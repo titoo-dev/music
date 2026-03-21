@@ -36,7 +36,7 @@ export function DownloadPanel() {
 	return (
 		<aside
 			className={`
-				fixed right-0 top-0 z-20 flex h-full flex-col overflow-hidden
+				fixed right-0 top-14 z-20 flex h-[calc(100%-3.5rem)] flex-col overflow-hidden
 				border-l border-border/40 bg-white
 				transition-all duration-300 ease-in-out
 				${downloadsOpen ? "w-[340px] translate-x-0" : "w-0 translate-x-full"}
@@ -46,7 +46,7 @@ export function DownloadPanel() {
 			{downloadsOpen && (
 				<button
 					onClick={() => setDownloadsOpen(false)}
-					className="absolute -left-3 top-20 z-10 flex h-6 w-3 items-center justify-center rounded-l-md border border-r-0 border-border/40 bg-white text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					className="absolute -left-3 top-6 z-10 flex h-6 w-3 items-center justify-center rounded-l-md border border-r-0 border-border/40 bg-white text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 				>
 					<ChevronRight className="h-3 w-3" />
 				</button>

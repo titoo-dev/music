@@ -382,7 +382,8 @@ function AlbumCard({
 }) {
 	const id = album.ALB_ID || album.id;
 	const title = album.ALB_TITLE || album.title;
-	const artist = album.ART_NAME || album.artist?.name;
+	const artistName = album.ART_NAME || album.artist?.name;
+	const artistId = album.ART_ID || album.artist?.id;
 	const cover =
 		album.cover_medium ||
 		album.cover_big ||
@@ -419,7 +420,13 @@ function AlbumCard({
 				>
 					{title}
 				</Link>
-				<p className="text-xs text-muted-foreground truncate">{artist}</p>
+				{artistId ? (
+					<Link href={`/artist?id=${artistId}`} className="text-xs text-muted-foreground truncate block hover:underline hover:text-foreground transition-colors">
+						{artistName}
+					</Link>
+				) : (
+					<p className="text-xs text-muted-foreground truncate">{artistName}</p>
+				)}
 			</div>
 		</div>
 	);
