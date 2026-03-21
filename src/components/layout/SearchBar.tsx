@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { isValidURL } from "@/utils/helpers";
 import { useDownload } from "@/hooks/useDownload";
 import { useLoginStore } from "@/stores/useLoginStore";
@@ -9,8 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 
 export function SearchBar() {
-	const [term, setTerm] = useState("");
+	const searchParams = useSearchParams();
+	const [term, setTerm] = useState(searchParams.get("term") ?? "");
 	const router = useRouter();
+
+	// Keep input in sync when URL changes (back/forward navigation)
+	useEffect(() => {
+		setTerm(searchParams.get("term") ?? "");
+	}, [searchParams]);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const loggedIn = useLoginStore((s) => s.loggedIn);
 	const { download } = useDownload();

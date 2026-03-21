@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { Navigation } from "@/components/layout/Sidebar";
 import { SearchBar } from "@/components/layout/SearchBar";
@@ -80,7 +81,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
 					{/* Search bar (desktop) */}
 					<div className="hidden md:block">
-						<SearchBar />
+						<Suspense>
+							<SearchBar />
+						</Suspense>
 					</div>
 
 					{/* Downloads panel trigger */}
@@ -141,7 +144,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
 				{/* Mobile search bar - below the nav on small screens */}
 				<div className="border-t border-border/40 px-4 py-2 md:hidden">
-					<SearchBar />
+					<Suspense>
+						<SearchBar />
+					</Suspense>
 				</div>
 			</header>
 
