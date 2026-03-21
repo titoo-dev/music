@@ -1,0 +1,100 @@
+"use client";
+
+import { useEffect, useRef, useCallback } from "react";
+import { useQueueStore } from "@/stores/useQueueStore";
+
+const WS_PORT = 6595;
+
+export function useSocket() {
+	const wsRef = useRef<WebSocket | null>(null);
+	const { addToQueue, updateQueueItem, removeFromQueue, setCurrent } = useQueueStore();
+
+	const connect = useCallback(() => {
+		const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+		const url = `${protocol}://${window.location.hostname}:${WS_PORT}`;
+
+		const ws = new WebSocket(url);
+		wsRef.current = ws;
+
+		ws.onopen = () => {
+			console.log("[WS] Connected");
+		};
+
+		ws.onmessage = (event) => {
+			try {
+				const { key, data } = JSON.parse(event.data);
+				handleMessage(key, data);
+			} catch {
+				// ignore invalid messages
+			}
+		};
+
+		ws.onclose = () => {
+			console.log("[WS] Disconnected, reconnecting...");
+			setTimeout(connect, 3000);
+		};
+
+		ws.onerror = () => {
+			ws.close();
+		};
+	}, []);
+
+	const handleMessage = useCallback(
+		(key: string, data: any) => {
+			switch (key) {
+				case "addedToQueue":
+					if (Array.isArray(data)) {
+						data.forEach((item: any) => addToQueue(item));
+					} else {
+						addToQueue(data);
+					}
+					break;
+				case "startDownload":
+					updateQueueItem(data, { status: "downloading" });
+					break;
+				case "updateQueue":
+					if (data.uuid) {
+						updateQueueItem(data.uuid, data);
+					}
+					break;
+				case "removedFromQueue":
+					removeFromQueue(data.uuid);
+					break;
+				case "removedAllDownloads":
+					useQueueStore.getState().clearQueue();
+					break;
+				case "removedFinishedDownloads":
+					useQueueStore.getState().clearCompleted();
+					break;
+				case "finishDownload":
+					updateQueueItem(data.uuid, { status: "completed" });
+					break;
+				case "cancellingCurrentItem":
+					updateQueueItem(data, { status: "cancelling" });
+					break;
+				case "currentItemCancelled":
+					removeFromQueue(data.uuid);
+					break;
+				case "queueError":
+					console.error("[Queue Error]", data);
+					break;
+			}
+		},
+		[addToQueue, updateQueueItem, removeFromQueue, setCurrent]
+	);
+
+	const send = useCallback((key: string, data: any = {}) => {
+		if (wsRef.current?.readyState === WebSocket.OPEN) {
+			wsRef.current.send(JSON.stringify({ key, data }));
+		}
+	}, []);
+
+	useEffect(() => {
+		connect();
+		return () => {
+			wsRef.current?.close();
+		};
+	}, [connect]);
+
+	return { send };
+}
