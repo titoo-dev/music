@@ -588,11 +588,37 @@ export function mapGwTrackToDeezer(track: GWTrack): EnrichedAPITrack {
 }
 
 // Cleanup terms that can hurt search results
-export function clean_search_query(term) {
-	term = term.replaceAll(/ feat[.]? /g, " ");
-	term = term.replaceAll(/ ft[.]? /g, " ");
-	term = term.replaceAll(/\(feat[.]? /g, " ");
-	term = term.replaceAll(/\(ft[.]? /g, " ");
-	term = term.replace(" & ", " ").replace("–", "-").replace("—", "-");
+export function clean_search_query(term: string): string {
+	// Normalize unicode dashes and quotes
+	term = term.replace(/[\u2013\u2014]/g, "-"); // – —
+	term = term.replace(/[\u2018\u2019]/g, "'"); // ' '
+	term = term.replace(/[\u201C\u201D]/g, '"'); // " "
+
+	// Remove featuring tags (various formats)
+	term = term.replace(/\s*\((?:feat|ft)\.?\s+[^)]*\)/gi, "");
+	term = term.replace(/\s*\[(?:feat|ft)\.?\s+[^\]]*\]/gi, "");
+	term = term.replace(/\s+(?:feat|ft)\.?\s+.+$/i, (match) => {
+		// Only strip if it looks like "feat. Artist" at the end
+		if (/(?:feat|ft)\.?\s+\w/i.test(match)) return "";
+		return match;
+	});
+
+	// Remove common suffixes that hurt search
+	term = term.replace(
+		/\s*\((?:Official\s*(?:Video|Audio|Music\s*Video|Lyric\s*Video|Visualizer)|Lyric\s*Video|Audio|Clip\s*Officiel|Videoclip)\)/gi,
+		""
+	);
+	term = term.replace(
+		/\s*\[(?:Official\s*(?:Video|Audio|Music\s*Video|Lyric\s*Video|Visualizer)|Lyric\s*Video|Audio)\]/gi,
+		""
+	);
+
+	// Normalize ampersands and special characters
+	term = term.replace(/\s*&\s*/g, " ");
+	term = term.replace(/\s*\+\s*/g, " ");
+
+	// Remove extra whitespace
+	term = term.replace(/\s+/g, " ").trim();
+
 	return term;
 }

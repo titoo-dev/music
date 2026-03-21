@@ -36,7 +36,7 @@ function ArtistContent() {
 		if (!id) return;
 		async function loadArtist() {
 			try {
-				const data = await fetchData("tracklist", { id, type: "artist" });
+				const data = await fetchData("content/tracklist", { id, type: "artist" });
 				setArtist(data?.artist || data);
 				setReleases(data?.releases || {});
 			} catch {

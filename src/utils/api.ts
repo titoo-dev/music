@@ -1,5 +1,16 @@
-const API_BASE = "/api";
+const API_BASE = "/api/v1";
 const WS_PORT = 6595;
+
+async function unwrap(res: Response) {
+	const json = await res.json();
+	if (!res.ok || json.success === false) {
+		const msg = json.error?.message || `API error: ${res.status}`;
+		const err = new Error(msg) as Error & { code?: string };
+		err.code = json.error?.code;
+		throw err;
+	}
+	return json.data ?? json;
+}
 
 export async function fetchData(endpoint: string, params: Record<string, string> = {}) {
 	const url = new URL(`${API_BASE}/${endpoint}`, window.location.origin);
@@ -7,8 +18,7 @@ export async function fetchData(endpoint: string, params: Record<string, string>
 		url.searchParams.set(key, value);
 	});
 	const res = await fetch(url.toString());
-	if (!res.ok) throw new Error(`API error: ${res.status}`);
-	return res.json();
+	return unwrap(res);
 }
 
 export async function postToServer(endpoint: string, data: Record<string, any> = {}) {
@@ -17,8 +27,7 @@ export async function postToServer(endpoint: string, data: Record<string, any> =
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(data),
 	});
-	if (!res.ok) throw new Error(`API error: ${res.status}`);
-	return res.json();
+	return unwrap(res);
 }
 
 export function getWsUrl() {

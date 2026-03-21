@@ -46,7 +46,7 @@ export default function HomePage() {
 	useEffect(() => {
 		async function loadHome() {
 			try {
-				const data = await fetchData("home");
+				const data = await fetchData("content/home");
 				if (data?.data) setCharts(data.data);
 			} catch {
 				// ignore

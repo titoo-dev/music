@@ -42,8 +42,8 @@ export default function SettingsPage() {
 		async function loadSettings() {
 			try {
 				const data = await fetchData("settings");
-				setSettings(data.settings);
-				setSpotifySettings(data.spotifySettings);
+				setSettings(data?.settings ?? data);
+				setSpotifySettings(data?.spotifySettings ?? null);
 			} catch {
 				// ignore
 			}
@@ -56,10 +56,10 @@ export default function SettingsPage() {
 		if (!arlInput.trim()) return;
 		setLoginStatus("Logging in...");
 		try {
-			const res = await postToServer("login-arl", {
+			const res = await postToServer("auth/login-arl", {
 				arl: arlInput.trim(),
 			});
-			if (res.status === 1 || res.status === 3) {
+			if (res.user) {
 				setArl(arlInput.trim());
 				setUser(res.user);
 				setChilds(res.childs || []);
@@ -75,7 +75,7 @@ export default function SettingsPage() {
 	};
 
 	const handleLogout = async () => {
-		await postToServer("logout");
+		await postToServer("auth/logout");
 		logout();
 		setLoginStatus("");
 	};

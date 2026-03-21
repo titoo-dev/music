@@ -34,7 +34,7 @@ function PlaylistContent() {
 		if (!id) return;
 		async function loadPlaylist() {
 			try {
-				const data = await fetchData("tracklist", { id, type: "playlist" });
+				const data = await fetchData("content/tracklist", { id, type: "playlist" });
 				setPlaylist(data);
 				setTracks(data?.tracks || []);
 			} catch {

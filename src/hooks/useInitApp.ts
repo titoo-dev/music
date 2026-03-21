@@ -16,7 +16,7 @@ export function useInitApp() {
 
 		async function init() {
 			try {
-				const data = await fetchData("connect");
+				const data = await fetchData("auth/connect");
 
 				if (data.deezerAvailable) {
 					setDeezerAvailable(data.deezerAvailable);
@@ -30,10 +30,10 @@ export function useInitApp() {
 				}
 
 				// Auto-login with stored ARL
-				if (data.autologin && arl) {
+				if (!data.loggedIn && arl) {
 					try {
-						const loginRes = await postToServer("login-arl", { arl });
-						if (loginRes.status === 1 || loginRes.status === 3) {
+						const loginRes = await postToServer("auth/login-arl", { arl });
+						if (loginRes.user) {
 							setUser(loginRes.user);
 							setChilds(loginRes.childs || []);
 							setCurrentChild(loginRes.currentChild || 0);

@@ -32,7 +32,7 @@ export default function ChartsPage() {
 	useEffect(() => {
 		async function loadCharts() {
 			try {
-				const data = await fetchData("charts");
+				const data = await fetchData("content/charts");
 				setCountries(data || []);
 			} catch {
 				// ignore
@@ -46,7 +46,7 @@ export default function ChartsPage() {
 		setSelectedChart(chart);
 		setLoadingTracks(true);
 		try {
-			const data = await fetchData("chart-tracks", {
+			const data = await fetchData("content/chart-tracks", {
 				id: chart.id.toString(),
 			});
 			setTracks(data?.data || []);

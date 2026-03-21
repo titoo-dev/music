@@ -423,7 +423,7 @@ export class GW {
 	search(
 		query,
 		index = 0,
-		limit = 10,
+		limit = 100,
 		suggest = true,
 		artist_suggest = true,
 		top_tracks = true
@@ -440,7 +440,7 @@ export class GW {
 
 	search_music(query, type, options: APIOptions = {}) {
 		const index = options.index || 0;
-		const limit = options.limit || 10;
+		const limit = options.limit || 100;
 		return this.api_call("search.music", {
 			query,
 			filter: "ALL",

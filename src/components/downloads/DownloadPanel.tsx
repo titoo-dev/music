@@ -27,8 +27,8 @@ export function DownloadPanel() {
 		["completed", "withErrors", "failed"].includes(i.status)
 	);
 
-	const handleCancelAll = () => postToServer("cancel-all");
-	const handleClearCompleted = () => postToServer("remove-finished");
+	const handleCancelAll = () => postToServer("downloads/cancel-all");
+	const handleClearCompleted = () => postToServer("downloads/clear-finished");
 
 	return (
 		<aside

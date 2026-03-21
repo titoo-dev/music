@@ -37,20 +37,21 @@ function SearchContent() {
 	const [tab, setTab] = useState<SearchTab>("all");
 	const [results, setResults] = useState<any>(null);
 	const [loading, setLoading] = useState(false);
+	const [loadingMore, setLoadingMore] = useState(false);
 
 	const doSearch = useCallback(async () => {
 		if (!term) return;
 		setLoading(true);
 		try {
 			if (tab === "all") {
-				const data = await fetchData("main-search", { term });
+				const data = await fetchData("search/main", { term });
 				setResults(data);
 			} else {
 				const data = await fetchData("search", {
 					term,
 					type: tab,
 					start: "0",
-					nb: "30",
+					nb: "100",
 				});
 				setResults(data);
 			}
@@ -64,9 +65,33 @@ function SearchContent() {
 		doSearch();
 	}, [doSearch]);
 
+	const loadMore = useCallback(async () => {
+		if (!term || tab === "all" || !results?.data) return;
+		setLoadingMore(true);
+		try {
+			const data = await fetchData("search", {
+				term,
+				type: tab,
+				start: String(results.data.length),
+				nb: "100",
+			});
+			if (data?.data?.length) {
+				setResults((prev: any) => ({
+					...prev,
+					data: [...(prev?.data || []), ...data.data],
+					total: data.total ?? prev?.total,
+				}));
+			}
+		} catch {
+			// ignore
+		}
+		setLoadingMore(false);
+	}, [term, tab, results]);
+
 	const { download, isLoading } = useDownload();
 	const deezerUrl = (id: string | number, type: string) => `https://www.deezer.com/${type}/${id}`;
 	const handleDownload = (id: string | number, type: string) => download(deezerUrl(id, type));
+	const hasMore = tab !== "all" && results?.data && results?.total && results.data.length < results.total;
 
 	if (!term) {
 		return (
@@ -120,6 +145,7 @@ function SearchContent() {
 								isLoading={isLoading}
 								deezerUrl={deezerUrl}
 							/>
+							{hasMore && <LoadMoreButton loading={loadingMore} onClick={loadMore} />}
 						</TabsContent>
 						<TabsContent value="album">
 							<AlbumResults
@@ -128,9 +154,11 @@ function SearchContent() {
 								isLoading={isLoading}
 								deezerUrl={deezerUrl}
 							/>
+							{hasMore && <LoadMoreButton loading={loadingMore} onClick={loadMore} />}
 						</TabsContent>
 						<TabsContent value="artist">
 							<ArtistResults data={results} />
+							{hasMore && <LoadMoreButton loading={loadingMore} onClick={loadMore} />}
 						</TabsContent>
 						<TabsContent value="playlist">
 							<PlaylistResults
@@ -139,6 +167,7 @@ function SearchContent() {
 								isLoading={isLoading}
 								deezerUrl={deezerUrl}
 							/>
+							{hasMore && <LoadMoreButton loading={loadingMore} onClick={loadMore} />}
 						</TabsContent>
 					</>
 				)}
@@ -154,6 +183,28 @@ function SearchContent() {
 	);
 }
 
+function LoadMoreButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
+	return (
+		<div className="flex justify-center pt-6">
+			<Button
+				variant="outline"
+				onClick={onClick}
+				disabled={loading}
+				className="gap-2"
+			>
+				{loading ? (
+					<>
+						<Loader2 className="size-3.5 animate-spin" />
+						Loading...
+					</>
+				) : (
+					"Load more"
+				)}
+			</Button>
+		</div>
+	);
+}
+
 function AllResults({
 	results,
 	onDownload,
@@ -165,11 +216,12 @@ function AllResults({
 	isLoading: (url: string) => boolean;
 	deezerUrl: (id: string | number, type: string) => string;
 }) {
-	const tracks = results?.TRACK?.data?.slice(0, 6) || [];
-	const albums = results?.ALBUM?.data?.slice(0, 6) || [];
-	const artists = results?.ARTIST?.data?.slice(0, 6) || [];
+	const tracks = results?.TRACK?.data?.slice(0, 15) || [];
+	const albums = results?.ALBUM?.data?.slice(0, 18) || [];
+	const artists = results?.ARTIST?.data?.slice(0, 12) || [];
+	const playlists = results?.PLAYLIST?.data?.slice(0, 12) || [];
 
-	if (tracks.length === 0 && albums.length === 0 && artists.length === 0) {
+	if (tracks.length === 0 && albums.length === 0 && artists.length === 0 && playlists.length === 0) {
 		return <EmptyTabState />;
 	}
 
@@ -220,6 +272,50 @@ function AllResults({
 								artist={artist}
 							/>
 						))}
+					</div>
+				</section>
+			)}
+			{playlists.length > 0 && (
+				<section className="space-y-3">
+					<h2 className="text-sm font-medium text-muted-foreground">
+						Playlists
+					</h2>
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+						{playlists.map((pl: any) => {
+							const id = pl.PLAYLIST_ID || pl.id;
+							const title = pl.TITLE || pl.title;
+							const picture =
+								pl.picture_xl ||
+								pl.picture_medium ||
+								getCoverUrl(pl.PLAYLIST_PICTURE, 250) ||
+								"/placeholder.jpg";
+							return (
+								<div key={id} className="group">
+									<div className="relative rounded-xl overflow-hidden bg-muted/30">
+										<img
+											src={picture}
+											alt={title}
+											loading="lazy"
+											className="w-full aspect-square object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+										/>
+										<div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center">
+											<Button
+												size="sm"
+												onClick={() => onDownload(id, "playlist")}
+												disabled={isLoading(deezerUrl(id, "playlist"))}
+												className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5"
+											>
+												{isLoading(deezerUrl(id, "playlist")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+												{isLoading(deezerUrl(id, "playlist")) ? "Adding..." : "Download"}
+											</Button>
+										</div>
+									</div>
+									<div className="mt-2 px-0.5">
+										<p className="text-sm font-medium truncate">{title}</p>
+									</div>
+								</div>
+							);
+						})}
 					</div>
 				</section>
 			)}

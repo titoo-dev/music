@@ -54,7 +54,7 @@ const statusConfig: Record<
 
 export function QueueItem({ item }: Props) {
 	const handleRemove = () => {
-		postToServer("remove-from-queue", { uuid: item.uuid });
+		postToServer("downloads/cancel", { uuid: item.uuid });
 	};
 
 	const config = statusConfig[item.status] || {

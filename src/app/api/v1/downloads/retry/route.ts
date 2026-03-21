@@ -1,0 +1,30 @@
+import { NextRequest } from "next/server";
+import { ok, fail, handleError, requireAuthAndApp } from "../../_lib/helpers";
+
+export async function POST(request: NextRequest) {
+	try {
+		const { dz, app, error } = await requireAuthAndApp();
+		if (error) return error;
+
+		const { uuid } = await request.json();
+		if (!uuid) {
+			return fail("MISSING_UUID", "Download UUID is required.", 400);
+		}
+
+		const queueItem = app.queue[uuid];
+		if (!queueItem) {
+			return fail("ITEM_NOT_FOUND", "Download item not found in queue.", 404);
+		}
+
+		app.cancelDownload(uuid);
+
+		const url =
+			queueItem.url ||
+			`https://www.deezer.com/${queueItem.__type__ === "Single" ? "track" : "album"}/${queueItem.id}`;
+		const result = await app.addToQueue(dz, [url], queueItem.bitrate, true);
+
+		return ok(result);
+	} catch (e) {
+		return handleError(e);
+	}
+}

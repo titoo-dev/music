@@ -30,11 +30,12 @@ export function useQueuePolling() {
 
 		async function poll() {
 			try {
-				const res = await fetch("/api/queue");
+				const res = await fetch("/api/v1/downloads/queue");
 				if (!res.ok) return;
 				const data = await res.json();
-				if (data.queue) {
-					syncFromServer(data.queue, data.current);
+				const queueData = data.data ?? data;
+				if (queueData.queue) {
+					syncFromServer(queueData.queue, queueData.current);
 				}
 			} catch {
 				// ignore

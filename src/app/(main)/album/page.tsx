@@ -29,7 +29,7 @@ function AlbumContent() {
 		if (!id) return;
 		async function loadAlbum() {
 			try {
-				const data = await fetchData("tracklist", { id, type: "album" });
+				const data = await fetchData("content/tracklist", { id, type: "album" });
 				// GW API returns data in DATA/SONGS structure
 				const albumData = data?.DATA || data;
 				const trackList = data?.tracks || data?.SONGS?.data || [];

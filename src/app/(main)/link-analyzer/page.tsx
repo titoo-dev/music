@@ -31,7 +31,7 @@ export default function LinkAnalyzerPage() {
 		setError("");
 		setResult(null);
 		try {
-			const data = await fetchData("analyze-link", {
+			const data = await fetchData("content/analyze-link", {
 				term: link.trim(),
 			});
 			if (data.error) {

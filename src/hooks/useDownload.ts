@@ -17,15 +17,15 @@ export function useDownload() {
 		async (url: string, bitrate?: number | null) => {
 			setLoadingUrls((prev) => new Set(prev).add(url));
 			try {
-				const res = await postToServer("add-to-queue", {
+				const res = await postToServer("downloads/queue", {
 					url,
 					bitrate: bitrate ?? null,
 				});
 				// Directly update the store from the API response (WS-independent)
-				if (res.result) {
-					const items = Array.isArray(res.result)
-						? res.result
-						: [res.result];
+				if (res) {
+					const items = Array.isArray(res)
+						? res
+						: [res];
 					items.forEach((item: any) => addToQueue(item));
 				}
 				// Open the download sheet for visual feedback
