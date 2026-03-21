@@ -87,6 +87,17 @@ export interface Settings {
 	featuredToTitle?: string;
 	titleCasing?: string;
 	artistCasing?: string;
+	storageType?: "local" | "s3";
+	s3?: S3Settings;
+}
+
+export interface S3Settings {
+	endpoint: string;
+	region: string;
+	bucket: string;
+	accessKeyId: string;
+	secretAccessKey: string;
+	pathPrefix?: string;
 }
 
 export interface SpotifySettings {

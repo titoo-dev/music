@@ -4,6 +4,8 @@
 import type { Listener } from "@/lib/deemix/types/listener";
 import type { Settings } from "@/lib/deemix/types/Settings";
 
+import type { StorageProvider } from "@/lib/deemix/storage/StorageProvider";
+
 // These will be dynamically imported to avoid build issues
 let Deezer: any;
 let Downloader: any;
@@ -16,6 +18,7 @@ let Collection: any;
 let Convertable: any;
 let SpotifyPlugin: any;
 let utils: any;
+let createStorageProvider: any;
 
 let _initialized = false;
 
@@ -36,6 +39,7 @@ async function ensureImports() {
 		Convertable = deemix.Convertable;
 		SpotifyPlugin = deemix.SpotifyPlugin;
 		utils = deemix.utils;
+		createStorageProvider = deemix.createStorageProvider;
 		_initialized = true;
 	} catch (e) {
 		console.error("Failed to import deemix modules:", e);
@@ -50,6 +54,7 @@ export class DeemixApp {
 	latestVersion: string | null;
 	plugins: Record<string, any>;
 	settings: Settings;
+	storageProvider: StorageProvider | null;
 	listener: Listener;
 	_wsBroadcast?: (key: string, data: any) => void;
 	// Full download object data (equivalent to disk persistence in old deemix)
@@ -65,6 +70,7 @@ export class DeemixApp {
 		this.latestVersion = null;
 		this.listener = listener;
 		this.settings = {} as Settings;
+		this.storageProvider = null;
 		// init() is called externally after construction (awaited by server-state.ts)
 	}
 
@@ -75,6 +81,9 @@ export class DeemixApp {
 			if (configFolder) {
 				this.settings = loadSettings(configFolder);
 			}
+		}
+		if (createStorageProvider) {
+			this.storageProvider = createStorageProvider(this.settings);
 		}
 		if (SpotifyPlugin) {
 			this.plugins.spotify = new SpotifyPlugin();
@@ -115,6 +124,9 @@ export class DeemixApp {
 			saveSettings(newSettings, utils.getConfigFolder());
 		}
 		this.settings = newSettings;
+		if (createStorageProvider) {
+			this.storageProvider = createStorageProvider(this.settings);
+		}
 		if (this.plugins.spotify?.saveSettings) {
 			this.plugins.spotify.saveSettings(newSpotifySettings);
 		}
@@ -243,7 +255,7 @@ export class DeemixApp {
 				continue;
 			}
 
-			this.currentJob = new Downloader(dz, downloadObject, this.settings, this.listener);
+			this.currentJob = new Downloader(dz, downloadObject, this.settings, this.listener, this.storageProvider || undefined);
 			this.listener.send("startDownload", currentUUID);
 			await this.currentJob.start();
 

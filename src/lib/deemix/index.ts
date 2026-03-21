@@ -112,6 +112,7 @@ export * as tagger from "./tagger";
 export * from "./types/index";
 export * as utils from "./utils/index";
 export * from "./download-objects/index";
+export * from "./storage/index";
 
 // Exporting the organized objects
 export { Downloader, generateDownloadObject, itemgen, parseLink };

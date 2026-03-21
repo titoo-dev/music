@@ -7,7 +7,7 @@ import {
 	type APIAlbum,
 	type APITrack,
 } from "@/lib/deezer";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { mkdirSync } from "fs";
 import { HTTPError } from "got";
 import { tmpdir } from "os";
 import { streamTrack } from "./decryption";
@@ -16,6 +16,8 @@ import { DownloadObject } from "./download-objects/DownloadObject";
 import { Single } from "./download-objects/Single";
 import { DownloadCanceled, DownloadFailed, ErrorMessages } from "./errors";
 import { DEFAULT_SETTINGS, OverwriteOption } from "./settings";
+import type { StorageProvider } from "./storage/StorageProvider";
+import { LocalStorageProvider } from "./storage/LocalStorageProvider";
 import { Album } from "./types/Album";
 import type { Listener } from "./types/listener";
 import { StaticPicture } from "./types/Picture";
@@ -55,6 +57,7 @@ export class Downloader {
 	settings: Settings;
 	bitrate: number;
 	listener: Listener;
+	storageProvider: StorageProvider;
 	playlistCovername?: string;
 	playlistURLs: { url: string; ext: string }[];
 	coverQueue: Record<string, string>;
@@ -63,13 +66,15 @@ export class Downloader {
 		dz: Deezer,
 		downloadObject: DownloadObject,
 		settings: Settings,
-		listener: Listener
+		listener: Listener,
+		storageProvider?: StorageProvider
 	) {
 		this.dz = dz;
 		this.downloadObject = downloadObject;
 		this.settings = settings || DEFAULT_SETTINGS;
 		this.bitrate = downloadObject.bitrate;
 		this.listener = listener;
+		this.storageProvider = storageProvider || new LocalStorageProvider();
 
 		this.playlistURLs = [];
 
@@ -239,18 +244,19 @@ export class Downloader {
 		const { filename, filepath, artistPath, coverPath, extrasPath } =
 			generatePath(track, this.downloadObject.type, this.settings);
 
-		// Make sure the filepath exsists
-		mkdirSync(filepath, { recursive: true });
+		// Make sure the filepath exists
+		await this.storageProvider.ensureDir(filepath);
 		const extension = extensions[track.bitrate];
 		let writepath = `${filepath}/${filename}${extension}`;
 
-		const shouldDownload = checkShouldDownload(
+		const shouldDownload = await checkShouldDownload(
 			filename,
 			filepath,
 			extension,
 			writepath,
 			this.settings.overwriteFile,
-			track
+			track,
+			this.storageProvider
 		);
 
 		// Adding tags
@@ -297,7 +303,7 @@ export class Downloader {
 
 			let c = 0;
 			let currentFilename = originalFilename;
-			while (existsSync(currentFilename + extension)) {
+			while (await this.storageProvider.exists(currentFilename + extension)) {
 				c++;
 				currentFilename = `${originalFilename} (${c})`;
 			}
@@ -433,12 +439,12 @@ export class Downloader {
 		// Save lyrics in lrc file
 		if (this.settings.syncedLyrics && track.lyrics?.sync) {
 			if (
-				!existsSync(`${filepath}/${filename}.lrc`) ||
+				!(await this.storageProvider.exists(`${filepath}/${filename}.lrc`)) ||
 				[OverwriteOption.OVERWRITE, OverwriteOption.ONLY_TAGS].includes(
 					this.settings.overwriteFile
 				)
 			) {
-				writeFileSync(`${filepath}/${filename}.lrc`, track.lyrics.sync);
+				await this.storageProvider.writeFile(`${filepath}/${filename}.lrc`, track.lyrics.sync);
 			}
 		}
 
@@ -446,16 +452,21 @@ export class Downloader {
 		track.downloadURL = track.urls[formatsName[track.bitrate]];
 		if (!track.downloadURL) throw new DownloadFailed("notAvailable", track);
 		try {
-			await streamTrack(writepath, track, this.downloadObject, this.listener);
+			await streamTrack(writepath, track, this.downloadObject, this.listener, this.storageProvider);
 		} catch (e) {
 			if (e instanceof HTTPError)
 				throw new DownloadFailed("notAvailable", track);
 			throw e;
 		}
 
+		// Tag the track (operates on local temp file for S3, final path for local)
 		if (!track.local) {
-			tagTrack(extension, writepath, track, this.settings.tags);
+			const localPath = this.storageProvider.getLocalPath(writepath);
+			tagTrack(extension, localPath, track, this.settings.tags);
 		}
+
+		// Finalize: upload to S3 if needed (after tagging)
+		await this.storageProvider.finalizeStream(writepath);
 
 		if (track.searched) returnData.searched = true;
 		this.downloadObject.downloaded += 1;
@@ -620,7 +631,8 @@ export class Downloader {
 					await downloadImage(
 						image.url,
 						`${track.albumPath}/${track.albumFilename}.${image.ext}`,
-						this.settings.overwriteFile
+						this.settings.overwriteFile,
+						this.storageProvider
 					);
 				});
 			}
@@ -635,7 +647,8 @@ export class Downloader {
 					await downloadImage(
 						image.url,
 						`${track.artistPath}/${track.artistFilename}.${image.ext}`,
-						this.settings.overwriteFile
+						this.settings.overwriteFile,
+						this.storageProvider
 					);
 				});
 			}
@@ -649,16 +662,16 @@ export class Downloader {
 				const filename = `${track.data.artist} - ${track.data.title}`;
 				let searchedFile;
 				try {
-					searchedFile = readFileSync(
+					searchedFile = (await this.storageProvider.readFile(
 						`${this.downloadObject.extrasPath}/searched.txt`
-					).toString();
+					)).toString();
 				} catch {
 					searchedFile = "";
 				}
 				if (searchedFile.indexOf(filename) === -1) {
 					if (searchedFile !== "") searchedFile += "\r\n";
 					searchedFile += filename + "\r\n";
-					writeFileSync(
+					await this.storageProvider.writeFile(
 						`${this.downloadObject.extrasPath}/searched.txt`,
 						searchedFile
 					);
@@ -721,7 +734,8 @@ export class Downloader {
 						await downloadImage(
 							image.url,
 							`${track.albumPath}/${track.albumFilename}.${image.ext}`,
-							this.settings.overwriteFile
+							this.settings.overwriteFile,
+							this.storageProvider
 						);
 					});
 				}
@@ -736,7 +750,8 @@ export class Downloader {
 						await downloadImage(
 							image.url,
 							`${track.artistPath}/${track.artistFilename}.${image.ext}`,
-							this.settings.overwriteFile
+							this.settings.overwriteFile,
+							this.storageProvider
 						);
 					});
 				}
@@ -751,7 +766,7 @@ export class Downloader {
 		// Create errors logfile
 		try {
 			if (this.settings.logErrors && errors !== "") {
-				writeFileSync(`${this.downloadObject.extrasPath}/errors.txt`, errors);
+				await this.storageProvider.writeFile(`${this.downloadObject.extrasPath}/errors.txt`, errors);
 			}
 		} catch (e) {
 			this.afterDownloadErrorReport("CreateErrorLog", e);
@@ -760,7 +775,7 @@ export class Downloader {
 		// Create searched logfile
 		try {
 			if (this.settings.logSearched && searched !== "") {
-				writeFileSync(
+				await this.storageProvider.writeFile(
 					`${this.downloadObject.extrasPath}/searched.txt`,
 					searched
 				);
@@ -780,7 +795,8 @@ export class Downloader {
 					await downloadImage(
 						image.url,
 						`${this.downloadObject.extrasPath}/${this.playlistCovername}.${image.ext}`,
-						this.settings.overwriteFile
+						this.settings.overwriteFile,
+						this.storageProvider
 					);
 				});
 			}
@@ -797,7 +813,7 @@ export class Downloader {
 						this.downloadObject,
 						this.settings
 					) || "playlist";
-				writeFileSync(
+				await this.storageProvider.writeFile(
 					`${this.downloadObject.extrasPath}/${filename}.m3u8`,
 					playlist.join("\n")
 				);

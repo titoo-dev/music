@@ -11,6 +11,8 @@
     "dev:all": "npm run dev & npm run server"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@aws-sdk/lib-storage": "^3.700.0",
     "@base-ui/react": "^1.3.0",
     "@spotify/web-api-ts-sdk": "^1.2.0",
     "async": "^3.2.6",

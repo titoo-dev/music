@@ -8,6 +8,7 @@ import {
 	decryptChunk,
 } from "./utils/crypto";
 import { DownloadCanceled, DownloadEmpty } from "./errors";
+import type { StorageProvider } from "./storage/StorageProvider";
 
 import { USER_AGENT_HEADER, pipeline } from "./utils/index";
 
@@ -41,7 +42,7 @@ export function reverseStreamURL(url) {
 	return reverseStreamPath(urlPart);
 }
 
-export async function streamTrack(writepath, track, downloadObject, listener) {
+export async function streamTrack(writepath, track, downloadObject, listener, storageProvider?: StorageProvider) {
 	if (downloadObject && downloadObject.isCanceled) throw new DownloadCanceled();
 	const headers = { "User-Agent": USER_AGENT_HEADER };
 	let chunkLength = 0;
@@ -50,7 +51,9 @@ export async function streamTrack(writepath, track, downloadObject, listener) {
 		track.downloadURL.includes("/mobile/") ||
 		track.downloadURL.includes("/media/");
 	let blowfishKey;
-	const outputStream = fs.createWriteStream(writepath);
+	const outputStream = storageProvider
+		? storageProvider.createWriteStream(writepath)
+		: fs.createWriteStream(writepath);
 	let timeout = null;
 
 	const itemData = {
@@ -165,7 +168,11 @@ export async function streamTrack(writepath, track, downloadObject, listener) {
 	try {
 		await pipeline(request, decrypter, depadder, outputStream);
 	} catch (e) {
-		if (fs.existsSync(writepath)) fs.unlinkSync(writepath);
+		if (storageProvider) {
+			await storageProvider.deleteFile(writepath);
+		} else if (fs.existsSync(writepath)) {
+			fs.unlinkSync(writepath);
+		}
 		if (
 			e instanceof ReadError ||
 			e instanceof TimeoutError ||
@@ -190,7 +197,7 @@ export async function streamTrack(writepath, track, downloadObject, listener) {
 					state: "downloadTimeout",
 				});
 			}
-			return await streamTrack(writepath, track, downloadObject, listener);
+			return await streamTrack(writepath, track, downloadObject, listener, storageProvider);
 		} else if (request.destroyed) {
 			switch (error) {
 				case "DownloadEmpty":

@@ -1,16 +1,17 @@
 import type { Tags } from "../types/Settings";
 import type Track from "../types/Track";
-import fs from "fs";
+import type { StorageProvider } from "../storage/StorageProvider";
 import { OverwriteOption } from "../settings";
 import { tagFLAC, tagID3 } from "../tagger";
 
-export const checkShouldDownload = (
+export const checkShouldDownload = async (
 	filename: string,
 	filepath: string,
 	extension: string,
 	writepath: string,
 	overwriteFile: string,
-	track: Track
+	track: Track,
+	storageProvider: StorageProvider
 ) => {
 	if (
 		overwriteFile === OverwriteOption.OVERWRITE ||
@@ -18,7 +19,7 @@ export const checkShouldDownload = (
 	)
 		return true;
 
-	const trackAlreadyDownloaded = fs.existsSync(writepath);
+	const trackAlreadyDownloaded = await storageProvider.exists(writepath);
 
 	if (
 		trackAlreadyDownloaded &&
@@ -35,7 +36,7 @@ export const checkShouldDownload = (
 		const baseFilename = `${filepath}/${filename}`;
 
 		for (const ext of extensions) {
-			if (fs.existsSync(baseFilename + ext)) return false;
+			if (await storageProvider.exists(baseFilename + ext)) return false;
 		}
 	}
 
@@ -45,8 +46,8 @@ export const checkShouldDownload = (
 		overwriteFile === OverwriteOption.ONLY_LOWER_BITRATES &&
 		extension === ".mp3"
 	) {
-		const stats = fs.statSync(writepath);
-		const fileSizeKb = (stats.size * 8) / 1024;
+		const fileSize = await storageProvider.getFileSize(writepath);
+		const fileSizeKb = (fileSize * 8) / 1024;
 		const bitrateAprox = fileSizeKb / track.duration;
 		if (Number(track.bitrate) === 3 && bitrateAprox < 310) {
 			return true;
