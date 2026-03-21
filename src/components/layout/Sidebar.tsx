@@ -4,117 +4,115 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAppStore } from "@/stores/useAppStore";
 import { useLoginStore } from "@/stores/useLoginStore";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import {
+	Home,
+	Search,
+	BarChart3,
+	Link2,
+	Settings,
+	Info,
+} from "lucide-react";
 
 const navItems = [
-	{ path: "/", label: "Home", icon: "🏠" },
-	{ path: "/search", label: "Search", icon: "🔍" },
-	{ path: "/charts", label: "Charts", icon: "📊" },
-	{ path: "/favorites", label: "Favorites", icon: "❤️" },
-	{ path: "/link-analyzer", label: "Link Analyzer", icon: "🔗" },
+	{ path: "/", label: "Home", icon: Home },
+	{ path: "/search", label: "Search", icon: Search },
+	{ path: "/charts", label: "Charts", icon: BarChart3 },
+	{ path: "/link-analyzer", label: "Analyzer", icon: Link2 },
 ];
 
-const bottomItems = [
-	{ path: "/settings", label: "Settings", icon: "⚙️" },
-	{ path: "/about", label: "About", icon: "ℹ️" },
+const secondaryItems = [
+	{ path: "/settings", label: "Settings", icon: Settings },
+	{ path: "/about", label: "About", icon: Info },
 ];
 
-export function Sidebar() {
+interface NavigationProps {
+	isMobile?: boolean;
+	onNavigate?: () => void;
+}
+
+/**
+ * Navigation component used both in the top bar (desktop: horizontal)
+ * and in the mobile Sheet (vertical list).
+ */
+export function Navigation({ isMobile = false, onNavigate }: NavigationProps) {
 	const pathname = usePathname();
-	const slimSidebar = useAppStore((s) => s.slimSidebar);
-	const toggleSlimSidebar = useAppStore((s) => s.toggleSlimSidebar);
-	const user = useLoginStore((s) => s.user);
-	const loggedIn = useLoginStore((s) => s.loggedIn);
 
-	return (
-		<aside
-			className="fixed left-0 top-0 h-full flex flex-col transition-all z-20"
-			style={{
-				width: slimSidebar ? "var(--sidebar-slim-width)" : "var(--sidebar-width)",
-				background: "var(--bg-secondary)",
-				borderRight: "1px solid var(--border)",
-			}}
-		>
-			{/* Logo */}
-			<div className="p-4 flex items-center gap-3">
-				<div
-					className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold"
-					style={{ background: "var(--primary)" }}
-				>
-					d
-				</div>
-				{!slimSidebar && <span className="text-lg font-semibold">deemix</span>}
-			</div>
+	if (isMobile) {
+		return (
+			<nav className="flex flex-col py-2">
+				{navItems.map((item) => {
+					const isActive = pathname === item.path;
+					const Icon = item.icon;
+					return (
+						<Link key={item.path} href={item.path} className="no-underline" onClick={onNavigate}>
+							<Button
+								variant="ghost"
+								className={`w-full justify-start gap-3 rounded-none px-6 py-6 text-sm font-medium ${
+									isActive
+										? "bg-muted text-foreground"
+										: "text-muted-foreground hover:text-foreground"
+								}`}
+							>
+								<Icon className="h-4 w-4" />
+								<span>{item.label}</span>
+							</Button>
+						</Link>
+					);
+				})}
 
-			{/* User info */}
-			{loggedIn && user && (
-				<div className="px-4 py-2 flex items-center gap-3">
-					{user.picture ? (
-						<img
-							src={`https://e-cdns-images.dzcdn.net/images/user/${user.picture}/56x56-000000-80-0-0.jpg`}
-							alt=""
-							className="w-8 h-8 rounded-full"
-						/>
-					) : (
-						<div
-							className="w-8 h-8 rounded-full flex items-center justify-center text-sm"
-							style={{ background: "var(--bg-tertiary)" }}
-						>
-							👤
-						</div>
-					)}
-					{!slimSidebar && (
-						<span className="text-sm truncate" style={{ color: "var(--text-secondary)" }}>
-							{user.name || "User"}
-						</span>
-					)}
-				</div>
-			)}
+				<Separator className="my-2" />
 
-			{/* Navigation */}
-			<nav className="flex-1 mt-4">
-				{navItems.map((item) => (
-					<Link
-						key={item.path}
-						href={item.path}
-						className="flex items-center gap-3 px-4 py-3 transition-colors no-underline"
-						style={{
-							background: pathname === item.path ? "var(--bg-tertiary)" : "transparent",
-							color:
-								pathname === item.path ? "var(--text-primary)" : "var(--text-secondary)",
-						}}
-					>
-						<span className="text-lg">{item.icon}</span>
-						{!slimSidebar && <span className="text-sm">{item.label}</span>}
-					</Link>
-				))}
+				{secondaryItems.map((item) => {
+					const isActive = pathname === item.path;
+					const Icon = item.icon;
+					return (
+						<Link key={item.path} href={item.path} className="no-underline" onClick={onNavigate}>
+							<Button
+								variant="ghost"
+								className={`w-full justify-start gap-3 rounded-none px-6 py-6 text-sm font-medium ${
+									isActive
+										? "bg-muted text-foreground"
+										: "text-muted-foreground hover:text-foreground"
+								}`}
+							>
+								<Icon className="h-4 w-4" />
+								<span>{item.label}</span>
+							</Button>
+						</Link>
+					);
+				})}
 			</nav>
+		);
+	}
 
-			{/* Bottom nav */}
-			<div className="border-t" style={{ borderColor: "var(--border)" }}>
-				{bottomItems.map((item) => (
-					<Link
-						key={item.path}
-						href={item.path}
-						className="flex items-center gap-3 px-4 py-3 transition-colors no-underline"
-						style={{
-							background: pathname === item.path ? "var(--bg-tertiary)" : "transparent",
-							color:
-								pathname === item.path ? "var(--text-primary)" : "var(--text-secondary)",
-						}}
-					>
-						<span className="text-lg">{item.icon}</span>
-						{!slimSidebar && <span className="text-sm">{item.label}</span>}
+	// Desktop: horizontal nav links
+	return (
+		<nav className="flex items-center gap-1">
+			{navItems.map((item) => {
+				const isActive = pathname === item.path;
+				const Icon = item.icon;
+				return (
+					<Link key={item.path} href={item.path} className="no-underline">
+						<Button
+							variant="ghost"
+							size="sm"
+							className={`gap-1.5 text-sm font-medium ${
+								isActive
+									? "bg-muted text-foreground"
+									: "text-muted-foreground hover:text-foreground"
+							}`}
+						>
+							<Icon className="h-3.5 w-3.5" />
+							<span>{item.label}</span>
+						</Button>
 					</Link>
-				))}
-				<button
-					onClick={toggleSlimSidebar}
-					className="flex items-center gap-3 px-4 py-3 w-full transition-colors cursor-pointer"
-					style={{ color: "var(--text-muted)" }}
-				>
-					<span className="text-lg">{slimSidebar ? "▶" : "◀"}</span>
-					{!slimSidebar && <span className="text-sm">Collapse</span>}
-				</button>
-			</div>
-		</aside>
+				);
+			})}
+		</nav>
 	);
 }
+
+// Keep old export name for any remaining references
+export const Sidebar = Navigation;

@@ -1,16 +1,37 @@
 "use client";
 
 import { useEffect, useState, useCallback, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { fetchData, postToServer } from "@/utils/api";
 import { convertDuration } from "@/utils/helpers";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+	Tabs,
+	TabsList,
+	TabsTrigger,
+	TabsContent,
+} from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { Download, Loader2 } from "lucide-react";
+import { PreviewButton } from "@/components/audio/PreviewButton";
+
+function getCoverUrl(hash: string, size = 500) {
+	if (!hash) return "";
+	if (hash.startsWith("http")) return hash;
+	return `https://e-cdns-images.dzcdn.net/images/cover/${hash}/${size}x${size}-000000-80-0-0.jpg`;
+}
+
+function getArtistUrl(hash: string, size = 500) {
+	if (!hash) return "";
+	if (hash.startsWith("http")) return hash;
+	return `https://e-cdns-images.dzcdn.net/images/artist/${hash}/${size}x${size}-000000-80-0-0.jpg`;
+}
 
 type SearchTab = "all" | "track" | "album" | "artist" | "playlist";
 
 function SearchContent() {
 	const searchParams = useSearchParams();
-	const router = useRouter();
 	const term = searchParams.get("term") || "";
 	const [tab, setTab] = useState<SearchTab>("all");
 	const [results, setResults] = useState<any>(null);
@@ -24,7 +45,12 @@ function SearchContent() {
 				const data = await fetchData("main-search", { term });
 				setResults(data);
 			} else {
-				const data = await fetchData("search", { term, type: tab, start: "0", nb: "30" });
+				const data = await fetchData("search", {
+					term,
+					type: tab,
+					start: "0",
+					nb: "30",
+				});
 				setResults(data);
 			}
 		} catch {
@@ -44,91 +70,141 @@ function SearchContent() {
 
 	if (!term) {
 		return (
-			<div className="text-center py-16" style={{ color: "var(--text-muted)" }}>
-				Type something to search
+			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
+				<p className="text-sm font-medium text-muted-foreground">No search query</p>
+				<p className="text-xs text-muted-foreground">Type something in the search bar to get started.</p>
 			</div>
 		);
 	}
 
-	const tabs: { key: SearchTab; label: string }[] = [
-		{ key: "all", label: "All" },
-		{ key: "track", label: "Tracks" },
-		{ key: "album", label: "Albums" },
-		{ key: "artist", label: "Artists" },
-		{ key: "playlist", label: "Playlists" },
-	];
-
 	return (
-		<div>
-			<h1 className="text-xl font-bold mb-4">
-				Results for &quot;{term}&quot;
-			</h1>
-
-			{/* Tabs */}
-			<div className="flex gap-2 mb-6">
-				{tabs.map((t) => (
-					<button
-						key={t.key}
-						onClick={() => setTab(t.key)}
-						className="px-4 py-2 rounded-full text-sm transition-colors cursor-pointer"
-						style={{
-							background: tab === t.key ? "var(--primary)" : "var(--bg-tertiary)",
-							color: tab === t.key ? "white" : "var(--text-secondary)",
-						}}
-					>
-						{t.label}
-					</button>
-				))}
+		<div className="space-y-6">
+			<div>
+				<h1 className="text-2xl font-semibold tracking-tight">
+					Search results for &ldquo;{term}&rdquo;
+				</h1>
 			</div>
 
-			{loading && (
-				<div className="py-8 text-center" style={{ color: "var(--text-muted)" }}>
-					Searching...
-				</div>
-			)}
+			<Tabs
+				value={tab}
+				onValueChange={(value) => setTab(value as SearchTab)}
+			>
+				<TabsList>
+					<TabsTrigger value="all">All</TabsTrigger>
+					<TabsTrigger value="track">Tracks</TabsTrigger>
+					<TabsTrigger value="album">Albums</TabsTrigger>
+					<TabsTrigger value="artist">Artists</TabsTrigger>
+					<TabsTrigger value="playlist">Playlists</TabsTrigger>
+				</TabsList>
 
-			{!loading && results && tab === "all" && <AllResults results={results} onDownload={handleDownload} />}
-			{!loading && results && tab === "track" && <TrackResults data={results} onDownload={handleDownload} />}
-			{!loading && results && tab === "album" && <AlbumResults data={results} onDownload={handleDownload} />}
-			{!loading && results && tab === "artist" && <ArtistResults data={results} />}
-			{!loading && results && tab === "playlist" && <PlaylistResults data={results} onDownload={handleDownload} />}
+				{loading && (
+					<div className="flex items-center justify-center py-12">
+						<Loader2 className="size-5 animate-spin text-muted-foreground" />
+					</div>
+				)}
+
+				{!loading && results && (
+					<>
+						<TabsContent value="all">
+							<AllResults
+								results={results}
+								onDownload={handleDownload}
+							/>
+						</TabsContent>
+						<TabsContent value="track">
+							<TrackResults
+								data={results}
+								onDownload={handleDownload}
+							/>
+						</TabsContent>
+						<TabsContent value="album">
+							<AlbumResults
+								data={results}
+								onDownload={handleDownload}
+							/>
+						</TabsContent>
+						<TabsContent value="artist">
+							<ArtistResults data={results} />
+						</TabsContent>
+						<TabsContent value="playlist">
+							<PlaylistResults
+								data={results}
+								onDownload={handleDownload}
+							/>
+						</TabsContent>
+					</>
+				)}
+
+				{!loading && !results && term && (
+					<div className="flex flex-col items-center justify-center py-24 gap-2">
+						<p className="text-sm font-medium text-muted-foreground">No results found</p>
+						<p className="text-xs text-muted-foreground">Try a different search term.</p>
+					</div>
+				)}
+			</Tabs>
 		</div>
 	);
 }
 
-function AllResults({ results, onDownload }: { results: any; onDownload: (id: string, type: string) => void }) {
+function AllResults({
+	results,
+	onDownload,
+}: {
+	results: any;
+	onDownload: (id: string, type: string) => void;
+}) {
 	const tracks = results?.TRACK?.data?.slice(0, 6) || [];
 	const albums = results?.ALBUM?.data?.slice(0, 6) || [];
 	const artists = results?.ARTIST?.data?.slice(0, 6) || [];
 
+	if (tracks.length === 0 && albums.length === 0 && artists.length === 0) {
+		return <EmptyTabState />;
+	}
+
 	return (
-		<div className="space-y-8">
+		<div className="space-y-8 mt-4">
 			{tracks.length > 0 && (
-				<section>
-					<h2 className="text-lg font-semibold mb-3">Tracks</h2>
-					<div className="space-y-1">
-						{tracks.map((track: any) => (
-							<TrackRow key={track.SNG_ID || track.id} track={track} onDownload={onDownload} />
+				<section className="space-y-3">
+					<h2 className="text-sm font-medium text-muted-foreground">
+						Tracks
+					</h2>
+					<div className="rounded-lg border border-border overflow-hidden">
+						{tracks.map((track: any, idx: number) => (
+							<div key={track.SNG_ID || track.id}>
+								<TrackRow track={track} onDownload={onDownload} />
+								{idx < tracks.length - 1 && <Separator />}
+							</div>
 						))}
 					</div>
 				</section>
 			)}
 			{albums.length > 0 && (
-				<section>
-					<h2 className="text-lg font-semibold mb-3">Albums</h2>
-					<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+				<section className="space-y-3">
+					<h2 className="text-sm font-medium text-muted-foreground">
+						Albums
+					</h2>
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
 						{albums.map((album: any) => (
-							<AlbumCard key={album.ALB_ID || album.id} album={album} onDownload={onDownload} />
+							<AlbumCard
+								key={album.ALB_ID || album.id}
+								album={album}
+								onDownload={onDownload}
+							/>
 						))}
 					</div>
 				</section>
 			)}
 			{artists.length > 0 && (
-				<section>
-					<h2 className="text-lg font-semibold mb-3">Artists</h2>
-					<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+				<section className="space-y-3">
+					<h2 className="text-sm font-medium text-muted-foreground">
+						Artists
+					</h2>
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
 						{artists.map((artist: any) => (
-							<ArtistCard key={artist.ART_ID || artist.id} artist={artist} />
+							<ArtistCard
+								key={artist.ART_ID || artist.id}
+								artist={artist}
+							/>
 						))}
 					</div>
 				</section>
@@ -137,69 +213,110 @@ function AllResults({ results, onDownload }: { results: any; onDownload: (id: st
 	);
 }
 
-function TrackRow({ track, onDownload }: { track: any; onDownload: (id: string, type: string) => void }) {
+function TrackRow({
+	track,
+	onDownload,
+}: {
+	track: any;
+	onDownload: (id: string, type: string) => void;
+}) {
 	const id = track.SNG_ID || track.id;
 	const title = track.SNG_TITLE || track.title;
 	const artist = track.ART_NAME || track.artist?.name;
 	const album = track.ALB_TITLE || track.album?.title;
 	const duration = track.DURATION || track.duration;
-	const cover = track.ALB_PICTURE
-		? `https://e-cdns-images.dzcdn.net/images/cover/${track.ALB_PICTURE}/56x56-000000-80-0-0.jpg`
-		: track.album?.cover_small;
+	const cover =
+		track.album?.cover_small ||
+		getCoverUrl(track.ALB_PICTURE, 56);
+	const previewUrl = track.MEDIA?.[0]?.HREF || track.preview || "";
 
 	return (
-		<div
-			className="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors group cursor-pointer"
-			style={{ background: "transparent" }}
-			onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary)")}
-			onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-		>
-			{cover && <img src={cover} alt="" className="w-10 h-10 rounded" />}
+		<div className="flex items-center gap-3 px-4 py-2.5 group hover:bg-muted/50 transition-colors">
+			{cover && (
+				<img
+					src={cover}
+					alt=""
+					className="w-10 h-10 rounded-md object-cover"
+				/>
+			)}
 			<div className="flex-1 min-w-0">
-				<div className="text-sm truncate">{title}</div>
-				<div className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>
-					{artist} {album ? `- ${album}` : ""}
-				</div>
+				<p className="text-sm font-medium truncate">{title}</p>
+				<p className="text-xs text-muted-foreground truncate">
+					{artist}
+					{album ? ` \u00b7 ${album}` : ""}
+				</p>
 			</div>
-			<span className="text-xs" style={{ color: "var(--text-muted)" }}>
+			<span className="text-xs text-muted-foreground tabular-nums">
 				{duration ? convertDuration(duration) : ""}
 			</span>
-			<button
+			<PreviewButton
+				track={{
+					id,
+					title,
+					artist,
+					cover: cover || "",
+					previewUrl,
+				}}
+			/>
+			<Button
+				size="icon-sm"
+				variant="ghost"
 				onClick={() => onDownload(id, "track")}
-				className="opacity-0 group-hover:opacity-100 transition-opacity btn btn-primary text-xs py-1 px-2"
+				className="opacity-0 group-hover:opacity-100 transition-opacity"
 			>
-				DL
-			</button>
+				<Download className="size-3.5" />
+			</Button>
 		</div>
 	);
 }
 
-function AlbumCard({ album, onDownload }: { album: any; onDownload: (id: string, type: string) => void }) {
+function AlbumCard({
+	album,
+	onDownload,
+}: {
+	album: any;
+	onDownload: (id: string, type: string) => void;
+}) {
 	const id = album.ALB_ID || album.id;
 	const title = album.ALB_TITLE || album.title;
 	const artist = album.ART_NAME || album.artist?.name;
-	const cover = album.ALB_PICTURE
-		? `https://e-cdns-images.dzcdn.net/images/cover/${album.ALB_PICTURE}/250x250-000000-80-0-0.jpg`
-		: album.cover_medium;
+	const cover =
+		album.cover_medium ||
+		album.cover_big ||
+		getCoverUrl(album.ALB_PICTURE, 250) ||
+		"/placeholder.jpg";
 
 	return (
-		<div>
-			<div className="cover-container">
+		<div className="group">
+			<div className="relative rounded-xl overflow-hidden bg-muted/30">
 				<Link href={`/album?id=${id}`}>
-					<img src={cover || "/placeholder.jpg"} alt={title} loading="lazy" />
+					<img
+						src={cover}
+						alt={title}
+						loading="lazy"
+						className="w-full aspect-square object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+					/>
 				</Link>
-				<div className="overlay">
-					<button onClick={() => onDownload(id, "album")} className="btn btn-primary text-sm">
+				<div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center">
+					<Button
+						size="sm"
+						onClick={() => onDownload(id, "album")}
+						className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5"
+					>
+						<Download className="size-3.5" />
 						Download
-					</button>
+					</Button>
 				</div>
 			</div>
-			<Link href={`/album?id=${id}`} className="block mt-2 text-sm truncate no-underline" style={{ color: "var(--text-primary)" }}>
-				{title}
-			</Link>
-			<span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-				{artist}
-			</span>
+			<div className="mt-2 px-0.5">
+				<Link
+					href={`/album?id=${id}`}
+					className="text-sm font-medium truncate block hover:underline"
+				>
+					{title}
+				</Link>
+				<p className="text-xs text-muted-foreground truncate">{artist}</p>
+			</div>
 		</div>
 	);
 }
@@ -207,41 +324,74 @@ function AlbumCard({ album, onDownload }: { album: any; onDownload: (id: string,
 function ArtistCard({ artist }: { artist: any }) {
 	const id = artist.ART_ID || artist.id;
 	const name = artist.ART_NAME || artist.name;
-	const picture = artist.ART_PICTURE
-		? `https://e-cdns-images.dzcdn.net/images/artist/${artist.ART_PICTURE}/250x250-000000-80-0-0.jpg`
-		: artist.picture_medium;
+	const picture =
+		artist.picture_xl ||
+		artist.picture_medium ||
+		getArtistUrl(artist.ART_PICTURE, 250) ||
+		"/placeholder.jpg";
 
 	return (
-		<div className="text-center">
+		<div className="group text-center">
 			<Link href={`/artist?id=${id}`}>
-				<div className="cover-container rounded-full mx-auto" style={{ maxWidth: "150px" }}>
-					<img src={picture || "/placeholder.jpg"} alt={name} loading="lazy" className="rounded-full" />
+				<div className="rounded-full overflow-hidden bg-muted/30 aspect-square">
+					<img
+						src={picture}
+						alt={name}
+						loading="lazy"
+						className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.05]"
+					/>
 				</div>
 			</Link>
-			<Link href={`/artist?id=${id}`} className="block mt-2 text-sm truncate no-underline" style={{ color: "var(--text-primary)" }}>
-				{name}
-			</Link>
+			<div className="mt-2">
+				<Link
+					href={`/artist?id=${id}`}
+					className="text-sm font-medium truncate block hover:underline"
+				>
+					{name}
+				</Link>
+			</div>
 		</div>
 	);
 }
 
-function TrackResults({ data, onDownload }: { data: any; onDownload: (id: string, type: string) => void }) {
+function TrackResults({
+	data,
+	onDownload,
+}: {
+	data: any;
+	onDownload: (id: string, type: string) => void;
+}) {
 	const tracks = data?.data || [];
+	if (tracks.length === 0) return <EmptyTabState />;
 	return (
-		<div className="space-y-1">
-			{tracks.map((track: any) => (
-				<TrackRow key={track.SNG_ID || track.id} track={track} onDownload={onDownload} />
+		<div className="mt-4 rounded-lg border border-border overflow-hidden">
+			{tracks.map((track: any, idx: number) => (
+				<div key={track.SNG_ID || track.id}>
+					<TrackRow track={track} onDownload={onDownload} />
+					{idx < tracks.length - 1 && <Separator />}
+				</div>
 			))}
 		</div>
 	);
 }
 
-function AlbumResults({ data, onDownload }: { data: any; onDownload: (id: string, type: string) => void }) {
+function AlbumResults({
+	data,
+	onDownload,
+}: {
+	data: any;
+	onDownload: (id: string, type: string) => void;
+}) {
 	const albums = data?.data || [];
+	if (albums.length === 0) return <EmptyTabState />;
 	return (
-		<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
 			{albums.map((album: any) => (
-				<AlbumCard key={album.ALB_ID || album.id} album={album} onDownload={onDownload} />
+				<AlbumCard
+					key={album.ALB_ID || album.id}
+					album={album}
+					onDownload={onDownload}
+				/>
 			))}
 		</div>
 	);
@@ -249,36 +399,70 @@ function AlbumResults({ data, onDownload }: { data: any; onDownload: (id: string
 
 function ArtistResults({ data }: { data: any }) {
 	const artists = data?.data || [];
+	if (artists.length === 0) return <EmptyTabState />;
 	return (
-		<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-4">
 			{artists.map((artist: any) => (
-				<ArtistCard key={artist.ART_ID || artist.id} artist={artist} />
+				<ArtistCard
+					key={artist.ART_ID || artist.id}
+					artist={artist}
+				/>
 			))}
 		</div>
 	);
 }
 
-function PlaylistResults({ data, onDownload }: { data: any; onDownload: (id: string, type: string) => void }) {
-	const playlists = data?.data || [];
+function EmptyTabState() {
 	return (
-		<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+		<div className="flex flex-col items-center justify-center py-24 gap-2">
+			<p className="text-sm font-medium text-muted-foreground">No results</p>
+			<p className="text-xs text-muted-foreground">No matches found for this category.</p>
+		</div>
+	);
+}
+
+function PlaylistResults({
+	data,
+	onDownload,
+}: {
+	data: any;
+	onDownload: (id: string, type: string) => void;
+}) {
+	const playlists = data?.data || [];
+	if (playlists.length === 0) return <EmptyTabState />;
+	return (
+		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
 			{playlists.map((pl: any) => {
 				const id = pl.PLAYLIST_ID || pl.id;
 				const title = pl.TITLE || pl.title;
-				const picture = pl.PLAYLIST_PICTURE
-					? `https://e-cdns-images.dzcdn.net/images/playlist/${pl.PLAYLIST_PICTURE}/250x250-000000-80-0-0.jpg`
-					: pl.picture_medium;
+				const picture =
+					pl.picture_xl ||
+					pl.picture_medium ||
+					getCoverUrl(pl.PLAYLIST_PICTURE, 250) ||
+					"/placeholder.jpg";
 				return (
-					<div key={id}>
-						<div className="cover-container">
-							<img src={picture || "/placeholder.jpg"} alt={title} loading="lazy" />
-							<div className="overlay">
-								<button onClick={() => onDownload(id, "playlist")} className="btn btn-primary text-sm">
+					<div key={id} className="group">
+						<div className="relative rounded-xl overflow-hidden bg-muted/30">
+							<img
+								src={picture}
+								alt={title}
+								loading="lazy"
+								className="w-full aspect-square object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+							/>
+							<div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center">
+								<Button
+									size="sm"
+									onClick={() => onDownload(id, "playlist")}
+									className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5"
+								>
+									<Download className="size-3.5" />
 									Download
-								</button>
+								</Button>
 							</div>
 						</div>
-						<span className="block mt-2 text-sm truncate">{title}</span>
+						<div className="mt-2 px-0.5">
+							<p className="text-sm font-medium truncate">{title}</p>
+						</div>
 					</div>
 				);
 			})}
@@ -288,7 +472,13 @@ function PlaylistResults({ data, onDownload }: { data: any; onDownload: (id: str
 
 export default function SearchPage() {
 	return (
-		<Suspense fallback={<div style={{ color: "var(--text-muted)" }}>Loading...</div>}>
+		<Suspense
+			fallback={
+				<div className="flex items-center justify-center min-h-[50vh]">
+					<Loader2 className="size-5 animate-spin text-muted-foreground" />
+				</div>
+			}
+		>
 			<SearchContent />
 		</Suspense>
 	);

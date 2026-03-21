@@ -4,6 +4,22 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchData, postToServer } from "@/utils/api";
 import { convertDuration } from "@/utils/helpers";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { PreviewButton } from "@/components/audio/PreviewButton";
+import { Loader2 } from "lucide-react";
+
+function getCoverUrl(hash: string, size = 500) {
+	if (!hash) return "";
+	if (hash.startsWith("http")) return hash;
+	return `https://e-cdns-images.dzcdn.net/images/cover/${hash}/${size}x${size}-000000-80-0-0.jpg`;
+}
+
+function getArtistUrl(hash: string, size = 500) {
+	if (!hash) return "";
+	if (hash.startsWith("http")) return hash;
+	return `https://e-cdns-images.dzcdn.net/images/artist/${hash}/${size}x${size}-000000-80-0-0.jpg`;
+}
 
 function PlaylistContent() {
 	const searchParams = useSearchParams();
@@ -37,74 +53,130 @@ function PlaylistContent() {
 		postToServer("add-to-queue", { url, bitrate: null });
 	};
 
-	if (loading) return <div style={{ color: "var(--text-muted)" }}>Loading...</div>;
-	if (!playlist) return <div style={{ color: "var(--text-muted)" }}>Playlist not found</div>;
+	if (loading)
+		return (
+			<div className="flex items-center justify-center min-h-[50vh]">
+				<Loader2 className="size-5 animate-spin text-muted-foreground" />
+			</div>
+		);
+	if (!playlist)
+		return (
+			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
+				<p className="text-sm font-medium text-muted-foreground">Playlist not found</p>
+				<p className="text-xs text-muted-foreground">The playlist you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
+			</div>
+		);
+
+	const playlistCover =
+		playlist.picture_xl ||
+		playlist.picture_big ||
+		playlist.picture_medium ||
+		getCoverUrl(playlist.PLAYLIST_PICTURE, 500) ||
+		"/placeholder.jpg";
+
+	const playlistTitle = playlist.title || playlist.TITLE || "Playlist";
 
 	return (
-		<div>
-			<div className="flex gap-6 mb-8">
-				<div className="w-48 h-48 rounded-lg overflow-hidden flex-shrink-0">
-					<img
-						src={playlist.picture_xl || playlist.picture_big || "/placeholder.jpg"}
-						alt={playlist.title}
-						className="w-full h-full object-cover"
-					/>
-				</div>
-				<div className="flex flex-col justify-end">
-					<span className="text-xs uppercase" style={{ color: "var(--text-muted)" }}>
-						Playlist
-					</span>
-					<h1 className="text-3xl font-bold mb-2">{playlist.title}</h1>
-					{playlist.creator && (
-						<p style={{ color: "var(--text-secondary)" }}>by {playlist.creator?.name}</p>
-					)}
-					<p className="text-sm" style={{ color: "var(--text-muted)" }}>
-						{playlist.nb_tracks || tracks.length} tracks
-					</p>
-					<button onClick={handleDownloadAll} className="btn btn-primary mt-4 w-fit">
-						Download Playlist
-					</button>
+		<div className="space-y-8">
+			{/* Playlist Header */}
+			<div className="flex flex-col md:flex-row gap-8">
+				<img
+					src={playlistCover}
+					alt={playlistTitle}
+					className="w-48 h-48 rounded-lg object-cover flex-shrink-0"
+				/>
+				<div className="flex flex-col justify-end gap-3">
+					<p className="text-xs font-medium text-muted-foreground">Playlist</p>
+					<h1 className="text-2xl font-semibold tracking-tight text-foreground">
+						{playlistTitle}
+					</h1>
+					<div className="flex items-center gap-2 text-sm text-muted-foreground">
+						{playlist.creator && <span>By {playlist.creator?.name}</span>}
+						{(playlist.nb_tracks || tracks.length > 0) && (
+							<>
+								{playlist.creator && <span className="text-border">·</span>}
+								<span>{playlist.nb_tracks || tracks.length} tracks</span>
+							</>
+						)}
+					</div>
+					<Button onClick={handleDownloadAll} className="w-fit mt-1">
+						Download playlist
+					</Button>
 				</div>
 			</div>
 
-			<div className="space-y-1">
-				{tracks.map((track: any, idx: number) => (
-					<div
-						key={track.id || track.SNG_ID || idx}
-						className="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors group"
-						onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary)")}
-						onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-					>
-						<span className="text-sm w-8 text-right" style={{ color: "var(--text-muted)" }}>
-							{idx + 1}
-						</span>
-						{(track.album?.cover_small || track.ALB_PICTURE) && (
-							<img
-								src={
-									track.album?.cover_small ||
-									`https://e-cdns-images.dzcdn.net/images/cover/${track.ALB_PICTURE}/56x56-000000-80-0-0.jpg`
-								}
-								alt=""
-								className="w-10 h-10 rounded"
-							/>
-						)}
-						<div className="flex-1 min-w-0">
-							<div className="text-sm truncate">{track.title || track.SNG_TITLE}</div>
-							<div className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>
-								{track.artist?.name || track.ART_NAME}
-							</div>
-						</div>
-						<span className="text-xs" style={{ color: "var(--text-muted)" }}>
-							{convertDuration(track.duration || track.DURATION || 0)}
-						</span>
-						<button
-							onClick={() => handleDownloadTrack(track.id || track.SNG_ID)}
-							className="opacity-0 group-hover:opacity-100 btn btn-primary text-xs py-1 px-2"
-						>
-							DL
-						</button>
+			<Separator />
+
+			{/* Tracklist */}
+			<div>
+				<h2 className="text-xs font-medium text-muted-foreground mb-4">
+					Tracklist
+				</h2>
+				{tracks.length === 0 ? (
+					<div className="flex flex-col items-center justify-center py-16 gap-2">
+						<p className="text-sm font-medium text-muted-foreground">No tracks</p>
+						<p className="text-xs text-muted-foreground">The tracklist for this playlist is unavailable.</p>
 					</div>
-				))}
+				) : (
+				<div className="rounded-lg border border-border overflow-hidden">
+					{tracks.map((track: any, idx: number) => {
+						const trackId = track.id || track.SNG_ID;
+						const trackTitle = track.title || track.SNG_TITLE;
+						const trackArtist = track.artist?.name || track.ART_NAME;
+						const trackDuration = track.duration || track.DURATION || 0;
+						const trackCover =
+							track.album?.cover_small ||
+							getCoverUrl(track.ALB_PICTURE, 56);
+						const previewUrl = track.MEDIA?.[0]?.HREF || track.preview || "";
+
+						return (
+							<div
+								key={trackId || idx}
+								className="flex items-center gap-4 px-4 py-3 border-b border-border last:border-b-0 transition-colors hover:bg-muted group"
+							>
+								<span className="text-xs text-muted-foreground w-6 text-right tabular-nums">
+									{idx + 1}
+								</span>
+								{trackCover && (
+									<img
+										src={trackCover}
+										alt=""
+										className="w-10 h-10 rounded object-cover flex-shrink-0"
+									/>
+								)}
+								<div className="flex-1 min-w-0">
+									<p className="text-sm font-medium truncate text-foreground">
+										{trackTitle}
+									</p>
+									<p className="text-xs text-muted-foreground truncate">
+										{trackArtist}
+									</p>
+								</div>
+								<span className="text-xs text-muted-foreground tabular-nums">
+									{convertDuration(trackDuration)}
+								</span>
+								<PreviewButton
+									track={{
+										id: trackId,
+										title: trackTitle,
+										artist: trackArtist,
+										cover: trackCover || "",
+										previewUrl,
+									}}
+								/>
+								<Button
+									variant="ghost"
+									size="xs"
+									onClick={() => handleDownloadTrack(trackId)}
+									className="opacity-0 group-hover:opacity-100 transition-opacity"
+								>
+									Download
+								</Button>
+							</div>
+						);
+					})}
+				</div>
+				)}
 			</div>
 		</div>
 	);
@@ -112,7 +184,13 @@ function PlaylistContent() {
 
 export default function PlaylistPage() {
 	return (
-		<Suspense fallback={<div style={{ color: "var(--text-muted)" }}>Loading...</div>}>
+		<Suspense
+			fallback={
+				<div className="flex items-center justify-center min-h-[50vh]">
+					<Loader2 className="size-5 animate-spin text-muted-foreground" />
+				</div>
+			}
+		>
 			<PlaylistContent />
 		</Suspense>
 	);

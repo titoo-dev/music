@@ -3,6 +3,18 @@
 import { useState } from "react";
 import { fetchData, postToServer } from "@/utils/api";
 import { convertDuration } from "@/utils/helpers";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Download, Loader2, Link2, AlertCircle } from "lucide-react";
 
 export default function LinkAnalyzerPage() {
 	const [link, setLink] = useState("");
@@ -17,7 +29,9 @@ export default function LinkAnalyzerPage() {
 		setError("");
 		setResult(null);
 		try {
-			const data = await fetchData("analyze-link", { term: link.trim() });
+			const data = await fetchData("analyze-link", {
+				term: link.trim(),
+			});
 			if (data.error) {
 				setError(data.error);
 			} else {
@@ -36,75 +50,128 @@ export default function LinkAnalyzerPage() {
 	};
 
 	return (
-		<div className="max-w-2xl">
-			<h1 className="text-2xl font-bold mb-6">Link Analyzer</h1>
+		<div className="max-w-2xl mx-auto space-y-6">
+			<div>
+				<h1 className="text-2xl font-semibold tracking-tight">
+					Link Analyzer
+				</h1>
+				<p className="text-sm text-muted-foreground mt-1">
+					Paste a Deezer or Spotify link to analyze and download.
+				</p>
+			</div>
 
-			<form onSubmit={handleAnalyze} className="flex gap-2 mb-6">
-				<input
-					type="text"
-					value={link}
-					onChange={(e) => setLink(e.target.value)}
-					placeholder="Paste a Deezer or Spotify link..."
-					className="input flex-1"
-				/>
-				<button type="submit" className="btn btn-primary" disabled={loading}>
-					{loading ? "..." : "Analyze"}
-				</button>
+			<form onSubmit={handleAnalyze} className="flex gap-2">
+				<div className="relative flex-1">
+					<Link2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+					<Input
+						type="text"
+						value={link}
+						onChange={(e) => setLink(e.target.value)}
+						placeholder="Paste a link here..."
+						className="pl-9"
+					/>
+				</div>
+				<Button type="submit" disabled={loading}>
+					{loading ? (
+						<Loader2 className="size-4 animate-spin" />
+					) : (
+						"Analyze"
+					)}
+				</Button>
 			</form>
 
 			{error && (
-				<div className="p-4 rounded-lg mb-4" style={{ background: "var(--bg-tertiary)" }}>
-					<span style={{ color: "var(--danger)" }}>{error}</span>
+				<div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-3">
+					<AlertCircle className="size-4 text-destructive shrink-0" />
+					<p className="text-sm text-destructive">{error}</p>
 				</div>
 			)}
 
 			{result && (
-				<div className="card">
-					<div className="flex gap-4 mb-4">
-						{(result.cover_xl || result.cover_big || result.picture_xl) && (
-							<img
-								src={result.cover_xl || result.cover_big || result.picture_xl}
-								alt=""
-								className="w-32 h-32 rounded-lg object-cover"
-							/>
-						)}
-						<div>
-							<h2 className="text-xl font-bold">{result.title}</h2>
-							{result.artist?.name && (
-								<p style={{ color: "var(--text-secondary)" }}>{result.artist.name}</p>
+				<Card>
+					<CardContent className="pt-6">
+						<div className="flex gap-4">
+							{(result.cover_xl ||
+								result.cover_big ||
+								result.picture_xl) && (
+								<img
+									src={
+										result.cover_xl ||
+										result.cover_big ||
+										result.picture_xl
+									}
+									alt=""
+									className="w-28 h-28 rounded-xl object-cover shrink-0"
+								/>
 							)}
-							{result.duration && (
-								<p className="text-sm" style={{ color: "var(--text-muted)" }}>
-									Duration: {convertDuration(result.duration)}
-								</p>
-							)}
-							{result.nb_tracks && (
-								<p className="text-sm" style={{ color: "var(--text-muted)" }}>
-									{result.nb_tracks} tracks
-								</p>
-							)}
-							<button onClick={handleDownload} className="btn btn-primary mt-3">
-								Download
-							</button>
-						</div>
-					</div>
-
-					{result.tracks?.data && (
-						<div className="mt-4 space-y-1">
-							{result.tracks.data.map((track: any, idx: number) => (
-								<div key={track.id || idx} className="flex items-center gap-3 py-1">
-									<span className="text-xs w-6 text-right" style={{ color: "var(--text-muted)" }}>
-										{idx + 1}
-									</span>
-									<span className="text-sm flex-1 truncate">{track.title}</span>
-									<span className="text-xs" style={{ color: "var(--text-muted)" }}>
-										{convertDuration(track.duration)}
-									</span>
+							<div className="flex-1 min-w-0 space-y-2">
+								<h2 className="text-lg font-semibold truncate">
+									{result.title}
+								</h2>
+								{result.artist?.name && (
+									<p className="text-sm text-muted-foreground">
+										{result.artist.name}
+									</p>
+								)}
+								<div className="flex gap-2 flex-wrap">
+									{result.duration && (
+										<Badge variant="secondary">
+											{convertDuration(result.duration)}
+										</Badge>
+									)}
+									{result.nb_tracks && (
+										<Badge variant="secondary">
+											{result.nb_tracks} tracks
+										</Badge>
+									)}
 								</div>
-							))}
+								<Button
+									size="sm"
+									onClick={handleDownload}
+									className="gap-1.5 mt-1"
+								>
+									<Download className="size-3.5" />
+									Download
+								</Button>
+							</div>
 						</div>
-					)}
-				</div>
+
+						{result.tracks?.data && (
+							<>
+								<Separator className="my-4" />
+								<div className="space-y-1">
+									<h3 className="text-sm font-medium text-muted-foreground mb-3">
+										Tracklist
+									</h3>
+									<div className="rounded-lg border border-border overflow-hidden">
+										{result.tracks.data.map(
+											(track: any, idx: number) => (
+												<div key={track.id || idx}>
+													<div className="flex items-center gap-3 py-2 px-3 hover:bg-muted/50 transition-colors">
+														<span className="text-xs text-muted-foreground w-6 text-right tabular-nums">
+															{idx + 1}
+														</span>
+														<span className="text-sm flex-1 truncate">
+															{track.title}
+														</span>
+														<span className="text-xs text-muted-foreground tabular-nums">
+															{convertDuration(
+																track.duration
+															)}
+														</span>
+													</div>
+													{idx <
+														result.tracks.data.length -
+															1 && <Separator />}
+												</div>
+											)
+										)}
+									</div>
+								</div>
+							</>
+						)}
+					</CardContent>
+				</Card>
 			)}
 		</div>
 	);

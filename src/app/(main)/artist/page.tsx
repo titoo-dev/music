@@ -4,6 +4,23 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchData, postToServer } from "@/utils/api";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { Loader2 } from "lucide-react";
+
+function getCoverUrl(hash: string, size = 500) {
+	if (!hash) return "";
+	if (hash.startsWith("http")) return hash;
+	return `https://e-cdns-images.dzcdn.net/images/cover/${hash}/${size}x${size}-000000-80-0-0.jpg`;
+}
+
+function getArtistUrl(hash: string, size = 500) {
+	if (!hash) return "";
+	if (hash.startsWith("http")) return hash;
+	return `https://e-cdns-images.dzcdn.net/images/artist/${hash}/${size}x${size}-000000-80-0-0.jpg`;
+}
 
 function ArtistContent() {
 	const searchParams = useSearchParams();
@@ -33,92 +50,143 @@ function ArtistContent() {
 		postToServer("add-to-queue", { url, bitrate: null });
 	};
 
-	if (loading) return <div style={{ color: "var(--text-muted)" }}>Loading...</div>;
-	if (!artist) return <div style={{ color: "var(--text-muted)" }}>Artist not found</div>;
+	if (loading)
+		return (
+			<div className="flex items-center justify-center min-h-[50vh]">
+				<Loader2 className="size-5 animate-spin text-muted-foreground" />
+			</div>
+		);
+	if (!artist)
+		return (
+			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
+				<p className="text-sm font-medium text-muted-foreground">Artist not found</p>
+				<p className="text-xs text-muted-foreground">The artist you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
+			</div>
+		);
+
+	const artistPicture =
+		artist.picture_xl ||
+		artist.picture_big ||
+		artist.picture_medium ||
+		getArtistUrl(artist.ART_PICTURE, 500);
+
+	const artistName = artist.name || artist.ART_NAME;
 
 	const tabKeys = Object.keys(releases).filter((k) => releases[k]?.length > 0);
-	const currentReleases = releases[tab] || [];
 
 	return (
-		<div>
-			<div className="flex gap-6 mb-8">
-				{(artist.picture_xl || artist.picture_big) && (
-					<div className="w-48 h-48 rounded-full overflow-hidden flex-shrink-0">
-						<img
-							src={artist.picture_xl || artist.picture_big}
-							alt={artist.name}
-							className="w-full h-full object-cover"
-						/>
-					</div>
+		<div className="space-y-8">
+			{/* Artist Header */}
+			<div className="flex flex-col md:flex-row items-center md:items-end gap-8">
+				{artistPicture && (
+					<img
+						src={artistPicture}
+						alt={artistName}
+						className="w-48 h-48 rounded-full object-cover flex-shrink-0"
+					/>
 				)}
-				<div className="flex flex-col justify-end">
-					<span className="text-xs uppercase" style={{ color: "var(--text-muted)" }}>
-						Artist
-					</span>
-					<h1 className="text-3xl font-bold mb-2">{artist.name}</h1>
+				<div className="flex flex-col gap-2 text-center md:text-left">
+					<p className="text-xs font-medium text-muted-foreground">Artist</p>
+					<h1 className="text-2xl font-semibold tracking-tight text-foreground">
+						{artistName}
+					</h1>
 					{artist.nb_fan && (
-						<p className="text-sm" style={{ color: "var(--text-muted)" }}>
+						<p className="text-sm text-muted-foreground">
 							{artist.nb_fan.toLocaleString()} fans
 						</p>
 					)}
 				</div>
 			</div>
 
+			<Separator />
+
+			{/* Release Tabs */}
 			{tabKeys.length > 0 && (
-				<div className="flex gap-2 mb-6">
+				<Tabs
+					value={tab}
+					onValueChange={(val: string | null) => val && setTab(val)}
+				>
+					<TabsList variant="line">
+						{tabKeys.map((key) => (
+							<TabsTrigger key={key} value={key}>
+								{key.charAt(0).toUpperCase() + key.slice(1)} ({releases[key].length})
+							</TabsTrigger>
+						))}
+					</TabsList>
+
 					{tabKeys.map((key) => (
-						<button
-							key={key}
-							onClick={() => setTab(key)}
-							className="px-4 py-2 rounded-full text-sm transition-colors capitalize cursor-pointer"
-							style={{
-								background: tab === key ? "var(--primary)" : "var(--bg-tertiary)",
-								color: tab === key ? "white" : "var(--text-secondary)",
-							}}
-						>
-							{key} ({releases[key].length})
-						</button>
+						<TabsContent key={key} value={key} className="mt-6">
+							<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+								{releases[key].map((album: any) => {
+									const albumId = album.id || album.ALB_ID;
+									const albumTitle = album.title || album.ALB_TITLE;
+									const albumCover =
+										album.cover_medium ||
+										album.cover_big ||
+										getCoverUrl(album.ALB_PICTURE, 250) ||
+										"/placeholder.jpg";
+
+									return (
+										<div key={albumId} className="group space-y-2">
+											<div className="relative overflow-hidden rounded-lg">
+												<Link href={`/album?id=${albumId}`}>
+													<img
+														src={albumCover}
+														alt={albumTitle}
+														loading="lazy"
+														className="w-full aspect-square object-cover transition-opacity group-hover:opacity-80"
+													/>
+												</Link>
+												<div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+													<Button
+														size="sm"
+														onClick={() => handleDownload(albumId)}
+													>
+														Download
+													</Button>
+												</div>
+											</div>
+											<div>
+												<Link
+													href={`/album?id=${albumId}`}
+													className="text-sm font-medium truncate block text-foreground hover:underline"
+												>
+													{albumTitle}
+												</Link>
+												<p className="text-xs text-muted-foreground">
+													{album.release_date || album.PHYSICAL_RELEASE_DATE}
+													{(album.nb_tracks || album.NUMBER_TRACK) ? ` \u00b7 ${album.nb_tracks || album.NUMBER_TRACK} tracks` : ""}
+												</p>
+											</div>
+										</div>
+									);
+								})}
+							</div>
+						</TabsContent>
 					))}
-				</div>
+				</Tabs>
 			)}
 
-			<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-				{currentReleases.map((album: any) => (
-					<div key={album.id}>
-						<div className="cover-container">
-							<Link href={`/album?id=${album.id}`}>
-								<img
-									src={album.cover_medium || album.cover_big || "/placeholder.jpg"}
-									alt={album.title}
-									loading="lazy"
-								/>
-							</Link>
-							<div className="overlay">
-								<button onClick={() => handleDownload(album.id)} className="btn btn-primary text-sm">
-									Download
-								</button>
-							</div>
-						</div>
-						<Link
-							href={`/album?id=${album.id}`}
-							className="block mt-2 text-sm truncate no-underline"
-							style={{ color: "var(--text-primary)" }}
-						>
-							{album.title}
-						</Link>
-						<span className="text-xs" style={{ color: "var(--text-muted)" }}>
-							{album.release_date} {album.nb_tracks ? `- ${album.nb_tracks} tracks` : ""}
-						</span>
-					</div>
-				))}
-			</div>
+			{/* Fallback if no categorized releases */}
+			{tabKeys.length === 0 && (
+				<div className="flex flex-col items-center justify-center py-24 gap-2">
+					<p className="text-sm font-medium text-muted-foreground">No releases</p>
+					<p className="text-xs text-muted-foreground">No discography found for this artist.</p>
+				</div>
+			)}
 		</div>
 	);
 }
 
 export default function ArtistPage() {
 	return (
-		<Suspense fallback={<div style={{ color: "var(--text-muted)" }}>Loading...</div>}>
+		<Suspense
+			fallback={
+				<div className="flex items-center justify-center min-h-[50vh]">
+					<Loader2 className="size-5 animate-spin text-muted-foreground" />
+				</div>
+			}
+		>
 			<ArtistContent />
 		</Suspense>
 	);

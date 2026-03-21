@@ -2,27 +2,40 @@
 
 import type { QueueItem as QueueItemType } from "@/stores/useQueueStore";
 import { postToServer } from "@/utils/api";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 
 interface Props {
 	item: QueueItemType;
 }
 
-const statusLabels: Record<string, string> = {
-	inQueue: "In Queue",
-	downloading: "Downloading",
-	completed: "Completed",
-	withErrors: "Completed with errors",
-	failed: "Failed",
-	cancelling: "Cancelling...",
-};
-
-const statusColors: Record<string, string> = {
-	inQueue: "var(--text-muted)",
-	downloading: "var(--primary)",
-	completed: "var(--success)",
-	withErrors: "var(--warning)",
-	failed: "var(--danger)",
-	cancelling: "var(--warning)",
+const statusConfig: Record<string, { label: string; className: string }> = {
+	inQueue: {
+		label: "Queued",
+		className: "bg-muted text-muted-foreground",
+	},
+	downloading: {
+		label: "Downloading",
+		className: "bg-primary/10 text-primary",
+	},
+	completed: {
+		label: "Done",
+		className: "bg-emerald-50 text-emerald-600",
+	},
+	withErrors: {
+		label: "Errors",
+		className: "bg-amber-50 text-amber-600",
+	},
+	failed: {
+		label: "Failed",
+		className: "bg-red-50 text-red-600",
+	},
+	cancelling: {
+		label: "Cancelling",
+		className: "bg-muted text-muted-foreground",
+	},
 };
 
 export function QueueItem({ item }: Props) {
@@ -30,42 +43,43 @@ export function QueueItem({ item }: Props) {
 		postToServer("remove-from-queue", { uuid: item.uuid });
 	};
 
+	const config = statusConfig[item.status] || {
+		label: item.status,
+		className: "bg-muted text-muted-foreground",
+	};
+
 	return (
-		<div
-			className="px-4 py-3 flex gap-3 items-center transition-colors group"
-			style={{ borderBottom: "1px solid var(--border)" }}
-		>
+		<div className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
 			{/* Cover */}
-			<div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
-				{item.cover ? (
-					<img src={item.cover} alt="" className="w-full h-full object-cover" />
-				) : (
-					<div
-						className="w-full h-full flex items-center justify-center text-sm"
-						style={{ background: "var(--bg-tertiary)" }}
-					>
-						🎵
-					</div>
-				)}
-			</div>
+			{item.cover ? (
+				<img
+					src={item.cover}
+					alt=""
+					className="h-10 w-10 shrink-0 rounded-md object-cover"
+				/>
+			) : (
+				<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+					♪
+				</div>
+			)}
 
 			{/* Info */}
-			<div className="flex-1 min-w-0">
-				<div className="text-sm truncate">{item.title}</div>
-				<div className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>
+			<div className="min-w-0 flex-1">
+				<p className="truncate text-sm font-medium text-foreground">
+					{item.title}
+				</p>
+				<p className="truncate text-xs text-muted-foreground">
 					{item.artist}
-				</div>
+				</p>
 
-				{/* Progress */}
+				{/* Progress bar for downloading items */}
 				{item.status === "downloading" && (
-					<div className="mt-1">
-						<div className="progress-bar">
-							<div
-								className="fill"
-								style={{ width: `${Math.min(item.progress || 0, 100)}%` }}
-							/>
-						</div>
-						<div className="flex justify-between text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+					<div className="mt-2">
+						<Progress
+							value={Math.min(item.progress || 0, 100)}
+							className="[&_[data-slot=progress-track]]:h-1.5 [&_[data-slot=progress-track]]:rounded-full [&_[data-slot=progress-track]]:bg-muted [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:bg-primary"
+						/>
+						<div className="mt-1 flex justify-between text-xs text-muted-foreground">
 							<span>
 								{item.downloaded}/{item.size}
 							</span>
@@ -74,23 +88,26 @@ export function QueueItem({ item }: Props) {
 					</div>
 				)}
 
-				{/* Status */}
+				{/* Status badge for non-downloading items */}
 				{item.status !== "downloading" && (
-					<span className="text-xs" style={{ color: statusColors[item.status] || "var(--text-muted)" }}>
-						{statusLabels[item.status] || item.status}
-					</span>
+					<Badge
+						variant="secondary"
+						className={`mt-1.5 border-0 text-[11px] font-medium ${config.className}`}
+					>
+						{config.label}
+					</Badge>
 				)}
 			</div>
 
-			{/* Remove button */}
-			<button
+			{/* Remove button - visible on hover */}
+			<Button
+				variant="ghost"
+				size="icon-xs"
 				onClick={handleRemove}
-				className="opacity-0 group-hover:opacity-100 transition-opacity text-sm cursor-pointer"
-				style={{ color: "var(--text-muted)" }}
-				title="Remove"
+				className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
 			>
-				✕
-			</button>
+				<X className="h-3.5 w-3.5" />
+			</Button>
 		</div>
 	);
 }
