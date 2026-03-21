@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { Navigation } from "@/components/layout/Sidebar";
 import { SearchBar } from "@/components/layout/SearchBar";
-import { DownloadSheet } from "@/components/downloads/DownloadBar";
+import { DownloadTrigger } from "@/components/downloads/DownloadTrigger";
+import { DownloadPanel } from "@/components/downloads/DownloadPanel";
 import { useSocket } from "@/hooks/useSocket";
 import { useInitApp } from "@/hooks/useInitApp";
 import { useQueuePolling } from "@/hooks/useQueuePolling";
@@ -36,6 +37,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
 	const sidebarOpen = useAppStore((s) => s.sidebarOpen);
 	const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
+	const downloadsOpen = useAppStore((s) => s.downloadsOpen);
 	const user = useLoginStore((s) => s.user);
 	const loggedIn = useLoginStore((s) => s.loggedIn);
 	const logout = useLoginStore((s) => s.logout);
@@ -81,8 +83,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 						<SearchBar />
 					</div>
 
-					{/* Downloads sheet trigger */}
-					<DownloadSheet />
+					{/* Downloads panel trigger */}
+					<DownloadTrigger />
 
 					{/* User avatar / menu */}
 					{loggedIn && user ? (
@@ -161,13 +163,23 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 				</SheetContent>
 			</Sheet>
 
-			{/* ─── Main Content ─── */}
-			<ScrollArea className="flex-1">
-				<main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-					{children}
-				</main>
-			</ScrollArea>
-		{/* ─── Audio Preview ─── */}
+			{/* ─── Main Content + Downloads Panel ─── */}
+			<div className="flex flex-1 overflow-hidden">
+				<ScrollArea
+					className={`flex-1 transition-all duration-300 ${
+						downloadsOpen ? "mr-[340px]" : ""
+					}`}
+				>
+					<main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+						{children}
+					</main>
+				</ScrollArea>
+
+				{/* ─── Downloads Side Panel ─── */}
+				<DownloadPanel />
+			</div>
+
+			{/* ─── Audio Preview ─── */}
 			<AudioPreview />
 			<MiniPlayer />
 		</div>
