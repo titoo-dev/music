@@ -1,6 +1,7 @@
 "use client";
 
 import { usePreviewStore } from "@/stores/usePreviewStore";
+import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -20,13 +21,10 @@ export function MiniPlayer() {
 					className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-2xl border border-border/50 bg-background/90 px-4 py-3 shadow-xl backdrop-blur-xl"
 				>
 					{/* Cover */}
-					{currentTrack.cover && (
-						<img
-							src={currentTrack.cover}
-							alt=""
-							className="h-10 w-10 rounded-xl object-cover shadow-sm"
-						/>
-					)}
+					<CoverImage
+						src={currentTrack.cover}
+						className="h-10 w-10 rounded-xl shadow-sm"
+					/>
 
 					{/* Track info */}
 					<div className="min-w-0 max-w-[140px]">

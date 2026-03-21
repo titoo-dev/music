@@ -70,7 +70,10 @@ export function useSocket() {
 					useQueueStore.getState().clearCompleted();
 					break;
 				case "finishDownload":
-					updateQueueItem(data.uuid, { status: data.status || "completed" });
+					updateQueueItem(data.uuid, {
+						status: data.status || "completed",
+						...(data.extrasPath ? { extrasPath: data.extrasPath } : {}),
+					});
 					break;
 				case "cancellingCurrentItem":
 					updateQueueItem(data, { status: "cancelling" });

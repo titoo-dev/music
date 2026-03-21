@@ -4,7 +4,8 @@ import type { QueueItem as QueueItemType } from "@/stores/useQueueStore";
 import { postToServer } from "@/utils/api";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { X, Check, AlertTriangle, XCircle, Loader2, Clock } from "lucide-react";
+import { CoverImage } from "@/components/ui/cover-image";
+import { X, Check, AlertTriangle, XCircle, Loader2, Clock, FolderOpen } from "lucide-react";
 
 interface Props {
 	item: QueueItemType;
@@ -57,6 +58,12 @@ export function QueueItem({ item }: Props) {
 		postToServer("downloads/cancel", { uuid: item.uuid });
 	};
 
+	const handleOpenFolder = () => {
+		postToServer("system/open-folder", { path: item.extrasPath });
+	};
+
+	const isDone = ["completed", "withErrors", "failed"].includes(item.status);
+
 	const config = statusConfig[item.status] || {
 		label: item.status,
 		icon: null,
@@ -75,17 +82,10 @@ export function QueueItem({ item }: Props) {
 		>
 			{/* Cover */}
 			<div className="relative shrink-0">
-				{item.cover ? (
-					<img
-						src={item.cover}
-						alt=""
-						className="h-10 w-10 rounded-md object-cover shadow-sm"
-					/>
-				) : (
-					<div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-sm text-muted-foreground shadow-sm">
-						&#9835;
-					</div>
-				)}
+				<CoverImage
+					src={item.cover}
+					className="h-10 w-10 rounded-md shadow-sm"
+				/>
 				{/* Status indicator dot */}
 				{item.status === "completed" && (
 					<div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
@@ -132,15 +132,28 @@ export function QueueItem({ item }: Props) {
 				)}
 			</div>
 
-			{/* Remove button */}
-			<Button
-				variant="ghost"
-				size="icon-xs"
-				onClick={handleRemove}
-				className="shrink-0 text-muted-foreground/50 opacity-0 transition-all hover:text-red-500 hover:bg-red-50 group-hover:opacity-100"
-			>
-				<X className="h-3 w-3" />
-			</Button>
+			{/* Action buttons */}
+			<div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-all group-hover:opacity-100">
+				{isDone && item.extrasPath && (
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						onClick={handleOpenFolder}
+						className="text-muted-foreground/50 hover:text-foreground hover:bg-muted"
+						title="Ouvrir le dossier"
+					>
+						<FolderOpen className="h-3 w-3" />
+					</Button>
+				)}
+				<Button
+					variant="ghost"
+					size="icon-xs"
+					onClick={handleRemove}
+					className="text-muted-foreground/50 hover:text-red-500 hover:bg-red-50"
+				>
+					<X className="h-3 w-3" />
+				</Button>
+			</div>
 		</div>
 	);
 }

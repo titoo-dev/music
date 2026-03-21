@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
+import { CoverImage } from "@/components/ui/cover-image";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -78,13 +79,11 @@ function ArtistContent() {
 		<div className="space-y-8">
 			{/* Artist Header */}
 			<div className="flex flex-col md:flex-row items-center md:items-end gap-8">
-				{artistPicture && (
-					<img
-						src={artistPicture}
-						alt={artistName}
-						className="w-48 h-48 rounded-full object-cover flex-shrink-0"
-					/>
-				)}
+				<CoverImage
+					src={artistPicture}
+					alt={artistName}
+					className="w-48 h-48 rounded-full flex-shrink-0"
+				/>
 				<div className="flex flex-col gap-2 text-center md:text-left">
 					<p className="text-xs font-medium text-muted-foreground">Artist</p>
 					<h1 className="text-2xl font-semibold tracking-tight text-foreground">
@@ -130,11 +129,11 @@ function ArtistContent() {
 										<div key={albumId} className="group space-y-2">
 											<div className="relative overflow-hidden rounded-lg">
 												<Link href={`/album?id=${albumId}`}>
-													<img
+													<CoverImage
 														src={albumCover}
 														alt={albumTitle}
 														loading="lazy"
-														className="w-full aspect-square object-cover transition-opacity group-hover:opacity-80"
+														className="w-full aspect-square transition-opacity group-hover:opacity-80"
 													/>
 												</Link>
 												<div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">

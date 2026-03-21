@@ -264,6 +264,7 @@ export class DeemixApp {
 				this.listener.send("finishDownload", {
 					uuid: currentUUID,
 					status: this.queue[currentUUID].status,
+					extrasPath: downloadObject.extrasPath || "",
 				});
 			}
 

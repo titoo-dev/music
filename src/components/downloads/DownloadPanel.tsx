@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 export function DownloadPanel() {
-	const { queue } = useQueueStore();
+	const { queue, clearCompleted } = useQueueStore();
 	const downloadsOpen = useAppStore((s) => s.downloadsOpen);
 	const setDownloadsOpen = useAppStore((s) => s.setDownloadsOpen);
 
@@ -28,12 +28,15 @@ export function DownloadPanel() {
 	);
 
 	const handleCancelAll = () => postToServer("downloads/cancel-all");
-	const handleClearCompleted = () => postToServer("downloads/clear-finished");
+	const handleClearCompleted = async () => {
+		await postToServer("downloads/clear-finished");
+		clearCompleted();
+	};
 
 	return (
 		<aside
 			className={`
-				fixed right-0 top-0 z-20 flex h-full flex-col
+				fixed right-0 top-0 z-20 flex h-full flex-col overflow-hidden
 				border-l border-border/40 bg-white
 				transition-all duration-300 ease-in-out
 				${downloadsOpen ? "w-[340px] translate-x-0" : "w-0 translate-x-full"}

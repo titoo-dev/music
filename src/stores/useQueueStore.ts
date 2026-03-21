@@ -14,6 +14,7 @@ export interface QueueItem {
 	downloaded: number;
 	failed: number;
 	errors: any[];
+	extrasPath?: string;
 }
 
 interface QueueState {
@@ -100,8 +101,9 @@ export const useQueueStore = create<QueueState>((set) => ({
 	clearCompleted: () =>
 		set((s) => {
 			const newQueue = { ...s.queue };
+			const doneStatuses = ["completed", "withErrors", "failed"];
 			const newOrder = s.queueOrder.filter((uuid) => {
-				if (newQueue[uuid]?.status === "completed") {
+				if (doneStatuses.includes(newQueue[uuid]?.status)) {
 					delete newQueue[uuid];
 					return false;
 				}

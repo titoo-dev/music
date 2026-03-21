@@ -7,6 +7,7 @@ import { convertDuration } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Download, Loader2 } from "lucide-react";
+import { CoverImage } from "@/components/ui/cover-image";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 
 function getCoverUrl(hash: string, size = 500) {
@@ -126,13 +127,7 @@ export default function ChartsPage() {
 										<span className="text-xs text-muted-foreground w-8 text-right tabular-nums">
 											{idx + 1}
 										</span>
-										{trackCover && (
-											<img
-												src={trackCover}
-												alt=""
-												className="w-10 h-10 rounded-md object-cover"
-											/>
-										)}
+										<CoverImage src={trackCover} className="w-10 h-10 rounded-md" />
 										<div className="flex-1 min-w-0">
 											<p className="text-sm font-medium truncate">
 												{trackTitle}
@@ -206,11 +201,11 @@ export default function ChartsPage() {
 							onClick={() => loadChartTracks(country)}
 						>
 							<div className="rounded-xl overflow-hidden bg-muted/30">
-								<img
+								<CoverImage
 									src={countryPicture}
 									alt={countryTitle}
 									loading="lazy"
-									className="w-full aspect-square object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+									className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
 								/>
 							</div>
 							<div className="mt-2 px-0.5">

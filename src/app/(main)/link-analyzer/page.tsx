@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Download, Loader2, Link2, AlertCircle } from "lucide-react";
+import { CoverImage } from "@/components/ui/cover-image";
 
 export default function LinkAnalyzerPage() {
 	const [link, setLink] = useState("");
@@ -93,19 +94,10 @@ export default function LinkAnalyzerPage() {
 				<Card>
 					<CardContent className="pt-6">
 						<div className="flex gap-4">
-							{(result.cover_xl ||
-								result.cover_big ||
-								result.picture_xl) && (
-								<img
-									src={
-										result.cover_xl ||
-										result.cover_big ||
-										result.picture_xl
-									}
-									alt=""
-									className="w-28 h-28 rounded-xl object-cover shrink-0"
-								/>
-							)}
+							<CoverImage
+								src={result.cover_xl || result.cover_big || result.picture_xl}
+								className="w-28 h-28 rounded-xl shrink-0"
+							/>
 							<div className="flex-1 min-w-0 space-y-2">
 								<h2 className="text-lg font-semibold truncate">
 									{result.title}

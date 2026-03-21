@@ -16,6 +16,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Download, Loader2 } from "lucide-react";
 import { PreviewButton } from "@/components/audio/PreviewButton";
+import { CoverImage } from "@/components/ui/cover-image";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -281,41 +282,15 @@ function AllResults({
 						Playlists
 					</h2>
 					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-						{playlists.map((pl: any) => {
-							const id = pl.PLAYLIST_ID || pl.id;
-							const title = pl.TITLE || pl.title;
-							const picture =
-								pl.picture_xl ||
-								pl.picture_medium ||
-								getCoverUrl(pl.PLAYLIST_PICTURE, 250) ||
-								"/placeholder.jpg";
-							return (
-								<div key={id} className="group">
-									<div className="relative rounded-xl overflow-hidden bg-muted/30">
-										<img
-											src={picture}
-											alt={title}
-											loading="lazy"
-											className="w-full aspect-square object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-										/>
-										<div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center">
-											<Button
-												size="sm"
-												onClick={() => onDownload(id, "playlist")}
-												disabled={isLoading(deezerUrl(id, "playlist"))}
-												className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5"
-											>
-												{isLoading(deezerUrl(id, "playlist")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-												{isLoading(deezerUrl(id, "playlist")) ? "Adding..." : "Download"}
-											</Button>
-										</div>
-									</div>
-									<div className="mt-2 px-0.5">
-										<p className="text-sm font-medium truncate">{title}</p>
-									</div>
-								</div>
-							);
-						})}
+						{playlists.map((pl: any) => (
+							<PlaylistCard
+								key={pl.PLAYLIST_ID || pl.id}
+								playlist={pl}
+								onDownload={onDownload}
+								isLoading={isLoading}
+								deezerUrl={deezerUrl}
+							/>
+						))}
 					</div>
 				</section>
 			)}
@@ -336,8 +311,10 @@ function TrackRow({
 }) {
 	const id = track.SNG_ID || track.id;
 	const title = track.SNG_TITLE || track.title;
-	const artist = track.ART_NAME || track.artist?.name;
-	const album = track.ALB_TITLE || track.album?.title;
+	const artistName = track.ART_NAME || track.artist?.name;
+	const artistId = track.ART_ID || track.artist?.id;
+	const albumTitle = track.ALB_TITLE || track.album?.title;
+	const albumId = track.ALB_ID || track.album?.id;
 	const duration = track.DURATION || track.duration;
 	const cover =
 		track.album?.cover_small ||
@@ -346,18 +323,25 @@ function TrackRow({
 
 	return (
 		<div className="flex items-center gap-3 px-4 py-2.5 group hover:bg-muted/50 transition-colors">
-			{cover && (
-				<img
-					src={cover}
-					alt=""
-					className="w-10 h-10 rounded-md object-cover"
-				/>
-			)}
+			<CoverImage src={cover} className="w-10 h-10 rounded-md" />
 			<div className="flex-1 min-w-0">
 				<p className="text-sm font-medium truncate">{title}</p>
 				<p className="text-xs text-muted-foreground truncate">
-					{artist}
-					{album ? ` \u00b7 ${album}` : ""}
+					{artistId ? (
+						<Link href={`/artist?id=${artistId}`} className="hover:underline hover:text-foreground transition-colors">
+							{artistName}
+						</Link>
+					) : artistName}
+					{albumTitle ? (
+						<>
+							{" · "}
+							{albumId ? (
+								<Link href={`/album?id=${albumId}`} className="hover:underline hover:text-foreground transition-colors">
+									{albumTitle}
+								</Link>
+							) : albumTitle}
+						</>
+					) : ""}
 				</p>
 			</div>
 			<span className="text-xs text-muted-foreground tabular-nums">
@@ -367,7 +351,7 @@ function TrackRow({
 				track={{
 					id,
 					title,
-					artist,
+					artist: artistName,
 					cover: cover || "",
 					previewUrl,
 				}}
@@ -409,11 +393,11 @@ function AlbumCard({
 		<div className="group">
 			<div className="relative rounded-xl overflow-hidden bg-muted/30">
 				<Link href={`/album?id=${id}`}>
-					<img
+					<CoverImage
 						src={cover}
 						alt={title}
 						loading="lazy"
-						className="w-full aspect-square object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+						className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
 					/>
 				</Link>
 				<div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center">
@@ -454,11 +438,11 @@ function ArtistCard({ artist }: { artist: any }) {
 		<div className="group text-center">
 			<Link href={`/artist?id=${id}`}>
 				<div className="rounded-full overflow-hidden bg-muted/30 aspect-square">
-					<img
+					<CoverImage
 						src={picture}
 						alt={name}
 						loading="lazy"
-						className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.05]"
+						className="w-full h-full transition-transform duration-200 group-hover:scale-[1.05]"
 					/>
 				</div>
 			</Link>
@@ -551,6 +535,64 @@ function EmptyTabState() {
 	);
 }
 
+function PlaylistCard({
+	playlist: pl,
+	onDownload,
+	isLoading,
+	deezerUrl,
+}: {
+	playlist: any;
+	onDownload: (id: string, type: string) => void;
+	isLoading: (url: string) => boolean;
+	deezerUrl: (id: string | number, type: string) => string;
+}) {
+	const id = pl.PLAYLIST_ID || pl.id;
+	const title = pl.TITLE || pl.title;
+	const nbTracks = pl.NB_SONG || pl.nb_tracks;
+	const picture =
+		pl.picture_xl ||
+		pl.picture_medium ||
+		getCoverUrl(pl.PLAYLIST_PICTURE, 250) ||
+		"/placeholder.jpg";
+
+	return (
+		<div className="group">
+			<div className="relative rounded-xl overflow-hidden bg-muted/30">
+				<Link href={`/playlist?id=${id}`}>
+					<CoverImage
+						src={picture}
+						alt={title}
+						loading="lazy"
+						className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
+					/>
+				</Link>
+				<div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center pointer-events-none">
+					<Button
+						size="sm"
+						onClick={() => onDownload(id, "playlist")}
+						disabled={isLoading(deezerUrl(id, "playlist"))}
+						className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5 pointer-events-auto"
+					>
+						{isLoading(deezerUrl(id, "playlist")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+						{isLoading(deezerUrl(id, "playlist")) ? "Adding..." : "Download"}
+					</Button>
+				</div>
+			</div>
+			<div className="mt-2 px-0.5">
+				<Link
+					href={`/playlist?id=${id}`}
+					className="text-sm font-medium truncate block hover:underline"
+				>
+					{title}
+				</Link>
+				{nbTracks != null && (
+					<p className="text-xs text-muted-foreground truncate">{nbTracks} tracks</p>
+				)}
+			</div>
+		</div>
+	);
+}
+
 function PlaylistResults({
 	data,
 	onDownload,
@@ -566,41 +608,15 @@ function PlaylistResults({
 	if (playlists.length === 0) return <EmptyTabState />;
 	return (
 		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
-			{playlists.map((pl: any) => {
-				const id = pl.PLAYLIST_ID || pl.id;
-				const title = pl.TITLE || pl.title;
-				const picture =
-					pl.picture_xl ||
-					pl.picture_medium ||
-					getCoverUrl(pl.PLAYLIST_PICTURE, 250) ||
-					"/placeholder.jpg";
-				return (
-					<div key={id} className="group">
-						<div className="relative rounded-xl overflow-hidden bg-muted/30">
-							<img
-								src={picture}
-								alt={title}
-								loading="lazy"
-								className="w-full aspect-square object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-							/>
-							<div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center">
-								<Button
-									size="sm"
-									onClick={() => onDownload(id, "playlist")}
-									disabled={isLoading(deezerUrl(id, "playlist"))}
-									className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5"
-								>
-									{isLoading(deezerUrl(id, "playlist")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-									{isLoading(deezerUrl(id, "playlist")) ? "Adding..." : "Download"}
-								</Button>
-							</div>
-						</div>
-						<div className="mt-2 px-0.5">
-							<p className="text-sm font-medium truncate">{title}</p>
-						</div>
-					</div>
-				);
-			})}
+			{playlists.map((pl: any) => (
+				<PlaylistCard
+					key={pl.PLAYLIST_ID || pl.id}
+					playlist={pl}
+					onDownload={onDownload}
+					isLoading={isLoading}
+					deezerUrl={deezerUrl}
+				/>
+			))}
 		</div>
 	);
 }

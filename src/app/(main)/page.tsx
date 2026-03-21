@@ -14,6 +14,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Download, ArrowRight, Loader2 } from "lucide-react";
+import { CoverImage } from "@/components/ui/cover-image";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -139,29 +140,34 @@ export default function HomePage() {
 									key={item.id}
 									className="group relative rounded-xl overflow-hidden bg-muted/30"
 								>
-									<img
-										src={chartPicture}
-										alt={chartTitle}
-										loading="lazy"
-										className="w-full aspect-square object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-									/>
-									<div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center">
+									<Link href={`/playlist?id=${item.id}`}>
+										<CoverImage
+											src={chartPicture}
+											alt={chartTitle}
+											loading="lazy"
+											className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
+										/>
+									</Link>
+									<div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center pointer-events-none">
 										<Button
 											size="sm"
 											onClick={() =>
 												handleDownload(item.id, "playlist")
 											}
 											disabled={isLoading(deezerUrl(item.id, "playlist"))}
-											className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5"
+											className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5 pointer-events-auto"
 										>
 											{isLoading(deezerUrl(item.id, "playlist")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
 											{isLoading(deezerUrl(item.id, "playlist")) ? "Adding..." : "Download"}
 										</Button>
 									</div>
 									<div className="p-3">
-										<p className="text-sm font-medium truncate">
+										<Link
+											href={`/playlist?id=${item.id}`}
+											className="text-sm font-medium truncate block hover:underline"
+										>
 											{chartTitle}
-										</p>
+										</Link>
 										{item.nb_tracks && (
 											<p className="text-xs text-muted-foreground mt-0.5">
 												{item.nb_tracks} tracks

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 import { Loader2 } from "lucide-react";
+import { CoverImage } from "@/components/ui/cover-image";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -35,8 +36,9 @@ function PlaylistContent() {
 		async function loadPlaylist() {
 			try {
 				const data = await fetchData("content/tracklist", { id, type: "playlist" });
-				setPlaylist(data);
-				setTracks(data?.tracks || []);
+				const playlistData = data?.DATA || data;
+				setPlaylist(playlistData);
+				setTracks(data?.tracks || data?.SONGS?.data || []);
 			} catch {
 				// ignore
 			}
@@ -77,10 +79,10 @@ function PlaylistContent() {
 		<div className="space-y-8">
 			{/* Playlist Header */}
 			<div className="flex flex-col md:flex-row gap-8">
-				<img
+				<CoverImage
 					src={playlistCover}
 					alt={playlistTitle}
-					className="w-48 h-48 rounded-lg object-cover flex-shrink-0"
+					className="w-48 h-48 rounded-lg flex-shrink-0"
 				/>
 				<div className="flex flex-col justify-end gap-3">
 					<p className="text-xs font-medium text-muted-foreground">Playlist</p>
@@ -135,13 +137,7 @@ function PlaylistContent() {
 								<span className="text-xs text-muted-foreground w-6 text-right tabular-nums">
 									{idx + 1}
 								</span>
-								{trackCover && (
-									<img
-										src={trackCover}
-										alt=""
-										className="w-10 h-10 rounded object-cover flex-shrink-0"
-									/>
-								)}
+								<CoverImage src={trackCover} className="w-10 h-10 rounded flex-shrink-0" />
 								<div className="flex-1 min-w-0">
 									<p className="text-sm font-medium truncate text-foreground">
 										{trackTitle}

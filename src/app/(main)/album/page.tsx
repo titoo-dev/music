@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { PreviewButton } from "@/components/audio/PreviewButton";
+import { CoverImage } from "@/components/ui/cover-image";
 import { Loader2, Check } from "lucide-react";
 
 function getCoverUrl(picture: string, size = 500) {
@@ -74,10 +75,10 @@ function AlbumContent() {
 		<div className="space-y-8">
 			{/* Album Header */}
 			<div className="flex flex-col md:flex-row gap-8">
-				<img
+				<CoverImage
 					src={cover}
 					alt={title}
-					className="w-48 h-48 rounded-lg object-cover flex-shrink-0"
+					className="w-48 h-48 rounded-lg flex-shrink-0"
 				/>
 				<div className="flex flex-col justify-end gap-3">
 					<Badge variant="secondary" className="w-fit">
@@ -143,13 +144,7 @@ function AlbumContent() {
 								<span className="text-xs text-muted-foreground w-6 text-right tabular-nums">
 									{trackNum}
 								</span>
-								{trackCover && (
-									<img
-										src={trackCover}
-										alt=""
-										className="w-9 h-9 rounded object-cover"
-									/>
-								)}
+								<CoverImage src={trackCover} className="w-9 h-9 rounded" />
 								<div className="flex-1 min-w-0">
 									<p className="text-sm font-medium truncate text-foreground">
 										{trackTitle}
