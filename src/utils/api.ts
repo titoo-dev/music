@@ -17,7 +17,7 @@ export async function fetchData(endpoint: string, params: Record<string, string>
 	Object.entries(params).forEach(([key, value]) => {
 		url.searchParams.set(key, value);
 	});
-	const res = await fetch(url.toString());
+	const res = await fetch(url.toString(), { cache: "no-store" });
 	return unwrap(res);
 }
 

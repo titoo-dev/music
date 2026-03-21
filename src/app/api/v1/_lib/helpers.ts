@@ -12,6 +12,7 @@ export interface ApiResponse<T = unknown> {
 export function ok<T>(data: T, status = 200) {
 	return NextResponse.json({ success: true, data } satisfies ApiResponse<T>, {
 		status,
+		headers: { "Cache-Control": "no-store" },
 	});
 }
 

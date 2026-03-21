@@ -84,6 +84,5 @@ export class GWAPIError extends DeezerError {
 	constructor(message: string) {
 		super(message);
 		this.name = "GWAPIError";
-		this.message = "Track unavailable on Deezer";
 	}
 }

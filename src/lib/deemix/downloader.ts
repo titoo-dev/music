@@ -431,7 +431,7 @@ export class Downloader {
 		}
 
 		// Save lyrics in lrc file
-		if (this.settings.syncedLyrics && track.lyrics.sync) {
+		if (this.settings.syncedLyrics && track.lyrics?.sync) {
 			if (
 				!existsSync(`${filepath}/${filename}.lrc`) ||
 				[OverwriteOption.OVERWRITE, OverwriteOption.ONLY_TAGS].includes(

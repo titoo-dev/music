@@ -163,15 +163,27 @@ class Track {
 			this.parseTrack(existingTrack);
 
 			// Get Lyrics Data
-			if (!existingTrack.lyrics && this.lyrics.id !== "0") {
+			// The pageTrack response may include full lyrics; if so, reuse them.
+			// Otherwise, fetch via song.getLyrics (uses track ID).
+			const lyricsData = existingTrack.lyrics as any;
+			const hasFullLyrics =
+				lyricsData != null &&
+				typeof lyricsData === "object" &&
+				"LYRICS_TEXT" in lyricsData;
+			if (!hasFullLyrics) {
 				try {
 					existingTrack.lyrics = await dz.gw.get_track_lyrics(this.id);
 				} catch {
-					this.lyrics.id = "0";
+					// Lyrics not available (region restriction or no lyrics for this track)
 				}
 			}
-			if (this.lyrics.id !== "0") {
-				this.lyrics.parseLyrics(existingTrack.lyrics);
+			const finalLyrics = existingTrack.lyrics as any;
+			if (
+				finalLyrics &&
+				typeof finalLyrics === "object" &&
+				"LYRICS_TEXT" in finalLyrics
+			) {
+				this.lyrics.parseLyrics(finalLyrics);
 			}
 
 			// Parse Album Data

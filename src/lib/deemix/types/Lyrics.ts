@@ -14,6 +14,7 @@ export class Lyrics {
 	}
 
 	parseLyrics(lyricsAPI) {
+		if (!lyricsAPI || typeof lyricsAPI !== "object") return;
 		this.unsync = lyricsAPI.LYRICS_TEXT || "";
 		if (lyricsAPI.LYRICS_SYNC_JSON) {
 			const syncLyricsJson = lyricsAPI.LYRICS_SYNC_JSON;
@@ -27,8 +28,14 @@ export class Lyrics {
 					this.syncID3.push([currentLine, milliseconds]);
 				} else {
 					let notEmptyLine = line + 1;
-					while (syncLyricsJson[notEmptyLine].line === "") notEmptyLine += 1;
-					timestamp = syncLyricsJson[notEmptyLine].lrc_timestamp;
+					while (
+						notEmptyLine < syncLyricsJson.length &&
+						syncLyricsJson[notEmptyLine].line === ""
+					)
+						notEmptyLine += 1;
+					if (notEmptyLine < syncLyricsJson.length) {
+						timestamp = syncLyricsJson[notEmptyLine].lrc_timestamp;
+					}
 				}
 				this.sync += timestamp + currentLine + "\r\n";
 			}
