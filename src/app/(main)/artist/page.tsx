@@ -2,7 +2,8 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchData, postToServer } from "@/utils/api";
+import { fetchData } from "@/utils/api";
+import { useDownload } from "@/hooks/useDownload";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ function ArtistContent() {
 	const [releases, setReleases] = useState<any>({});
 	const [tab, setTab] = useState("all");
 	const [loading, setLoading] = useState(true);
+	const { download, isLoading } = useDownload();
 
 	useEffect(() => {
 		if (!id) return;
@@ -45,10 +47,8 @@ function ArtistContent() {
 		loadArtist();
 	}, [id]);
 
-	const handleDownload = (albumId: string) => {
-		const url = `https://www.deezer.com/album/${albumId}`;
-		postToServer("add-to-queue", { url, bitrate: null });
-	};
+	const albumUrl = (albumId: string) => `https://www.deezer.com/album/${albumId}`;
+	const handleDownload = (albumId: string) => download(albumUrl(albumId));
 
 	if (loading)
 		return (
@@ -141,8 +141,11 @@ function ArtistContent() {
 													<Button
 														size="sm"
 														onClick={() => handleDownload(albumId)}
+														disabled={isLoading(albumUrl(albumId))}
+														className="gap-1.5"
 													>
-														Download
+														{isLoading(albumUrl(albumId)) && <Loader2 className="size-3 animate-spin" />}
+														{isLoading(albumUrl(albumId)) ? "Adding..." : "Download"}
 													</Button>
 												</div>
 											</div>

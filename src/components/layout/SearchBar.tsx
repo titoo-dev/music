@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { isValidURL } from "@/utils/helpers";
-import { postToServer } from "@/utils/api";
+import { useDownload } from "@/hooks/useDownload";
 import { useLoginStore } from "@/stores/useLoginStore";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
@@ -13,6 +13,7 @@ export function SearchBar() {
 	const router = useRouter();
 	const inputRef = useRef<HTMLInputElement>(null);
 	const loggedIn = useLoginStore((s) => s.loggedIn);
+	const { download } = useDownload();
 
 	const handleSubmit = useCallback(
 		(e: React.FormEvent) => {
@@ -22,7 +23,7 @@ export function SearchBar() {
 			// If it's a URL, add to queue directly
 			if (isValidURL(term)) {
 				if (loggedIn) {
-					postToServer("add-to-queue", { url: term, bitrate: null }).catch(() => {});
+					download(term);
 					setTerm("");
 				}
 				return;
@@ -31,7 +32,7 @@ export function SearchBar() {
 			// Otherwise, navigate to search
 			router.push(`/search?term=${encodeURIComponent(term.trim())}`);
 		},
-		[term, router, loggedIn]
+		[term, router, loggedIn, download]
 	);
 
 	// CTRL+F keyboard shortcut to focus search

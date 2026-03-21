@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchData, postToServer } from "@/utils/api";
+import { fetchData } from "@/utils/api";
+import { useDownload } from "@/hooks/useDownload";
 import { convertDuration } from "@/utils/helpers";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -63,10 +64,9 @@ function SearchContent() {
 		doSearch();
 	}, [doSearch]);
 
-	const handleDownload = (id: string | number, type: string) => {
-		const url = `https://www.deezer.com/${type}/${id}`;
-		postToServer("add-to-queue", { url, bitrate: null });
-	};
+	const { download, isLoading } = useDownload();
+	const deezerUrl = (id: string | number, type: string) => `https://www.deezer.com/${type}/${id}`;
+	const handleDownload = (id: string | number, type: string) => download(deezerUrl(id, type));
 
 	if (!term) {
 		return (
@@ -109,18 +109,24 @@ function SearchContent() {
 							<AllResults
 								results={results}
 								onDownload={handleDownload}
+								isLoading={isLoading}
+								deezerUrl={deezerUrl}
 							/>
 						</TabsContent>
 						<TabsContent value="track">
 							<TrackResults
 								data={results}
 								onDownload={handleDownload}
+								isLoading={isLoading}
+								deezerUrl={deezerUrl}
 							/>
 						</TabsContent>
 						<TabsContent value="album">
 							<AlbumResults
 								data={results}
 								onDownload={handleDownload}
+								isLoading={isLoading}
+								deezerUrl={deezerUrl}
 							/>
 						</TabsContent>
 						<TabsContent value="artist">
@@ -130,6 +136,8 @@ function SearchContent() {
 							<PlaylistResults
 								data={results}
 								onDownload={handleDownload}
+								isLoading={isLoading}
+								deezerUrl={deezerUrl}
 							/>
 						</TabsContent>
 					</>
@@ -149,9 +157,13 @@ function SearchContent() {
 function AllResults({
 	results,
 	onDownload,
+	isLoading,
+	deezerUrl,
 }: {
 	results: any;
 	onDownload: (id: string, type: string) => void;
+	isLoading: (url: string) => boolean;
+	deezerUrl: (id: string | number, type: string) => string;
 }) {
 	const tracks = results?.TRACK?.data?.slice(0, 6) || [];
 	const albums = results?.ALBUM?.data?.slice(0, 6) || [];
@@ -171,7 +183,7 @@ function AllResults({
 					<div className="rounded-lg border border-border overflow-hidden">
 						{tracks.map((track: any, idx: number) => (
 							<div key={track.SNG_ID || track.id}>
-								<TrackRow track={track} onDownload={onDownload} />
+								<TrackRow track={track} onDownload={onDownload} isLoading={isLoading} deezerUrl={deezerUrl} />
 								{idx < tracks.length - 1 && <Separator />}
 							</div>
 						))}
@@ -189,6 +201,8 @@ function AllResults({
 								key={album.ALB_ID || album.id}
 								album={album}
 								onDownload={onDownload}
+								isLoading={isLoading}
+								deezerUrl={deezerUrl}
 							/>
 						))}
 					</div>
@@ -216,9 +230,13 @@ function AllResults({
 function TrackRow({
 	track,
 	onDownload,
+	isLoading,
+	deezerUrl,
 }: {
 	track: any;
 	onDownload: (id: string, type: string) => void;
+	isLoading: (url: string) => boolean;
+	deezerUrl: (id: string | number, type: string) => string;
 }) {
 	const id = track.SNG_ID || track.id;
 	const title = track.SNG_TITLE || track.title;
@@ -262,9 +280,10 @@ function TrackRow({
 				size="icon-sm"
 				variant="ghost"
 				onClick={() => onDownload(id, "track")}
+				disabled={isLoading(deezerUrl(id, "track"))}
 				className="opacity-0 group-hover:opacity-100 transition-opacity"
 			>
-				<Download className="size-3.5" />
+				{isLoading(deezerUrl(id, "track")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
 			</Button>
 		</div>
 	);
@@ -273,9 +292,13 @@ function TrackRow({
 function AlbumCard({
 	album,
 	onDownload,
+	isLoading,
+	deezerUrl,
 }: {
 	album: any;
 	onDownload: (id: string, type: string) => void;
+	isLoading: (url: string) => boolean;
+	deezerUrl: (id: string | number, type: string) => string;
 }) {
 	const id = album.ALB_ID || album.id;
 	const title = album.ALB_TITLE || album.title;
@@ -301,10 +324,11 @@ function AlbumCard({
 					<Button
 						size="sm"
 						onClick={() => onDownload(id, "album")}
+						disabled={isLoading(deezerUrl(id, "album"))}
 						className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5"
 					>
-						<Download className="size-3.5" />
-						Download
+						{isLoading(deezerUrl(id, "album")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+						{isLoading(deezerUrl(id, "album")) ? "Adding..." : "Download"}
 					</Button>
 				</div>
 			</div>
@@ -357,9 +381,13 @@ function ArtistCard({ artist }: { artist: any }) {
 function TrackResults({
 	data,
 	onDownload,
+	isLoading,
+	deezerUrl,
 }: {
 	data: any;
 	onDownload: (id: string, type: string) => void;
+	isLoading: (url: string) => boolean;
+	deezerUrl: (id: string | number, type: string) => string;
 }) {
 	const tracks = data?.data || [];
 	if (tracks.length === 0) return <EmptyTabState />;
@@ -367,7 +395,7 @@ function TrackResults({
 		<div className="mt-4 rounded-lg border border-border overflow-hidden">
 			{tracks.map((track: any, idx: number) => (
 				<div key={track.SNG_ID || track.id}>
-					<TrackRow track={track} onDownload={onDownload} />
+					<TrackRow track={track} onDownload={onDownload} isLoading={isLoading} deezerUrl={deezerUrl} />
 					{idx < tracks.length - 1 && <Separator />}
 				</div>
 			))}
@@ -378,9 +406,13 @@ function TrackResults({
 function AlbumResults({
 	data,
 	onDownload,
+	isLoading,
+	deezerUrl,
 }: {
 	data: any;
 	onDownload: (id: string, type: string) => void;
+	isLoading: (url: string) => boolean;
+	deezerUrl: (id: string | number, type: string) => string;
 }) {
 	const albums = data?.data || [];
 	if (albums.length === 0) return <EmptyTabState />;
@@ -391,6 +423,8 @@ function AlbumResults({
 					key={album.ALB_ID || album.id}
 					album={album}
 					onDownload={onDownload}
+					isLoading={isLoading}
+					deezerUrl={deezerUrl}
 				/>
 			))}
 		</div>
@@ -424,9 +458,13 @@ function EmptyTabState() {
 function PlaylistResults({
 	data,
 	onDownload,
+	isLoading,
+	deezerUrl,
 }: {
 	data: any;
 	onDownload: (id: string, type: string) => void;
+	isLoading: (url: string) => boolean;
+	deezerUrl: (id: string | number, type: string) => string;
 }) {
 	const playlists = data?.data || [];
 	if (playlists.length === 0) return <EmptyTabState />;
@@ -453,10 +491,11 @@ function PlaylistResults({
 								<Button
 									size="sm"
 									onClick={() => onDownload(id, "playlist")}
+									disabled={isLoading(deezerUrl(id, "playlist"))}
 									className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5"
 								>
-									<Download className="size-3.5" />
-									Download
+									{isLoading(deezerUrl(id, "playlist")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+									{isLoading(deezerUrl(id, "playlist")) ? "Adding..." : "Download"}
 								</Button>
 							</div>
 						</div>

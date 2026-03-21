@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchData, postToServer } from "@/utils/api";
+import { fetchData } from "@/utils/api";
+import { useDownload } from "@/hooks/useDownload";
 import { useLoginStore } from "@/stores/useLoginStore";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -55,10 +56,9 @@ export default function HomePage() {
 		loadHome();
 	}, []);
 
-	const handleDownload = (id: string, type: string) => {
-		const url = `https://www.deezer.com/${type}/${id}`;
-		postToServer("add-to-queue", { url, bitrate: null });
-	};
+	const { download, isLoading } = useDownload();
+	const deezerUrl = (id: string, type: string) => `https://www.deezer.com/${type}/${id}`;
+	const handleDownload = (id: string, type: string) => download(deezerUrl(id, type));
 
 	if (loading) {
 		return (
@@ -151,10 +151,11 @@ export default function HomePage() {
 											onClick={() =>
 												handleDownload(item.id, "playlist")
 											}
+											disabled={isLoading(deezerUrl(item.id, "playlist"))}
 											className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5"
 										>
-											<Download className="size-3.5" />
-											Download
+											{isLoading(deezerUrl(item.id, "playlist")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+											{isLoading(deezerUrl(item.id, "playlist")) ? "Adding..." : "Download"}
 										</Button>
 									</div>
 									<div className="p-3">

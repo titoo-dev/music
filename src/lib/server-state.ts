@@ -2,6 +2,7 @@
 // This module is only imported in API routes (server-side)
 
 import type { Listener } from "@/lib/deemix/types/listener";
+import { broadcast } from "@/lib/broadcast";
 
 // We use a global variable to persist state across hot reloads in dev
 const globalForDeemix = globalThis as unknown as {
@@ -50,16 +51,8 @@ async function initializeDeemixApp() {
 function createListener(): Listener {
 	return {
 		send(key: string, data: any) {
-			// This will be connected to WebSocket broadcast
-			if (globalForDeemix.deemixApp?._wsBroadcast) {
-				globalForDeemix.deemixApp._wsBroadcast(key, data);
-			}
+			broadcast(key, data);
 		},
 	};
 }
 
-export function setWsBroadcast(fn: (key: string, data: any) => void) {
-	if (globalForDeemix.deemixApp) {
-		globalForDeemix.deemixApp._wsBroadcast = fn;
-	}
-}

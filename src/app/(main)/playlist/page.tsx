@@ -2,7 +2,8 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchData, postToServer } from "@/utils/api";
+import { fetchData } from "@/utils/api";
+import { useDownload } from "@/hooks/useDownload";
 import { convertDuration } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -27,6 +28,7 @@ function PlaylistContent() {
 	const [playlist, setPlaylist] = useState<any>(null);
 	const [tracks, setTracks] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
+	const { download, isLoading } = useDownload();
 
 	useEffect(() => {
 		if (!id) return;
@@ -43,15 +45,10 @@ function PlaylistContent() {
 		loadPlaylist();
 	}, [id]);
 
-	const handleDownloadAll = () => {
-		const url = `https://www.deezer.com/playlist/${id}`;
-		postToServer("add-to-queue", { url, bitrate: null });
-	};
-
-	const handleDownloadTrack = (trackId: string) => {
-		const url = `https://www.deezer.com/track/${trackId}`;
-		postToServer("add-to-queue", { url, bitrate: null });
-	};
+	const playlistUrl = `https://www.deezer.com/playlist/${id}`;
+	const handleDownloadAll = () => download(playlistUrl);
+	const trackUrl = (trackId: string) => `https://www.deezer.com/track/${trackId}`;
+	const handleDownloadTrack = (trackId: string) => download(trackUrl(trackId));
 
 	if (loading)
 		return (
@@ -99,8 +96,9 @@ function PlaylistContent() {
 							</>
 						)}
 					</div>
-					<Button onClick={handleDownloadAll} className="w-fit mt-1">
-						Download playlist
+					<Button onClick={handleDownloadAll} disabled={isLoading(playlistUrl)} className="w-fit mt-1 gap-2">
+						{isLoading(playlistUrl) && <Loader2 className="size-4 animate-spin" />}
+						{isLoading(playlistUrl) ? "Adding..." : "Download playlist"}
 					</Button>
 				</div>
 			</div>
@@ -168,9 +166,11 @@ function PlaylistContent() {
 									variant="ghost"
 									size="xs"
 									onClick={() => handleDownloadTrack(trackId)}
-									className="opacity-0 group-hover:opacity-100 transition-opacity"
+									disabled={isLoading(trackUrl(trackId))}
+									className="opacity-0 group-hover:opacity-100 transition-opacity gap-1.5"
 								>
-									Download
+									{isLoading(trackUrl(trackId)) && <Loader2 className="size-3 animate-spin" />}
+									{isLoading(trackUrl(trackId)) ? "Adding..." : "Download"}
 								</Button>
 							</div>
 						);

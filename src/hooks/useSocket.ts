@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useQueueStore } from "@/stores/useQueueStore";
+import { useAppStore } from "@/stores/useAppStore";
 
 const WS_PORT = 6595;
 
@@ -48,6 +49,8 @@ export function useSocket() {
 					} else {
 						addToQueue(data);
 					}
+					// Auto-open the download sheet for visual feedback
+					useAppStore.getState().setDownloadsOpen(true);
 					break;
 				case "startDownload":
 					updateQueueItem(data, { status: "downloading" });
@@ -67,7 +70,7 @@ export function useSocket() {
 					useQueueStore.getState().clearCompleted();
 					break;
 				case "finishDownload":
-					updateQueueItem(data.uuid, { status: "completed" });
+					updateQueueItem(data.uuid, { status: data.status || "completed" });
 					break;
 				case "cancellingCurrentItem":
 					updateQueueItem(data, { status: "cancelling" });

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { fetchData, postToServer } from "@/utils/api";
+import { fetchData } from "@/utils/api";
+import { useDownload } from "@/hooks/useDownload";
 import { convertDuration } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ export default function LinkAnalyzerPage() {
 	const [result, setResult] = useState<any>(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
+	const { download, isLoading: isDownloading } = useDownload();
 
 	const handleAnalyze = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -45,7 +47,7 @@ export default function LinkAnalyzerPage() {
 
 	const handleDownload = () => {
 		if (link.trim()) {
-			postToServer("add-to-queue", { url: link.trim(), bitrate: null });
+			download(link.trim());
 		}
 	};
 
@@ -128,10 +130,11 @@ export default function LinkAnalyzerPage() {
 								<Button
 									size="sm"
 									onClick={handleDownload}
+									disabled={isDownloading(link.trim())}
 									className="gap-1.5 mt-1"
 								>
-									<Download className="size-3.5" />
-									Download
+									{isDownloading(link.trim()) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+									{isDownloading(link.trim()) ? "Adding..." : "Download"}
 								</Button>
 							</div>
 						</div>

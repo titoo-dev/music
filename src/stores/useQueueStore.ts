@@ -28,6 +28,7 @@ interface QueueState {
 	removeFromQueue: (uuid: string) => void;
 	clearQueue: () => void;
 	clearCompleted: () => void;
+	syncFromServer: (serverQueue: Record<string, any>, serverCurrent?: any) => void;
 }
 
 export const useQueueStore = create<QueueState>((set) => ({
@@ -38,17 +39,54 @@ export const useQueueStore = create<QueueState>((set) => ({
 	setQueue: (queue, queueOrder) => set({ queue, queueOrder }),
 	setCurrent: (current) => set({ current }),
 	addToQueue: (item) =>
-		set((s) => ({
-			queue: { ...s.queue, [item.uuid]: item },
-			queueOrder: [...s.queueOrder, item.uuid],
-		})),
+		set((s) => {
+			const existing = s.queue[item.uuid];
+			if (existing) {
+				// Item already exists — merge metadata but keep current status/progress
+				// to prevent race condition (WS addedToQueue arriving after startDownload)
+				return {
+					queue: {
+						...s.queue,
+						[item.uuid]: {
+							...item,
+							status: existing.status,
+							progress: existing.progress ?? item.progress,
+							downloaded: existing.downloaded ?? item.downloaded,
+							failed: existing.failed ?? item.failed,
+						},
+					},
+				};
+			}
+			return {
+				queue: {
+					...s.queue,
+					[item.uuid]: { ...item, status: item.status || "inQueue" },
+				},
+				queueOrder: [...s.queueOrder, item.uuid],
+			};
+		}),
 	updateQueueItem: (uuid, data) =>
-		set((s) => ({
-			queue: {
-				...s.queue,
-				[uuid]: s.queue[uuid] ? { ...s.queue[uuid], ...data } : s.queue[uuid],
-			},
-		})),
+		set((s) => {
+			if (s.queue[uuid]) {
+				return {
+					queue: {
+						...s.queue,
+						[uuid]: { ...s.queue[uuid], ...data },
+					},
+				};
+			}
+			// Item not yet in store (race condition: startDownload arrived before addedToQueue)
+			// Store the partial data so it can be merged when addedToQueue arrives
+			return {
+				queue: {
+					...s.queue,
+					[uuid]: { uuid, status: "inQueue", ...data } as QueueItem,
+				},
+				queueOrder: s.queueOrder.includes(uuid)
+					? s.queueOrder
+					: [...s.queueOrder, uuid],
+			};
+		}),
 	removeFromQueue: (uuid) =>
 		set((s) => {
 			const newQueue = { ...s.queue };
@@ -70,5 +108,26 @@ export const useQueueStore = create<QueueState>((set) => ({
 				return true;
 			});
 			return { queue: newQueue, queueOrder: newOrder };
+		}),
+	syncFromServer: (serverQueue, serverCurrent) =>
+		set((s) => {
+			const merged: Record<string, QueueItem> = {};
+			// Merge server queue state into client, server is authoritative for status/progress
+			for (const [uuid, serverItem] of Object.entries(serverQueue)) {
+				const clientItem = s.queue[uuid];
+				merged[uuid] = {
+					...(clientItem || {}),
+					...serverItem,
+				} as QueueItem;
+			}
+			// If server has a current downloading item, merge its live progress
+			if (serverCurrent?.uuid && merged[serverCurrent.uuid]) {
+				merged[serverCurrent.uuid] = {
+					...merged[serverCurrent.uuid],
+					...serverCurrent,
+					status: "downloading",
+				};
+			}
+			return { queue: merged };
 		}),
 }));

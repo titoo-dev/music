@@ -52,6 +52,10 @@ export class DeemixApp {
 	settings: Settings;
 	listener: Listener;
 	_wsBroadcast?: (key: string, data: any) => void;
+	// Full download object data (equivalent to disk persistence in old deemix)
+	// Stores toDict() output keyed by UUID, needed by startQueue to reconstruct
+	// Single/Collection instances with trackAPI/albumAPI data
+	private _downloadData: Record<string, any> = {};
 
 	constructor(listener: Listener) {
 		this.queueOrder = [];
@@ -172,9 +176,13 @@ export class DeemixApp {
 			}
 
 			this.queueOrder.push(downloadObj.uuid);
+			// Store full download data in memory (replaces disk persistence from old deemix)
+			this._downloadData[downloadObj.uuid] = downloadObj.toDict();
 			this.queue[downloadObj.uuid] = downloadObj.getEssentialDict();
 			this.queue[downloadObj.uuid].status = "inQueue";
-			slimmedObjects.push(downloadObj.getSlimmedDict());
+			const slimmed = downloadObj.getSlimmedDict();
+			slimmed.status = "inQueue";
+			slimmedObjects.push(slimmed);
 		});
 
 		if (slimmedObjects.length === 1)
@@ -202,7 +210,13 @@ export class DeemixApp {
 			}
 
 			this.queue[currentUUID].status = "downloading";
-			const currentItem = this.queue[currentUUID];
+			// Use full download data (with trackAPI, albumAPI, etc.) for reconstruction
+			const currentItem = this._downloadData[currentUUID];
+
+			if (!currentItem) {
+				this.currentJob = null;
+				continue;
+			}
 
 			let downloadObject: any;
 			switch (currentItem.__type__) {
@@ -224,7 +238,10 @@ export class DeemixApp {
 				}
 			}
 
-			if (!downloadObject) return;
+			if (!downloadObject) {
+				this.currentJob = null;
+				continue;
+			}
 
 			this.currentJob = new Downloader(dz, downloadObject, this.settings, this.listener);
 			this.listener.send("startDownload", currentUUID);
@@ -243,8 +260,15 @@ export class DeemixApp {
 					...downloadObject.getSlimmedDict(),
 					status: this.queue[currentUUID].status,
 				};
+
+				this.listener.send("finishDownload", {
+					uuid: currentUUID,
+					status: this.queue[currentUUID].status,
+				});
 			}
 
+			// Clean up full download data (no longer needed after completion)
+			delete this._downloadData[currentUUID];
 			this.currentJob = null;
 		} while (this.queueOrder.length);
 	}
@@ -261,6 +285,7 @@ export class DeemixApp {
 				this.listener.send("removedFromQueue", { uuid });
 			}
 			delete this.queue[uuid];
+			delete this._downloadData[uuid];
 		}
 	}
 
@@ -274,6 +299,7 @@ export class DeemixApp {
 				currentItem = downloadObject.uuid;
 			}
 			delete this.queue[downloadObject.uuid];
+			delete this._downloadData[downloadObject.uuid];
 		});
 		this.listener.send("removedAllDownloads", currentItem);
 	}

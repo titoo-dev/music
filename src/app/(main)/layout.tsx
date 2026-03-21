@@ -6,6 +6,7 @@ import { SearchBar } from "@/components/layout/SearchBar";
 import { DownloadSheet } from "@/components/downloads/DownloadBar";
 import { useSocket } from "@/hooks/useSocket";
 import { useInitApp } from "@/hooks/useInitApp";
+import { useQueuePolling } from "@/hooks/useQueuePolling";
 import { useAppStore } from "@/stores/useAppStore";
 import { useLoginStore } from "@/stores/useLoginStore";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,6 +32,7 @@ import { MiniPlayer } from "@/components/audio/MiniPlayer";
 export default function MainLayout({ children }: { children: React.ReactNode }) {
 	useSocket();
 	useInitApp();
+	useQueuePolling();
 
 	const sidebarOpen = useAppStore((s) => s.sidebarOpen);
 	const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);

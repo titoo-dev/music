@@ -2,13 +2,14 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchData, postToServer } from "@/utils/api";
+import { fetchData } from "@/utils/api";
+import { useDownload } from "@/hooks/useDownload";
 import { convertDuration } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { PreviewButton } from "@/components/audio/PreviewButton";
-import { Loader2 } from "lucide-react";
+import { Loader2, Check } from "lucide-react";
 
 function getCoverUrl(picture: string, size = 500) {
 	if (!picture) return "/placeholder.jpg";
@@ -22,6 +23,7 @@ function AlbumContent() {
 	const [album, setAlbum] = useState<any>(null);
 	const [tracks, setTracks] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
+	const { download, isLoading } = useDownload();
 
 	useEffect(() => {
 		if (!id) return;
@@ -41,13 +43,10 @@ function AlbumContent() {
 		loadAlbum();
 	}, [id]);
 
-	const handleDownloadAll = () => {
-		postToServer("add-to-queue", { url: `https://www.deezer.com/album/${id}`, bitrate: null });
-	};
-
-	const handleDownloadTrack = (trackId: string) => {
-		postToServer("add-to-queue", { url: `https://www.deezer.com/track/${trackId}`, bitrate: null });
-	};
+	const albumUrl = `https://www.deezer.com/album/${id}`;
+	const handleDownloadAll = () => download(albumUrl);
+	const trackUrl = (trackId: string) => `https://www.deezer.com/track/${trackId}`;
+	const handleDownloadTrack = (trackId: string) => download(trackUrl(trackId));
 
 	if (loading)
 		return (
@@ -102,8 +101,11 @@ function AlbumContent() {
 							</>
 						)}
 					</div>
-					<Button onClick={handleDownloadAll} className="w-fit mt-1">
-						Download album
+					<Button onClick={handleDownloadAll} disabled={isLoading(albumUrl)} className="w-fit mt-1 gap-2">
+						{isLoading(albumUrl) ? (
+							<Loader2 className="size-4 animate-spin" />
+						) : null}
+						{isLoading(albumUrl) ? "Adding..." : "Download album"}
 					</Button>
 				</div>
 			</div>
@@ -173,9 +175,13 @@ function AlbumContent() {
 									variant="ghost"
 									size="sm"
 									onClick={() => handleDownloadTrack(trackId)}
-									className="opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+									disabled={isLoading(trackUrl(trackId))}
+									className="opacity-0 group-hover:opacity-100 transition-opacity text-xs gap-1.5"
 								>
-									Download
+									{isLoading(trackUrl(trackId)) ? (
+										<Loader2 className="size-3 animate-spin" />
+									) : null}
+									{isLoading(trackUrl(trackId)) ? "Adding..." : "Download"}
 								</Button>
 							</div>
 						);

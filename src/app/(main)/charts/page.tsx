@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchData, postToServer } from "@/utils/api";
+import { fetchData } from "@/utils/api";
+import { useDownload } from "@/hooks/useDownload";
 import { convertDuration } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -26,6 +27,7 @@ export default function ChartsPage() {
 	const [tracks, setTracks] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [loadingTracks, setLoadingTracks] = useState(false);
+	const { download, isLoading } = useDownload();
 
 	useEffect(() => {
 		async function loadCharts() {
@@ -54,17 +56,11 @@ export default function ChartsPage() {
 		setLoadingTracks(false);
 	};
 
-	const handleDownload = (id: string, type: string = "track") => {
-		const url = `https://www.deezer.com/${type}/${id}`;
-		postToServer("add-to-queue", { url, bitrate: null });
-	};
+	const deezerUrl = (id: string, type: string) => `https://www.deezer.com/${type}/${id}`;
+	const handleDownload = (id: string, type: string = "track") => download(deezerUrl(id, type));
 
-	const handleDownloadAll = () => {
-		if (selectedChart) {
-			const url = `https://www.deezer.com/playlist/${selectedChart.id}`;
-			postToServer("add-to-queue", { url, bitrate: null });
-		}
-	};
+	const chartUrl = selectedChart ? `https://www.deezer.com/playlist/${selectedChart.id}` : "";
+	const handleDownloadAll = () => { if (chartUrl) download(chartUrl); };
 
 	if (loading) {
 		return (
@@ -95,10 +91,11 @@ export default function ChartsPage() {
 					<Button
 						size="sm"
 						onClick={handleDownloadAll}
+						disabled={isLoading(chartUrl)}
 						className="gap-1.5"
 					>
-						<Download className="size-3.5" />
-						Download All
+						{isLoading(chartUrl) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+						{isLoading(chartUrl) ? "Adding..." : "Download All"}
 					</Button>
 				</div>
 
@@ -162,9 +159,10 @@ export default function ChartsPage() {
 											onClick={() =>
 												handleDownload(trackId, "track")
 											}
+											disabled={isLoading(deezerUrl(trackId, "track"))}
 											className="opacity-0 group-hover:opacity-100 transition-opacity"
 										>
-											<Download className="size-3.5" />
+											{isLoading(deezerUrl(trackId, "track")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
 										</Button>
 									</div>
 									{idx < tracks.length - 1 && <Separator />}
