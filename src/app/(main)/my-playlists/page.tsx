@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2, Plus, Music, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { usePlayerStore } from "@/stores/usePlayerStore";
 
 interface PlaylistItem {
 	id: string;
@@ -42,6 +43,8 @@ export default function MyPlaylistsPage() {
 	const [deleteTarget, setDeleteTarget] = useState<PlaylistItem | null>(null);
 	const [deleting, setDeleting] = useState(false);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
+	const stopPlayer = usePlayerStore((s) => s.stop);
 
 	const loadPlaylists = async () => {
 		try {
@@ -73,6 +76,10 @@ export default function MyPlaylistsPage() {
 
 	const handleDelete = async () => {
 		if (!deleteTarget) return;
+		// Stop player in case it's playing a track from this playlist
+		if (currentPlayerTrack) {
+			stopPlayer();
+		}
 		setDeleting(true);
 		try {
 			await fetch(`/api/v1/playlists/${deleteTarget.id}`, { method: "DELETE" });

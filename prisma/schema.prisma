@@ -24,6 +24,7 @@ model User {
   deezerCred    DeezerCredential?
   playlists     Playlist[]
   downloads     DownloadHistory[]
+  albums        Album[]
 
   @@map("user")
 }
@@ -150,6 +151,23 @@ model PlaylistTrack {
 
   @@unique([playlistId, trackId])
   @@map("playlist_track")
+}
+
+model Album {
+  id             String   @id @default(cuid())
+  userId         String
+  deezerAlbumId  String
+  title          String
+  artist         String
+  coverUrl       String?
+  trackCount     Int      @default(0)
+  downloadedAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deezerAlbumId])
+  @@index([userId])
+  @@map("album")
 }
 
 model DownloadHistory {

@@ -42,6 +42,7 @@ export default function PlaylistDetailPage() {
 	const { download, isLoading } = useDownload();
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
 	const playerPlaying = usePlayerStore((s) => s.isPlaying);
+	const stopPlayer = usePlayerStore((s) => s.stop);
 
 	const isDownloadsPlaylist = playlist?.title === "Downloads";
 
@@ -79,6 +80,10 @@ export default function PlaylistDetailPage() {
 
 	const handleRemoveTrack = async (trackId: string) => {
 		if (!playlist) return;
+		// Stop player if it's playing the track being removed
+		if (currentPlayerTrack?.trackId === trackId) {
+			stopPlayer();
+		}
 		try {
 			await fetch(`/api/v1/playlists/${playlist.id}/tracks`, {
 				method: "DELETE",

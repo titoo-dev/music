@@ -387,22 +387,51 @@ export class DeemixApp {
 
 			// For collections (albums/playlists), record each individual track
 			if (rawData.__type__ === "Collection") {
-				for (const file of downloadObject.files || []) {
+				const albumId = String(rawData.id || downloadObject.id || "");
+				const albumTitle = rawData.title || downloadObject.title || "";
+				const albumArtist = rawData.artist || downloadObject.artist || "";
+				const completedFiles = downloadObject.files || [];
+
+				for (const file of completedFiles) {
 					if (!file?.data?.id) continue;
 					const fileTrackId = String(file.data.id);
 					const storagePath = file.path ? String(file.path) : null;
 					await prisma.downloadHistory.upsert({
 						where: { userId_trackId: { userId, trackId: fileTrackId } },
-						update: { downloadedAt: new Date(), storagePath },
+						update: { downloadedAt: new Date(), storagePath, albumId },
 						create: {
 							userId,
 							trackId: fileTrackId,
 							title: file.data.title || "",
 							artist: file.data.artist || "",
+							album: albumTitle,
+							albumId,
 							coverUrl: cover,
 							bitrate,
 							storageType,
 							storagePath,
+						},
+					});
+				}
+
+				// Create album record in DB if this is an album download
+				if (rawData.type === "album" && albumId) {
+					await prisma.album.upsert({
+						where: { userId_deezerAlbumId: { userId, deezerAlbumId: albumId } },
+						update: {
+							title: albumTitle,
+							artist: albumArtist,
+							coverUrl: cover,
+							trackCount: completedFiles.length,
+							downloadedAt: new Date(),
+						},
+						create: {
+							userId,
+							deezerAlbumId: albumId,
+							title: albumTitle,
+							artist: albumArtist,
+							coverUrl: cover,
+							trackCount: completedFiles.length,
 						},
 					});
 				}

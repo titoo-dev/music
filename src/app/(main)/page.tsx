@@ -13,7 +13,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Download, ArrowRight, Loader2, Music } from "lucide-react";
+import { Download, ArrowRight, Loader2, Music, Disc3 } from "lucide-react";
 import { CoverImage } from "@/components/ui/cover-image";
 
 function getCoverUrl(hash: string, size = 500) {
@@ -47,9 +47,20 @@ interface UserPlaylist {
 	_count: { tracks: number };
 }
 
+interface UserAlbum {
+	id: string;
+	deezerAlbumId: string;
+	title: string;
+	artist: string;
+	coverUrl: string | null;
+	trackCount: number;
+	downloadedAt: string;
+}
+
 export default function HomePage() {
 	const [charts, setCharts] = useState<ChartItem[]>([]);
 	const [playlists, setPlaylists] = useState<UserPlaylist[]>([]);
+	const [albums, setAlbums] = useState<UserAlbum[]>([]);
 	const [loading, setLoading] = useState(true);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const user = useAuthStore((s) => s.user);
@@ -70,15 +81,19 @@ export default function HomePage() {
 
 	useEffect(() => {
 		if (!isAuthenticated) return;
-		async function loadPlaylists() {
+		async function loadUserData() {
 			try {
-				const data = await fetchData("playlists");
-				if (data) setPlaylists(data);
+				const [playlistData, albumData] = await Promise.all([
+					fetchData("playlists").catch(() => null),
+					fetchData("albums").catch(() => null),
+				]);
+				if (playlistData) setPlaylists(playlistData);
+				if (albumData) setAlbums(albumData);
 			} catch {
 				// ignore
 			}
 		}
-		loadPlaylists();
+		loadUserData();
 	}, [isAuthenticated]);
 
 	const { download, isLoading } = useDownload();
@@ -205,6 +220,51 @@ export default function HomePage() {
 									</p>
 									<p className="text-xs text-muted-foreground mt-0.5">
 										{pl._count.tracks} track{pl._count.tracks !== 1 ? "s" : ""}
+									</p>
+								</div>
+							</Link>
+						))}
+					</div>
+				</section>
+			)}
+
+			{/* User Albums */}
+			{albums.length > 0 && (
+				<section className="space-y-4">
+					<div className="flex items-center justify-between">
+						<h2 className="text-lg font-medium">My Albums</h2>
+						<span className="text-xs text-muted-foreground">
+							{albums.length} album{albums.length !== 1 ? "s" : ""}
+						</span>
+					</div>
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+						{albums.slice(0, 10).map((album) => (
+							<Link
+								key={album.id}
+								href={`/my-albums/${album.id}`}
+								className="group rounded-xl overflow-hidden bg-muted/30 no-underline"
+							>
+								<div className="w-full aspect-square bg-muted/50 flex items-center justify-center">
+									{album.coverUrl ? (
+										<CoverImage
+											src={album.coverUrl}
+											alt={album.title}
+											loading="lazy"
+											className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
+										/>
+									) : (
+										<Disc3 className="size-12 text-muted-foreground/30" />
+									)}
+								</div>
+								<div className="p-3">
+									<p className="text-sm font-medium truncate group-hover:underline">
+										{album.title}
+									</p>
+									<p className="text-xs text-muted-foreground mt-0.5 truncate">
+										{album.artist}
+									</p>
+									<p className="text-xs text-muted-foreground mt-0.5">
+										{album.trackCount} track{album.trackCount !== 1 ? "s" : ""}
 									</p>
 								</div>
 							</Link>
