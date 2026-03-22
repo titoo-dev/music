@@ -34,9 +34,12 @@ export function CoverImage({
 		);
 	}
 
+	// Upgrade Deezer cover URLs to higher resolution
+	const hiRes = src.replace(/\/\d+x\d+-/, "/1000x1000-");
+
 	return (
 		<img
-			src={src}
+			src={hiRes}
 			alt={alt}
 			loading={loading}
 			className={cn("object-cover border-[1.5px] sm:border-2 border-foreground", className)}

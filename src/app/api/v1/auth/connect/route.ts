@@ -36,18 +36,37 @@ export async function GET(request: NextRequest) {
 					image: session.user.image,
 				};
 
-				// Try to restore Deezer session from stored ARL
+				// Try to restore Deezer session from stored ARL or service ARL
 				let dz = getUserDz(session.user.id);
 				if (!dz?.loggedIn) {
 					const cred = await prisma.deezerCredential.findUnique({
 						where: { userId: session.user.id },
 					});
-					if (cred) {
+					const arl = cred?.arl || process.env.DEEMIX_SERVICE_ARL;
+					if (arl) {
 						const { Deezer } = await import("@/lib/deezer");
 						dz = new Deezer();
-						const loggedIn = await dz.loginViaArl(cred.arl);
+						const loggedIn = await dz.loginViaArl(arl);
 						if (loggedIn) {
 							setUserDz(session.user.id, dz);
+							// Persist service ARL as user credential if not already stored
+							if (!cred && process.env.DEEMIX_SERVICE_ARL) {
+								try {
+									await prisma.deezerCredential.create({
+										data: {
+											userId: session.user.id,
+											arl,
+											deezerUserId: String(dz.currentUser?.id || ""),
+											deezerUserName: dz.currentUser?.name || "",
+											deezerPicture: dz.currentUser?.picture || "",
+											canStreamHq: !!dz.currentUser?.can_stream_hq,
+											canStreamLossless: !!dz.currentUser?.can_stream_lossless,
+										},
+									});
+								} catch {
+									// Ignore duplicate or write errors
+								}
+							}
 						} else {
 							dz = null;
 						}

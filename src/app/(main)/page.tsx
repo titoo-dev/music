@@ -101,8 +101,6 @@ export default function HomePage() {
 	const [loading, setLoading] = useState(true);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const user = useAuthStore((s) => s.user);
-	const isDeezerConnected = useAuthStore((s) => s.isDeezerConnected);
-
 	useEffect(() => {
 		async function loadHome() {
 			try {
@@ -168,39 +166,6 @@ export default function HomePage() {
 						<Link href="/login">
 							<Button className="w-full gap-2">
 								Sign in
-								<ArrowRight className="size-4" />
-							</Button>
-						</Link>
-					</CardContent>
-				</Card>
-			</div>
-		);
-	}
-
-	if (!isDeezerConnected) {
-		return (
-			<div className="flex flex-col items-center justify-center min-h-[60vh] gap-8">
-				<div className="text-center space-y-4">
-					<h1 className="text-brutal-xl">
-						CONNECT YOUR<br />
-						<span className="text-primary">DEEZER ACCOUNT</span>
-					</h1>
-					<p className="text-sm text-muted-foreground max-w-md font-medium">
-						You need a Deezer ARL token to browse and download music.
-						Head to Settings to connect.
-					</p>
-				</div>
-				<Card className="max-w-sm w-full">
-					<CardHeader>
-						<CardTitle>Deezer not connected</CardTitle>
-						<CardDescription>
-							Add your Deezer ARL in Settings to access your library and download music.
-						</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<Link href="/settings">
-							<Button className="w-full gap-2">
-								Go to Settings
 								<ArrowRight className="size-4" />
 							</Button>
 						</Link>

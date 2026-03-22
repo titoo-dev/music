@@ -28,7 +28,7 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Menu, Settings, Info, LogOut, Music, History } from "lucide-react";
+import { Menu, Info, LogOut, Music, History } from "lucide-react";
 import { AudioPreview } from "@/components/audio/AudioPreview";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
 import { AudioEngine } from "@/components/audio/AudioEngine";
@@ -194,12 +194,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 											<DropdownMenuItem className="gap-2 text-sm font-bold">
 												<History className="h-3.5 w-3.5" />
 												Download History
-											</DropdownMenuItem>
-										</Link>
-										<Link href="/settings" className="no-underline">
-											<DropdownMenuItem className="gap-2 text-sm font-bold">
-												<Settings className="h-3.5 w-3.5" />
-												Settings
 											</DropdownMenuItem>
 										</Link>
 										<Link href="/about" className="no-underline">

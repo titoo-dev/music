@@ -9,7 +9,6 @@ import {
 	Search,
 	BarChart3,
 	Link2,
-	Settings,
 	Info,
 	Music,
 	History,
@@ -28,7 +27,6 @@ const authItems = [
 ];
 
 const secondaryItems = [
-	{ path: "/settings", label: "Settings", icon: Settings },
 	{ path: "/about", label: "About", icon: Info },
 ];
 

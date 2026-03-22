@@ -59,6 +59,10 @@ export function SearchBar() {
 				onChange={(e) => setTerm(e.target.value)}
 				placeholder="Search or paste a link..."
 				className="h-9 w-full pl-9 pr-16 text-sm"
+				autoComplete="off"
+				autoCorrect="off"
+				autoCapitalize="off"
+				spellCheck={false}
 			/>
 			<kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 select-none items-center gap-0.5 border-[2px] border-foreground bg-muted px-1.5 py-0.5 text-[10px] font-bold text-foreground font-mono sm:flex">
 				Ctrl+F

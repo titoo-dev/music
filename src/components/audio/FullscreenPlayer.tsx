@@ -25,9 +25,6 @@ function seek(time: number) {
 	(window as any).__deemixAudioSeek?.(time);
 }
 
-function hiRes(url: string | null | undefined) {
-	return url?.replace(/\/\d+x\d+-/, "/1000x1000-") ?? null;
-}
 
 /* ─── Cover Carousel ─── */
 /* Only re-renders when queue changes — immune to currentTime updates */
@@ -102,7 +99,7 @@ const CoverCarousel = memo(function CoverCarousel({
 					{queue.map((track) => (
 						<CarouselItem key={track.trackId} className="pl-0">
 							<CoverImage
-								src={hiRes(track.cover)}
+								src={track.cover}
 								className="aspect-square w-full border-[3px] border-foreground shadow-[var(--shadow-brutal)]"
 							/>
 						</CarouselItem>
