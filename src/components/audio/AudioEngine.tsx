@@ -42,6 +42,9 @@ async function getTrackUrl(trackId: string): Promise<string> {
 // Stores pre-buffered Audio elements so playback starts instantly
 const preloadCache = new Map<string, HTMLAudioElement>();
 const MAX_PRELOADED = 6;
+// Tracks elements that were evicted or abandoned — prevents stale URL resolutions
+// from setting src on elements that are no longer needed.
+const evictedAudio = new WeakSet<HTMLAudioElement>();
 
 export function preloadTrack(trackId: string) {
 	if (preloadCache.has(trackId)) return;
@@ -50,6 +53,7 @@ export function preloadTrack(trackId: string) {
 	if (preloadCache.size >= MAX_PRELOADED) {
 		const oldest = preloadCache.keys().next().value!;
 		const oldAudio = preloadCache.get(oldest)!;
+		evictedAudio.add(oldAudio);
 		oldAudio.src = "";
 		preloadCache.delete(oldest);
 	}
@@ -61,8 +65,10 @@ export function preloadTrack(trackId: string) {
 	preloadCache.set(trackId, audio);
 
 	getTrackUrl(trackId).then((url) => {
-		// Check if still in cache (not evicted while fetching)
-		if (preloadCache.get(trackId) !== audio) return;
+		// Only skip if the element was explicitly evicted/abandoned.
+		// When AudioEngine adopts an element (removes from cache), we still
+		// want the URL to be set so the audio can load.
+		if (evictedAudio.has(audio)) return;
 		audio.src = url;
 		audio.load();
 	});
@@ -137,9 +143,11 @@ export function AudioEngine() {
 				detachEvents(audio);
 				audio.pause();
 				audio.src = "";
+				evictedAudio.add(audio);
 			}
 			// Clean up preload cache
 			for (const [, a] of preloadCache) {
+				evictedAudio.add(a);
 				a.src = "";
 			}
 			preloadCache.clear();
@@ -197,6 +205,7 @@ export function AudioEngine() {
 			detachEvents(audio);
 			audio.pause();
 			audio.src = "";
+			evictedAudio.add(audio);
 
 			prevTrackIdRef.current = currentTrack.trackId;
 
@@ -270,17 +279,18 @@ export function AudioEngine() {
 		adjustVolume(audio, volume / 100, { duration: 300 });
 	}, [volume, isPlaying]);
 
-	// Seek: listen for currentTime resets (prev button restart)
-	const lastStoreTime = useRef(0);
+	// Seek: respond to _seekTo signal from prev() restart
+	const seekTo = usePlayerStore((s) => s._seekTo);
 	useEffect(() => {
+		if (seekTo === null) return;
 		const audio = audioRef.current;
-		if (!audio) return;
-		const storeTime = usePlayerStore.getState().currentTime;
-		if (storeTime === 0 && lastStoreTime.current > 3) {
-			audio.currentTime = 0;
+		if (audio) {
+			audio.currentTime = seekTo;
+			setCurrentTime(seekTo);
 		}
-		lastStoreTime.current = storeTime;
-	});
+		// Clear the signal so it doesn't re-fire
+		usePlayerStore.setState({ _seekTo: null });
+	}, [seekTo, setCurrentTime]);
 
 	// --- Media Session position update ---
 	const onPositionUpdate = useCallback(() => {
@@ -316,7 +326,6 @@ export function AudioEngine() {
 		const audio = audioRef.current;
 		if (!audio) return;
 		setCurrentTime(audio.currentTime);
-		lastStoreTime.current = audio.currentTime;
 		onPositionUpdate();
 
 		// Preload next track at 50% progress
@@ -349,6 +358,7 @@ export function AudioEngine() {
 			urlCache.clear();
 			// Invalidate preloaded elements (presigned URLs are now invalid)
 			for (const [, a] of preloadCache) {
+				evictedAudio.add(a);
 				a.src = "";
 			}
 			preloadCache.clear();

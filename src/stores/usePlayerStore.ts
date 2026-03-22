@@ -21,6 +21,8 @@ interface PlayerState {
 	duration: number;
 	shuffle: boolean;
 	repeat: RepeatMode;
+	/** Set by prev() to signal AudioEngine to seek; AudioEngine clears it after seeking. */
+	_seekTo: number | null;
 
 	play: (track: PlayerTrack, queue?: PlayerTrack[]) => void;
 	pause: () => void;
@@ -49,6 +51,7 @@ export const usePlayerStore = create<PlayerState>()(
 			duration: 0,
 			shuffle: false,
 			repeat: "off" as RepeatMode,
+			_seekTo: null,
 
 			play: (track, queue) => {
 				const state = get();
@@ -85,7 +88,13 @@ export const usePlayerStore = create<PlayerState>()(
 
 				let nextIndex: number;
 				if (shuffle) {
-					nextIndex = Math.floor(Math.random() * queue.length);
+					if (queue.length === 1) {
+						nextIndex = 0;
+					} else {
+						// Pick a random index that differs from the current one
+						nextIndex = Math.floor(Math.random() * (queue.length - 1));
+						if (nextIndex >= queueIndex) nextIndex++;
+					}
 				} else {
 					nextIndex = queueIndex + 1;
 				}
@@ -108,19 +117,33 @@ export const usePlayerStore = create<PlayerState>()(
 			},
 
 			prev: () => {
-				const { queue, queueIndex, currentTime } = get();
+				const { queue, queueIndex, currentTime, repeat } = get();
 				if (queue.length === 0) return;
 
 				// If more than 3 seconds in, restart current track
 				if (currentTime > 3) {
-					set({ currentTime: 0 });
+					set({ currentTime: 0, _seekTo: 0 });
 					return;
 				}
 
-				const prevIndex = queueIndex > 0 ? queueIndex - 1 : queue.length - 1;
+				// At the start of the queue: restart current track (unless repeat-all wraps)
+				if (queueIndex === 0) {
+					if (repeat === "all") {
+						set({
+							currentTrack: queue[queue.length - 1],
+							queueIndex: queue.length - 1,
+							isPlaying: true,
+							currentTime: 0,
+						});
+					} else {
+						set({ currentTime: 0, _seekTo: 0 });
+					}
+					return;
+				}
+
 				set({
-					currentTrack: queue[prevIndex],
-					queueIndex: prevIndex,
+					currentTrack: queue[queueIndex - 1],
+					queueIndex: queueIndex - 1,
 					isPlaying: true,
 					currentTime: 0,
 				});
