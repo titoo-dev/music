@@ -13,6 +13,7 @@ import Link from "next/link";
 import { PlayButton } from "@/components/audio/PlayButton";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
+import { preloadTrack } from "@/components/audio/AudioEngine";
 
 interface PlaylistTrack {
 	id: string;
@@ -64,6 +65,17 @@ export default function PlaylistDetailPage() {
 		}
 		load();
 	}, [params.id, isAuthenticated]);
+
+	// Preload first playable tracks so playback starts instantly
+	useEffect(() => {
+		if (!playlist || playlist.tracks.length === 0) return;
+		const playable = playlist.tracks
+			.filter((t) => isDownloadsPlaylist || downloaded.has(t.trackId))
+			.slice(0, 3);
+		for (const track of playable) {
+			preloadTrack(track.trackId);
+		}
+	}, [playlist, downloaded, isDownloadsPlaylist]);
 
 	const handleRemoveTrack = async (trackId: string) => {
 		if (!playlist) return;

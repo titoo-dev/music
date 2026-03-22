@@ -3,11 +3,11 @@
 import { useEffect, useRef, useCallback } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
+import { adjustVolume } from "@/utils/adjust-volume";
 
-// Cache presigned URLs to avoid re-fetching
+// --- URL Cache ---
 const urlCache = new Map<string, { url: string; fetchedAt: number }>();
 const URL_CACHE_TTL = 12 * 60 * 1000; // 12 minutes (presigned URLs valid for 15)
-// Track whether direct S3 streaming works (falls back to proxy if not)
 let usePresigned = true;
 
 async function fetchPresignedUrl(trackId: string): Promise<string | null> {
@@ -30,15 +30,56 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 	}
 }
 
+async function getTrackUrl(trackId: string): Promise<string> {
+	if (usePresigned) {
+		const url = await fetchPresignedUrl(trackId);
+		if (url) return url;
+	}
+	return `/api/v1/stream/${trackId}`;
+}
+
+// --- Audio Preload Cache ---
+// Stores pre-buffered Audio elements so playback starts instantly
+const preloadCache = new Map<string, HTMLAudioElement>();
+const MAX_PRELOADED = 6;
+
+export function preloadTrack(trackId: string) {
+	if (preloadCache.has(trackId)) return;
+
+	// Evict oldest if at capacity
+	if (preloadCache.size >= MAX_PRELOADED) {
+		const oldest = preloadCache.keys().next().value!;
+		const oldAudio = preloadCache.get(oldest)!;
+		oldAudio.src = "";
+		preloadCache.delete(oldest);
+	}
+
+	const audio = new Audio();
+	audio.preload = "auto";
+	audio.crossOrigin = "anonymous";
+	// Reserve spot immediately to prevent duplicate fetches
+	preloadCache.set(trackId, audio);
+
+	getTrackUrl(trackId).then((url) => {
+		// Check if still in cache (not evicted while fetching)
+		if (preloadCache.get(trackId) !== audio) return;
+		audio.src = url;
+		audio.load();
+	});
+}
+
 /**
- * Hidden <audio> element that drives full-track playback from S3.
- * Separate from AudioPreview (which handles 30s Deezer clips).
+ * Drives full-track playback from S3 using imperatively managed Audio objects.
+ * Pre-buffers adjacent tracks in the queue for instant playback.
  * Also manages the Media Session API for OS-level media controls.
  */
 export function AudioEngine() {
-	const audioRef = useRef<HTMLAudioElement>(null);
+	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const prevTrackIdRef = useRef<string | null>(null);
-	const preloadedTrackIdRef = useRef<string | null>(null);
+	// Flag to skip play/pause effect when loadTrack already handled playback
+	const skipPlayEffectRef = useRef(false);
+	// Generation counter to cancel stale track loads on rapid switching
+	const loadGenRef = useRef(0);
 
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -53,14 +94,74 @@ export function AudioEngine() {
 
 	const previewStop = usePreviewStore((s) => s.stop);
 
-	// Stop preview playback when full player starts
+	// --- Stable event handler delegation via refs ---
+	// Audio element event handlers always call the latest callback through this ref
+	const handlersRef = useRef({
+		onCanPlay: () => {},
+		onTimeUpdate: () => {},
+		onEnded: () => {},
+		onError: () => {},
+		onLoadedMetadata: () => {},
+	});
+
+	const attachEvents = useCallback((audio: HTMLAudioElement) => {
+		audio.oncanplay = () => handlersRef.current.onCanPlay();
+		audio.ontimeupdate = () => handlersRef.current.onTimeUpdate();
+		audio.onended = () => handlersRef.current.onEnded();
+		audio.onerror = () => handlersRef.current.onError();
+		audio.onloadedmetadata = () => handlersRef.current.onLoadedMetadata();
+	}, []);
+
+	const detachEvents = useCallback((audio: HTMLAudioElement) => {
+		audio.oncanplay = null;
+		audio.ontimeupdate = null;
+		audio.onended = null;
+		audio.onerror = null;
+		audio.onloadedmetadata = null;
+	}, []);
+
+	// --- Initialize audio element (client-only) ---
 	useEffect(() => {
-		if (currentTrack && isPlaying) {
-			previewStop();
+		if (!audioRef.current) {
+			const audio = new Audio();
+			audio.preload = "auto";
+			audio.crossOrigin = "anonymous";
+			audioRef.current = audio;
+			attachEvents(audio);
 		}
+		return () => {
+			const audio = audioRef.current;
+			if (audio) {
+				detachEvents(audio);
+				audio.pause();
+				audio.src = "";
+			}
+			// Clean up preload cache
+			for (const [, a] of preloadCache) {
+				a.src = "";
+			}
+			preloadCache.clear();
+		};
+	}, [attachEvents, detachEvents]);
+
+	// Stop preview when full player starts
+	useEffect(() => {
+		if (currentTrack && isPlaying) previewStop();
 	}, [currentTrack, isPlaying, previewStop]);
 
-	// Load new track — use presigned URL for direct S3 streaming
+	// --- Preload adjacent tracks when queue position changes ---
+	useEffect(() => {
+		if (!currentTrack) return;
+		const { queue, queueIndex } = usePlayerStore.getState();
+		if (queueIndex + 1 < queue.length) {
+			preloadTrack(queue[queueIndex + 1].trackId);
+		}
+		if (queueIndex - 1 >= 0) {
+			preloadTrack(queue[queueIndex - 1].trackId);
+		}
+	}, [currentTrack]);
+
+	// --- Load new track ---
 	useEffect(() => {
 		const audio = audioRef.current;
 		if (!audio) return;
@@ -73,51 +174,86 @@ export function AudioEngine() {
 		}
 
 		if (currentTrack.trackId !== prevTrackIdRef.current) {
+			const gen = ++loadGenRef.current;
+			// Prevent the play/pause effect from re-starting the old audio
+			skipPlayEffectRef.current = true;
+
+			// Immediately kill the old audio — hard stop, no fade
+			detachEvents(audio);
+			audio.pause();
+			audio.src = "";
+
 			prevTrackIdRef.current = currentTrack.trackId;
 
-			// Try presigned URL for faster direct S3 streaming
-			if (usePresigned) {
-				const cachedUrl = urlCache.get(currentTrack.trackId);
-				if (cachedUrl && Date.now() - cachedUrl.fetchedAt < URL_CACHE_TTL) {
-					// Presigned URL already cached (from preloading) — use immediately
-					audio.src = cachedUrl.url;
-					audio.load();
-				} else {
-					// Fetch presigned URL, then load
-					fetchPresignedUrl(currentTrack.trackId).then((url) => {
-						// Make sure this track is still current
-						if (prevTrackIdRef.current !== currentTrack.trackId) return;
-						audio.src = url || `/api/v1/stream/${currentTrack.trackId}`;
-						audio.load();
-					});
+			const preloaded = preloadCache.get(currentTrack.trackId);
+
+			if (preloaded) {
+				// Swap to the preloaded element (its buffer has the audio data)
+				audioRef.current = preloaded;
+				preloadCache.delete(currentTrack.trackId);
+				attachEvents(preloaded);
+
+				if (preloaded.readyState >= 2) {
+					// Already buffered — play immediately
+					setDuration(preloaded.duration || 0);
+					if (usePlayerStore.getState().isPlaying) {
+						skipPlayEffectRef.current = true;
+						preloaded.volume = 0;
+						preloaded.play().catch(() => {});
+						const targetVol = usePlayerStore.getState().volume / 100;
+						adjustVolume(preloaded, targetVol, { duration: 800 });
+					}
 				}
+				// If not ready yet, onCanPlay will fire and handle playback
 			} else {
-				// Fallback: proxy through server
-				audio.src = `/api/v1/stream/${currentTrack.trackId}`;
-				audio.load();
+				// No preloaded data — load normally on a fresh element
+				const newAudio = new Audio();
+				newAudio.preload = "auto";
+				newAudio.crossOrigin = "anonymous";
+				audioRef.current = newAudio;
+				attachEvents(newAudio);
+
+				getTrackUrl(currentTrack.trackId).then((url) => {
+					if (loadGenRef.current !== gen) return;
+					newAudio.src = url;
+					newAudio.load();
+				});
 			}
 		}
-	}, [currentTrack]);
+	}, [currentTrack, attachEvents, detachEvents, setDuration]);
 
-	// Play / pause
+	// --- Play / pause with fade effects ---
 	useEffect(() => {
 		const audio = audioRef.current;
 		if (!audio || !currentTrack) return;
 
 		if (isPlaying) {
+			// Skip if loadTrack already started playback (preloaded swap)
+			if (skipPlayEffectRef.current) {
+				skipPlayEffectRef.current = false;
+				return;
+			}
 			if (audio.readyState >= 2) {
+				audio.volume = 0;
 				audio.play().catch(() => {});
+				const targetVolume = usePlayerStore.getState().volume / 100;
+				adjustVolume(audio, targetVolume, { duration: 600 });
 			}
 		} else {
-			audio.pause();
+			adjustVolume(audio, 0, { duration: 500 }).then(() => {
+				if (!usePlayerStore.getState().isPlaying) {
+					audio.pause();
+				}
+			});
 		}
 	}, [isPlaying, currentTrack]);
 
-	// Volume
+	// Volume — smooth transition
 	useEffect(() => {
 		const audio = audioRef.current;
-		if (audio) audio.volume = volume / 100;
-	}, [volume]);
+		if (!audio || !isPlaying) return;
+		adjustVolume(audio, volume / 100, { duration: 300 });
+	}, [volume, isPlaying]);
 
 	// Seek: listen for currentTime resets (prev button restart)
 	const lastStoreTime = useRef(0);
@@ -125,19 +261,17 @@ export function AudioEngine() {
 		const audio = audioRef.current;
 		if (!audio) return;
 		const storeTime = usePlayerStore.getState().currentTime;
-		// If store time jumped to 0 but audio is further ahead, seek
 		if (storeTime === 0 && lastStoreTime.current > 3) {
 			audio.currentTime = 0;
 		}
 		lastStoreTime.current = storeTime;
 	});
 
-	// Update position state for seek bar in OS media controls
+	// --- Media Session position update ---
 	const onPositionUpdate = useCallback(() => {
 		if (!("mediaSession" in navigator)) return;
 		const audio = audioRef.current;
 		if (!audio || !audio.duration || !isFinite(audio.duration)) return;
-
 		try {
 			navigator.mediaSession.setPositionState({
 				duration: audio.duration,
@@ -149,57 +283,37 @@ export function AudioEngine() {
 		}
 	}, []);
 
-	const onCanPlay = useCallback(() => {
+	// --- Update handler refs (always point to latest closures) ---
+	handlersRef.current.onCanPlay = () => {
 		const audio = audioRef.current;
 		if (!audio) return;
 		setDuration(audio.duration || 0);
 		onPositionUpdate();
 		if (usePlayerStore.getState().isPlaying) {
+			audio.volume = 0;
 			audio.play().catch(() => {});
+			const targetVolume = usePlayerStore.getState().volume / 100;
+			adjustVolume(audio, targetVolume, { duration: 800 });
 		}
-	}, [setDuration, onPositionUpdate]);
+	};
 
-	const onTimeUpdate = useCallback(() => {
+	handlersRef.current.onTimeUpdate = () => {
 		const audio = audioRef.current;
 		if (!audio) return;
 		setCurrentTime(audio.currentTime);
 		lastStoreTime.current = audio.currentTime;
 		onPositionUpdate();
 
-		// Preload next track's presigned URL when ~75% done
-		if (
-			usePresigned &&
-			audio.duration > 0 &&
-			audio.currentTime / audio.duration > 0.75
-		) {
+		// Preload next track at 50% progress
+		if (audio.duration > 0 && audio.currentTime / audio.duration > 0.5) {
 			const { queue, queueIndex } = usePlayerStore.getState();
-			const nextIndex = queueIndex + 1;
-			if (nextIndex < queue.length) {
-				const nextTrack = queue[nextIndex];
-				if (nextTrack && preloadedTrackIdRef.current !== nextTrack.trackId) {
-					preloadedTrackIdRef.current = nextTrack.trackId;
-					fetchPresignedUrl(nextTrack.trackId);
-				}
+			if (queueIndex + 1 < queue.length) {
+				preloadTrack(queue[queueIndex + 1].trackId);
 			}
 		}
-	}, [setCurrentTime, onPositionUpdate]);
+	};
 
-	// If presigned URL fails (CORS, network), fall back to proxy
-	const onError = useCallback(() => {
-		const audio = audioRef.current;
-		if (!audio || !usePresigned || !currentTrack) return;
-
-		const src = audio.src;
-		// Only retry if the failed src was a presigned URL (not our proxy)
-		if (src && !src.includes("/api/v1/stream/")) {
-			usePresigned = false;
-			urlCache.clear();
-			audio.src = `/api/v1/stream/${currentTrack.trackId}`;
-			audio.load();
-		}
-	}, [currentTrack]);
-
-	const onEnded = useCallback(() => {
+	handlersRef.current.onEnded = () => {
 		if (repeat === "one") {
 			const audio = audioRef.current;
 			if (audio) {
@@ -209,9 +323,31 @@ export function AudioEngine() {
 		} else {
 			next();
 		}
-	}, [repeat, next]);
+	};
 
-	// Expose seek function via a global ref for the Player UI
+	handlersRef.current.onError = () => {
+		const audio = audioRef.current;
+		if (!audio || !usePresigned || !currentTrack) return;
+		const src = audio.src;
+		if (src && !src.includes("/api/v1/stream/")) {
+			usePresigned = false;
+			urlCache.clear();
+			// Invalidate preloaded elements (presigned URLs are now invalid)
+			for (const [, a] of preloadCache) {
+				a.src = "";
+			}
+			preloadCache.clear();
+			audio.src = `/api/v1/stream/${currentTrack.trackId}`;
+			audio.load();
+		}
+	};
+
+	handlersRef.current.onLoadedMetadata = () => {
+		const audio = audioRef.current;
+		if (audio) setDuration(audio.duration || 0);
+	};
+
+	// Expose seek function for Player UI
 	useEffect(() => {
 		(window as any).__deemixAudioSeek = (time: number) => {
 			const audio = audioRef.current;
@@ -227,7 +363,6 @@ export function AudioEngine() {
 
 	// --- Media Session API ---
 
-	// Update metadata when track changes
 	useEffect(() => {
 		if (!("mediaSession" in navigator)) return;
 
@@ -236,12 +371,18 @@ export function AudioEngine() {
 			return;
 		}
 
-		// Cover URLs follow the pattern: .../images/cover/{hash}/{size}x{size}-000000-80-0-0.jpg
-		// Generate multiple sizes for OS media controls from whatever size was stored
 		const artwork: MediaImage[] = currentTrack.cover
 			? [
-					{ src: currentTrack.cover.replace(/\/\d+x\d+-/, "/256x256-"), sizes: "256x256", type: "image/jpeg" },
-					{ src: currentTrack.cover.replace(/\/\d+x\d+-/, "/512x512-"), sizes: "512x512", type: "image/jpeg" },
+					{
+						src: currentTrack.cover.replace(/\/\d+x\d+-/, "/256x256-"),
+						sizes: "256x256",
+						type: "image/jpeg",
+					},
+					{
+						src: currentTrack.cover.replace(/\/\d+x\d+-/, "/512x512-"),
+						sizes: "512x512",
+						type: "image/jpeg",
+					},
 				]
 			: [];
 
@@ -252,7 +393,6 @@ export function AudioEngine() {
 		});
 	}, [currentTrack]);
 
-	// Update playback state
 	useEffect(() => {
 		if (!("mediaSession" in navigator)) return;
 		navigator.mediaSession.playbackState = currentTrack
@@ -262,7 +402,6 @@ export function AudioEngine() {
 			: "none";
 	}, [isPlaying, currentTrack]);
 
-	// Register action handlers
 	useEffect(() => {
 		if (!("mediaSession" in navigator)) return;
 
@@ -298,7 +437,10 @@ export function AudioEngine() {
 					const audio = audioRef.current;
 					if (audio) {
 						const offset = details.seekOffset ?? 10;
-						audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + offset);
+						audio.currentTime = Math.min(
+							audio.duration || 0,
+							audio.currentTime + offset,
+						);
 						setCurrentTime(audio.currentTime);
 					}
 				},
@@ -322,20 +464,6 @@ export function AudioEngine() {
 		};
 	}, [pause, resume, prev, next, setCurrentTime]);
 
-	return (
-		<audio
-			ref={audioRef}
-			onCanPlay={onCanPlay}
-			onTimeUpdate={onTimeUpdate}
-			onEnded={onEnded}
-			onError={onError}
-			onLoadedMetadata={() => {
-				const audio = audioRef.current;
-				if (audio) setDuration(audio.duration || 0);
-			}}
-			preload="auto"
-			crossOrigin="anonymous"
-			className="hidden"
-		/>
-	);
+	// No JSX audio element — all managed imperatively for preload swapping
+	return null;
 }
