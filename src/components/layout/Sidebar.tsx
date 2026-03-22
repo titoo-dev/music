@@ -7,8 +7,6 @@ import { Button } from "@/components/ui/button";
 import {
 	Home,
 	Search,
-	BarChart3,
-	Link2,
 	Info,
 	Music,
 	History,
@@ -17,8 +15,6 @@ import {
 const navItems = [
 	{ path: "/", label: "Home", icon: Home },
 	{ path: "/search", label: "Search", icon: Search },
-	{ path: "/charts", label: "Charts", icon: BarChart3 },
-	{ path: "/link-analyzer", label: "Analyzer", icon: Link2 },
 ];
 
 const authItems = [

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { fetchData } from "@/utils/api";
-import { useDownload } from "@/hooks/useDownload";
 import { useAuthStore } from "@/stores/useAuthStore";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -13,30 +12,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Download, ArrowRight, Loader2, Music, Disc3 } from "lucide-react";
+import { ArrowRight, Loader2, Music, Disc3 } from "lucide-react";
 import { CoverImage } from "@/components/ui/cover-image";
-
-function getCoverUrl(hash: string, size = 500) {
-	if (!hash) return "";
-	if (hash.startsWith("http")) return hash;
-	return `https://e-cdns-images.dzcdn.net/images/cover/${hash}/${size}x${size}-000000-80-0-0.jpg`;
-}
-
-function getArtistUrl(hash: string, size = 500) {
-	if (!hash) return "";
-	if (hash.startsWith("http")) return hash;
-	return `https://e-cdns-images.dzcdn.net/images/artist/${hash}/${size}x${size}-000000-80-0-0.jpg`;
-}
-
-interface ChartItem {
-	id: string;
-	title: string;
-	picture_medium?: string;
-	picture_xl?: string;
-	PLAYLIST_PICTURE?: string;
-	TITLE?: string;
-	nb_tracks?: number;
-}
 
 interface UserPlaylist {
 	id: string;
@@ -95,27 +72,17 @@ interface UserAlbum {
 }
 
 export default function HomePage() {
-	const [charts, setCharts] = useState<ChartItem[]>([]);
 	const [playlists, setPlaylists] = useState<UserPlaylist[]>([]);
 	const [albums, setAlbums] = useState<UserAlbum[]>([]);
 	const [loading, setLoading] = useState(true);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const user = useAuthStore((s) => s.user);
-	useEffect(() => {
-		async function loadHome() {
-			try {
-				const data = await fetchData("content/home");
-				if (data?.data) setCharts(data.data);
-			} catch {
-				// ignore
-			}
-			setLoading(false);
-		}
-		loadHome();
-	}, []);
 
 	useEffect(() => {
-		if (!isAuthenticated) return;
+		if (!isAuthenticated) {
+			setLoading(false);
+			return;
+		}
 		async function loadUserData() {
 			try {
 				const [playlistData, albumData] = await Promise.all([
@@ -127,13 +94,10 @@ export default function HomePage() {
 			} catch {
 				// ignore
 			}
+			setLoading(false);
 		}
 		loadUserData();
 	}, [isAuthenticated]);
-
-	const { download, isLoading } = useDownload();
-	const deezerUrl = (id: string, type: string) => `https://www.deezer.com/${type}/${id}`;
-	const handleDownload = (id: string, type: string) => download(deezerUrl(id, type));
 
 	if (loading) {
 		return (
@@ -182,7 +146,7 @@ export default function HomePage() {
 					Welcome back{user?.name ? `, ${user.name}` : ""}
 				</h1>
 				<p className="text-sm text-muted-foreground mt-2 font-medium uppercase tracking-wider">
-					Browse charts or search for something to download.
+					Search for something to download.
 				</p>
 			</div>
 
@@ -266,73 +230,6 @@ export default function HomePage() {
 				</section>
 			)}
 
-			{charts.length === 0 ? (
-				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<p className="text-sm font-bold text-foreground uppercase tracking-wider">No charts available</p>
-					<p className="text-xs text-muted-foreground">Charts could not be loaded. Try again later.</p>
-				</div>
-			) : (
-				<section className="space-y-4">
-					<div className="flex items-center justify-between">
-						<h2 className="text-brutal-md">Top Charts</h2>
-						<span className="text-xs font-bold text-muted-foreground uppercase tracking-wider font-mono">
-							{charts.length} playlists
-						</span>
-					</div>
-					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
-						{charts.slice(0, 20).map((item) => {
-							const chartTitle = item.title || item.TITLE || "Chart";
-							const chartPicture =
-								item.picture_xl ||
-								item.picture_medium ||
-								getCoverUrl(item.PLAYLIST_PICTURE || "", 500) ||
-								"/placeholder.jpg";
-
-							return (
-								<div
-									key={item.id}
-									className="group relative border-2 sm:border-[3px] border-foreground bg-card overflow-hidden shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all"
-								>
-									<Link href={`/playlist?id=${item.id}`}>
-										<CoverImage
-											src={chartPicture}
-											alt={chartTitle}
-											loading="lazy"
-											className="w-full aspect-square border-0"
-										/>
-									</Link>
-									<div className="absolute inset-0 bg-black/50 flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-										<Button
-											size="sm"
-											onClick={() =>
-												handleDownload(item.id, "playlist")
-											}
-											disabled={isLoading(deezerUrl(item.id, "playlist"))}
-											className="gap-1.5 pointer-events-auto"
-										>
-											{isLoading(deezerUrl(item.id, "playlist")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-											{isLoading(deezerUrl(item.id, "playlist")) ? "Adding..." : "Download"}
-										</Button>
-									</div>
-									<div className="p-3 border-t-[2px] border-foreground">
-										<Link
-											href={`/playlist?id=${item.id}`}
-											className="text-sm font-bold truncate block hover:underline"
-										>
-											{chartTitle}
-										</Link>
-										{item.nb_tracks && (
-											<p className="text-xs text-muted-foreground mt-0.5 font-mono">
-												{item.nb_tracks} tracks
-											</p>
-										)}
-									</div>
-								</div>
-							);
-						})}
-					</div>
-				</section>
-			)}
 		</div>
 	);
 }

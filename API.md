@@ -310,54 +310,6 @@ Get detailed tracklist for an album, playlist, or artist.
 
 ---
 
-### `GET /api/v1/content/charts`
-
-Get list of available country charts.
-
-**Auth required:** Yes
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "data": [
-      { "id": 1, "title": "France", "picture_medium": "https://..." },
-      { "id": 2, "title": "United States", ... }
-    ]
-  }
-}
-```
-
----
-
-### `GET /api/v1/content/chart-tracks`
-
-Get tracks for a specific chart.
-
-**Auth required:** Yes
-
-**Query Parameters:**
-
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `id` | string | No | `0` | Chart ID |
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "data": [
-      { "id": 789, "title": "Song Title", "artist": { ... }, ... }
-    ],
-    "total": 100
-  }
-}
-```
-
----
-
 ### `GET /api/v1/content/home`
 
 Get home/explore page data (editorial channels).
@@ -388,38 +340,6 @@ Get editorial new releases.
     "data": [
       { "id": 123, "title": "New Album", "artist": { ... }, ... }
     ]
-  }
-}
-```
-
----
-
-### `GET /api/v1/content/analyze-link`
-
-Parse and analyze a Deezer or Spotify link.
-
-**Auth required:** Yes
-
-**Query Parameters:**
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `term` | string | Yes | Deezer or Spotify URL to analyze |
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "source": "deezer",
-    "type": "track",
-    "id": "123456",
-    "data": {
-      "id": 123456,
-      "title": "Song Title",
-      "artist": { "name": "Artist" },
-      ...
-    }
   }
 }
 ```
@@ -794,11 +714,8 @@ Check if a newer version is available.
 | `GET` | `/api/v1/search/main` | Yes | Unified multi-source search |
 | `GET` | `/api/v1/search/album` | Yes | Album search (public API) |
 | `GET` | `/api/v1/content/tracklist` | Yes | Get album/playlist/artist details |
-| `GET` | `/api/v1/content/charts` | Yes | List available charts |
-| `GET` | `/api/v1/content/chart-tracks` | Yes | Get chart tracks |
 | `GET` | `/api/v1/content/home` | Yes | Home/explore data |
 | `GET` | `/api/v1/content/new-releases` | Yes | New releases |
-| `GET` | `/api/v1/content/analyze-link` | Yes | Parse Deezer/Spotify link |
 | `GET` | `/api/v1/library/playlists` | Yes | User's playlists |
 | `GET` | `/api/v1/library/tracks` | Yes | User's liked tracks |
 | `GET` | `/api/v1/library/albums` | Yes | User's saved albums |
