@@ -3,6 +3,7 @@
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
+import { SeekBar } from "./SeekBar";
 import { motion, AnimatePresence } from "motion/react";
 
 function formatTime(seconds: number) {
@@ -34,7 +35,8 @@ export function Player() {
 	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 	const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
 
-	const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
+
 	const hasQueue = queue.length > 1;
 
 	return (
@@ -48,24 +50,22 @@ export function Player() {
 					transition={{ type: "spring", damping: 25, stiffness: 300 }}
 					className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/40 bg-background/95 backdrop-blur-xl md:left-56"
 				>
-					{/* Progress bar (clickable) */}
-					<div
-						className="group relative h-1 w-full cursor-pointer bg-muted transition-all hover:h-1.5"
-						onClick={(e) => {
-							const rect = e.currentTarget.getBoundingClientRect();
-							const pct = (e.clientX - rect.left) / rect.width;
-							seek(pct * duration);
-						}}
-					>
-						<div
-							className="absolute inset-y-0 left-0 bg-foreground transition-all"
-							style={{ width: `${progress}%` }}
+					{/* Progress bar (touch-friendly) */}
+					<div className="group/seekbar -mb-3">
+						<SeekBar
+							currentTime={currentTime}
+							duration={duration}
+							onSeek={seek}
+							variant="thin"
 						/>
 					</div>
 
 					<div className="flex items-center gap-4 px-4 py-2.5">
-						{/* Track info */}
-						<div className="flex items-center gap-3 min-w-0 w-[30%]">
+						{/* Track info — tap opens fullscreen on mobile */}
+						<div
+							className="flex items-center gap-3 min-w-0 w-[30%] cursor-pointer md:cursor-default"
+							onClick={() => setFullscreenOpen(true)}
+						>
 							<CoverImage
 								src={currentTrack.cover}
 								className="h-10 w-10 shrink-0 rounded-lg shadow-sm"

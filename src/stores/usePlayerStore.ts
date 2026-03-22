@@ -23,6 +23,7 @@ interface PlayerState {
 	repeat: RepeatMode;
 	/** Set by prev() to signal AudioEngine to seek; AudioEngine clears it after seeking. */
 	_seekTo: number | null;
+	fullscreenOpen: boolean;
 
 	play: (track: PlayerTrack, queue?: PlayerTrack[]) => void;
 	pause: () => void;
@@ -31,11 +32,14 @@ interface PlayerState {
 	stop: () => void;
 	next: () => void;
 	prev: () => void;
+	/** Like prev() but always goes to previous track (no restart-if->3s). Used by fullscreen swipe. */
+	prevTrack: () => void;
 	setVolume: (v: number) => void;
 	setCurrentTime: (t: number) => void;
 	setDuration: (d: number) => void;
 	toggleShuffle: () => void;
 	toggleRepeat: () => void;
+	setFullscreenOpen: (v: boolean) => void;
 	playQueue: (queue: PlayerTrack[], startIndex?: number) => void;
 }
 
@@ -52,6 +56,7 @@ export const usePlayerStore = create<PlayerState>()(
 			shuffle: false,
 			repeat: "off" as RepeatMode,
 			_seekTo: null,
+			fullscreenOpen: false,
 
 			play: (track, queue) => {
 				const state = get();
@@ -80,7 +85,7 @@ export const usePlayerStore = create<PlayerState>()(
 			pause: () => set({ isPlaying: false }),
 			resume: () => set({ isPlaying: true }),
 			toggle: () => set((s) => ({ isPlaying: !s.isPlaying })),
-			stop: () => set({ currentTrack: null, isPlaying: false, currentTime: 0, duration: 0 }),
+			stop: () => set({ currentTrack: null, isPlaying: false, currentTime: 0, duration: 0, fullscreenOpen: false }),
 
 			next: () => {
 				const { queue, queueIndex, shuffle, repeat } = get();
@@ -149,10 +154,37 @@ export const usePlayerStore = create<PlayerState>()(
 				});
 			},
 
+			prevTrack: () => {
+				const { queue, queueIndex, repeat } = get();
+				if (queue.length === 0) return;
+
+				if (queueIndex === 0) {
+					if (repeat === "all") {
+						set({
+							currentTrack: queue[queue.length - 1],
+							queueIndex: queue.length - 1,
+							isPlaying: true,
+							currentTime: 0,
+						});
+					} else {
+						set({ currentTime: 0, _seekTo: 0 });
+					}
+					return;
+				}
+
+				set({
+					currentTrack: queue[queueIndex - 1],
+					queueIndex: queueIndex - 1,
+					isPlaying: true,
+					currentTime: 0,
+				});
+			},
+
 			setVolume: (volume) => set({ volume }),
 			setCurrentTime: (currentTime) => set({ currentTime }),
 			setDuration: (duration) => set({ duration }),
 			toggleShuffle: () => set((s) => ({ shuffle: !s.shuffle })),
+			setFullscreenOpen: (fullscreenOpen) => set({ fullscreenOpen }),
 			toggleRepeat: () =>
 				set((s) => ({
 					repeat: s.repeat === "off" ? "all" : s.repeat === "all" ? "one" : "off",
