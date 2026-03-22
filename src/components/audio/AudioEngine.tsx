@@ -93,6 +93,8 @@ export function AudioEngine() {
 	const resume = usePlayerStore((s) => s.resume);
 
 	const previewStop = usePreviewStore((s) => s.stop);
+	const previewTrack = usePreviewStore((s) => s.currentTrack);
+	const previewIsPlaying = usePreviewStore((s) => s.isPlaying);
 
 	// --- Stable event handler delegation via refs ---
 	// Audio element event handlers always call the latest callback through this ref
@@ -148,6 +150,19 @@ export function AudioEngine() {
 	useEffect(() => {
 		if (currentTrack && isPlaying) previewStop();
 	}, [currentTrack, isPlaying, previewStop]);
+
+	// Stop stream player when preview starts
+	useEffect(() => {
+		if (previewTrack && previewIsPlaying) {
+			const audio = audioRef.current;
+			if (audio) {
+				audio.pause();
+				audio.src = "";
+			}
+			prevTrackIdRef.current = null;
+			usePlayerStore.getState().stop();
+		}
+	}, [previewTrack, previewIsPlaying]);
 
 	// --- Preload adjacent tracks when queue position changes ---
 	useEffect(() => {
