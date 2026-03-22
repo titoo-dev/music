@@ -12,6 +12,9 @@ import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Loader2, Check } from "lucide-react";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
+import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
+import { usePreviewStore } from "@/stores/usePreviewStore";
+import { usePlayerStore } from "@/stores/usePlayerStore";
 
 function getCoverUrl(picture: string, size = 500) {
 	if (!picture) return "/placeholder.jpg";
@@ -44,6 +47,11 @@ function AlbumContent() {
 		}
 		loadAlbum();
 	}, [id]);
+
+	const previewTrack = usePreviewStore((s) => s.currentTrack);
+	const previewPlaying = usePreviewStore((s) => s.isPlaying);
+	const playerTrack = usePlayerStore((s) => s.currentTrack);
+	const playerPlaying = usePlayerStore((s) => s.isPlaying);
 
 	const albumUrl = `https://www.deezer.com/album/${id}`;
 	const handleDownloadAll = () => download(albumUrl);
@@ -136,18 +144,26 @@ function AlbumContent() {
 							? getCoverUrl(track.ALB_PICTURE, 56)
 							: track.album?.cover_small;
 						const previewUrl = (track.MEDIA?.[0]?.HREF || track.preview || "").replace("http://", "https://");
+						const isPreviewActive = previewTrack?.id === String(trackId) && previewPlaying;
+						const isPlayerActive = playerTrack?.trackId === String(trackId) && playerPlaying;
+						const isActive = isPreviewActive || isPlayerActive;
+						const isPaused = (previewTrack?.id === String(trackId) && !previewPlaying) || (playerTrack?.trackId === String(trackId) && !playerPlaying);
 
 						return (
 							<div
 								key={trackId || idx}
-								className="flex items-center gap-4 px-4 py-3 border-b border-border last:border-b-0 transition-colors hover:bg-muted group"
+								className={`flex items-center gap-4 px-4 py-3 border-b border-border last:border-b-0 transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted"} group`}
 							>
-								<span className="text-xs text-muted-foreground w-6 text-right tabular-nums">
-									{trackNum}
+								<span className="w-6 text-right tabular-nums flex items-center justify-end">
+									{isActive || isPaused ? (
+										<PlaybackIndicator paused={isPaused} />
+									) : (
+										<span className="text-xs text-muted-foreground">{trackNum}</span>
+									)}
 								</span>
 								<CoverImage src={trackCover} className="w-9 h-9 rounded" />
 								<div className="flex-1 min-w-0">
-									<p className="text-sm font-medium truncate text-foreground">
+									<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : "text-foreground"}`}>
 										{trackTitle}
 										{track.VERSION ? ` ${track.VERSION}` : ""}
 									</p>

@@ -3,11 +3,13 @@ import {
 	GetObjectCommand,
 	HeadObjectCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Readable } from "stream";
 
 let _cachedClient: S3Client | null = null;
 let _cachedBucket: string | null = null;
 let _cachedPathPrefix: string | null = null;
+let _cachedDownloadLocation: string | null = null;
 
 function getS3Config() {
 	const endpoint = process.env.DEEMIX_S3_ENDPOINT;
@@ -47,20 +49,23 @@ function getClient() {
  * The storagePath includes the downloadLocation prefix (e.g. "/data/music/Artist/Album/Track.mp3").
  * We need to strip it, just like S3StorageProvider.toS3Key() does.
  */
-export async function toS3Key(storagePath: string): Promise<string> {
-	const { pathPrefix } = getClient();
+async function getDownloadLocation(): Promise<string> {
+	if (_cachedDownloadLocation !== null) return _cachedDownloadLocation;
 
-	// Get downloadLocation from the app settings to strip it from the path
-	let downloadLocation = "";
 	try {
 		const { getDeemixApp } = await import("@/lib/server-state");
 		const app = await getDeemixApp();
-		if (app?.settings?.downloadLocation) {
-			downloadLocation = app.settings.downloadLocation;
-		}
+		_cachedDownloadLocation = app?.settings?.downloadLocation || "";
 	} catch {
-		// fallback: no stripping
+		_cachedDownloadLocation = "";
 	}
+
+	return _cachedDownloadLocation;
+}
+
+export async function toS3Key(storagePath: string): Promise<string> {
+	const { pathPrefix } = getClient();
+	const downloadLocation = await getDownloadLocation();
 
 	let relative = storagePath;
 	if (downloadLocation && relative.startsWith(downloadLocation)) {
@@ -106,6 +111,17 @@ export async function streamObject(storagePath: string, range?: string) {
 		contentType: response.ContentType || inferContentType(storagePath),
 		statusCode: range ? 206 : 200,
 	};
+}
+
+/** Generate a presigned URL for direct browser streaming (valid for 1 hour) */
+export async function getPresignedUrl(storagePath: string, expiresIn = 3600) {
+	const { client, bucket } = getClient();
+	const key = await toS3Key(storagePath);
+
+	const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+	const url = await getSignedUrl(client, command, { expiresIn });
+
+	return { url, contentType: inferContentType(storagePath) };
 }
 
 function inferContentType(path: string): string {

@@ -11,7 +11,8 @@ import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { Loader2, ArrowLeft, Download, Trash2, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { PlayButton } from "@/components/audio/PlayButton";
-import type { PlayerTrack } from "@/stores/usePlayerStore";
+import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 
 interface PlaylistTrack {
 	id: string;
@@ -38,6 +39,8 @@ export default function PlaylistDetailPage() {
 	const [loading, setLoading] = useState(true);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const { download, isLoading } = useDownload();
+	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
+	const playerPlaying = usePlayerStore((s) => s.isPlaying);
 
 	const isDownloadsPlaylist = playlist?.title === "Downloads";
 
@@ -174,10 +177,12 @@ export default function PlaylistDetailPage() {
 								cover: t.coverUrl,
 								duration: t.duration,
 							}));
+						const isActive = currentPlayerTrack?.trackId === track.trackId && playerPlaying;
+						const isPaused = currentPlayerTrack?.trackId === track.trackId && !playerPlaying;
 						return (
 							<div
 								key={track.id}
-								className="group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/50 transition-colors"
+								className={`group flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted/50"}`}
 							>
 								{isTrackDownloaded ? (
 									<PlayButton
@@ -190,21 +195,26 @@ export default function PlaylistDetailPage() {
 										{idx + 1}
 									</span>
 								)}
-								<div className="shrink-0 size-10 rounded overflow-hidden bg-muted">
+								<div className="relative shrink-0 size-10 rounded overflow-hidden bg-muted">
 									{track.coverUrl ? (
 										<CoverImage
 											src={track.coverUrl}
 											alt={track.title}
-											className="size-10"
+											className={`size-10 ${isActive ? "opacity-50" : ""}`}
 										/>
 									) : (
 										<div className="size-10 flex items-center justify-center text-xs text-muted-foreground">
 											?
 										</div>
 									)}
+									{(isActive || isPaused) && (
+										<div className="absolute inset-0 flex items-center justify-center">
+											<PlaybackIndicator paused={isPaused} />
+										</div>
+									)}
 								</div>
 								<div className="flex-1 min-w-0">
-									<p className="text-sm font-medium truncate">{track.title}</p>
+									<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : ""}`}>{track.title}</p>
 									<p className="text-xs text-muted-foreground truncate">
 										{track.artist}
 										{track.album ? ` \u00B7 ${track.album}` : ""}

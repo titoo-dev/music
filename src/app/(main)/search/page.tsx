@@ -19,6 +19,9 @@ import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
+import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
+import { usePreviewStore } from "@/stores/usePreviewStore";
+import { usePlayerStore } from "@/stores/usePlayerStore";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -350,11 +353,27 @@ function TrackRow({
 		getCoverUrl(track.ALB_PICTURE, 56);
 	const previewUrl = (track.MEDIA?.[0]?.HREF || track.preview || "").replace("http://", "https://");
 
+	const previewTrack = usePreviewStore((s) => s.currentTrack);
+	const previewPlaying = usePreviewStore((s) => s.isPlaying);
+	const playerTrack = usePlayerStore((s) => s.currentTrack);
+	const playerPlaying = usePlayerStore((s) => s.isPlaying);
+	const isPreviewActive = previewTrack?.id === String(id) && previewPlaying;
+	const isPlayerActive = playerTrack?.trackId === String(id) && playerPlaying;
+	const isActive = isPreviewActive || isPlayerActive;
+	const isPaused = (previewTrack?.id === String(id) && !previewPlaying) || (playerTrack?.trackId === String(id) && !playerPlaying);
+
 	return (
-		<div className="flex items-center gap-3 px-4 py-2.5 group hover:bg-muted/50 transition-colors">
-			<CoverImage src={cover} className="w-10 h-10 rounded-md" />
+		<div className={`flex items-center gap-3 px-4 py-2.5 group transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted/50"}`}>
+			<div className="relative">
+				<CoverImage src={cover} className={`w-10 h-10 rounded-md transition-opacity ${isActive ? "opacity-50" : ""}`} />
+				{(isActive || isPaused) && (
+					<div className="absolute inset-0 flex items-center justify-center">
+						<PlaybackIndicator paused={isPaused} />
+					</div>
+				)}
+			</div>
 			<div className="flex-1 min-w-0">
-				<p className="text-sm font-medium truncate">{title}</p>
+				<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : ""}`}>{title}</p>
 				<p className="text-xs text-muted-foreground truncate">
 					{artistId ? (
 						<Link href={`/artist?id=${artistId}`} className="hover:underline hover:text-foreground transition-colors">

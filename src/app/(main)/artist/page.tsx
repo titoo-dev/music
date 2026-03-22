@@ -13,6 +13,9 @@ import { Download, Loader2 } from "lucide-react";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { CoverImage } from "@/components/ui/cover-image";
 import { PreviewButton } from "@/components/audio/PreviewButton";
+import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
+import { usePreviewStore } from "@/stores/usePreviewStore";
+import { usePlayerStore } from "@/stores/usePlayerStore";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -50,6 +53,11 @@ function ArtistContent() {
 		}
 		loadArtist();
 	}, [id]);
+
+	const previewTrack = usePreviewStore((s) => s.currentTrack);
+	const previewPlaying = usePreviewStore((s) => s.isPlaying);
+	const playerTrack = usePlayerStore((s) => s.currentTrack);
+	const playerPlaying = usePlayerStore((s) => s.isPlaying);
 
 	const deezerUrl = (itemId: string, type: string) => `https://www.deezer.com/${type}/${itemId}`;
 	const handleDownload = (itemId: string, type: string) => download(deezerUrl(itemId, type));
@@ -131,19 +139,28 @@ function ArtistContent() {
 							const albumId = track.ALB_ID || track.album?.id;
 							const albumTitle = track.ALB_TITLE || track.album?.title;
 							const previewUrl = (track.MEDIA?.[0]?.HREF || track.preview || "").replace("http://", "https://");
+							const isPreviewActive = previewTrack?.id === String(trackId) && previewPlaying;
+							const isPlayerActive = playerTrack?.trackId === String(trackId) && playerPlaying;
+							const isActive = isPreviewActive || isPlayerActive;
+							const isPaused = (previewTrack?.id === String(trackId) && !previewPlaying) || (playerTrack?.trackId === String(trackId) && !playerPlaying);
+
 							const trackUrl = deezerUrl(trackId, "track");
 
 							return (
 								<div
 									key={trackId || idx}
-									className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-b-0 transition-colors hover:bg-muted/50 group"
+									className={`flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-b-0 transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted/50"} group`}
 								>
-									<span className="text-xs text-muted-foreground w-6 text-right tabular-nums">
-										{idx + 1}
+									<span className="w-6 text-right tabular-nums flex items-center justify-end">
+										{isActive || isPaused ? (
+											<PlaybackIndicator paused={isPaused} />
+										) : (
+											<span className="text-xs text-muted-foreground">{idx + 1}</span>
+										)}
 									</span>
 									<CoverImage src={trackCover} className="w-10 h-10 rounded-md flex-shrink-0" />
 									<div className="flex-1 min-w-0">
-										<p className="text-sm font-medium truncate text-foreground">
+										<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : "text-foreground"}`}>
 											{trackTitle}
 										</p>
 										<p className="text-xs text-muted-foreground truncate">

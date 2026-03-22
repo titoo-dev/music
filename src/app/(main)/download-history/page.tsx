@@ -8,6 +8,7 @@ import { CoverImage } from "@/components/ui/cover-image";
 import { Loader2, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { PlayButton } from "@/components/audio/PlayButton";
+import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 
 interface DownloadItem {
@@ -39,6 +40,8 @@ export default function DownloadHistoryPage() {
 	const [totalPages, setTotalPages] = useState(1);
 	const [total, setTotal] = useState(0);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
+	const playerPlaying = usePlayerStore((s) => s.isPlaying);
 
 	useEffect(() => {
 		if (!isAuthenticated) {
@@ -118,10 +121,12 @@ export default function DownloadHistoryPage() {
 								cover: i.coverUrl,
 								duration: null,
 							}));
+							const isActive = currentPlayerTrack?.trackId === item.trackId && playerPlaying;
+							const isPaused = currentPlayerTrack?.trackId === item.trackId && !playerPlaying;
 							return (
 								<div
 									key={item.id}
-									className="group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/50 transition-colors"
+									className={`group flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted/50"}`}
 								>
 									{item.storageType === "s3" && (
 										<PlayButton
@@ -130,7 +135,7 @@ export default function DownloadHistoryPage() {
 											className="opacity-0 group-hover:opacity-100 transition-opacity"
 										/>
 									)}
-									<div className="shrink-0 size-10 rounded overflow-hidden bg-muted">
+									<div className="relative shrink-0 size-10 rounded overflow-hidden bg-muted">
 										{item.coverUrl ? (
 											<CoverImage
 												src={item.coverUrl}
@@ -142,9 +147,14 @@ export default function DownloadHistoryPage() {
 												?
 											</div>
 										)}
+										{(isActive || isPaused) && (
+											<div className="absolute inset-0 flex items-center justify-center">
+												<PlaybackIndicator paused={isPaused} />
+											</div>
+										)}
 									</div>
 									<div className="flex-1 min-w-0">
-										<p className="text-sm font-medium truncate">{item.title}</p>
+										<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : ""}`}>{item.title}</p>
 										<p className="text-xs text-muted-foreground truncate">
 											{item.artist}
 											{item.album ? ` \u00B7 ${item.album}` : ""}
