@@ -6,6 +6,7 @@ export interface StorageProvider {
 	createWriteStream(filePath: string): NodeJS.WritableStream;
 	finalizeStream(filePath: string): Promise<void>;
 	deleteFile(filePath: string): Promise<void>;
+	deleteDirectory(dirPath: string): Promise<void>;
 	getFileSize(filePath: string): Promise<number>;
 	getLocalPath(filePath: string): string;
 }

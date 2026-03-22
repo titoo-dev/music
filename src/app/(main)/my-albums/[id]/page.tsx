@@ -85,6 +85,7 @@ export default function AlbumDetailPage() {
 	const [album, setAlbum] = useState<AlbumDetail | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [deleting, setDeleting] = useState(false);
+	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const openSheet = useTrackActionStore((s) => s.openSheet);
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
@@ -108,6 +109,7 @@ export default function AlbumDetailPage() {
 			// ignore
 		}
 		setDeleting(false);
+		setDeleteDialogOpen(false);
 	};
 
 	useEffect(() => {
@@ -211,18 +213,17 @@ export default function AlbumDetailPage() {
 						{playerQueue.length > 0 && (
 							<PlayAllButton queue={playerQueue} />
 						)}
-						<AlertDialog>
+						<AlertDialog open={deleteDialogOpen} onOpenChange={(open) => !deleting && setDeleteDialogOpen(open)}>
 							<AlertDialogTrigger
 								render={
 									<Button
 										variant="outline"
 										size="sm"
 										className="gap-1.5 text-muted-foreground hover:text-red-500 hover:border-red-500"
-										disabled={deleting}
 									/>
 								}
 							>
-								{deleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+								<Trash2 className="size-3.5" />
 								Delete album
 							</AlertDialogTrigger>
 							<AlertDialogContent>
@@ -235,11 +236,13 @@ export default function AlbumDetailPage() {
 									</AlertDialogDescription>
 								</AlertDialogHeader>
 								<AlertDialogFooter>
-									<AlertDialogCancel>Cancel</AlertDialogCancel>
+									<AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
 									<AlertDialogAction
 										onClick={handleDelete}
 										className="bg-red-600 hover:bg-red-700"
+										disabled={deleting}
 									>
+										{deleting && <Loader2 className="size-3.5 animate-spin mr-1.5" />}
 										Delete
 									</AlertDialogAction>
 								</AlertDialogFooter>

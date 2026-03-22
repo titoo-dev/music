@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import path from "path";
 import { prisma } from "@/lib/prisma";
 import { getDeemixApp } from "@/lib/server-state";
 import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
@@ -70,16 +71,26 @@ export async function DELETE(request: NextRequest, ctx: RouteCtx) {
 			select: { storagePath: true, storageType: true },
 		});
 
-		// Delete files from storage (S3 or local)
+		// Delete entire album directory from storage (tracks, covers, extras)
 		const app = await getDeemixApp();
 		const storageProvider = app?.storageProvider;
 		if (storageProvider) {
-			for (const track of tracks) {
-				if (track.storagePath) {
-					try {
-						await storageProvider.deleteFile(track.storagePath);
-					} catch {
-						// Continue even if a file deletion fails
+			// Derive the album folder from the first track's storage path
+			const firstPath = tracks.find((t) => t.storagePath)?.storagePath;
+			if (firstPath) {
+				const albumDir = path.dirname(firstPath);
+				try {
+					await storageProvider.deleteDirectory(albumDir);
+				} catch {
+					// Fall back to deleting individual track files
+					for (const track of tracks) {
+						if (track.storagePath) {
+							try {
+								await storageProvider.deleteFile(track.storagePath);
+							} catch {
+								// Continue even if a file deletion fails
+							}
+						}
 					}
 				}
 			}

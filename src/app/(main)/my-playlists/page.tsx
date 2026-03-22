@@ -224,7 +224,7 @@ export default function MyPlaylistsPage() {
 				</div>
 			)}
 
-			<Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+			<Dialog open={!!deleteTarget} onOpenChange={(open) => !open && !deleting && setDeleteTarget(null)}>
 				<DialogContent>
 					<DialogHeader>
 						<DialogTitle>Delete playlist</DialogTitle>
@@ -236,7 +236,7 @@ export default function MyPlaylistsPage() {
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setDeleteTarget(null)}>
+						<Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
 							Cancel
 						</Button>
 						<Button variant="destructive" onClick={handleDelete} disabled={deleting}>

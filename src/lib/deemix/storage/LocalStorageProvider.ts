@@ -30,6 +30,12 @@ export class LocalStorageProvider implements StorageProvider {
 		if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 	}
 
+	async deleteDirectory(dirPath: string): Promise<void> {
+		if (fs.existsSync(dirPath)) {
+			fs.rmSync(dirPath, { recursive: true, force: true });
+		}
+	}
+
 	async getFileSize(filePath: string): Promise<number> {
 		return fs.statSync(filePath).size;
 	}

@@ -4,6 +4,8 @@ import {
 	GetObjectCommand,
 	HeadObjectCommand,
 	DeleteObjectCommand,
+	ListObjectsV2Command,
+	DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import fs from "fs";
@@ -139,6 +141,36 @@ export class S3StorageProvider implements StorageProvider {
 		} catch {
 			// Ignore delete errors
 		}
+	}
+
+	async deleteDirectory(dirPath: string): Promise<void> {
+		const prefix = this.toS3Key(dirPath).replace(/\/?$/, "/");
+
+		let continuationToken: string | undefined;
+		do {
+			const list = await this.client.send(
+				new ListObjectsV2Command({
+					Bucket: this.bucket,
+					Prefix: prefix,
+					ContinuationToken: continuationToken,
+				})
+			);
+
+			const objects = list.Contents;
+			if (objects && objects.length > 0) {
+				await this.client.send(
+					new DeleteObjectsCommand({
+						Bucket: this.bucket,
+						Delete: {
+							Objects: objects.map((o) => ({ Key: o.Key })),
+							Quiet: true,
+						},
+					})
+				);
+			}
+
+			continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+		} while (continuationToken);
 	}
 
 	async getFileSize(filePath: string): Promise<number> {
