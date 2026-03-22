@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, fail, handleError } from "../../_lib/helpers";
-import { headObject, streamObject } from "@/lib/s3-stream";
+import { streamObject } from "@/lib/s3-stream";
 
 // GET /api/v1/stream/[trackId] — Stream a downloaded track from S3
 export async function GET(
@@ -36,7 +36,7 @@ export async function GET(
 		if (!rangeHeader) {
 			const { body, contentLength, contentType } = await streamObject(download.storagePath);
 
-			return new Response(body as any, {
+			return new Response(body, {
 				status: 200,
 				headers: {
 					"Content-Type": contentType,
@@ -62,7 +62,7 @@ export async function GET(
 			headers["Content-Range"] = contentRange;
 		}
 
-		return new Response(body as any, {
+		return new Response(body, {
 			status: statusCode,
 			headers,
 		});

@@ -33,7 +33,15 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 async function getTrackUrl(trackId: string): Promise<string> {
 	if (usePresigned) {
 		const url = await fetchPresignedUrl(trackId);
-		if (url) return url;
+		if (url) {
+			// Skip presigned URL if it would cause mixed content (HTTPS page → HTTP audio)
+			if (window.location.protocol === "https:" && url.startsWith("http://")) {
+				usePresigned = false;
+				urlCache.clear();
+				return `/api/v1/stream/${trackId}`;
+			}
+			return url;
+		}
 	}
 	return `/api/v1/stream/${trackId}`;
 }

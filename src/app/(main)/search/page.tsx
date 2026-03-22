@@ -100,7 +100,7 @@ function SearchContent() {
 	const handleDownload = (id: string | number, type: string) => {
 		download(deezerUrl(id, type));
 	};
-	const hasMore = tab !== "all" && results?.data && results?.total && results.data.length < results.total;
+	const hasMore = tab !== "all" && !!results?.data && !!results?.total && results.data.length < results.total;
 
 	// Collect all track IDs from results for batch download check
 	const allTrackIds = (() => {

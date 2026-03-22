@@ -66,7 +66,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 	const displayName = user?.name || deezerUser?.name || "User";
 
 	return (
-		<div className="flex min-h-screen bg-background max-w-full overflow-x-hidden">
+		<div className="flex h-dvh bg-background max-w-full overflow-hidden">
 			{/* ─── Desktop Sidebar ─── */}
 			<aside className="hidden border-r-[3px] border-foreground bg-sidebar md:fixed md:inset-y-0 md:z-40 md:flex md:w-56 md:flex-col">
 				{/* Logo */}

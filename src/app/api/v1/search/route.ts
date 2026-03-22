@@ -2,6 +2,13 @@ import { NextRequest } from "next/server";
 import { clean_search_query } from "@/lib/deezer/utils";
 import { ok, fail, handleError, getGuestOrUserDz } from "../_lib/helpers";
 
+const searchMethods: Record<string, string> = {
+	track: "search_track",
+	album: "search_album",
+	artist: "search_artist",
+	playlist: "search_playlist",
+};
+
 export async function GET(request: NextRequest) {
 	try {
 		const { dz } = await getGuestOrUserDz(request);
@@ -18,12 +25,12 @@ export async function GET(request: NextRequest) {
 			return fail("MISSING_TERM", "Search term is required.", 400);
 		}
 
-		const validTypes = ["track", "album", "artist", "playlist"];
-		if (!validTypes.includes(type)) {
-			return fail("INVALID_TYPE", `Type must be one of: ${validTypes.join(", ")}`, 400);
+		const method = searchMethods[type];
+		if (!method) {
+			return fail("INVALID_TYPE", `Type must be one of: ${Object.keys(searchMethods).join(", ")}`, 400);
 		}
 
-		const results = await dz.gw.search_music(term, type, {
+		const results = await (dz.api as any)[method](term, {
 			index: start,
 			limit: nb,
 		});

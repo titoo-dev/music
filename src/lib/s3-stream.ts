@@ -4,7 +4,6 @@ import {
 	HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import type { Readable } from "stream";
 
 let _cachedClient: S3Client | null = null;
 let _cachedBucket: string | null = null;
@@ -104,8 +103,12 @@ export async function streamObject(storagePath: string, range?: string) {
 
 	const response = await client.send(command);
 
+	// Convert to Web ReadableStream for compatibility with the Web Response API
+	// (Node.js Readable is not reliably accepted by `new Response()` in standalone mode)
+	const webStream = response.Body!.transformToWebStream();
+
 	return {
-		body: response.Body as Readable,
+		body: webStream,
 		contentLength: response.ContentLength || 0,
 		contentRange: response.ContentRange,
 		contentType: response.ContentType || inferContentType(storagePath),
