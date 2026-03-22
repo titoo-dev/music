@@ -34,81 +34,55 @@ const secondaryItems = [
 ];
 
 interface NavigationProps {
-	isMobile?: boolean;
 	onNavigate?: () => void;
 }
 
 /**
- * Navigation component used both in the top bar (desktop: horizontal)
- * and in the mobile Sheet (vertical list).
+ * Vertical navigation used in the desktop sidebar and mobile sheet.
  */
-export function Navigation({ isMobile = false, onNavigate }: NavigationProps) {
+export function Navigation({ onNavigate }: NavigationProps) {
 	const pathname = usePathname();
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
-	const renderItem = (item: { path: string; label: string; icon: any }, mobile: boolean) => {
+	const renderItem = (item: { path: string; label: string; icon: any }) => {
 		const isActive = pathname === item.path;
 		const Icon = item.icon;
 
-		if (mobile) {
-			return (
-				<Link key={item.path} href={item.path} className="no-underline" onClick={onNavigate}>
-					<Button
-						variant="ghost"
-						className={`w-full justify-start gap-3 rounded-none px-6 py-6 text-sm font-medium ${
-							isActive
-								? "bg-muted text-foreground"
-								: "text-muted-foreground hover:text-foreground"
-						}`}
-					>
-						<Icon className="h-4 w-4" />
-						<span>{item.label}</span>
-					</Button>
-				</Link>
-			);
-		}
-
 		return (
-			<Link key={item.path} href={item.path} className="no-underline">
+			<Link key={item.path} href={item.path} className="no-underline" onClick={onNavigate}>
 				<Button
 					variant="ghost"
-					size="sm"
-					className={`gap-1.5 text-sm font-medium ${
+					className={`w-full justify-start gap-3 px-3 py-2.5 text-sm font-medium ${
 						isActive
 							? "bg-muted text-foreground"
 							: "text-muted-foreground hover:text-foreground"
 					}`}
 				>
-					<Icon className="h-3.5 w-3.5" />
+					<Icon className="h-4 w-4" />
 					<span>{item.label}</span>
 				</Button>
 			</Link>
 		);
 	};
 
-	if (isMobile) {
-		return (
-			<nav className="flex flex-col py-2">
-				{navItems.map((item) => renderItem(item, true))}
-
+	return (
+		<nav className="flex h-full flex-col">
+			<div className="flex flex-col gap-0.5 px-3 py-2">
+				{navItems.map(renderItem)}
 				{isAuthenticated && (
 					<>
 						<Separator className="my-2" />
-						{authItems.map((item) => renderItem(item, true))}
+						{authItems.map(renderItem)}
 					</>
 				)}
+			</div>
 
-				<Separator className="my-2" />
-				{secondaryItems.map((item) => renderItem(item, true))}
-			</nav>
-		);
-	}
+			<div className="flex-1" />
 
-	// Desktop: horizontal nav links
-	return (
-		<nav className="flex items-center gap-1">
-			{navItems.map((item) => renderItem(item, false))}
-			{isAuthenticated && authItems.map((item) => renderItem(item, false))}
+			<div className="flex flex-col gap-0.5 px-3 pb-2">
+				<Separator className="mb-2" />
+				{secondaryItems.map(renderItem)}
+			</div>
 		</nav>
 	);
 }

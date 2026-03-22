@@ -66,121 +66,191 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 	const displayName = user?.name || deezerUser?.name || "User";
 
 	return (
-		<div className="flex min-h-screen flex-col bg-white">
-			{/* ─── Top Navigation Bar ─── */}
-			<header className="sticky top-0 z-30 border-b border-border/40 bg-white/80 backdrop-blur-sm">
-				<div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:px-6">
-					{/* Mobile hamburger */}
-					<Button
-						variant="ghost"
-						size="icon"
-						className="shrink-0 text-muted-foreground md:hidden"
-						onClick={() => setSidebarOpen(true)}
-					>
-						<Menu className="h-5 w-5" />
-					</Button>
+		<div className="flex min-h-screen bg-white">
+			{/* ─── Desktop Sidebar ─── */}
+			<aside className="hidden border-r border-border/40 bg-white md:fixed md:inset-y-0 md:z-40 md:flex md:w-56 md:flex-col">
+				{/* Logo */}
+				<Link
+					href="/"
+					className="flex h-14 shrink-0 items-center gap-2 px-5 no-underline"
+				>
+					<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-background">
+						d
+					</div>
+					<span className="text-base font-semibold tracking-tight text-foreground">
+						deemix
+					</span>
+				</Link>
 
-					{/* Logo */}
-					<Link
-						href="/"
-						className="mr-2 flex shrink-0 items-center gap-2 no-underline"
-					>
-						<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-background">
-							d
+				{/* Navigation */}
+				<div className="flex-1 overflow-y-auto">
+					<Navigation />
+				</div>
+
+				{/* User section */}
+				{isAuthenticated && user ? (
+					<div className="shrink-0 border-t border-border/40 p-3">
+						<div className="flex items-center gap-3 rounded-lg px-2 py-2">
+							<Avatar className="h-8 w-8 shrink-0">
+								{avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
+								<AvatarFallback className="bg-muted text-xs font-medium text-muted-foreground">
+									{displayName.charAt(0).toUpperCase()}
+								</AvatarFallback>
+							</Avatar>
+							<span className="flex-1 truncate text-sm font-medium text-foreground">
+								{displayName}
+							</span>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-500"
+								onClick={handleLogout}
+							>
+								<LogOut className="h-4 w-4" />
+							</Button>
 						</div>
-						<span className="hidden text-base font-semibold tracking-tight text-foreground sm:inline">
-							deemix
-						</span>
-					</Link>
+					</div>
+				) : (
+					<div className="shrink-0 border-t border-border/40 p-3">
+						<Link href="/login" className="no-underline">
+							<Button variant="ghost" size="sm" className="w-full text-sm text-muted-foreground">
+								Sign in
+							</Button>
+						</Link>
+					</div>
+				)}
+			</aside>
 
-					{/* Desktop nav links */}
-					<div className="hidden md:flex">
-						<Navigation />
+			{/* ─── Main Area ─── */}
+			<div className="flex flex-1 flex-col md:pl-56">
+				{/* Top bar */}
+				<header className="sticky top-0 z-30 border-b border-border/40 bg-white/80 backdrop-blur-sm">
+					<div className="flex h-14 items-center gap-4 px-4 sm:px-6">
+						{/* Mobile hamburger */}
+						<Button
+							variant="ghost"
+							size="icon"
+							className="shrink-0 text-muted-foreground md:hidden"
+							onClick={() => setSidebarOpen(true)}
+						>
+							<Menu className="h-5 w-5" />
+						</Button>
+
+						{/* Mobile logo */}
+						<Link
+							href="/"
+							className="flex shrink-0 items-center gap-2 no-underline md:hidden"
+						>
+							<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-background">
+								d
+							</div>
+							<span className="text-base font-semibold tracking-tight text-foreground">
+								deemix
+							</span>
+						</Link>
+
+						{/* Spacer */}
+						<div className="flex-1" />
+
+						{/* Search bar (desktop) */}
+						<div className="hidden md:block">
+							<Suspense>
+								<SearchBar />
+							</Suspense>
+						</div>
+
+						{/* Downloads panel trigger */}
+						<DownloadTrigger />
+
+						{/* User avatar / menu (mobile only) */}
+						<div className="md:hidden">
+							{isAuthenticated && user ? (
+								<DropdownMenu>
+									<DropdownMenuTrigger
+										render={
+											<Button variant="ghost" size="icon" className="shrink-0 rounded-full" />
+										}
+									>
+										<Avatar className="h-7 w-7">
+											{avatarUrl ? (
+												<AvatarImage src={avatarUrl} />
+											) : null}
+											<AvatarFallback className="bg-muted text-xs font-medium text-muted-foreground">
+												{displayName.charAt(0).toUpperCase()}
+											</AvatarFallback>
+										</Avatar>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent className="w-48">
+										<DropdownMenuItem className="gap-2 text-sm">
+											<span className="truncate font-medium">{displayName}</span>
+										</DropdownMenuItem>
+										<Link href="/my-playlists" className="no-underline">
+											<DropdownMenuItem className="gap-2 text-sm">
+												<Music className="h-3.5 w-3.5" />
+												My Playlists
+											</DropdownMenuItem>
+										</Link>
+										<Link href="/download-history" className="no-underline">
+											<DropdownMenuItem className="gap-2 text-sm">
+												<History className="h-3.5 w-3.5" />
+												Download History
+											</DropdownMenuItem>
+										</Link>
+										<Link href="/settings" className="no-underline">
+											<DropdownMenuItem className="gap-2 text-sm">
+												<Settings className="h-3.5 w-3.5" />
+												Settings
+											</DropdownMenuItem>
+										</Link>
+										<Link href="/about" className="no-underline">
+											<DropdownMenuItem className="gap-2 text-sm">
+												<Info className="h-3.5 w-3.5" />
+												About
+											</DropdownMenuItem>
+										</Link>
+										<DropdownMenuItem
+											className="gap-2 text-sm text-red-500"
+											onClick={() => handleLogout()}
+										>
+											<LogOut className="h-3.5 w-3.5" />
+											Log out
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							) : (
+								<Link href="/login" className="no-underline">
+									<Button variant="ghost" size="sm" className="text-sm text-muted-foreground">
+										Sign in
+									</Button>
+								</Link>
+							)}
+						</div>
 					</div>
 
-					{/* Spacer */}
-					<div className="flex-1" />
-
-					{/* Search bar (desktop) */}
-					<div className="hidden md:block">
+					{/* Mobile search bar - below the nav on small screens */}
+					<div className="border-t border-border/40 px-4 py-2 md:hidden">
 						<Suspense>
 							<SearchBar />
 						</Suspense>
 					</div>
+				</header>
 
-					{/* Downloads panel trigger */}
-					<DownloadTrigger />
+				{/* ─── Main Content + Downloads Panel ─── */}
+				<div className="flex flex-1 overflow-hidden">
+					<ScrollArea
+						className={`flex-1 transition-all duration-300 ${
+							downloadsOpen ? "mr-[340px]" : ""
+						}`}
+					>
+						<main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+							{children}
+						</main>
+					</ScrollArea>
 
-					{/* User avatar / menu */}
-					{isAuthenticated && user ? (
-						<DropdownMenu>
-							<DropdownMenuTrigger
-								render={
-									<Button variant="ghost" size="icon" className="shrink-0 rounded-full" />
-								}
-							>
-								<Avatar className="h-7 w-7">
-									{avatarUrl ? (
-										<AvatarImage src={avatarUrl} />
-									) : null}
-									<AvatarFallback className="bg-muted text-xs font-medium text-muted-foreground">
-										{displayName.charAt(0).toUpperCase()}
-									</AvatarFallback>
-								</Avatar>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent className="w-48">
-								<DropdownMenuItem className="gap-2 text-sm">
-									<span className="truncate font-medium">{displayName}</span>
-								</DropdownMenuItem>
-								<Link href="/my-playlists" className="no-underline">
-									<DropdownMenuItem className="gap-2 text-sm">
-										<Music className="h-3.5 w-3.5" />
-										My Playlists
-									</DropdownMenuItem>
-								</Link>
-								<Link href="/download-history" className="no-underline">
-									<DropdownMenuItem className="gap-2 text-sm">
-										<History className="h-3.5 w-3.5" />
-										Download History
-									</DropdownMenuItem>
-								</Link>
-								<Link href="/settings" className="no-underline">
-									<DropdownMenuItem className="gap-2 text-sm">
-										<Settings className="h-3.5 w-3.5" />
-										Settings
-									</DropdownMenuItem>
-								</Link>
-								<Link href="/about" className="no-underline">
-									<DropdownMenuItem className="gap-2 text-sm">
-										<Info className="h-3.5 w-3.5" />
-										About
-									</DropdownMenuItem>
-								</Link>
-								<DropdownMenuItem
-									className="gap-2 text-sm text-red-500"
-									onClick={() => handleLogout()}
-								>
-									<LogOut className="h-3.5 w-3.5" />
-									Log out
-								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
-					) : (
-						<Link href="/login" className="no-underline">
-							<Button variant="ghost" size="sm" className="text-sm text-muted-foreground">
-								Sign in
-							</Button>
-						</Link>
-					)}
+					{/* ─── Downloads Side Panel ─── */}
+					<DownloadPanel />
 				</div>
-
-				{/* Mobile search bar - below the nav on small screens */}
-				<div className="border-t border-border/40 px-4 py-2 md:hidden">
-					<Suspense>
-						<SearchBar />
-					</Suspense>
-				</div>
-			</header>
+			</div>
 
 			{/* ─── Mobile Navigation Sheet ─── */}
 			<Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
@@ -196,25 +266,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 							Navigation
 						</SheetDescription>
 					</SheetHeader>
-					<Navigation isMobile onNavigate={() => setSidebarOpen(false)} />
+					<Navigation onNavigate={() => setSidebarOpen(false)} />
 				</SheetContent>
 			</Sheet>
-
-			{/* ─── Main Content + Downloads Panel ─── */}
-			<div className="flex flex-1 overflow-hidden">
-				<ScrollArea
-					className={`flex-1 transition-all duration-300 ${
-						downloadsOpen ? "mr-[340px]" : ""
-					}`}
-				>
-					<main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-						{children}
-					</main>
-				</ScrollArea>
-
-				{/* ─── Downloads Side Panel ─── */}
-				<DownloadPanel />
-			</div>
 
 			{/* ─── Audio Preview ─── */}
 			<AudioPreview />
