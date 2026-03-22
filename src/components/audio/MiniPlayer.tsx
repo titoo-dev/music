@@ -14,24 +14,24 @@ export function MiniPlayer() {
 			{currentTrack && (
 				<motion.div
 					key="mini-player"
-					initial={{ y: 80, opacity: 0, scale: 0.95 }}
-					animate={{ y: 0, opacity: 1, scale: 1 }}
-					exit={{ y: 80, opacity: 0, scale: 0.95 }}
+					initial={{ y: 80, opacity: 0 }}
+					animate={{ y: 0, opacity: 1 }}
+					exit={{ y: 80, opacity: 0 }}
 					transition={{ type: "spring", damping: 25, stiffness: 300 }}
-					className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-2xl border border-border/50 bg-background/90 px-4 py-3 shadow-xl backdrop-blur-xl"
+					className="fixed bottom-5 right-5 z-50 flex items-center gap-3 border-2 sm:border-[3px] border-foreground bg-background px-4 py-3 shadow-[var(--shadow-brutal-hover)]"
 				>
 					{/* Cover */}
 					<CoverImage
 						src={currentTrack.cover}
-						className="h-10 w-10 rounded-xl shadow-sm"
+						className="h-10 w-10"
 					/>
 
 					{/* Track info */}
 					<div className="min-w-0 max-w-[140px]">
-						<p className="truncate text-sm font-medium leading-tight">
+						<p className="truncate text-sm font-bold leading-tight">
 							{currentTrack.title}
 						</p>
-						<p className="truncate text-xs text-muted-foreground leading-tight">
+						<p className="truncate text-xs text-muted-foreground leading-tight font-medium">
 							{currentTrack.artist}
 						</p>
 					</div>
@@ -45,7 +45,7 @@ export function MiniPlayer() {
 							fill="none"
 							stroke="currentColor"
 							strokeWidth="2"
-							className="shrink-0 text-muted-foreground"
+							className="shrink-0 text-foreground"
 						>
 							<path d="M11 5L6 9H2v6h4l5 4V5z" />
 							{volume > 0 && (
@@ -61,7 +61,7 @@ export function MiniPlayer() {
 							max={100}
 							value={volume}
 							onChange={(e) => setVolume(parseInt(e.target.value))}
-							className="w-16 h-1 accent-foreground cursor-pointer"
+							className="w-16 h-1 accent-primary cursor-pointer"
 						/>
 					</div>
 
@@ -69,7 +69,7 @@ export function MiniPlayer() {
 					<Button
 						variant="ghost"
 						size="icon"
-						className="h-8 w-8 rounded-full"
+						className="h-8 w-8 border-[2px] border-foreground"
 						onClick={() => toggle(currentTrack)}
 					>
 						{isPlaying ? (
@@ -79,20 +79,8 @@ export function MiniPlayer() {
 								viewBox="0 0 12 12"
 								fill="currentColor"
 							>
-								<rect
-									x="1"
-									y="1"
-									width="3.5"
-									height="10"
-									rx="0.5"
-								/>
-								<rect
-									x="7.5"
-									y="1"
-									width="3.5"
-									height="10"
-									rx="0.5"
-								/>
+								<rect x="1" y="1" width="3.5" height="10" />
+								<rect x="7.5" y="1" width="3.5" height="10" />
 							</svg>
 						) : (
 							<svg
@@ -110,7 +98,7 @@ export function MiniPlayer() {
 					<Button
 						variant="ghost"
 						size="icon"
-						className="h-6 w-6 text-muted-foreground hover:text-foreground"
+						className="h-6 w-6"
 						onClick={stop}
 					>
 						<svg

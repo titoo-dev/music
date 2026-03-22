@@ -93,7 +93,7 @@ export default function ChartsPage() {
 						Back
 					</Button>
 					<div className="flex-1 min-w-0">
-						<h1 className="text-2xl font-semibold tracking-tight truncate">
+						<h1 className="text-brutal-lg truncate">
 							{selectedChart.title || selectedChart.TITLE}
 						</h1>
 					</div>
@@ -114,11 +114,11 @@ export default function ChartsPage() {
 					</div>
 				) : tracks.length === 0 ? (
 					<div className="flex flex-col items-center justify-center py-24 gap-2">
-						<p className="text-sm font-medium text-muted-foreground">No tracks found</p>
-						<p className="text-xs text-muted-foreground">This chart appears to be empty.</p>
+						<p className="text-sm font-bold uppercase tracking-wider text-muted-foreground">No tracks found</p>
+						<p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">This chart appears to be empty.</p>
 					</div>
 				) : (
-					<div className="rounded-lg border border-border overflow-hidden">
+					<div className="border-2 sm:border-[3px] border-foreground overflow-hidden">
 						{tracks.map((track: any, idx: number) => {
 							const trackId = track.id || track.SNG_ID;
 							const trackTitle = track.title || track.SNG_TITLE;
@@ -135,15 +135,15 @@ export default function ChartsPage() {
 
 							return (
 								<div key={trackId || idx}>
-									<div className={`flex items-center gap-3 px-4 py-2.5 group transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted/50"}`}>
+									<div className={`flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 overflow-hidden group transition-colors ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}>
 										<span className="w-8 text-right tabular-nums flex items-center justify-end">
 											{isActive || isPaused ? (
 												<PlaybackIndicator paused={isPaused} />
 											) : (
-												<span className="text-xs text-muted-foreground">{idx + 1}</span>
+												<span className="text-xs text-muted-foreground font-mono font-bold">{idx + 1}</span>
 											)}
 										</span>
-										<CoverImage src={trackCover} className="w-10 h-10 rounded-md" />
+										<CoverImage src={trackCover} className="size-9 sm:size-10" />
 										<div className="flex-1 min-w-0">
 											<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : ""}`}>
 												{trackTitle}
@@ -152,7 +152,7 @@ export default function ChartsPage() {
 												{trackArtist}
 											</p>
 										</div>
-										<span className="text-xs text-muted-foreground tabular-nums">
+										<span className="hidden sm:inline text-xs text-muted-foreground font-mono tabular-nums">
 											{convertDuration(trackDuration)}
 										</span>
 										<PreviewButton
@@ -171,7 +171,7 @@ export default function ChartsPage() {
 												handleDownload(trackId, "track")
 											}
 											disabled={isLoading(deezerUrl(trackId, "track"))}
-											className=""
+											className="hidden sm:inline-flex"
 										>
 											{isLoading(deezerUrl(trackId, "track")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
 										</Button>
@@ -189,19 +189,19 @@ export default function ChartsPage() {
 	return (
 		<div className="space-y-6">
 			<div>
-				<h1 className="text-2xl font-semibold tracking-tight">Charts</h1>
-				<p className="text-sm text-muted-foreground mt-1">
+				<h1 className="text-brutal-lg">Charts</h1>
+				<p className="text-sm text-muted-foreground mt-1 uppercase tracking-wider font-bold">
 					Browse charts by country
 				</p>
 			</div>
 
 			{countries.length === 0 ? (
 				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<p className="text-sm font-medium text-muted-foreground">No charts available</p>
-					<p className="text-xs text-muted-foreground">Charts could not be loaded. Try again later.</p>
+					<p className="text-sm font-bold uppercase tracking-wider text-muted-foreground">No charts available</p>
+					<p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Charts could not be loaded. Try again later.</p>
 				</div>
 			) : (
-			<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+			<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
 				{countries.map((country: any) => {
 					const countryTitle = country.title || country.TITLE;
 					const countryPicture =
@@ -213,19 +213,17 @@ export default function ChartsPage() {
 					return (
 						<div
 							key={country.id}
-							className="group cursor-pointer"
+							className="group cursor-pointer border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all overflow-hidden"
 							onClick={() => loadChartTracks(country)}
 						>
-							<div className="rounded-xl overflow-hidden bg-muted/30">
-								<CoverImage
-									src={countryPicture}
-									alt={countryTitle}
-									loading="lazy"
-									className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
-								/>
-							</div>
-							<div className="mt-2 px-0.5">
-								<p className="text-sm font-medium truncate">
+							<CoverImage
+								src={countryPicture}
+								alt={countryTitle}
+								loading="lazy"
+								className="w-full aspect-square border-0"
+							/>
+							<div className="border-t-[2px] border-foreground px-2 py-2">
+								<p className="text-sm font-bold truncate">
 									{countryTitle}
 								</p>
 							</div>

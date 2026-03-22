@@ -55,10 +55,10 @@ export default function LinkAnalyzerPage() {
 	return (
 		<div className="max-w-2xl mx-auto space-y-6">
 			<div>
-				<h1 className="text-2xl font-semibold tracking-tight">
+				<h1 className="text-brutal-lg">
 					Link Analyzer
 				</h1>
-				<p className="text-sm text-muted-foreground mt-1">
+				<p className="text-sm text-muted-foreground mt-1 uppercase tracking-wider font-bold">
 					Paste a Deezer or Spotify link to analyze and download.
 				</p>
 			</div>
@@ -84,7 +84,7 @@ export default function LinkAnalyzerPage() {
 			</form>
 
 			{error && (
-				<div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-3">
+				<div className="flex items-center gap-2 border-2 sm:border-[3px] border-destructive bg-destructive/10 px-4 py-3">
 					<AlertCircle className="size-4 text-destructive shrink-0" />
 					<p className="text-sm text-destructive">{error}</p>
 				</div>
@@ -93,13 +93,13 @@ export default function LinkAnalyzerPage() {
 			{result && (
 				<Card>
 					<CardContent className="pt-6">
-						<div className="flex gap-4">
+						<div className="flex gap-3 sm:gap-4">
 							<CoverImage
 								src={result.cover_xl || result.cover_big || result.picture_xl}
-								className="w-28 h-28 rounded-xl shrink-0"
+								className="w-20 h-20 sm:w-28 sm:h-28 shrink-0"
 							/>
 							<div className="flex-1 min-w-0 space-y-2">
-								<h2 className="text-lg font-semibold truncate">
+								<h2 className="text-lg font-black truncate">
 									{result.title}
 								</h2>
 								{result.artist?.name && (
@@ -135,21 +135,21 @@ export default function LinkAnalyzerPage() {
 							<>
 								<Separator className="my-4" />
 								<div className="space-y-1">
-									<h3 className="text-sm font-medium text-muted-foreground mb-3">
+									<h3 className="text-xs font-black text-foreground uppercase tracking-[0.15em] mb-3">
 										Tracklist
 									</h3>
-									<div className="rounded-lg border border-border overflow-hidden">
+									<div className="border-2 sm:border-[3px] border-foreground overflow-hidden">
 										{result.tracks.data.map(
 											(track: any, idx: number) => (
 												<div key={track.id || idx}>
-													<div className="flex items-center gap-3 py-2 px-3 hover:bg-muted/50 transition-colors">
-														<span className="text-xs text-muted-foreground w-6 text-right tabular-nums">
+													<div className="flex items-center gap-3 py-2 px-3 hover:bg-accent/20 transition-colors">
+														<span className="text-xs text-muted-foreground w-6 text-right tabular-nums font-mono font-bold">
 															{idx + 1}
 														</span>
 														<span className="text-sm flex-1 truncate">
 															{track.title}
 														</span>
-														<span className="text-xs text-muted-foreground tabular-nums">
+														<span className="text-xs text-muted-foreground tabular-nums font-mono">
 															{convertDuration(
 																track.duration
 															)}

@@ -151,7 +151,7 @@ export default function AlbumDetailPage() {
 	if (!album) {
 		return (
 			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-				<p className="text-sm text-muted-foreground">Album not found.</p>
+				<p className="text-sm text-muted-foreground font-bold">Album not found.</p>
 				<Link href="/">
 					<Button variant="outline">Back to home</Button>
 				</Link>
@@ -180,12 +180,12 @@ export default function AlbumDetailPage() {
 					>
 						<ArrowLeft className="size-4" />
 					</Button>
-					<div className="w-48 h-48 rounded-lg flex-shrink-0 overflow-hidden bg-muted/50 flex items-center justify-center">
+					<div className="w-32 h-32 sm:w-48 sm:h-48 flex-shrink-0 overflow-hidden bg-muted border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] flex items-center justify-center">
 						{album.coverUrl ? (
 							<CoverImage
 								src={album.coverUrl}
 								alt={album.title}
-								className="w-48 h-48 rounded-lg"
+								className="w-32 h-32 sm:w-48 sm:h-48"
 							/>
 						) : (
 							<Disc3 className="size-12 text-muted-foreground/30" />
@@ -196,13 +196,13 @@ export default function AlbumDetailPage() {
 					<Badge variant="secondary" className="w-fit">
 						Album
 					</Badge>
-					<h1 className="text-2xl font-semibold tracking-tight text-foreground">
+					<h1 className="text-brutal-lg">
 						{album.title}
 					</h1>
-					<div className="flex items-center gap-2 text-sm text-muted-foreground">
+					<div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
 						<span>{album.artist}</span>
 						<span className="text-border">·</span>
-						<span>{album.tracks.length} track{album.tracks.length !== 1 ? "s" : ""}</span>
+						<span className="font-mono">{album.tracks.length} track{album.tracks.length !== 1 ? "s" : ""}</span>
 					</div>
 					<div className="flex items-center gap-2 mt-1">
 						{playerQueue.length > 0 && (
@@ -250,12 +250,12 @@ export default function AlbumDetailPage() {
 
 			{/* Tracklist */}
 			<div>
-				<h2 className="text-xs font-medium text-muted-foreground mb-4">
+				<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em] mb-4">
 					Tracklist
 				</h2>
 				{album.tracks.length === 0 ? (
 					<div className="flex flex-col items-center justify-center py-16 gap-2">
-						<p className="text-sm text-muted-foreground">No tracks found.</p>
+						<p className="text-sm text-muted-foreground font-bold uppercase">No tracks found.</p>
 						<p className="text-xs text-muted-foreground">
 							Tracks for this album may not have been saved correctly.
 						</p>
@@ -276,13 +276,13 @@ export default function AlbumDetailPage() {
 							return (
 								<div
 									key={track.id}
-									className={`group flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted/50"}`}
+									className={`group flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 overflow-hidden transition-colors border-b-[2px] border-foreground last:border-b-0 ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}
 								>
 									<PlayButton
 										track={playerTrack}
 										queue={playerQueue}
 									/>
-									<div className="relative shrink-0 size-10 rounded overflow-hidden bg-muted">
+									<div className="relative shrink-0 size-9 sm:size-10 bg-muted">
 										{track.coverUrl ? (
 											<CoverImage
 												src={track.coverUrl}
@@ -301,14 +301,14 @@ export default function AlbumDetailPage() {
 										)}
 									</div>
 									<div className="flex-1 min-w-0">
-										<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : ""}`}>
+										<p className={`text-sm font-bold truncate ${isActive || isPaused ? "text-primary" : ""}`}>
 											{track.title}
 										</p>
 										<p className="text-xs text-muted-foreground truncate">
 											{track.artist}
 										</p>
 									</div>
-									<span className="text-xs text-muted-foreground shrink-0">
+									<span className="hidden sm:inline text-xs text-muted-foreground font-mono shrink-0">
 										{formatDuration(track.duration)}
 									</span>
 								</div>

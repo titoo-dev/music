@@ -71,8 +71,8 @@ function ArtistContent() {
 	if (!artist)
 		return (
 			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
-				<p className="text-sm font-medium text-muted-foreground">Artist not found</p>
-				<p className="text-xs text-muted-foreground">The artist you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
+				<p className="text-sm font-bold uppercase text-muted-foreground">Artist not found</p>
+				<p className="text-xs font-bold uppercase text-muted-foreground">The artist you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
 			</div>
 		);
 
@@ -104,15 +104,15 @@ function ArtistContent() {
 				<CoverImage
 					src={artistPicture}
 					alt={artistName}
-					className="w-48 h-48 rounded-full flex-shrink-0"
+					className="w-32 h-32 sm:w-48 sm:h-48 flex-shrink-0 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)]"
 				/>
 				<div className="flex flex-col gap-2 text-center md:text-left">
-					<p className="text-xs font-medium text-muted-foreground">Artist</p>
-					<h1 className="text-2xl font-semibold tracking-tight text-foreground">
+					<p className="text-xs font-black text-primary uppercase tracking-[0.15em]">Artist</p>
+					<h1 className="text-brutal-lg">
 						{artistName}
 					</h1>
 					{nbFan != null && (
-						<p className="text-sm text-muted-foreground">
+						<p className="text-sm text-muted-foreground font-mono">
 							{Number(nbFan).toLocaleString()} fans
 						</p>
 					)}
@@ -124,10 +124,10 @@ function ArtistContent() {
 			{/* Top Tracks */}
 			{topTracks.length > 0 && (
 				<section className="space-y-4">
-					<h2 className="text-sm font-medium text-muted-foreground">
+					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
 						Top tracks
 					</h2>
-					<div className="rounded-lg border border-border overflow-hidden">
+					<div className="border-2 sm:border-[3px] border-foreground overflow-hidden">
 						{topTracks.slice(0, 10).map((track: any, idx: number) => {
 							const trackId = track.SNG_ID || track.id;
 							const trackTitle = track.SNG_TITLE || track.title;
@@ -149,16 +149,16 @@ function ArtistContent() {
 							return (
 								<div
 									key={trackId || idx}
-									className={`flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-b-0 transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted/50"} group`}
+									className={`flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 overflow-hidden border-b-[2px] border-foreground last:border-b-0 transition-colors ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"} group`}
 								>
 									<span className="w-6 text-right tabular-nums flex items-center justify-end">
 										{isActive || isPaused ? (
 											<PlaybackIndicator paused={isPaused} />
 										) : (
-											<span className="text-xs text-muted-foreground">{idx + 1}</span>
+											<span className="text-xs text-muted-foreground font-mono font-bold">{idx + 1}</span>
 										)}
 									</span>
-									<CoverImage src={trackCover} className="w-10 h-10 rounded-md flex-shrink-0" />
+									<CoverImage src={trackCover} className="size-9 sm:size-10 flex-shrink-0" />
 									<div className="flex-1 min-w-0">
 										<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : "text-foreground"}`}>
 											{trackTitle}
@@ -177,7 +177,7 @@ function ArtistContent() {
 											) : ""}
 										</p>
 									</div>
-									<span className="text-xs text-muted-foreground tabular-nums">
+									<span className="hidden sm:inline text-xs text-muted-foreground tabular-nums font-mono">
 										{convertDuration(trackDuration)}
 									</span>
 									<PreviewButton
@@ -194,6 +194,7 @@ function ArtistContent() {
 										size="icon-sm"
 										onClick={() => handleDownload(trackId, "track")}
 										disabled={isLoading(trackUrl)}
+										className="hidden sm:inline-flex"
 										>
 										{isLoading(trackUrl) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
 									</Button>
@@ -206,7 +207,7 @@ function ArtistContent() {
 											coverUrl: trackCover,
 											duration: trackDuration ? Number(trackDuration) : null,
 										}}
-										className="size-7"
+										className="hidden sm:flex size-7"
 									/>
 								</div>
 							);
@@ -218,7 +219,7 @@ function ArtistContent() {
 			{/* Discography Tabs */}
 			{tabKeys.length > 0 && (
 				<section className="space-y-4">
-					<h2 className="text-sm font-medium text-muted-foreground">
+					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
 						Discography
 					</h2>
 					<Tabs defaultValue={tabKeys[0]}>
@@ -232,7 +233,7 @@ function ArtistContent() {
 
 						{tabKeys.map((key) => (
 							<TabsContent key={key} value={key} className="mt-6">
-								<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+								<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
 									{discography[key].map((album: any) => {
 										const albumId = album.id || album.ALB_ID;
 										const albumTitle = album.title || album.ALB_TITLE;
@@ -245,16 +246,16 @@ function ArtistContent() {
 
 										return (
 											<div key={albumId} className="group space-y-2">
-												<div className="relative overflow-hidden rounded-lg bg-muted/30">
+												<div className="relative overflow-hidden border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card">
 													<Link href={`/album?id=${albumId}`}>
 														<CoverImage
 															src={albumCover}
 															alt={albumTitle}
 															loading="lazy"
-															className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
+															className="w-full aspect-square border-0"
 														/>
 													</Link>
-													<div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
+													<div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center pointer-events-none transition-opacity">
 														<Button
 															size="sm"
 															onClick={() => handleDownload(albumId, "album")}
@@ -273,7 +274,7 @@ function ArtistContent() {
 													>
 														{albumTitle}
 													</Link>
-													<p className="text-xs text-muted-foreground">
+													<p className="text-xs text-muted-foreground font-mono">
 														{album.release_date || album.PHYSICAL_RELEASE_DATE}
 														{album.nb_tracks ? ` · ${album.nb_tracks} tracks` : ""}
 													</p>
@@ -291,8 +292,8 @@ function ArtistContent() {
 			{/* Fallback if nothing */}
 			{topTracks.length === 0 && tabKeys.length === 0 && (
 				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<p className="text-sm font-medium text-muted-foreground">No content</p>
-					<p className="text-xs text-muted-foreground">No tracks or discography found for this artist.</p>
+					<p className="text-sm font-bold uppercase text-muted-foreground">No content</p>
+					<p className="text-xs font-bold uppercase text-muted-foreground">No tracks or discography found for this artist.</p>
 				</div>
 			)}
 		</div>

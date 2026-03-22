@@ -89,8 +89,8 @@ export default function DownloadHistoryPage() {
 	return (
 		<div className="space-y-6">
 			<div>
-				<h1 className="text-2xl font-semibold tracking-tight">Download History</h1>
-				<p className="text-sm text-muted-foreground mt-1">
+				<h1 className="text-brutal-lg">Download History</h1>
+				<p className="text-sm text-muted-foreground mt-1 uppercase tracking-wider font-bold font-mono">
 					{total} track{total !== 1 ? "s" : ""} downloaded
 				</p>
 			</div>
@@ -98,8 +98,8 @@ export default function DownloadHistoryPage() {
 			{items.length === 0 ? (
 				<div className="flex flex-col items-center justify-center py-24 gap-2">
 					<Download className="size-8 text-muted-foreground/50" />
-					<p className="text-sm text-muted-foreground">No downloads yet</p>
-					<p className="text-xs text-muted-foreground">
+					<p className="text-sm text-muted-foreground font-bold uppercase">No downloads yet</p>
+					<p className="text-xs text-muted-foreground font-bold uppercase">
 						Downloaded tracks will appear here.
 					</p>
 				</div>
@@ -126,7 +126,7 @@ export default function DownloadHistoryPage() {
 							return (
 								<div
 									key={item.id}
-									className={`group flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted/50"}`}
+									className={`group flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 overflow-hidden transition-colors border-b-[2px] border-foreground last:border-b-0 ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}
 								>
 									{item.storageType === "s3" && (
 										<PlayButton
@@ -135,15 +135,15 @@ export default function DownloadHistoryPage() {
 											className=""
 										/>
 									)}
-									<div className="relative shrink-0 size-10 rounded overflow-hidden bg-muted">
+									<div className="relative shrink-0 size-9 sm:size-10 overflow-hidden bg-muted">
 										{item.coverUrl ? (
 											<CoverImage
 												src={item.coverUrl}
 												alt={item.title}
-												className="size-10"
+												className="size-9 sm:size-10"
 											/>
 										) : (
-											<div className="size-10 flex items-center justify-center text-xs text-muted-foreground">
+											<div className="size-9 sm:size-10 flex items-center justify-center text-xs text-muted-foreground">
 												?
 											</div>
 										)}
@@ -161,10 +161,10 @@ export default function DownloadHistoryPage() {
 										</p>
 									</div>
 									<div className="shrink-0 text-right">
-										<p className="text-xs text-muted-foreground">
+										<p className="text-xs text-muted-foreground font-mono font-bold">
 											{bitrateLabels[item.bitrate] || `${item.bitrate}`}
 										</p>
-										<p className="text-xs text-muted-foreground">
+										<p className="text-xs text-muted-foreground font-mono">
 											{new Date(item.downloadedAt).toLocaleDateString()}
 										</p>
 									</div>
@@ -184,7 +184,7 @@ export default function DownloadHistoryPage() {
 							>
 								<ChevronLeft className="size-4" />
 							</Button>
-							<span className="text-sm text-muted-foreground">
+							<span className="text-sm text-muted-foreground font-mono font-bold">
 								Page {page} of {totalPages}
 							</span>
 							<Button

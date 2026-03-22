@@ -17,17 +17,15 @@ export function DownloadTrigger() {
 
 	return (
 		<Button
-			variant="ghost"
+			variant={downloadsOpen ? "secondary" : "ghost"}
 			size="default"
-			className={`relative gap-2 text-muted-foreground hover:text-foreground ${
-				downloadsOpen ? "bg-muted text-foreground" : ""
-			}`}
+			className="relative gap-2"
 			onClick={() => setDownloadsOpen(!downloadsOpen)}
 		>
 			<ArrowDownToLine className="h-4 w-4" />
 			<span className="hidden text-sm sm:inline">Downloads</span>
 			{activeCount > 0 && (
-				<Badge className="absolute -right-1 -top-1 h-4 min-w-4 animate-in fade-in border-0 bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+				<Badge className="absolute -right-1 -top-1 h-5 min-w-5 border-[2px] border-foreground bg-accent px-1 text-[10px] font-black text-foreground shadow-[var(--shadow-brutal-sm)]">
 					{activeCount}
 				</Badge>
 			)}

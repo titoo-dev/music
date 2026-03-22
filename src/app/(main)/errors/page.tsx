@@ -13,7 +13,7 @@ export default function ErrorsPage() {
 		<div className="max-w-3xl mx-auto space-y-6">
 			{/* Header */}
 			<div className="flex items-center justify-between">
-				<h1 className="text-2xl font-semibold tracking-tight text-foreground">
+				<h1 className="text-brutal-lg">
 					Download errors
 				</h1>
 				{errors.length > 0 && (
@@ -40,10 +40,10 @@ export default function ErrorsPage() {
 
 			{errors.length === 0 ? (
 				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<p className="text-sm font-medium text-muted-foreground">
+					<p className="text-sm font-bold text-foreground uppercase tracking-wider">
 						No errors
 					</p>
-					<p className="text-xs text-muted-foreground">
+					<p className="text-xs text-muted-foreground font-medium">
 						All downloads completed cleanly.
 					</p>
 				</div>
@@ -53,7 +53,7 @@ export default function ErrorsPage() {
 						<Card key={idx}>
 							<CardContent>
 								<div className="flex items-start gap-3">
-									<span className="mt-0.5 h-2 w-2 rounded-full bg-destructive flex-shrink-0" />
+									<span className="mt-0.5 h-2 w-2 bg-destructive flex-shrink-0" />
 									<div className="flex-1 min-w-0 space-y-1">
 										<p className="text-sm font-medium text-foreground">
 											{error.message}

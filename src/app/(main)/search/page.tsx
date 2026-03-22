@@ -132,7 +132,7 @@ function SearchContent() {
 	return (
 		<div className="space-y-6">
 			<div>
-				<h1 className="text-2xl font-semibold tracking-tight">
+				<h1 className="text-brutal-lg">
 					Search results for &ldquo;{term}&rdquo;
 				</h1>
 			</div>
@@ -260,10 +260,10 @@ function AllResults({
 		<div className="space-y-8 mt-4">
 			{tracks.length > 0 && (
 				<section className="space-y-3">
-					<h2 className="text-sm font-medium text-muted-foreground">
+					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
 						Tracks
 					</h2>
-					<div className="rounded-lg border border-border overflow-hidden">
+					<div className="border-2 sm:border-[3px] border-foreground overflow-hidden">
 						{tracks.map((track: any, idx: number) => (
 							<div key={track.SNG_ID || track.id}>
 								<TrackRow track={track} onDownload={onDownload} isLoading={isLoading} deezerUrl={deezerUrl} downloaded={downloaded} />
@@ -275,10 +275,10 @@ function AllResults({
 			)}
 			{albums.length > 0 && (
 				<section className="space-y-3">
-					<h2 className="text-sm font-medium text-muted-foreground">
+					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
 						Albums
 					</h2>
-					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
 						{albums.map((album: any) => (
 							<AlbumCard
 								key={album.ALB_ID || album.id}
@@ -293,10 +293,10 @@ function AllResults({
 			)}
 			{artists.length > 0 && (
 				<section className="space-y-3">
-					<h2 className="text-sm font-medium text-muted-foreground">
+					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
 						Artists
 					</h2>
-					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
 						{artists.map((artist: any) => (
 							<ArtistCard
 								key={artist.ART_ID || artist.id}
@@ -308,10 +308,10 @@ function AllResults({
 			)}
 			{playlists.length > 0 && (
 				<section className="space-y-3">
-					<h2 className="text-sm font-medium text-muted-foreground">
+					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
 						Playlists
 					</h2>
-					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
 						{playlists.map((pl: any) => (
 							<PlaylistCard
 								key={pl.PLAYLIST_ID || pl.id}
@@ -363,9 +363,9 @@ function TrackRow({
 	const isPaused = (previewTrack?.id === String(id) && !previewPlaying) || (playerTrack?.trackId === String(id) && !playerPlaying);
 
 	return (
-		<div className={`flex items-center gap-3 px-4 py-2.5 group transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted/50"}`}>
+		<div className={`flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 overflow-hidden group transition-colors ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}>
 			<div className="relative">
-				<CoverImage src={cover} className={`w-10 h-10 rounded-md transition-opacity ${isActive ? "opacity-50" : ""}`} />
+				<CoverImage src={cover} className={`size-9 sm:size-10 border-0 transition-opacity ${isActive ? "opacity-50" : ""}`} />
 				{(isActive || isPaused) && (
 					<div className="absolute inset-0 flex items-center justify-center">
 						<PlaybackIndicator paused={isPaused} />
@@ -373,7 +373,7 @@ function TrackRow({
 				)}
 			</div>
 			<div className="flex-1 min-w-0">
-				<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : ""}`}>{title}</p>
+				<p className={`text-sm font-bold truncate ${isActive || isPaused ? "text-primary" : ""}`}>{title}</p>
 				<p className="text-xs text-muted-foreground truncate">
 					{artistId ? (
 						<Link href={`/artist?id=${artistId}`} className="hover:underline hover:text-foreground transition-colors">
@@ -392,7 +392,7 @@ function TrackRow({
 					) : ""}
 				</p>
 			</div>
-			<span className="text-xs text-muted-foreground tabular-nums">
+			<span className="hidden sm:inline text-xs text-muted-foreground font-mono tabular-nums">
 				{duration ? convertDuration(duration) : ""}
 			</span>
 			<PreviewButton
@@ -427,7 +427,7 @@ function TrackRow({
 					coverUrl: cover,
 					duration: duration ? Number(duration) : null,
 				}}
-				className="size-7"
+				className="hidden sm:flex size-7"
 			/>
 		</div>
 	);
@@ -455,17 +455,17 @@ function AlbumCard({
 		"/placeholder.jpg";
 
 	return (
-		<div className="group">
-			<div className="relative rounded-xl overflow-hidden bg-muted/30">
+		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
+			<div className="relative">
 				<Link href={`/album?id=${id}`}>
 					<CoverImage
 						src={cover}
 						alt={title}
 						loading="lazy"
-						className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
+						className="w-full aspect-square border-0"
 					/>
 				</Link>
-				<div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
+				<div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
 					<Button
 						size="sm"
 						onClick={() => onDownload(id, "album")}
@@ -477,19 +477,19 @@ function AlbumCard({
 					</Button>
 				</div>
 			</div>
-			<div className="mt-2 px-0.5">
+			<div className="mt-2 px-2 pb-2">
 				<Link
 					href={`/album?id=${id}`}
-					className="text-sm font-medium truncate block hover:underline"
+					className="text-sm font-bold truncate block hover:underline"
 				>
 					{title}
 				</Link>
 				{artistId ? (
-					<Link href={`/artist?id=${artistId}`} className="text-xs text-muted-foreground truncate block hover:underline hover:text-foreground transition-colors">
+					<Link href={`/artist?id=${artistId}`} className="text-xs text-muted-foreground font-medium truncate block hover:underline hover:text-foreground transition-colors">
 						{artistName}
 					</Link>
 				) : (
-					<p className="text-xs text-muted-foreground truncate">{artistName}</p>
+					<p className="text-xs text-muted-foreground font-medium truncate">{artistName}</p>
 				)}
 			</div>
 		</div>
@@ -506,21 +506,21 @@ function ArtistCard({ artist }: { artist: any }) {
 		"/placeholder.jpg";
 
 	return (
-		<div className="group text-center">
+		<div className="group text-center border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
 			<Link href={`/artist?id=${id}`}>
-				<div className="rounded-full overflow-hidden bg-muted/30 aspect-square">
+				<div className="overflow-hidden aspect-square">
 					<CoverImage
 						src={picture}
 						alt={name}
 						loading="lazy"
-						className="w-full h-full transition-transform duration-200 group-hover:scale-[1.05]"
+						className="w-full h-full border-0"
 					/>
 				</div>
 			</Link>
-			<div className="mt-2">
+			<div className="mt-2 pb-2">
 				<Link
 					href={`/artist?id=${id}`}
-					className="text-sm font-medium truncate block hover:underline"
+					className="text-sm font-bold truncate block hover:underline"
 				>
 					{name}
 				</Link>
@@ -545,7 +545,7 @@ function TrackResults({
 	const tracks = data?.data || [];
 	if (tracks.length === 0) return <EmptyTabState />;
 	return (
-		<div className="mt-4 rounded-lg border border-border overflow-hidden">
+		<div className="mt-4 border-2 sm:border-[3px] border-foreground overflow-hidden">
 			{tracks.map((track: any, idx: number) => (
 				<div key={track.SNG_ID || track.id}>
 					<TrackRow track={track} onDownload={onDownload} isLoading={isLoading} deezerUrl={deezerUrl} />
@@ -570,7 +570,7 @@ function AlbumResults({
 	const albums = data?.data || [];
 	if (albums.length === 0) return <EmptyTabState />;
 	return (
-		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4 mt-4">
 			{albums.map((album: any) => (
 				<AlbumCard
 					key={album.ALB_ID || album.id}
@@ -588,7 +588,7 @@ function ArtistResults({ data }: { data: any }) {
 	const artists = data?.data || [];
 	if (artists.length === 0) return <EmptyTabState />;
 	return (
-		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-4">
+		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4 mt-4">
 			{artists.map((artist: any) => (
 				<ArtistCard
 					key={artist.ART_ID || artist.id}
@@ -602,8 +602,8 @@ function ArtistResults({ data }: { data: any }) {
 function EmptyTabState() {
 	return (
 		<div className="flex flex-col items-center justify-center py-24 gap-2">
-			<p className="text-sm font-medium text-muted-foreground">No results</p>
-			<p className="text-xs text-muted-foreground">No matches found for this category.</p>
+			<p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">No results</p>
+			<p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">No matches found for this category.</p>
 		</div>
 	);
 }
@@ -629,17 +629,17 @@ function PlaylistCard({
 		"/placeholder.jpg";
 
 	return (
-		<div className="group">
-			<div className="relative rounded-xl overflow-hidden bg-muted/30">
+		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
+			<div className="relative">
 				<Link href={`/playlist?id=${id}`}>
 					<CoverImage
 						src={picture}
 						alt={title}
 						loading="lazy"
-						className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
+						className="w-full aspect-square border-0"
 					/>
 				</Link>
-				<div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
+				<div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
 					<Button
 						size="sm"
 						onClick={() => onDownload(id, "playlist")}
@@ -651,15 +651,15 @@ function PlaylistCard({
 					</Button>
 				</div>
 			</div>
-			<div className="mt-2 px-0.5">
+			<div className="mt-2 px-2 pb-2">
 				<Link
 					href={`/playlist?id=${id}`}
-					className="text-sm font-medium truncate block hover:underline"
+					className="text-sm font-bold truncate block hover:underline"
 				>
 					{title}
 				</Link>
 				{nbTracks != null && (
-					<p className="text-xs text-muted-foreground truncate">{nbTracks} tracks</p>
+					<p className="text-xs text-muted-foreground font-mono font-medium truncate">{nbTracks} tracks</p>
 				)}
 			</div>
 		</div>
@@ -680,7 +680,7 @@ function PlaylistResults({
 	const playlists = data?.data || [];
 	if (playlists.length === 0) return <EmptyTabState />;
 	return (
-		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4 mt-4">
 			{playlists.map((pl: any) => (
 				<PlaylistCard
 					key={pl.PLAYLIST_ID || pl.id}

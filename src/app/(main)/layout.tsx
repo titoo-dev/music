@@ -49,37 +49,33 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 	const logout = useAuthStore((s) => s.logout);
 
 	const handleLogout = async () => {
-		// Sign out from better-auth (clears session cookie)
 		await authClient.signOut();
-		// Clear Deezer session server-side
 		try {
 			await fetch("/api/v1/auth/logout", { method: "POST" });
 		} catch {
 			// Ignore errors
 		}
-		// Clear client state
 		logout();
 	};
 
-	// Determine avatar display: prefer Deezer picture, fallback to Google image
 	const avatarUrl = deezerUser?.picture
 		? `https://e-cdns-images.dzcdn.net/images/user/${deezerUser.picture}/56x56-000000-80-0-0.jpg`
 		: user?.image || null;
 	const displayName = user?.name || deezerUser?.name || "User";
 
 	return (
-		<div className="flex min-h-screen bg-white">
+		<div className="flex min-h-screen bg-background">
 			{/* ─── Desktop Sidebar ─── */}
-			<aside className="hidden border-r border-border/40 bg-white md:fixed md:inset-y-0 md:z-40 md:flex md:w-56 md:flex-col">
+			<aside className="hidden border-r-[3px] border-foreground bg-sidebar md:fixed md:inset-y-0 md:z-40 md:flex md:w-56 md:flex-col">
 				{/* Logo */}
 				<Link
 					href="/"
-					className="flex h-14 shrink-0 items-center gap-2 px-5 no-underline"
+					className="flex h-16 shrink-0 items-center gap-3 border-b-[3px] border-sidebar-border px-5 no-underline"
 				>
-					<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-background">
-						d
+					<div className="flex h-8 w-8 items-center justify-center border-[2px] border-foreground bg-primary text-sm font-black text-white">
+						D
 					</div>
-					<span className="text-base font-semibold tracking-tight text-foreground">
+					<span className="text-lg font-black tracking-tight text-sidebar-foreground uppercase">
 						deemix
 					</span>
 				</Link>
@@ -91,21 +87,21 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
 				{/* User section */}
 				{isAuthenticated && user ? (
-					<div className="shrink-0 border-t border-border/40 p-3">
-						<div className="flex items-center gap-3 rounded-lg px-2 py-2">
-							<Avatar className="h-8 w-8 shrink-0">
+					<div className="shrink-0 border-t-[3px] border-sidebar-border p-3">
+						<div className="flex items-center gap-3 px-2 py-2">
+							<Avatar className="h-8 w-8 shrink-0 border-[2px] border-foreground">
 								{avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
-								<AvatarFallback className="bg-muted text-xs font-medium text-muted-foreground">
+								<AvatarFallback className="bg-muted text-xs font-bold text-foreground">
 									{displayName.charAt(0).toUpperCase()}
 								</AvatarFallback>
 							</Avatar>
-							<span className="flex-1 truncate text-sm font-medium text-foreground">
+							<span className="flex-1 truncate text-sm font-bold text-foreground">
 								{displayName}
 							</span>
 							<Button
 								variant="ghost"
 								size="icon"
-								className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-500"
+								className="h-8 w-8 shrink-0 border-transparent text-muted-foreground hover:text-destructive hover:bg-destructive/10"
 								onClick={handleLogout}
 							>
 								<LogOut className="h-4 w-4" />
@@ -113,9 +109,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 						</div>
 					</div>
 				) : (
-					<div className="shrink-0 border-t border-border/40 p-3">
+					<div className="shrink-0 border-t-[3px] border-sidebar-border p-3">
 						<Link href="/login" className="no-underline">
-							<Button variant="ghost" size="sm" className="w-full text-sm text-muted-foreground">
+							<Button variant="outline" size="sm" className="w-full">
 								Sign in
 							</Button>
 						</Link>
@@ -126,13 +122,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 			{/* ─── Main Area ─── */}
 			<div className="flex flex-1 flex-col md:pl-56">
 				{/* Top bar */}
-				<header className="sticky top-0 z-30 border-b border-border/40 bg-white/80 backdrop-blur-sm">
-					<div className="flex h-14 items-center gap-4 px-4 sm:px-6">
+				<header className="sticky top-0 z-30 border-b-[3px] border-foreground bg-background">
+					<div className="flex h-16 items-center gap-4 px-4 sm:px-6">
 						{/* Mobile hamburger */}
 						<Button
 							variant="ghost"
 							size="icon"
-							className="shrink-0 text-muted-foreground md:hidden"
+							className="shrink-0 md:hidden"
 							onClick={() => setSidebarOpen(true)}
 						>
 							<Menu className="h-5 w-5" />
@@ -143,10 +139,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 							href="/"
 							className="flex shrink-0 items-center gap-2 no-underline md:hidden"
 						>
-							<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-background">
-								d
+							<div className="flex h-7 w-7 items-center justify-center border-[2px] border-foreground bg-primary text-xs font-black text-white">
+								D
 							</div>
-							<span className="text-base font-semibold tracking-tight text-foreground">
+							<span className="text-base font-black tracking-tight text-foreground uppercase">
 								deemix
 							</span>
 						</Link>
@@ -170,48 +166,48 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 								<DropdownMenu>
 									<DropdownMenuTrigger
 										render={
-											<Button variant="ghost" size="icon" className="shrink-0 rounded-full" />
+											<Button variant="ghost" size="icon" className="shrink-0" />
 										}
 									>
-										<Avatar className="h-7 w-7">
+										<Avatar className="h-7 w-7 border-[2px] border-foreground">
 											{avatarUrl ? (
 												<AvatarImage src={avatarUrl} />
 											) : null}
-											<AvatarFallback className="bg-muted text-xs font-medium text-muted-foreground">
+											<AvatarFallback className="bg-accent text-xs font-bold text-foreground">
 												{displayName.charAt(0).toUpperCase()}
 											</AvatarFallback>
 										</Avatar>
 									</DropdownMenuTrigger>
-									<DropdownMenuContent className="w-48">
-										<DropdownMenuItem className="gap-2 text-sm">
-											<span className="truncate font-medium">{displayName}</span>
+									<DropdownMenuContent className="w-48 border-[3px] border-foreground shadow-[var(--shadow-brutal)]">
+										<DropdownMenuItem className="gap-2 text-sm font-bold">
+											<span className="truncate">{displayName}</span>
 										</DropdownMenuItem>
 										<Link href="/my-playlists" className="no-underline">
-											<DropdownMenuItem className="gap-2 text-sm">
+											<DropdownMenuItem className="gap-2 text-sm font-bold">
 												<Music className="h-3.5 w-3.5" />
 												My Playlists
 											</DropdownMenuItem>
 										</Link>
 										<Link href="/download-history" className="no-underline">
-											<DropdownMenuItem className="gap-2 text-sm">
+											<DropdownMenuItem className="gap-2 text-sm font-bold">
 												<History className="h-3.5 w-3.5" />
 												Download History
 											</DropdownMenuItem>
 										</Link>
 										<Link href="/settings" className="no-underline">
-											<DropdownMenuItem className="gap-2 text-sm">
+											<DropdownMenuItem className="gap-2 text-sm font-bold">
 												<Settings className="h-3.5 w-3.5" />
 												Settings
 											</DropdownMenuItem>
 										</Link>
 										<Link href="/about" className="no-underline">
-											<DropdownMenuItem className="gap-2 text-sm">
+											<DropdownMenuItem className="gap-2 text-sm font-bold">
 												<Info className="h-3.5 w-3.5" />
 												About
 											</DropdownMenuItem>
 										</Link>
 										<DropdownMenuItem
-											className="gap-2 text-sm text-red-500"
+											className="gap-2 text-sm font-bold text-destructive"
 											onClick={() => handleLogout()}
 										>
 											<LogOut className="h-3.5 w-3.5" />
@@ -221,7 +217,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 								</DropdownMenu>
 							) : (
 								<Link href="/login" className="no-underline">
-									<Button variant="ghost" size="sm" className="text-sm text-muted-foreground">
+									<Button variant="ghost" size="sm">
 										Sign in
 									</Button>
 								</Link>
@@ -229,8 +225,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 						</div>
 					</div>
 
-					{/* Mobile search bar - below the nav on small screens */}
-					<div className="border-t border-border/40 px-4 py-2 md:hidden">
+					{/* Mobile search bar */}
+					<div className="border-t-[2px] border-foreground px-4 py-2 md:hidden">
 						<Suspense>
 							<SearchBar />
 						</Suspense>
@@ -241,10 +237,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 				<div className="flex flex-1 overflow-hidden">
 					<ScrollArea
 						className={`flex-1 transition-all duration-300 ${
-							downloadsOpen ? "mr-[340px]" : ""
+							downloadsOpen ? "hidden sm:block sm:mr-[340px]" : ""
 						}`}
 					>
-						<main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+						<main className="mx-auto w-full max-w-6xl px-3 py-6 sm:px-6 lg:px-8 min-w-0">
 							{children}
 						</main>
 					</ScrollArea>
@@ -256,15 +252,15 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
 			{/* ─── Mobile Navigation Sheet ─── */}
 			<Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-				<SheetContent side="left" className="w-[280px] p-0">
-					<SheetHeader className="border-b border-border/40 px-6 py-4">
-						<SheetTitle className="flex items-center gap-2 text-base font-semibold">
-							<div className="flex h-6 w-6 items-center justify-center rounded-md bg-foreground text-[10px] font-bold text-background">
-								d
+				<SheetContent side="left" className="w-[280px] p-0 bg-sidebar">
+					<SheetHeader className="border-b-[3px] border-foreground px-6 py-4">
+						<SheetTitle className="flex items-center gap-2 text-base font-black text-foreground">
+							<div className="flex h-7 w-7 items-center justify-center border-[2px] border-foreground bg-primary text-[10px] font-black text-white">
+								D
 							</div>
-							deemix
+							DEEMIX
 						</SheetTitle>
-						<SheetDescription className="text-xs text-muted-foreground">
+						<SheetDescription className="text-xs text-muted-foreground uppercase tracking-wider font-bold">
 							Navigation
 						</SheetDescription>
 					</SheetHeader>

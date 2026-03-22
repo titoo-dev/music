@@ -114,8 +114,8 @@ export default function MyPlaylistsPage() {
 		<div className="space-y-6">
 			<div className="flex items-center justify-between">
 				<div>
-					<h1 className="text-2xl font-semibold tracking-tight">My Playlists</h1>
-					<p className="text-sm text-muted-foreground mt-1">
+					<h1 className="text-brutal-lg">My Playlists</h1>
+					<p className="text-sm text-muted-foreground mt-1 uppercase tracking-wider font-bold">
 						{playlists.length} playlist{playlists.length !== 1 ? "s" : ""}
 					</p>
 				</div>
@@ -155,13 +155,13 @@ export default function MyPlaylistsPage() {
 			{playlists.length === 0 ? (
 				<div className="flex flex-col items-center justify-center py-24 gap-2">
 					<Music className="size-8 text-muted-foreground/50" />
-					<p className="text-sm text-muted-foreground">No playlists yet</p>
-					<p className="text-xs text-muted-foreground">
+					<p className="text-sm text-muted-foreground font-bold uppercase">No playlists yet</p>
+					<p className="text-xs text-muted-foreground font-bold uppercase">
 						Create your first playlist to start organizing your music.
 					</p>
 				</div>
 			) : (
-				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
 					{playlists.map((pl) => (
 						<Card key={pl.id} className="group relative">
 							<Link href={`/my-playlists/${pl.id}`} className="no-underline">
@@ -172,7 +172,7 @@ export default function MyPlaylistsPage() {
 									</CardDescription>
 								</CardHeader>
 								<CardContent>
-									<p className="text-xs text-muted-foreground">
+									<p className="text-xs text-muted-foreground font-mono">
 										Updated {new Date(pl.updatedAt).toLocaleDateString()}
 									</p>
 								</CardContent>

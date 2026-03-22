@@ -103,25 +103,26 @@ export default function HomePage() {
 	if (loading) {
 		return (
 			<div className="flex items-center justify-center min-h-[50vh]">
-				<Loader2 className="size-5 animate-spin text-muted-foreground" />
+				<Loader2 className="size-5 animate-spin text-foreground" />
 			</div>
 		);
 	}
 
 	if (!isAuthenticated) {
 		return (
-			<div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
-				<div className="text-center space-y-2">
-					<h1 className="text-2xl font-semibold tracking-tight">
-						Get started with deemix
+			<div className="flex flex-col items-center justify-center min-h-[60vh] gap-8">
+				<div className="text-center space-y-4">
+					<h1 className="text-brutal-xl">
+						GET STARTED<br />
+						<span className="text-primary">WITH DEEMIX</span>
 					</h1>
-					<p className="text-sm text-muted-foreground max-w-md">
+					<p className="text-sm text-muted-foreground max-w-md font-medium">
 						Sign in to download music and manage your playlists.
 					</p>
 				</div>
 				<Card className="max-w-sm w-full">
 					<CardHeader>
-						<CardTitle>Welcome to deemix</CardTitle>
+						<CardTitle>Welcome to DEEMIX</CardTitle>
 						<CardDescription>
 							Sign in with Google to get started, or browse as a guest.
 						</CardDescription>
@@ -141,12 +142,13 @@ export default function HomePage() {
 
 	if (!isDeezerConnected) {
 		return (
-			<div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
-				<div className="text-center space-y-2">
-					<h1 className="text-2xl font-semibold tracking-tight">
-						Connect your Deezer account
+			<div className="flex flex-col items-center justify-center min-h-[60vh] gap-8">
+				<div className="text-center space-y-4">
+					<h1 className="text-brutal-xl">
+						CONNECT YOUR<br />
+						<span className="text-primary">DEEZER ACCOUNT</span>
 					</h1>
-					<p className="text-sm text-muted-foreground max-w-md">
+					<p className="text-sm text-muted-foreground max-w-md font-medium">
 						You need a Deezer ARL token to browse and download music.
 						Head to Settings to connect.
 					</p>
@@ -172,12 +174,12 @@ export default function HomePage() {
 	}
 
 	return (
-		<div className="space-y-8">
+		<div className="space-y-10">
 			<div>
-				<h1 className="text-2xl font-semibold tracking-tight">
+				<h1 className="text-brutal-lg">
 					Welcome back{user?.name ? `, ${user.name}` : ""}
 				</h1>
-				<p className="text-sm text-muted-foreground mt-1">
+				<p className="text-sm text-muted-foreground mt-2 font-medium uppercase tracking-wider">
 					Browse charts or search for something to download.
 				</p>
 			</div>
@@ -186,39 +188,39 @@ export default function HomePage() {
 			{playlists.length > 0 && (
 				<section className="space-y-4">
 					<div className="flex items-center justify-between">
-						<h2 className="text-lg font-medium">My Playlists</h2>
+						<h2 className="text-brutal-md">My Playlists</h2>
 						<Link
 							href="/my-playlists"
-							className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+							className="text-xs font-bold text-primary hover:underline flex items-center gap-1 uppercase tracking-wider"
 						>
 							View all
 							<ArrowRight className="size-3" />
 						</Link>
 					</div>
-					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
 						{playlists.slice(0, 10).map((pl) => (
 							<Link
 								key={pl.id}
 								href={`/my-playlists/${pl.id}`}
-								className="group rounded-xl overflow-hidden bg-muted/30 no-underline"
+								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all"
 							>
-								<div className="w-full aspect-square bg-muted/50 flex items-center justify-center">
+								<div className="w-full aspect-square bg-muted flex items-center justify-center">
 									{pl.coverUrl ? (
 										<CoverImage
 											src={pl.coverUrl}
 											alt={pl.title}
 											loading="lazy"
-											className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
+											className="w-full aspect-square border-0"
 										/>
 									) : (
 										<Music className="size-12 text-muted-foreground/30" />
 									)}
 								</div>
-								<div className="p-3">
-									<p className="text-sm font-medium truncate group-hover:underline">
+								<div className="p-3 border-t-[2px] border-foreground">
+									<p className="text-sm font-bold truncate">
 										{pl.title}
 									</p>
-									<p className="text-xs text-muted-foreground mt-0.5">
+									<p className="text-xs text-muted-foreground mt-0.5 font-mono">
 										{pl._count.tracks} track{pl._count.tracks !== 1 ? "s" : ""}
 									</p>
 								</div>
@@ -232,38 +234,38 @@ export default function HomePage() {
 			{albums.length > 0 && (
 				<section className="space-y-4">
 					<div className="flex items-center justify-between">
-						<h2 className="text-lg font-medium">My Albums</h2>
-						<span className="text-xs text-muted-foreground">
+						<h2 className="text-brutal-md">My Albums</h2>
+						<span className="text-xs font-bold text-muted-foreground uppercase tracking-wider font-mono">
 							{albums.length} album{albums.length !== 1 ? "s" : ""}
 						</span>
 					</div>
-					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
 						{albums.slice(0, 10).map((album) => (
 							<Link
 								key={album.id}
 								href={`/my-albums/${album.id}`}
-								className="group rounded-xl overflow-hidden bg-muted/30 no-underline"
+								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all"
 							>
-								<div className="w-full aspect-square bg-muted/50 flex items-center justify-center">
+								<div className="w-full aspect-square bg-muted flex items-center justify-center">
 									{album.coverUrl ? (
 										<CoverImage
 											src={album.coverUrl}
 											alt={album.title}
 											loading="lazy"
-											className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
+											className="w-full aspect-square border-0"
 										/>
 									) : (
 										<Disc3 className="size-12 text-muted-foreground/30" />
 									)}
 								</div>
-								<div className="p-3">
-									<p className="text-sm font-medium truncate group-hover:underline">
+								<div className="p-3 border-t-[2px] border-foreground">
+									<p className="text-sm font-bold truncate">
 										{album.title}
 									</p>
 									<p className="text-xs text-muted-foreground mt-0.5 truncate">
 										{album.artist}
 									</p>
-									<p className="text-xs text-muted-foreground mt-0.5">
+									<p className="text-xs text-muted-foreground mt-0.5 font-mono">
 										{album.trackCount} track{album.trackCount !== 1 ? "s" : ""}
 									</p>
 								</div>
@@ -275,18 +277,18 @@ export default function HomePage() {
 
 			{charts.length === 0 ? (
 				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<p className="text-sm font-medium text-muted-foreground">No charts available</p>
+					<p className="text-sm font-bold text-foreground uppercase tracking-wider">No charts available</p>
 					<p className="text-xs text-muted-foreground">Charts could not be loaded. Try again later.</p>
 				</div>
 			) : (
 				<section className="space-y-4">
 					<div className="flex items-center justify-between">
-						<h2 className="text-lg font-medium">Top Charts</h2>
-						<span className="text-xs text-muted-foreground">
+						<h2 className="text-brutal-md">Top Charts</h2>
+						<span className="text-xs font-bold text-muted-foreground uppercase tracking-wider font-mono">
 							{charts.length} playlists
 						</span>
 					</div>
-					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
 						{charts.slice(0, 20).map((item) => {
 							const chartTitle = item.title || item.TITLE || "Chart";
 							const chartPicture =
@@ -298,17 +300,17 @@ export default function HomePage() {
 							return (
 								<div
 									key={item.id}
-									className="group relative rounded-xl overflow-hidden bg-muted/30"
+									className="group relative border-2 sm:border-[3px] border-foreground bg-card overflow-hidden shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all"
 								>
 									<Link href={`/playlist?id=${item.id}`}>
 										<CoverImage
 											src={chartPicture}
 											alt={chartTitle}
 											loading="lazy"
-											className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
+											className="w-full aspect-square border-0"
 										/>
 									</Link>
-									<div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
+									<div className="absolute inset-0 bg-black/50 flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
 										<Button
 											size="sm"
 											onClick={() =>
@@ -321,15 +323,15 @@ export default function HomePage() {
 											{isLoading(deezerUrl(item.id, "playlist")) ? "Adding..." : "Download"}
 										</Button>
 									</div>
-									<div className="p-3">
+									<div className="p-3 border-t-[2px] border-foreground">
 										<Link
 											href={`/playlist?id=${item.id}`}
-											className="text-sm font-medium truncate block hover:underline"
+											className="text-sm font-bold truncate block hover:underline"
 										>
 											{chartTitle}
 										</Link>
 										{item.nb_tracks && (
-											<p className="text-xs text-muted-foreground mt-0.5">
+											<p className="text-xs text-muted-foreground mt-0.5 font-mono">
 												{item.nb_tracks} tracks
 											</p>
 										)}

@@ -76,19 +76,19 @@ export function QueueItem({ item }: Props) {
 
 	return (
 		<div
-			className={`group relative flex items-center gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-muted/40 ${
-				isDownloading ? "bg-primary/[0.02]" : ""
+			className={`group relative flex items-center gap-3 px-2.5 py-2 overflow-hidden transition-colors hover:bg-accent/20 border-b border-foreground/10 last:border-b-0 ${
+				isDownloading ? "bg-accent/10" : ""
 			}`}
 		>
 			{/* Cover */}
 			<div className="relative shrink-0">
 				<CoverImage
 					src={item.cover}
-					className="h-10 w-10 rounded-md shadow-sm"
+					className="h-10 w-10"
 				/>
 				{/* Status indicator dot */}
 				{item.status === "completed" && (
-					<div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
+					<div className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center bg-accent text-foreground border border-foreground">
 						<Check className="h-2.5 w-2.5" strokeWidth={3} />
 					</div>
 				)}
@@ -96,7 +96,7 @@ export function QueueItem({ item }: Props) {
 
 			{/* Info */}
 			<div className="min-w-0 flex-1">
-				<p className="truncate text-[13px] font-medium leading-tight text-foreground">
+				<p className="truncate text-[13px] font-bold leading-tight text-foreground">
 					{item.title}
 				</p>
 				<p className="truncate text-[11px] leading-tight text-muted-foreground mt-0.5">
@@ -113,11 +113,11 @@ export function QueueItem({ item }: Props) {
 									className="[&_[data-slot=progress-track]]:h-1 [&_[data-slot=progress-track]]:rounded-full [&_[data-slot=progress-track]]:bg-primary/10 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:bg-primary [&_[data-slot=progress-indicator]]:transition-all"
 								/>
 							</div>
-							<span className="shrink-0 text-[10px] font-medium tabular-nums text-primary">
+							<span className="shrink-0 text-[10px] font-bold font-mono tabular-nums text-primary">
 								{Math.round(progressPercent)}%
 							</span>
 						</div>
-						<p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground/70">
+						<p className="mt-0.5 text-[10px] font-mono tabular-nums text-muted-foreground/70">
 							{item.downloaded}/{item.size} tracks
 						</p>
 					</div>

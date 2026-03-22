@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
 	Home,
 	Search,
@@ -52,10 +51,10 @@ export function Navigation({ onNavigate }: NavigationProps) {
 			<Link key={item.path} href={item.path} className="no-underline" onClick={onNavigate}>
 				<Button
 					variant="ghost"
-					className={`w-full justify-start gap-3 px-3 py-2.5 text-sm font-medium ${
+					className={`w-full justify-start gap-3 px-4 py-3 text-sm font-bold uppercase tracking-wider border-transparent ${
 						isActive
-							? "bg-muted text-foreground"
-							: "text-muted-foreground hover:text-foreground"
+							? "bg-foreground text-background border-foreground"
+							: "text-muted-foreground hover:text-foreground hover:bg-muted"
 					}`}
 				>
 					<Icon className="h-4 w-4" />
@@ -67,11 +66,11 @@ export function Navigation({ onNavigate }: NavigationProps) {
 
 	return (
 		<nav className="flex h-full flex-col">
-			<div className="flex flex-col gap-0.5 px-3 py-2">
+			<div className="flex flex-col gap-0.5 px-3 py-3">
 				{navItems.map(renderItem)}
 				{isAuthenticated && (
 					<>
-						<Separator className="my-2" />
+						<div className="my-2 h-[2px] bg-foreground" />
 						{authItems.map(renderItem)}
 					</>
 				)}
@@ -79,8 +78,8 @@ export function Navigation({ onNavigate }: NavigationProps) {
 
 			<div className="flex-1" />
 
-			<div className="flex flex-col gap-0.5 px-3 pb-2">
-				<Separator className="mb-2" />
+			<div className="flex flex-col gap-0.5 px-3 pb-3">
+				<div className="mb-2 h-[2px] bg-foreground" />
 				{secondaryItems.map(renderItem)}
 			</div>
 		</nav>

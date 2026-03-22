@@ -25,11 +25,11 @@ export function CoverImage({
 		return (
 			<div
 				className={cn(
-					"flex items-center justify-center bg-muted text-muted-foreground",
+					"flex items-center justify-center border-[1.5px] sm:border-2 border-foreground bg-muted text-muted-foreground",
 					className
 				)}
 			>
-				<Music className={cn("h-1/2 w-1/2 opacity-40", iconClassName)} />
+				<Music className={cn("h-1/3 w-1/3 opacity-40", iconClassName)} />
 			</div>
 		);
 	}
@@ -39,7 +39,7 @@ export function CoverImage({
 			src={src}
 			alt={alt}
 			loading={loading}
-			className={cn("object-cover", className)}
+			className={cn("object-cover border-[1.5px] sm:border-2 border-foreground", className)}
 			onError={() => setError(true)}
 		/>
 	);

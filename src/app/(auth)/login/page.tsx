@@ -28,13 +28,11 @@ export default function LoginPage() {
 				callbackURL: "/",
 			});
 			const data = result as any;
-			// Check for error response
 			if (data?.error) {
 				setError(data.error.message || "Sign in failed. Please try again.");
 				setLoading(false);
 				return;
 			}
-			// better-auth returns the redirect URL — navigate to it
 			const url = data?.url || data?.data?.url;
 			if (url) {
 				window.location.href = url;
@@ -49,12 +47,12 @@ export default function LoginPage() {
 	};
 
 	return (
-		<Card className="w-full max-w-sm">
+		<Card className="w-full max-w-sm relative">
 			<CardHeader className="text-center">
-				<div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-foreground text-lg font-bold text-background">
-					d
+				<div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center border-2 sm:border-[3px] border-foreground bg-primary text-xl font-black text-white shadow-[var(--shadow-brutal)]">
+					D
 				</div>
-				<CardTitle className="text-xl">Welcome to deemix</CardTitle>
+				<CardTitle className="text-2xl">Welcome to DEEMIX</CardTitle>
 				<CardDescription>
 					Sign in to download music, manage playlists, and track your library.
 				</CardDescription>
@@ -91,15 +89,17 @@ export default function LoginPage() {
 				</Button>
 
 				{error && (
-					<p className="text-center text-sm text-red-500">{error}</p>
+					<div className="border-[2px] border-destructive bg-destructive/10 px-3 py-2">
+						<p className="text-center text-sm font-bold text-destructive">{error}</p>
+					</div>
 				)}
 
 				<div className="relative my-2">
 					<div className="absolute inset-0 flex items-center">
-						<span className="w-full border-t" />
+						<span className="w-full border-t-[2px] border-foreground" />
 					</div>
 					<div className="relative flex justify-center text-xs uppercase">
-						<span className="bg-background px-2 text-muted-foreground">or</span>
+						<span className="bg-card px-3 font-bold text-muted-foreground tracking-widest">or</span>
 					</div>
 				</div>
 

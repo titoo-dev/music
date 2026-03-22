@@ -98,7 +98,7 @@ function SettingRow({
 	return (
 		<div className="flex items-center justify-between gap-4">
 			<div className="space-y-0.5 flex-1">
-				<Label className="text-sm">{label}</Label>
+				<Label className="text-sm font-bold">{label}</Label>
 				{description && (
 					<p className="text-xs text-muted-foreground">{description}</p>
 				)}
@@ -220,10 +220,10 @@ export default function SettingsPage() {
 	return (
 		<div className="max-w-2xl mx-auto space-y-6">
 			<div>
-				<h1 className="text-2xl font-semibold tracking-tight">
+				<h1 className="text-brutal-lg">
 					Settings
 				</h1>
-				<p className="text-sm text-muted-foreground mt-1">
+				<p className="text-sm text-muted-foreground mt-1 uppercase tracking-wider font-bold">
 					Manage your account and download preferences.
 				</p>
 			</div>
@@ -242,7 +242,7 @@ export default function SettingsPage() {
 					{isDeezerConnected && deezerUser ? (
 						<div className="flex items-center justify-between">
 							<div className="flex items-center gap-3">
-								<Avatar size="lg">
+								<Avatar size="lg" className="border-[2px] border-foreground">
 									{deezerUser.picture ? (
 										<AvatarImage
 											src={`https://e-cdns-images.dzcdn.net/images/user/${deezerUser.picture}/56x56-000000-80-0-0.jpg`}
@@ -255,7 +255,7 @@ export default function SettingsPage() {
 									)}
 								</Avatar>
 								<div>
-									<p className="text-sm font-medium">{deezerUser.name}</p>
+									<p className="text-sm font-bold">{deezerUser.name}</p>
 									<Badge variant="secondary" className="mt-1">
 										{deezerUser.can_stream_lossless
 											? "HiFi"
@@ -1187,7 +1187,7 @@ export default function SettingsPage() {
 					Save Settings
 				</Button>
 				{loginStatus && !saving && (
-					<span className="text-sm text-muted-foreground flex items-center gap-1.5">
+					<span className="text-sm text-muted-foreground flex items-center gap-1.5 font-bold uppercase">
 						{loginStatus.includes("saved") && (
 							<Check className="size-3.5 text-green-600" />
 						)}

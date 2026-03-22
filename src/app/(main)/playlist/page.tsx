@@ -77,8 +77,8 @@ function PlaylistContent() {
 	if (!playlist)
 		return (
 			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
-				<p className="text-sm font-medium text-muted-foreground">Playlist not found</p>
-				<p className="text-xs text-muted-foreground">The playlist you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
+				<p className="text-sm font-bold uppercase text-muted-foreground">Playlist not found</p>
+				<p className="text-xs font-bold uppercase text-muted-foreground">The playlist you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
 			</div>
 		);
 
@@ -98,14 +98,14 @@ function PlaylistContent() {
 				<CoverImage
 					src={playlistCover}
 					alt={playlistTitle}
-					className="w-48 h-48 rounded-lg flex-shrink-0"
+					className="w-32 h-32 sm:w-48 sm:h-48 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] flex-shrink-0"
 				/>
 				<div className="flex flex-col justify-end gap-3">
-					<p className="text-xs font-medium text-muted-foreground">Playlist</p>
-					<h1 className="text-2xl font-semibold tracking-tight text-foreground">
+					<p className="text-xs font-black text-primary uppercase tracking-[0.15em]">Playlist</p>
+					<h1 className="text-brutal-lg">
 						{playlistTitle}
 					</h1>
-					<div className="flex items-center gap-2 text-sm text-muted-foreground">
+					<div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
 						{playlist.creator && <span>By {playlist.creator?.name}</span>}
 						{(playlist.nb_tracks || tracks.length > 0) && (
 							<>
@@ -125,16 +125,16 @@ function PlaylistContent() {
 
 			{/* Tracklist */}
 			<div>
-				<h2 className="text-xs font-medium text-muted-foreground mb-4">
+				<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em] mb-4">
 					Tracklist
 				</h2>
 				{tracks.length === 0 ? (
 					<div className="flex flex-col items-center justify-center py-16 gap-2">
-						<p className="text-sm font-medium text-muted-foreground">No tracks</p>
-						<p className="text-xs text-muted-foreground">The tracklist for this playlist is unavailable.</p>
+						<p className="text-sm font-bold uppercase text-muted-foreground">No tracks</p>
+						<p className="text-xs font-bold uppercase text-muted-foreground">The tracklist for this playlist is unavailable.</p>
 					</div>
 				) : (
-				<div className="rounded-lg border border-border overflow-hidden">
+				<div className="border-2 sm:border-[3px] border-foreground overflow-hidden">
 					{tracks.map((track: any, idx: number) => {
 						const trackId = track.id || track.SNG_ID;
 						const trackTitle = track.title || track.SNG_TITLE;
@@ -152,16 +152,16 @@ function PlaylistContent() {
 						return (
 							<div
 								key={trackId || idx}
-								className={`flex items-center gap-4 px-4 py-3 border-b border-border last:border-b-0 transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted"} group`}
+								className={`flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-2 sm:py-3 overflow-hidden border-b-[2px] border-foreground last:border-b-0 transition-colors ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"} group`}
 							>
 								<span className="w-6 text-right tabular-nums flex items-center justify-end">
 									{isActive || isPaused ? (
 										<PlaybackIndicator paused={isPaused} />
 									) : (
-										<span className="text-xs text-muted-foreground">{idx + 1}</span>
+										<span className="text-xs font-mono font-bold text-muted-foreground">{idx + 1}</span>
 									)}
 								</span>
-								<CoverImage src={trackCover} className="w-10 h-10 rounded flex-shrink-0" />
+								<CoverImage src={trackCover} className="size-9 sm:size-10 flex-shrink-0" />
 								<div className="flex-1 min-w-0">
 									<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : "text-foreground"}`}>
 										{trackTitle}
@@ -170,7 +170,7 @@ function PlaylistContent() {
 										{trackArtist}
 									</p>
 								</div>
-								<span className="text-xs text-muted-foreground tabular-nums">
+								<span className="hidden sm:inline text-xs font-mono text-muted-foreground tabular-nums">
 									{convertDuration(trackDuration)}
 								</span>
 								<PreviewButton
@@ -183,7 +183,7 @@ function PlaylistContent() {
 									}}
 								/>
 								{downloaded.has(String(trackId)) ? (
-									<span className="flex items-center justify-center size-7 text-emerald-500" title="Already downloaded">
+									<span className="hidden sm:flex items-center justify-center size-7 text-emerald-500" title="Already downloaded">
 										<CheckCircle2 className="size-3.5" />
 									</span>
 								) : (
@@ -192,7 +192,7 @@ function PlaylistContent() {
 										size="xs"
 										onClick={() => handleDownloadTrack(trackId)}
 										disabled={isLoading(trackUrl(trackId))}
-										className="gap-1.5"
+										className="hidden sm:inline-flex gap-1.5"
 									>
 										{isLoading(trackUrl(trackId)) && <Loader2 className="size-3 animate-spin" />}
 										{isLoading(trackUrl(trackId)) ? "Adding..." : "Download"}
@@ -206,7 +206,7 @@ function PlaylistContent() {
 										coverUrl: trackCover,
 										duration: trackDuration ? Number(trackDuration) : null,
 									}}
-									className="size-7"
+									className="hidden sm:flex size-7"
 								/>
 							</div>
 						);

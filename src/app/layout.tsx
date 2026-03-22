@@ -1,10 +1,20 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Geist } from "next/font/google";
+import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+const spaceGrotesk = Space_Grotesk({
+	subsets: ["latin"],
+	variable: "--font-sans",
+	weight: ["300", "400", "500", "600", "700"],
+});
+
+const jetbrainsMono = JetBrains_Mono({
+	subsets: ["latin"],
+	variable: "--font-mono",
+	weight: ["400", "500", "700"],
+});
 
 export const metadata: Metadata = {
 	title: "deemix",
@@ -17,7 +27,10 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en" className={cn("h-full antialiased", geist.variable)}>
+		<html
+			lang="en"
+			className={cn("h-full", spaceGrotesk.variable, jetbrainsMono.variable)}
+		>
 			<body className="min-h-full font-sans bg-background text-foreground">
 				<TooltipProvider>{children}</TooltipProvider>
 			</body>

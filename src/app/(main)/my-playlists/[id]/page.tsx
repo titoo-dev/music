@@ -131,7 +131,7 @@ export default function PlaylistDetailPage() {
 	if (!playlist) {
 		return (
 			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-				<p className="text-sm text-muted-foreground">Playlist not found.</p>
+				<p className="text-sm text-muted-foreground font-bold">Playlist not found.</p>
 				<Link href="/my-playlists">
 					<Button variant="outline">Back to playlists</Button>
 				</Link>
@@ -150,11 +150,11 @@ export default function PlaylistDetailPage() {
 					<ArrowLeft className="size-4" />
 				</Button>
 				<div className="flex-1">
-					<h1 className="text-2xl font-semibold tracking-tight">{playlist.title}</h1>
+					<h1 className="text-brutal-lg">{playlist.title}</h1>
 					{playlist.description && (
 						<p className="text-sm text-muted-foreground mt-1">{playlist.description}</p>
 					)}
-					<p className="text-xs text-muted-foreground mt-0.5">
+					<p className="text-xs text-muted-foreground mt-0.5 font-mono font-bold">
 						{playlist.tracks.length} track{playlist.tracks.length !== 1 ? "s" : ""}
 					</p>
 				</div>
@@ -168,8 +168,8 @@ export default function PlaylistDetailPage() {
 
 			{playlist.tracks.length === 0 ? (
 				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<p className="text-sm text-muted-foreground">This playlist is empty.</p>
-					<p className="text-xs text-muted-foreground">
+					<p className="text-sm text-muted-foreground font-bold uppercase">This playlist is empty.</p>
+					<p className="text-xs text-muted-foreground font-bold uppercase">
 						Add tracks from search results or album pages.
 					</p>
 				</div>
@@ -199,7 +199,7 @@ export default function PlaylistDetailPage() {
 						return (
 							<div
 								key={track.id}
-								className={`group flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted/50"}`}
+								className={`group flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 overflow-hidden transition-colors border-b-[2px] border-foreground last:border-b-0 ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}
 							>
 								{isTrackDownloaded ? (
 									<PlayButton
@@ -208,19 +208,19 @@ export default function PlaylistDetailPage() {
 										className=""
 									/>
 								) : (
-									<span className="w-7 text-right text-xs text-muted-foreground shrink-0">
+									<span className="w-5 sm:w-7 text-right text-xs text-muted-foreground shrink-0 font-mono font-bold">
 										{idx + 1}
 									</span>
 								)}
-								<div className="relative shrink-0 size-10 rounded overflow-hidden bg-muted">
+								<div className="relative shrink-0 size-9 sm:size-10 bg-muted">
 									{track.coverUrl ? (
 										<CoverImage
 											src={track.coverUrl}
 											alt={track.title}
-											className={`size-10 ${isActive ? "opacity-50" : ""}`}
+											className={`size-9 sm:size-10 ${isActive ? "opacity-50" : ""}`}
 										/>
 									) : (
-										<div className="size-10 flex items-center justify-center text-xs text-muted-foreground">
+										<div className="size-9 sm:size-10 flex items-center justify-center text-xs text-muted-foreground">
 											?
 										</div>
 									)}
@@ -231,25 +231,25 @@ export default function PlaylistDetailPage() {
 									)}
 								</div>
 								<div className="flex-1 min-w-0">
-									<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : ""}`}>{track.title}</p>
+									<p className={`text-sm font-bold truncate ${isActive || isPaused ? "text-primary" : ""}`}>{track.title}</p>
 									<p className="text-xs text-muted-foreground truncate">
 										{track.artist}
 										{track.album ? ` \u00B7 ${track.album}` : ""}
 									</p>
 								</div>
-								<span className="text-xs text-muted-foreground shrink-0">
+								<span className="hidden sm:inline text-xs text-muted-foreground shrink-0 font-mono">
 									{formatDuration(track.duration)}
 								</span>
-								<div className="flex gap-1 items-center">
+								<div className="flex gap-1 items-center shrink-0">
 									{isTrackDownloaded ? (
-										<span className="flex items-center justify-center size-8 text-emerald-500" title="Already downloaded">
+										<span className="flex items-center justify-center size-7 sm:size-8 text-emerald-500" title="Already downloaded">
 											<CheckCircle2 className="size-3.5" />
 										</span>
 									) : (
 										<Button
 											variant="ghost"
 											size="icon"
-											className="size-8"
+											className="size-7 sm:size-8"
 											onClick={() => handleDownloadTrack(track.trackId)}
 											disabled={isLoading(trackUrl)}
 										>
@@ -269,12 +269,12 @@ export default function PlaylistDetailPage() {
 											coverUrl: track.coverUrl,
 											duration: track.duration,
 										}}
-										className="size-8"
+										className="hidden sm:flex size-8"
 									/>
 									<Button
 										variant="ghost"
 										size="icon"
-										className="size-8 text-muted-foreground hover:text-red-500"
+										className="hidden sm:flex size-8 text-muted-foreground hover:text-red-500"
 										onClick={() => handleRemoveTrack(track.trackId)}
 									>
 										<Trash2 className="size-3.5" />

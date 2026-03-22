@@ -67,8 +67,8 @@ function AlbumContent() {
 	if (!album)
 		return (
 			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
-				<p className="text-sm font-medium text-muted-foreground">Album not found</p>
-				<p className="text-xs text-muted-foreground">The album you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
+				<p className="text-sm font-bold uppercase text-muted-foreground">Album not found</p>
+				<p className="text-xs font-bold uppercase text-muted-foreground">The album you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
 			</div>
 		);
 
@@ -87,16 +87,16 @@ function AlbumContent() {
 				<CoverImage
 					src={cover}
 					alt={title}
-					className="w-48 h-48 rounded-lg flex-shrink-0"
+					className="w-32 h-32 sm:w-48 sm:h-48 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] flex-shrink-0"
 				/>
 				<div className="flex flex-col justify-end gap-3">
 					<Badge variant="secondary" className="w-fit">
 						{recordType}
 					</Badge>
-					<h1 className="text-2xl font-semibold tracking-tight text-foreground">
+					<h1 className="text-brutal-lg">
 						{title}
 					</h1>
-					<div className="flex items-center gap-2 text-sm text-muted-foreground">
+					<div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
 						<span>{artistName}</span>
 						{nbTracks && (
 							<>
@@ -124,16 +124,16 @@ function AlbumContent() {
 
 			{/* Tracklist */}
 			<div>
-				<h2 className="text-xs font-medium text-muted-foreground mb-4">
+				<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em] mb-4">
 					Tracklist
 				</h2>
 				{tracks.length === 0 ? (
 					<div className="flex flex-col items-center justify-center py-16 gap-2">
-						<p className="text-sm font-medium text-muted-foreground">No tracks</p>
-						<p className="text-xs text-muted-foreground">The tracklist for this album is unavailable.</p>
+						<p className="text-sm font-bold uppercase text-muted-foreground">No tracks</p>
+						<p className="text-xs font-bold uppercase text-muted-foreground">The tracklist for this album is unavailable.</p>
 					</div>
 				) : (
-				<div className="rounded-lg border border-border overflow-hidden">
+				<div className="border-2 sm:border-[3px] border-foreground overflow-hidden">
 					{tracks.map((track: any, idx: number) => {
 						const trackTitle = track.SNG_TITLE || track.title || "";
 						const trackArtist = track.ART_NAME || track.artist?.name || "";
@@ -152,16 +152,16 @@ function AlbumContent() {
 						return (
 							<div
 								key={trackId || idx}
-								className={`flex items-center gap-4 px-4 py-3 border-b border-border last:border-b-0 transition-colors ${isActive || isPaused ? "bg-primary/5" : "hover:bg-muted"} group`}
+								className={`flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-2 sm:py-3 overflow-hidden border-b-[2px] border-foreground last:border-b-0 transition-colors ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"} group`}
 							>
 								<span className="w-6 text-right tabular-nums flex items-center justify-end">
 									{isActive || isPaused ? (
 										<PlaybackIndicator paused={isPaused} />
 									) : (
-										<span className="text-xs text-muted-foreground">{trackNum}</span>
+										<span className="text-xs text-muted-foreground font-mono font-bold">{trackNum}</span>
 									)}
 								</span>
-								<CoverImage src={trackCover} className="w-9 h-9 rounded" />
+								<CoverImage src={trackCover} className="size-8 sm:size-9" />
 								<div className="flex-1 min-w-0">
 									<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : "text-foreground"}`}>
 										{trackTitle}
@@ -171,7 +171,7 @@ function AlbumContent() {
 										{trackArtist}
 									</p>
 								</div>
-								<span className="text-xs text-muted-foreground tabular-nums">
+								<span className="hidden sm:inline text-xs text-muted-foreground tabular-nums font-mono">
 									{convertDuration(trackDuration)}
 								</span>
 								<PreviewButton
@@ -188,7 +188,7 @@ function AlbumContent() {
 									size="sm"
 									onClick={() => handleDownloadTrack(trackId)}
 									disabled={isLoading(trackUrl(trackId))}
-									className="text-xs gap-1.5"
+									className="hidden sm:inline-flex text-xs gap-1.5"
 								>
 									{isLoading(trackUrl(trackId)) ? (
 										<Loader2 className="size-3 animate-spin" />
@@ -204,7 +204,7 @@ function AlbumContent() {
 										coverUrl: trackCover,
 										duration: trackDuration ? Number(trackDuration) : null,
 									}}
-									className="size-8"
+									className="hidden sm:flex size-8"
 								/>
 							</div>
 						);
