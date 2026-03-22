@@ -12,13 +12,14 @@ import {
 	TabsContent,
 } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, CheckCircle2 } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { useLongPress } from "@/hooks/useLongPress";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
+import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePreviewStore } from "@/stores/usePreviewStore";
@@ -118,6 +119,7 @@ function SearchContent() {
 	})();
 
 	const { downloaded } = useDownloadedTracks(allTrackIds);
+	const { albumMap } = useDownloadedAlbums();
 
 	if (!term) {
 		return (
@@ -177,6 +179,7 @@ function SearchContent() {
 								isLoading={isLoading}
 								deezerUrl={deezerUrl}
 								downloaded={downloaded}
+								albumMap={albumMap}
 							/>
 						</TabsContent>
 						<TabsContent value="track">
@@ -195,6 +198,7 @@ function SearchContent() {
 								onDownload={handleDownload}
 								isLoading={isLoading}
 								deezerUrl={deezerUrl}
+								albumMap={albumMap}
 							/>
 							{hasMore && <LoadMoreButton loading={loadingMore} onClick={loadMore} />}
 						</TabsContent>
@@ -253,12 +257,14 @@ function AllResults({
 	isLoading,
 	deezerUrl,
 	downloaded,
+	albumMap,
 }: {
 	results: any;
 	onDownload: (id: string, type: string) => void;
 	isLoading: (url: string) => boolean;
 	deezerUrl: (id: string | number, type: string) => string;
 	downloaded: Set<string>;
+	albumMap: Map<string, string>;
 }) {
 	const tracks = results?.TRACK?.data?.slice(0, 15) || [];
 	const albums = results?.ALBUM?.data?.slice(0, 18) || [];
@@ -292,15 +298,19 @@ function AllResults({
 						Albums
 					</h2>
 					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
-						{albums.map((album: any) => (
-							<AlbumCard
-								key={album.ALB_ID || album.id}
-								album={album}
-								onDownload={onDownload}
-								isLoading={isLoading}
-								deezerUrl={deezerUrl}
-							/>
-						))}
+						{albums.map((album: any) => {
+							const deezerAlbumId = String(album.ALB_ID || album.id);
+							return (
+								<AlbumCard
+									key={deezerAlbumId}
+									album={album}
+									onDownload={onDownload}
+									isLoading={isLoading}
+									deezerUrl={deezerUrl}
+									myAlbumId={albumMap.get(deezerAlbumId)}
+								/>
+							);
+						})}
 					</div>
 				</section>
 			)}
@@ -461,11 +471,13 @@ function AlbumCard({
 	onDownload,
 	isLoading,
 	deezerUrl,
+	myAlbumId,
 }: {
 	album: any;
 	onDownload: (id: string, type: string) => void;
 	isLoading: (url: string) => boolean;
 	deezerUrl: (id: string | number, type: string) => string;
+	myAlbumId?: string;
 }) {
 	const id = album.ALB_ID || album.id;
 	const title = album.ALB_TITLE || album.title;
@@ -476,11 +488,12 @@ function AlbumCard({
 		album.cover_big ||
 		getCoverUrl(album.ALB_PICTURE, 250) ||
 		"/placeholder.jpg";
+	const albumHref = myAlbumId ? `/my-albums/${myAlbumId}` : `/album?id=${id}`;
 
 	return (
 		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
 			<div className="relative">
-				<Link href={`/album?id=${id}`}>
+				<Link href={albumHref}>
 					<CoverImage
 						src={cover}
 						alt={title}
@@ -488,21 +501,29 @@ function AlbumCard({
 						className="w-full aspect-square border-0"
 					/>
 				</Link>
-				<div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-					<Button
-						size="sm"
-						onClick={() => onDownload(id, "album")}
-						disabled={isLoading(deezerUrl(id, "album"))}
-						className="gap-1.5 pointer-events-auto"
-					>
-						{isLoading(deezerUrl(id, "album")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-						{isLoading(deezerUrl(id, "album")) ? "Adding..." : "Download"}
-					</Button>
-				</div>
+				{myAlbumId && (
+					<span className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-emerald-600 text-white text-[10px] font-bold uppercase px-1.5 py-0.5 border border-emerald-700">
+						<CheckCircle2 className="size-3" />
+						Downloaded
+					</span>
+				)}
+				{!myAlbumId && (
+					<div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+						<Button
+							size="sm"
+							onClick={() => onDownload(id, "album")}
+							disabled={isLoading(deezerUrl(id, "album"))}
+							className="gap-1.5 pointer-events-auto"
+						>
+							{isLoading(deezerUrl(id, "album")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+							{isLoading(deezerUrl(id, "album")) ? "Adding..." : "Download"}
+						</Button>
+					</div>
+				)}
 			</div>
 			<div className="mt-2 px-2 pb-2">
 				<Link
-					href={`/album?id=${id}`}
+					href={albumHref}
 					className="text-sm font-bold truncate block hover:underline"
 				>
 					{title}
@@ -584,25 +605,31 @@ function AlbumResults({
 	onDownload,
 	isLoading,
 	deezerUrl,
+	albumMap,
 }: {
 	data: any;
 	onDownload: (id: string, type: string) => void;
 	isLoading: (url: string) => boolean;
 	deezerUrl: (id: string | number, type: string) => string;
+	albumMap: Map<string, string>;
 }) {
 	const albums = data?.data || [];
 	if (albums.length === 0) return <EmptyTabState />;
 	return (
 		<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4 mt-4">
-			{albums.map((album: any) => (
-				<AlbumCard
-					key={album.ALB_ID || album.id}
-					album={album}
-					onDownload={onDownload}
-					isLoading={isLoading}
-					deezerUrl={deezerUrl}
-				/>
-			))}
+			{albums.map((album: any) => {
+				const deezerAlbumId = String(album.ALB_ID || album.id);
+				return (
+					<AlbumCard
+						key={deezerAlbumId}
+						album={album}
+						onDownload={onDownload}
+						isLoading={isLoading}
+						deezerUrl={deezerUrl}
+						myAlbumId={albumMap.get(deezerAlbumId)}
+					/>
+				);
+			})}
 		</div>
 	);
 }

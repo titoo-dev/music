@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { useDownload } from "@/hooks/useDownload";
 import { convertDuration } from "@/utils/helpers";
@@ -10,9 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2, Clock, Download } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
+import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
+import { useQueueStore } from "@/stores/useQueueStore";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePreviewStore } from "@/stores/usePreviewStore";
@@ -26,8 +28,66 @@ function getCoverUrl(picture: string, size = 500) {
 	return `https://e-cdns-images.dzcdn.net/images/cover/${picture}/${size}x${size}-000000-80-0-0.jpg`;
 }
 
+function AlbumDownloadButton({
+	queueItem,
+	allDownloaded,
+	apiLoading,
+	onDownload,
+}: {
+	queueItem: import("@/stores/useQueueStore").QueueItem | null;
+	allDownloaded: boolean;
+	apiLoading: boolean;
+	onDownload: () => void;
+}) {
+	const status = queueItem?.status;
+
+	if (status === "completed" || allDownloaded) {
+		return (
+			<Button disabled className="w-fit mt-1 gap-2 bg-emerald-600 hover:bg-emerald-600 text-white border-emerald-700">
+				<CheckCircle2 className="size-4" />
+				Downloaded
+			</Button>
+		);
+	}
+
+	if (status === "downloading") {
+		return (
+			<Button disabled className="w-fit mt-1 gap-2">
+				<Loader2 className="size-4 animate-spin" />
+				Downloading {queueItem.downloaded}/{queueItem.size}
+			</Button>
+		);
+	}
+
+	if (status === "inQueue") {
+		return (
+			<Button disabled className="w-fit mt-1 gap-2">
+				<Clock className="size-4" />
+				In queue...
+			</Button>
+		);
+	}
+
+	if (status === "failed") {
+		return (
+			<Button onClick={onDownload} variant="destructive" className="w-fit mt-1 gap-2">
+				<Download className="size-4" />
+				Retry download
+			</Button>
+		);
+	}
+
+	return (
+		<Button onClick={onDownload} disabled={apiLoading} className="w-fit mt-1 gap-2">
+			{apiLoading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+			{apiLoading ? "Adding..." : "Download album"}
+		</Button>
+	);
+}
+
 function AlbumContent() {
 	const searchParams = useSearchParams();
+	const router = useRouter();
 	const id = searchParams.get("id");
 	const [album, setAlbum] = useState<any>(null);
 	const [tracks, setTracks] = useState<any[]>([]);
@@ -35,6 +95,14 @@ function AlbumContent() {
 	const { download, isLoading } = useDownload();
 	const allTrackIds = tracks.map((t: any) => String(t.SNG_ID || t.id)).filter(Boolean);
 	const { downloaded } = useDownloadedTracks(allTrackIds);
+	const { albumMap } = useDownloadedAlbums();
+
+	// Redirect to my-albums if this album is already downloaded
+	useEffect(() => {
+		if (id && albumMap.has(String(id))) {
+			router.replace(`/my-albums/${albumMap.get(String(id))}`);
+		}
+	}, [id, albumMap, router]);
 
 	useEffect(() => {
 		if (!id) return;
@@ -59,6 +127,13 @@ function AlbumContent() {
 	const previewPlaying = usePreviewStore((s) => s.isPlaying);
 	const playerTrack = usePlayerStore((s) => s.currentTrack);
 	const playerPlaying = usePlayerStore((s) => s.isPlaying);
+
+	// Album download queue tracking
+	const albumQueueItem = useQueueStore((s) => {
+		const items = Object.values(s.queue);
+		return items.find((item) => String(item.id) === String(id)) || null;
+	});
+	const allTracksDownloaded = allTrackIds.length > 0 && allTrackIds.every((tid) => downloaded.has(tid));
 
 	const albumUrl = `https://www.deezer.com/album/${id}`;
 	const handleDownloadAll = () => download(albumUrl);
@@ -118,12 +193,12 @@ function AlbumContent() {
 							</>
 						)}
 					</div>
-					<Button onClick={handleDownloadAll} disabled={isLoading(albumUrl)} className="w-fit mt-1 gap-2">
-						{isLoading(albumUrl) ? (
-							<Loader2 className="size-4 animate-spin" />
-						) : null}
-						{isLoading(albumUrl) ? "Adding..." : "Download album"}
-					</Button>
+					<AlbumDownloadButton
+						queueItem={albumQueueItem}
+						allDownloaded={allTracksDownloaded}
+						apiLoading={isLoading(albumUrl)}
+						onDownload={handleDownloadAll}
+					/>
 				</div>
 			</div>
 

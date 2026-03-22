@@ -9,9 +9,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, CheckCircle2 } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
+import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { CoverImage } from "@/components/ui/cover-image";
 import { PreviewButton } from "@/components/audio/PreviewButton";
@@ -43,6 +44,7 @@ function ArtistContent() {
 	const { download, isLoading } = useDownload();
 	const allTrackIds = topTracks.map((t: any) => String(t.SNG_ID || t.id)).filter(Boolean);
 	const { downloaded } = useDownloadedTracks(allTrackIds);
+	const { albumMap } = useDownloadedAlbums();
 
 	useEffect(() => {
 		if (!id) return;
@@ -264,11 +266,13 @@ function ArtistContent() {
 											getCoverUrl(album.ALB_PICTURE || album.md5_image, 250) ||
 											"/placeholder.jpg";
 										const albumDeezerUrl = deezerUrl(albumId, "album");
+										const myAlbumId = albumMap.get(String(albumId));
+										const albumHref = myAlbumId ? `/my-albums/${myAlbumId}` : `/album?id=${albumId}`;
 
 										return (
 											<div key={albumId} className="group space-y-2">
 												<div className="relative overflow-hidden border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card">
-													<Link href={`/album?id=${albumId}`}>
+													<Link href={albumHref}>
 														<CoverImage
 															src={albumCover}
 															alt={albumTitle}
@@ -276,21 +280,29 @@ function ArtistContent() {
 															className="w-full aspect-square border-0"
 														/>
 													</Link>
-													<div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center pointer-events-none transition-opacity">
-														<Button
-															size="sm"
-															onClick={() => handleDownload(albumId, "album")}
-															disabled={isLoading(albumDeezerUrl)}
-															className="gap-1.5 pointer-events-auto"
-														>
-															{isLoading(albumDeezerUrl) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-															{isLoading(albumDeezerUrl) ? "Adding..." : "Download"}
-														</Button>
-													</div>
+													{myAlbumId && (
+														<span className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-emerald-600 text-white text-[10px] font-bold uppercase px-1.5 py-0.5 border border-emerald-700">
+															<CheckCircle2 className="size-3" />
+															Downloaded
+														</span>
+													)}
+													{!myAlbumId && (
+														<div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center pointer-events-none transition-opacity">
+															<Button
+																size="sm"
+																onClick={() => handleDownload(albumId, "album")}
+																disabled={isLoading(albumDeezerUrl)}
+																className="gap-1.5 pointer-events-auto"
+															>
+																{isLoading(albumDeezerUrl) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+																{isLoading(albumDeezerUrl) ? "Adding..." : "Download"}
+															</Button>
+														</div>
+													)}
 												</div>
 												<div>
 													<Link
-														href={`/album?id=${albumId}`}
+														href={albumHref}
 														className="text-sm font-medium truncate block text-foreground hover:underline"
 													>
 														{albumTitle}
