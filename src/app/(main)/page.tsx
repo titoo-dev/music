@@ -42,9 +42,46 @@ interface UserPlaylist {
 	id: string;
 	title: string;
 	description: string | null;
-	coverUrl: string | null;
 	updatedAt: string;
 	_count: { tracks: number };
+	covers?: string[];
+}
+
+function PlaylistCover({ covers, title }: { covers?: string[]; title: string }) {
+	const imgs = covers?.slice(0, 4) || [];
+
+	if (imgs.length === 0) {
+		return (
+			<div className="w-full aspect-square bg-muted flex items-center justify-center">
+				<Music className="size-12 text-muted-foreground/30" />
+			</div>
+		);
+	}
+
+	if (imgs.length < 4) {
+		return (
+			<CoverImage
+				src={imgs[0]}
+				alt={title}
+				loading="lazy"
+				className="w-full aspect-square border-0"
+			/>
+		);
+	}
+
+	return (
+		<div className="w-full aspect-square grid grid-cols-2 grid-rows-2 overflow-hidden">
+			{imgs.map((src, i) => (
+				<CoverImage
+					key={i}
+					src={src}
+					alt=""
+					loading="lazy"
+					className="w-full h-full border-0"
+				/>
+			))}
+		</div>
+	);
 }
 
 interface UserAlbum {
@@ -204,18 +241,7 @@ export default function HomePage() {
 								href={`/my-playlists/${pl.id}`}
 								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all"
 							>
-								<div className="w-full aspect-square bg-muted flex items-center justify-center">
-									{pl.coverUrl ? (
-										<CoverImage
-											src={pl.coverUrl}
-											alt={pl.title}
-											loading="lazy"
-											className="w-full aspect-square border-0"
-										/>
-									) : (
-										<Music className="size-12 text-muted-foreground/30" />
-									)}
-								</div>
+								<PlaylistCover covers={pl.covers} title={pl.title} />
 								<div className="p-3 border-t-[2px] border-foreground">
 									<p className="text-sm font-bold truncate">
 										{pl.title}

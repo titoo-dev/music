@@ -110,8 +110,9 @@ export function TrackDownloadStatus({
 	if (dlStatus === "failed") {
 		return (
 			<Button
-				size="icon-sm"
+				size="icon-xs"
 				variant="ghost"
+				className="size-7"
 				onClick={onDownload}
 				title="Retry download"
 			>
@@ -152,7 +153,7 @@ export function TrackDownloadStatus({
 
 	// Default — download button
 	return (
-		<Button size="icon-sm" variant="ghost" onClick={onDownload}>
+		<Button size="icon-xs" variant="ghost" className="size-7" onClick={onDownload}>
 			<Download className="size-3.5" />
 		</Button>
 	);

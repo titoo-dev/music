@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 import { postToServer } from "@/utils/api";
 import { useQueueStore } from "@/stores/useQueueStore";
-import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 
 /**
@@ -41,8 +40,6 @@ export function useDownload() {
 						: [res];
 					items.forEach((item: any) => addToQueue(item));
 				}
-				// Open the download sheet for visual feedback
-				useAppStore.getState().setDownloadsOpen(true);
 			} catch (e: any) {
 				// Handle specific auth errors
 				if (e.code === "NOT_AUTHENTICATED") {

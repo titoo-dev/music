@@ -11,10 +11,26 @@ export async function GET(request: NextRequest) {
 		const playlists = await prisma.playlist.findMany({
 			where: { userId },
 			orderBy: { updatedAt: "desc" },
-			include: { _count: { select: { tracks: true } } },
+			include: {
+				_count: { select: { tracks: true } },
+				tracks: {
+					take: 4,
+					orderBy: { position: "asc" },
+					select: { coverUrl: true },
+				},
+			},
 		});
 
-		return ok(playlists);
+		// Flatten covers for the frontend
+		const result = playlists.map((pl) => ({
+			...pl,
+			covers: pl.tracks
+				.map((t) => t.coverUrl)
+				.filter(Boolean) as string[],
+			tracks: undefined,
+		}));
+
+		return ok(result);
 	} catch (e) {
 		return handleError(e);
 	}

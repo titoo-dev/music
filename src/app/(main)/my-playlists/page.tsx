@@ -6,13 +6,6 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import {
 	Dialog,
 	DialogTrigger,
 	DialogContent,
@@ -25,6 +18,7 @@ import {
 import { Loader2, Plus, Music, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { CoverImage } from "@/components/ui/cover-image";
 
 interface PlaylistItem {
 	id: string;
@@ -33,6 +27,42 @@ interface PlaylistItem {
 	createdAt: string;
 	updatedAt: string;
 	_count: { tracks: number };
+	covers?: string[];
+}
+
+function PlaylistCover({ covers, title }: { covers?: string[]; title: string }) {
+	const imgs = covers?.slice(0, 4) || [];
+
+	if (imgs.length === 0) {
+		return (
+			<div className="aspect-square bg-muted flex items-center justify-center border-b-[2px] border-foreground">
+				<Music className="size-8 text-muted-foreground/40" />
+			</div>
+		);
+	}
+
+	if (imgs.length < 4) {
+		return (
+			<CoverImage
+				src={imgs[0]}
+				alt={title}
+				className="aspect-square w-full border-0 border-b-[2px] border-foreground"
+			/>
+		);
+	}
+
+	return (
+		<div className="aspect-square grid grid-cols-2 grid-rows-2 border-b-[2px] border-foreground overflow-hidden">
+			{imgs.map((src, i) => (
+				<CoverImage
+					key={i}
+					src={src}
+					alt=""
+					className="w-full h-full border-0"
+				/>
+			))}
+		</div>
+	);
 }
 
 export default function MyPlaylistsPage() {
@@ -161,34 +191,35 @@ export default function MyPlaylistsPage() {
 					</p>
 				</div>
 			) : (
-				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
+				<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
 					{playlists.map((pl) => (
-						<Card key={pl.id} className="group relative">
+						<div
+							key={pl.id}
+							className="group relative border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden"
+						>
 							<Link href={`/my-playlists/${pl.id}`} className="no-underline">
-								<CardHeader className="pb-2">
-									<CardTitle className="text-base truncate">{pl.title}</CardTitle>
-									<CardDescription>
+								<PlaylistCover covers={pl.covers} title={pl.title} />
+								<div className="px-2 py-2">
+									<p className="text-sm font-bold truncate">{pl.title}</p>
+									<p className="text-[11px] text-muted-foreground font-mono truncate">
 										{pl._count.tracks} track{pl._count.tracks !== 1 ? "s" : ""}
-									</CardDescription>
-								</CardHeader>
-								<CardContent>
-									<p className="text-xs text-muted-foreground font-mono">
-										Updated {new Date(pl.updatedAt).toLocaleDateString()}
 									</p>
-								</CardContent>
+								</div>
 							</Link>
-							{pl.title !== "Downloads" && <Button
-								variant="ghost"
-								size="icon"
-								className="absolute top-2 right-2 text-muted-foreground hover:text-red-500"
-								onClick={(e) => {
-									e.preventDefault();
-									setDeleteTarget(pl);
-								}}
-							>
-								<Trash2 className="size-4" />
-							</Button>}
-						</Card>
+							{pl.title !== "Downloads" && (
+								<Button
+									variant="ghost"
+									size="icon-xs"
+									className="absolute top-1.5 right-1.5 bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+									onClick={(e) => {
+										e.preventDefault();
+										setDeleteTarget(pl);
+									}}
+								>
+									<Trash2 className="size-3" />
+								</Button>
+							)}
+						</div>
 					))}
 				</div>
 			)}
