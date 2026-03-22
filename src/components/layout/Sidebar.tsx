@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAppStore } from "@/stores/useAppStore";
-import { useLoginStore } from "@/stores/useLoginStore";
+import { useAuthStore } from "@/stores/useAuthStore";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -13,6 +12,8 @@ import {
 	Link2,
 	Settings,
 	Info,
+	Music,
+	History,
 } from "lucide-react";
 
 const navItems = [
@@ -20,6 +21,11 @@ const navItems = [
 	{ path: "/search", label: "Search", icon: Search },
 	{ path: "/charts", label: "Charts", icon: BarChart3 },
 	{ path: "/link-analyzer", label: "Analyzer", icon: Link2 },
+];
+
+const authItems = [
+	{ path: "/my-playlists", label: "Playlists", icon: Music },
+	{ path: "/download-history", label: "History", icon: History },
 ];
 
 const secondaryItems = [
@@ -38,51 +44,62 @@ interface NavigationProps {
  */
 export function Navigation({ isMobile = false, onNavigate }: NavigationProps) {
 	const pathname = usePathname();
+	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+	const renderItem = (item: { path: string; label: string; icon: any }, mobile: boolean) => {
+		const isActive = pathname === item.path;
+		const Icon = item.icon;
+
+		if (mobile) {
+			return (
+				<Link key={item.path} href={item.path} className="no-underline" onClick={onNavigate}>
+					<Button
+						variant="ghost"
+						className={`w-full justify-start gap-3 rounded-none px-6 py-6 text-sm font-medium ${
+							isActive
+								? "bg-muted text-foreground"
+								: "text-muted-foreground hover:text-foreground"
+						}`}
+					>
+						<Icon className="h-4 w-4" />
+						<span>{item.label}</span>
+					</Button>
+				</Link>
+			);
+		}
+
+		return (
+			<Link key={item.path} href={item.path} className="no-underline">
+				<Button
+					variant="ghost"
+					size="sm"
+					className={`gap-1.5 text-sm font-medium ${
+						isActive
+							? "bg-muted text-foreground"
+							: "text-muted-foreground hover:text-foreground"
+					}`}
+				>
+					<Icon className="h-3.5 w-3.5" />
+					<span>{item.label}</span>
+				</Button>
+			</Link>
+		);
+	};
 
 	if (isMobile) {
 		return (
 			<nav className="flex flex-col py-2">
-				{navItems.map((item) => {
-					const isActive = pathname === item.path;
-					const Icon = item.icon;
-					return (
-						<Link key={item.path} href={item.path} className="no-underline" onClick={onNavigate}>
-							<Button
-								variant="ghost"
-								className={`w-full justify-start gap-3 rounded-none px-6 py-6 text-sm font-medium ${
-									isActive
-										? "bg-muted text-foreground"
-										: "text-muted-foreground hover:text-foreground"
-								}`}
-							>
-								<Icon className="h-4 w-4" />
-								<span>{item.label}</span>
-							</Button>
-						</Link>
-					);
-				})}
+				{navItems.map((item) => renderItem(item, true))}
+
+				{isAuthenticated && (
+					<>
+						<Separator className="my-2" />
+						{authItems.map((item) => renderItem(item, true))}
+					</>
+				)}
 
 				<Separator className="my-2" />
-
-				{secondaryItems.map((item) => {
-					const isActive = pathname === item.path;
-					const Icon = item.icon;
-					return (
-						<Link key={item.path} href={item.path} className="no-underline" onClick={onNavigate}>
-							<Button
-								variant="ghost"
-								className={`w-full justify-start gap-3 rounded-none px-6 py-6 text-sm font-medium ${
-									isActive
-										? "bg-muted text-foreground"
-										: "text-muted-foreground hover:text-foreground"
-								}`}
-							>
-								<Icon className="h-4 w-4" />
-								<span>{item.label}</span>
-							</Button>
-						</Link>
-					);
-				})}
+				{secondaryItems.map((item) => renderItem(item, true))}
 			</nav>
 		);
 	}
@@ -90,26 +107,8 @@ export function Navigation({ isMobile = false, onNavigate }: NavigationProps) {
 	// Desktop: horizontal nav links
 	return (
 		<nav className="flex items-center gap-1">
-			{navItems.map((item) => {
-				const isActive = pathname === item.path;
-				const Icon = item.icon;
-				return (
-					<Link key={item.path} href={item.path} className="no-underline">
-						<Button
-							variant="ghost"
-							size="sm"
-							className={`gap-1.5 text-sm font-medium ${
-								isActive
-									? "bg-muted text-foreground"
-									: "text-muted-foreground hover:text-foreground"
-							}`}
-						>
-							<Icon className="h-3.5 w-3.5" />
-							<span>{item.label}</span>
-						</Button>
-					</Link>
-				);
-			})}
+			{navItems.map((item) => renderItem(item, false))}
+			{isAuthenticated && authItems.map((item) => renderItem(item, false))}
 		</nav>
 	);
 }

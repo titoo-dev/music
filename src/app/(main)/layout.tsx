@@ -10,7 +10,8 @@ import { useSocket } from "@/hooks/useSocket";
 import { useInitApp } from "@/hooks/useInitApp";
 import { useQueuePolling } from "@/hooks/useQueuePolling";
 import { useAppStore } from "@/stores/useAppStore";
-import { useLoginStore } from "@/stores/useLoginStore";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { authClient } from "@/lib/auth-client";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
 	Sheet,
@@ -27,7 +28,7 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Menu, Settings, Info, LogOut } from "lucide-react";
+import { Menu, Settings, Info, LogOut, Music, History } from "lucide-react";
 import { AudioPreview } from "@/components/audio/AudioPreview";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
 
@@ -39,9 +40,30 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 	const sidebarOpen = useAppStore((s) => s.sidebarOpen);
 	const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
 	const downloadsOpen = useAppStore((s) => s.downloadsOpen);
-	const user = useLoginStore((s) => s.user);
-	const loggedIn = useLoginStore((s) => s.loggedIn);
-	const logout = useLoginStore((s) => s.logout);
+
+	const user = useAuthStore((s) => s.user);
+	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const deezerUser = useAuthStore((s) => s.deezerUser);
+	const logout = useAuthStore((s) => s.logout);
+
+	const handleLogout = async () => {
+		// Sign out from better-auth (clears session cookie)
+		await authClient.signOut();
+		// Clear Deezer session server-side
+		try {
+			await fetch("/api/v1/auth/logout", { method: "POST" });
+		} catch {
+			// Ignore errors
+		}
+		// Clear client state
+		logout();
+	};
+
+	// Determine avatar display: prefer Deezer picture, fallback to Google image
+	const avatarUrl = deezerUser?.picture
+		? `https://e-cdns-images.dzcdn.net/images/user/${deezerUser.picture}/56x56-000000-80-0-0.jpg`
+		: user?.image || null;
+	const displayName = user?.name || deezerUser?.name || "User";
 
 	return (
 		<div className="flex min-h-screen flex-col bg-white">
@@ -90,7 +112,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 					<DownloadTrigger />
 
 					{/* User avatar / menu */}
-					{loggedIn && user ? (
+					{isAuthenticated && user ? (
 						<DropdownMenu>
 							<DropdownMenuTrigger
 								render={
@@ -98,20 +120,30 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 								}
 							>
 								<Avatar className="h-7 w-7">
-									{user.picture ? (
-										<AvatarImage
-											src={`https://e-cdns-images.dzcdn.net/images/user/${user.picture}/56x56-000000-80-0-0.jpg`}
-										/>
+									{avatarUrl ? (
+										<AvatarImage src={avatarUrl} />
 									) : null}
 									<AvatarFallback className="bg-muted text-xs font-medium text-muted-foreground">
-										{(user.name || "U").charAt(0).toUpperCase()}
+										{displayName.charAt(0).toUpperCase()}
 									</AvatarFallback>
 								</Avatar>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent className="w-48">
 								<DropdownMenuItem className="gap-2 text-sm">
-									<span className="truncate font-medium">{user.name || "User"}</span>
+									<span className="truncate font-medium">{displayName}</span>
 								</DropdownMenuItem>
+								<Link href="/my-playlists" className="no-underline">
+									<DropdownMenuItem className="gap-2 text-sm">
+										<Music className="h-3.5 w-3.5" />
+										My Playlists
+									</DropdownMenuItem>
+								</Link>
+								<Link href="/download-history" className="no-underline">
+									<DropdownMenuItem className="gap-2 text-sm">
+										<History className="h-3.5 w-3.5" />
+										Download History
+									</DropdownMenuItem>
+								</Link>
 								<Link href="/settings" className="no-underline">
 									<DropdownMenuItem className="gap-2 text-sm">
 										<Settings className="h-3.5 w-3.5" />
@@ -126,7 +158,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 								</Link>
 								<DropdownMenuItem
 									className="gap-2 text-sm text-red-500"
-									onClick={() => logout()}
+									onClick={() => handleLogout()}
 								>
 									<LogOut className="h-3.5 w-3.5" />
 									Log out
@@ -134,9 +166,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 							</DropdownMenuContent>
 						</DropdownMenu>
 					) : (
-						<Link href="/settings" className="no-underline">
+						<Link href="/login" className="no-underline">
 							<Button variant="ghost" size="sm" className="text-sm text-muted-foreground">
-								Log in
+								Sign in
 							</Button>
 						</Link>
 					)}

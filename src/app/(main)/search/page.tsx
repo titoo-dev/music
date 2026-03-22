@@ -14,9 +14,10 @@ import {
 	TabsContent,
 } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, CheckCircle2 } from "lucide-react";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
+import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -91,8 +92,29 @@ function SearchContent() {
 
 	const { download, isLoading } = useDownload();
 	const deezerUrl = (id: string | number, type: string) => `https://www.deezer.com/${type}/${id}`;
-	const handleDownload = (id: string | number, type: string) => download(deezerUrl(id, type));
+	const handleDownload = (id: string | number, type: string) => {
+		download(deezerUrl(id, type));
+		// Optimistically mark as downloaded for tracks
+		if (type === "track") markDownloaded(String(id));
+	};
 	const hasMore = tab !== "all" && results?.data && results?.total && results.data.length < results.total;
+
+	// Collect all track IDs from results for batch download check
+	const allTrackIds = (() => {
+		if (!results) return [];
+		const ids: string[] = [];
+		// "all" tab
+		if (results?.TRACK?.data) {
+			results.TRACK.data.forEach((t: any) => ids.push(String(t.SNG_ID || t.id)));
+		}
+		// typed tab
+		if (tab === "track" && results?.data) {
+			results.data.forEach((t: any) => ids.push(String(t.SNG_ID || t.id)));
+		}
+		return ids;
+	})();
+
+	const { downloaded, markDownloaded } = useDownloadedTracks(allTrackIds);
 
 	if (!term) {
 		return (
@@ -137,6 +159,7 @@ function SearchContent() {
 								onDownload={handleDownload}
 								isLoading={isLoading}
 								deezerUrl={deezerUrl}
+								downloaded={downloaded}
 							/>
 						</TabsContent>
 						<TabsContent value="track">
@@ -145,6 +168,7 @@ function SearchContent() {
 								onDownload={handleDownload}
 								isLoading={isLoading}
 								deezerUrl={deezerUrl}
+								downloaded={downloaded}
 							/>
 							{hasMore && <LoadMoreButton loading={loadingMore} onClick={loadMore} />}
 						</TabsContent>
@@ -211,11 +235,13 @@ function AllResults({
 	onDownload,
 	isLoading,
 	deezerUrl,
+	downloaded,
 }: {
 	results: any;
 	onDownload: (id: string, type: string) => void;
 	isLoading: (url: string) => boolean;
 	deezerUrl: (id: string | number, type: string) => string;
+	downloaded: Set<string>;
 }) {
 	const tracks = results?.TRACK?.data?.slice(0, 15) || [];
 	const albums = results?.ALBUM?.data?.slice(0, 18) || [];
@@ -236,7 +262,7 @@ function AllResults({
 					<div className="rounded-lg border border-border overflow-hidden">
 						{tracks.map((track: any, idx: number) => (
 							<div key={track.SNG_ID || track.id}>
-								<TrackRow track={track} onDownload={onDownload} isLoading={isLoading} deezerUrl={deezerUrl} />
+								<TrackRow track={track} onDownload={onDownload} isLoading={isLoading} deezerUrl={deezerUrl} downloaded={downloaded} />
 								{idx < tracks.length - 1 && <Separator />}
 							</div>
 						))}
@@ -303,11 +329,13 @@ function TrackRow({
 	onDownload,
 	isLoading,
 	deezerUrl,
+	downloaded,
 }: {
 	track: any;
 	onDownload: (id: string, type: string) => void;
 	isLoading: (url: string) => boolean;
 	deezerUrl: (id: string | number, type: string) => string;
+	downloaded?: Set<string>;
 }) {
 	const id = track.SNG_ID || track.id;
 	const title = track.SNG_TITLE || track.title;
@@ -356,15 +384,21 @@ function TrackRow({
 					previewUrl,
 				}}
 			/>
-			<Button
-				size="icon-sm"
-				variant="ghost"
-				onClick={() => onDownload(id, "track")}
-				disabled={isLoading(deezerUrl(id, "track"))}
-				className="opacity-0 group-hover:opacity-100 transition-opacity"
-			>
-				{isLoading(deezerUrl(id, "track")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-			</Button>
+			{downloaded?.has(String(id)) ? (
+				<span className="flex items-center justify-center size-7 text-emerald-500" title="Already downloaded">
+					<CheckCircle2 className="size-3.5" />
+				</span>
+			) : (
+				<Button
+					size="icon-sm"
+					variant="ghost"
+					onClick={() => onDownload(id, "track")}
+					disabled={isLoading(deezerUrl(id, "track"))}
+					className="opacity-0 group-hover:opacity-100 transition-opacity"
+				>
+					{isLoading(deezerUrl(id, "track")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+				</Button>
+			)}
 		</div>
 	);
 }
@@ -470,11 +504,13 @@ function TrackResults({
 	onDownload,
 	isLoading,
 	deezerUrl,
+	downloaded,
 }: {
 	data: any;
 	onDownload: (id: string, type: string) => void;
 	isLoading: (url: string) => boolean;
 	deezerUrl: (id: string | number, type: string) => string;
+	downloaded?: Set<string>;
 }) {
 	const tracks = data?.data || [];
 	if (tracks.length === 0) return <EmptyTabState />;

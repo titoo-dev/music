@@ -1,16 +1,17 @@
-import { ok, fail, handleError, requireAuth } from "../../_lib/helpers";
+import { NextRequest } from "next/server";
+import { ok, fail, handleError, requireDeezer } from "../../_lib/helpers";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
 	try {
-		const auth = requireAuth();
-		if (auth.error) return auth.error;
+		const { dz, error } = await requireDeezer(request);
+		if (error) return error;
 
-		const userId = auth.dz.currentUser?.id;
+		const userId = dz.currentUser?.id;
 		if (!userId) {
 			return fail("NO_USER_ID", "User ID not available.", 400);
 		}
 
-		const playlists = await auth.dz.gw.get_user_playlists(userId, { limit: 2000 });
+		const playlists = await dz.gw.get_user_playlists(userId, { limit: 2000 });
 		return ok(playlists);
 	} catch (e) {
 		return handleError(e);

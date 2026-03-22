@@ -1,13 +1,21 @@
-import { NextResponse } from "next/server";
-import { getSessionDZ } from "@/lib/server-state";
+import { NextRequest } from "next/server";
+import { removeUserDz } from "@/lib/server-state";
+import { auth } from "@/lib/auth";
+import { ok, handleError } from "../v1/_lib/helpers";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
 	try {
-		const sessionDZ = getSessionDZ();
-		delete sessionDZ["default"];
+		// Clear Deezer session for the authenticated user
+		const session = await auth.api.getSession({
+			headers: request.headers,
+		});
 
-		return NextResponse.json({ status: "ok" });
-	} catch (e: any) {
-		return NextResponse.json({ error: e.message }, { status: 500 });
+		if (session?.user?.id) {
+			removeUserDz(session.user.id);
+		}
+
+		return ok({ message: "Deezer session cleared." });
+	} catch (e) {
+		return handleError(e);
 	}
 }

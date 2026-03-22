@@ -1,27 +1,23 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getDeemixApp, getSessionDZ } from "@/lib/server-state";
+import { NextRequest } from "next/server";
+import { ok, fail, handleError, requireDeezerAndApp } from "../v1/_lib/helpers";
 
 export async function POST(request: NextRequest) {
 	try {
+		const { dz, app, error } = await requireDeezerAndApp(request);
+		if (error) return error;
+
 		const { url, bitrate } = await request.json();
 
-		const sessionDZ = getSessionDZ();
-		const dz = sessionDZ["default"];
-		if (!dz?.loggedIn) {
-			return NextResponse.json({ error: "notLoggedIn" }, { status: 403 });
+		if (!url) {
+			return fail("MISSING_URL", "A URL or array of URLs is required.", 400);
 		}
 
-		const deemixApp = await getDeemixApp();
-		if (!deemixApp) {
-			return NextResponse.json({ error: "App not initialized" }, { status: 500 });
-		}
-
-		const effectiveBitrate = bitrate ?? deemixApp.settings.maxBitrate;
+		const effectiveBitrate = bitrate ?? app.settings.maxBitrate;
 		const urls = Array.isArray(url) ? url : [url];
 
-		const result = await deemixApp.addToQueue(dz, urls, effectiveBitrate);
-		return NextResponse.json({ result });
-	} catch (e: any) {
-		return NextResponse.json({ error: e.message }, { status: 500 });
+		const result = await app.addToQueue(dz, urls, effectiveBitrate);
+		return ok(result);
+	} catch (e) {
+		return handleError(e);
 	}
 }

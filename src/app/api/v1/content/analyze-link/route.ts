@@ -1,9 +1,12 @@
 import { NextRequest } from "next/server";
-import { ok, fail, handleError, requireAuthAndApp } from "../../_lib/helpers";
+import { ok, fail, handleError, getGuestOrUserDz, requireApp } from "../../_lib/helpers";
 
 export async function GET(request: NextRequest) {
 	try {
-		const { dz, app, error } = await requireAuthAndApp();
+		const { dz } = await getGuestOrUserDz(request);
+		if (!dz) return fail("NO_DEEZER", "Deezer is not available. Sign in or configure a service ARL.", 503);
+
+		const { app, error } = await requireApp();
 		if (error) return error;
 
 		const term = request.nextUrl.searchParams.get("term") || "";

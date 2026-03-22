@@ -1,5 +1,5 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { getSessionDZ } from "@/lib/server-state";
+import { NextRequest } from "next/server";
+import { ok, fail, handleError, getGuestOrUserDz } from "../v1/_lib/helpers";
 
 export async function GET(request: NextRequest) {
 	try {
@@ -8,17 +8,11 @@ export async function GET(request: NextRequest) {
 		const type = searchParams.get("type") || "";
 
 		if (!id || !type) {
-			return NextResponse.json(
-				{ error: "Missing id or type parameter" },
-				{ status: 400 }
-			);
+			return fail("MISSING_PARAMS", "Missing id or type parameter.", 400);
 		}
 
-		const sessionDZ = getSessionDZ();
-		const dz = sessionDZ["default"];
-		if (!dz?.loggedIn) {
-			return NextResponse.json({ error: "notLoggedIn" }, { status: 403 });
-		}
+		const { dz } = await getGuestOrUserDz(request);
+		if (!dz) return fail("NO_DEEZER", "Deezer is not available. Sign in or configure a service ARL.", 503);
 
 		let data: any;
 
@@ -45,14 +39,11 @@ export async function GET(request: NextRequest) {
 				break;
 			}
 			default:
-				return NextResponse.json(
-					{ error: `Unknown type: ${type}` },
-					{ status: 400 }
-				);
+				return fail("UNKNOWN_TYPE", `Unknown type: ${type}`, 400);
 		}
 
-		return NextResponse.json(data);
-	} catch (e: any) {
-		return NextResponse.json({ error: e.message }, { status: 500 });
+		return ok(data);
+	} catch (e) {
+		return handleError(e);
 	}
 }

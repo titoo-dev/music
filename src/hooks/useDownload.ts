@@ -4,10 +4,11 @@ import { useCallback, useState } from "react";
 import { postToServer } from "@/utils/api";
 import { useQueueStore } from "@/stores/useQueueStore";
 import { useAppStore } from "@/stores/useAppStore";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 /**
  * Hook for triggering downloads with loading state and direct store updates.
- * Does NOT depend on WebSocket for UI feedback — uses the API response directly.
+ * Gates downloads behind authentication + Deezer connection.
  */
 export function useDownload() {
 	const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());
@@ -15,6 +16,18 @@ export function useDownload() {
 
 	const download = useCallback(
 		async (url: string, bitrate?: number | null) => {
+			const { isAuthenticated, isDeezerConnected } = useAuthStore.getState();
+
+			if (!isAuthenticated) {
+				window.location.href = "/login";
+				return;
+			}
+
+			if (!isDeezerConnected) {
+				window.location.href = "/settings";
+				return;
+			}
+
 			setLoadingUrls((prev) => new Set(prev).add(url));
 			try {
 				const res = await postToServer("downloads/queue", {
@@ -30,7 +43,16 @@ export function useDownload() {
 				}
 				// Open the download sheet for visual feedback
 				useAppStore.getState().setDownloadsOpen(true);
-			} catch (e) {
+			} catch (e: any) {
+				// Handle specific auth errors
+				if (e.code === "NOT_AUTHENTICATED") {
+					window.location.href = "/login";
+					return;
+				}
+				if (e.code === "NO_DEEZER_ARL") {
+					window.location.href = "/settings";
+					return;
+				}
 				console.error("[Download] Failed:", e);
 			} finally {
 				setLoadingUrls((prev) => {

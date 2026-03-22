@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
-import { ok, fail, handleError, requireAuthAndApp } from "../../_lib/helpers";
+import { ok, fail, handleError, requireDeezerAndApp } from "../../_lib/helpers";
 
 export async function POST(request: NextRequest) {
 	try {
-		const { dz, app, error } = await requireAuthAndApp();
+		const { dz, app, error } = await requireDeezerAndApp(request);
 		if (error) return error;
 
 		const { uuid } = await request.json();

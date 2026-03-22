@@ -1,11 +1,12 @@
-import { getDeemixApp, getSessionDZ } from "@/lib/server-state";
-import { ok, fail, handleError } from "../../_lib/helpers";
+import { NextRequest } from "next/server";
+import { getDeemixApp, getUserDz, setUserDz } from "@/lib/server-state";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { ok, handleError } from "../../_lib/helpers";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
 	try {
 		const deemixApp = await getDeemixApp();
-		const sessionDZ = getSessionDZ();
-		const dz = sessionDZ["default"];
 
 		const deezerAvailable = deemixApp
 			? await deemixApp.isDeezerAvailable()
@@ -17,15 +18,62 @@ export async function GET() {
 			? deemixApp.getQueue()
 			: { queue: {}, queueOrder: [] };
 
-		const currentUser = dz?.loggedIn ? dz.currentUser : null;
-		const loggedIn = !!dz?.loggedIn;
+		// Check better-auth session
+		let betterAuthUser = null;
+		let deezerUser = null;
+		let deezerLoggedIn = false;
+
+		try {
+			const session = await auth.api.getSession({
+				headers: request.headers,
+			});
+
+			if (session?.user) {
+				betterAuthUser = {
+					id: session.user.id,
+					name: session.user.name,
+					email: session.user.email,
+					image: session.user.image,
+				};
+
+				// Try to restore Deezer session from stored ARL
+				let dz = getUserDz(session.user.id);
+				if (!dz?.loggedIn) {
+					const cred = await prisma.deezerCredential.findUnique({
+						where: { userId: session.user.id },
+					});
+					if (cred) {
+						const { Deezer } = await import("@/lib/deezer");
+						dz = new Deezer();
+						const loggedIn = await dz.loginViaArl(cred.arl);
+						if (loggedIn) {
+							setUserDz(session.user.id, dz);
+						} else {
+							dz = null;
+						}
+					}
+				}
+
+				if (dz?.loggedIn) {
+					deezerUser = dz.currentUser;
+					deezerLoggedIn = true;
+				}
+			}
+		} catch {
+			// No session or auth error — continue as guest
+		}
 
 		return ok({
-			loggedIn,
+			// Better-auth status
+			authenticated: !!betterAuthUser,
+			user: betterAuthUser,
+			// Deezer status
+			deezerLoggedIn,
+			deezerUser,
+			// App status
 			deezerAvailable,
 			spotifyEnabled,
 			settings,
-			currentUser,
 			queue,
 		});
 	} catch (e) {

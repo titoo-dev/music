@@ -17,7 +17,7 @@ export async function fetchData(endpoint: string, params: Record<string, string>
 	Object.entries(params).forEach(([key, value]) => {
 		url.searchParams.set(key, value);
 	});
-	const res = await fetch(url.toString(), { cache: "no-store" });
+	const res = await fetch(url.toString(), { cache: "no-store", credentials: "include" });
 	return unwrap(res);
 }
 
@@ -25,6 +25,7 @@ export async function postToServer(endpoint: string, data: Record<string, any> =
 	const res = await fetch(`${API_BASE}/${endpoint}`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
+		credentials: "include",
 		body: JSON.stringify(data),
 	});
 	return unwrap(res);

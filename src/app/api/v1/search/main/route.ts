@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
 import { clean_search_query } from "@/lib/deezer/utils";
-import { ok, fail, handleError, requireAuth } from "../../_lib/helpers";
+import { ok, fail, handleError, getGuestOrUserDz } from "../../_lib/helpers";
 
 export async function GET(request: NextRequest) {
 	try {
-		const auth = requireAuth();
-		if (auth.error) return auth.error;
+		const { dz } = await getGuestOrUserDz(request);
+		if (!dz) return fail("NO_DEEZER", "Deezer is not available. Sign in or configure a service ARL.", 503);
 
 		const rawTerm = request.nextUrl.searchParams.get("term") || "";
 		const term = clean_search_query(rawTerm);
@@ -15,10 +15,10 @@ export async function GET(request: NextRequest) {
 
 		const [gwResults, apiTracks, apiAlbums, apiArtists] =
 			await Promise.allSettled([
-				auth.dz.gw.search(term, 0, 100),
-				auth.dz.api.search_track(term, { limit: 50 }),
-				auth.dz.api.search_album(term, { limit: 50 }),
-				auth.dz.api.search_artist(term, { limit: 50 }),
+				dz.gw.search(term, 0, 100),
+				dz.api.search_track(term, { limit: 50 }),
+				dz.api.search_album(term, { limit: 50 }),
+				dz.api.search_artist(term, { limit: 50 }),
 			]);
 
 		const gw =

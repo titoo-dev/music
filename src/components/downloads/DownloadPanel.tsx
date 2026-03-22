@@ -1,23 +1,54 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useQueueStore } from "@/stores/useQueueStore";
 import { useAppStore } from "@/stores/useAppStore";
+import { useAuthStore } from "@/stores/useAuthStore";
 import { QueueItem } from "./QueueItem";
-import { postToServer } from "@/utils/api";
+import { postToServer, fetchData } from "@/utils/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { CoverImage } from "@/components/ui/cover-image";
+import Link from "next/link";
 import {
 	ArrowDownToLine,
 	X,
 	Trash2,
 	XCircle,
 	ChevronRight,
+	History,
 } from "lucide-react";
+
+interface HistoryItem {
+	id: string;
+	trackId: string;
+	title: string;
+	artist: string;
+	album: string | null;
+	coverUrl: string | null;
+	downloadedAt: string;
+}
 
 export function DownloadPanel() {
 	const { queue, clearCompleted } = useQueueStore();
 	const downloadsOpen = useAppStore((s) => s.downloadsOpen);
 	const setDownloadsOpen = useAppStore((s) => s.setDownloadsOpen);
+	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const [history, setHistory] = useState<HistoryItem[]>([]);
+
+	// Fetch recent download history when panel opens
+	useEffect(() => {
+		if (!downloadsOpen || !isAuthenticated) return;
+		async function loadHistory() {
+			try {
+				const data = await fetchData("downloads/history", { limit: "20" });
+				setHistory(data.items || []);
+			} catch {
+				// ignore
+			}
+		}
+		loadHistory();
+	}, [downloadsOpen, isAuthenticated, Object.keys(queue).length]);
 
 	const allItems = Object.values(queue);
 	const activeItems = allItems.filter((i) =>
@@ -159,6 +190,59 @@ export function DownloadPanel() {
 							<div className="space-y-0.5 px-1.5">
 								{completedItems.map((item) => (
 									<QueueItem key={item.uuid} item={item} />
+								))}
+							</div>
+						</div>
+					)}
+
+					{/* Download History */}
+					{history.length > 0 && (
+						<div>
+							{(activeItems.length > 0 || completedItems.length > 0) && (
+								<div className="mx-4 my-2 h-px bg-border/40" />
+							)}
+							<div className="flex items-center justify-between px-4 pb-1 pt-3">
+								<p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+									<History className="inline h-3 w-3 mr-1 -mt-0.5" />
+									History
+									<span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground normal-case tracking-normal">
+										{history.length}
+									</span>
+								</p>
+								<Link href="/download-history" className="text-[10px] text-muted-foreground hover:text-foreground no-underline">
+									View all
+								</Link>
+							</div>
+							<div className="space-y-0.5 px-1.5">
+								{history.map((item) => (
+									<div
+										key={item.id}
+										className="flex items-center gap-3 rounded-lg px-2.5 py-2 hover:bg-muted/40 transition-colors"
+									>
+										<div className="shrink-0">
+											{item.coverUrl ? (
+												<CoverImage
+													src={item.coverUrl}
+													className="h-10 w-10 rounded-md shadow-sm"
+												/>
+											) : (
+												<div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground">
+													?
+												</div>
+											)}
+										</div>
+										<div className="min-w-0 flex-1">
+											<p className="truncate text-[13px] font-medium leading-tight text-foreground">
+												{item.title}
+											</p>
+											<p className="truncate text-[11px] leading-tight text-muted-foreground mt-0.5">
+												{item.artist}
+											</p>
+											<p className="text-[10px] text-muted-foreground/50 mt-0.5">
+												{new Date(item.downloadedAt).toLocaleDateString()}
+											</p>
+										</div>
+									</div>
 								))}
 							</div>
 						</div>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useQueueStore } from "@/stores/useQueueStore";
 import { useAppStore } from "@/stores/useAppStore";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 function getWsUrl() {
 	if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
@@ -46,6 +47,12 @@ export function useSocket() {
 
 	const handleMessage = useCallback(
 		(key: string, data: any) => {
+			// Filter events by userId if present — only process events for the current user
+			const currentUserId = useAuthStore.getState().user?.id;
+			if (data?.userId && currentUserId && data.userId !== currentUserId) {
+				return; // Ignore events from other users
+			}
+
 			switch (key) {
 				case "addedToQueue":
 					if (Array.isArray(data)) {
@@ -56,9 +63,12 @@ export function useSocket() {
 					// Auto-open the download sheet for visual feedback
 					useAppStore.getState().setDownloadsOpen(true);
 					break;
-				case "startDownload":
-					updateQueueItem(data, { status: "downloading" });
+				case "startDownload": {
+					// startDownload now sends { uuid, userId } instead of just uuid
+					const uuid = typeof data === "string" ? data : data?.uuid;
+					if (uuid) updateQueueItem(uuid, { status: "downloading" });
 					break;
+				}
 				case "updateQueue":
 					if (data.uuid) {
 						updateQueueItem(data.uuid, data);

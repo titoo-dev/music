@@ -1,5 +1,6 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { getDeemixApp, getSessionDZ } from "@/lib/server-state";
+import { NextRequest } from "next/server";
+import { getDeemixApp } from "@/lib/server-state";
+import { ok, fail, handleError, getGuestOrUserDz } from "../v1/_lib/helpers";
 
 export async function GET(request: NextRequest) {
 	try {
@@ -7,18 +8,15 @@ export async function GET(request: NextRequest) {
 		const term = searchParams.get("term") || "";
 
 		if (!term) {
-			return NextResponse.json({ error: "Missing term" }, { status: 400 });
+			return fail("MISSING_TERM", "A search term or link is required.", 400);
 		}
 
-		const sessionDZ = getSessionDZ();
-		const dz = sessionDZ["default"];
-		if (!dz?.loggedIn) {
-			return NextResponse.json({ error: "notLoggedIn" }, { status: 403 });
-		}
+		const { dz } = await getGuestOrUserDz(request);
+		if (!dz) return fail("NO_DEEZER", "Deezer is not available. Sign in or configure a service ARL.", 503);
 
 		const deemixApp = await getDeemixApp();
 		if (!deemixApp) {
-			return NextResponse.json({ error: "App not initialized" }, { status: 500 });
+			return fail("APP_NOT_INITIALIZED", "Server application not initialized.", 500);
 		}
 
 		const { parseLink } = await import("@/lib/deemix");
@@ -30,13 +28,13 @@ export async function GET(request: NextRequest) {
 				try {
 					const spotifyData = await deemixApp.plugins.spotify.parseLink(term);
 					if (spotifyData) {
-						return NextResponse.json(spotifyData);
+						return ok(spotifyData);
 					}
 				} catch {
 					// Not a recognized Spotify link
 				}
 			}
-			return NextResponse.json({ error: "Link not recognized" }, { status: 400 });
+			return fail("LINK_NOT_RECOGNIZED", "Link not recognized.", 400);
 		}
 
 		let data: any;
@@ -59,8 +57,8 @@ export async function GET(request: NextRequest) {
 				break;
 		}
 
-		return NextResponse.json({ type: linkType, id: linkId, data });
-	} catch (e: any) {
-		return NextResponse.json({ error: e.message }, { status: 500 });
+		return ok({ type: linkType, id: linkId, data });
+	} catch (e) {
+		return handleError(e);
 	}
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchData } from "@/utils/api";
 import { useDownload } from "@/hooks/useDownload";
-import { useLoginStore } from "@/stores/useLoginStore";
+import { useAuthStore } from "@/stores/useAuthStore";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,8 +41,9 @@ interface ChartItem {
 export default function HomePage() {
 	const [charts, setCharts] = useState<ChartItem[]>([]);
 	const [loading, setLoading] = useState(true);
-	const loggedIn = useLoginStore((s) => s.loggedIn);
-	const user = useLoginStore((s) => s.user);
+	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const user = useAuthStore((s) => s.user);
+	const isDeezerConnected = useAuthStore((s) => s.isDeezerConnected);
 
 	useEffect(() => {
 		async function loadHome() {
@@ -69,7 +70,7 @@ export default function HomePage() {
 		);
 	}
 
-	if (!loggedIn) {
+	if (!isAuthenticated) {
 		return (
 			<div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
 				<div className="text-center space-y-2">
@@ -77,16 +78,46 @@ export default function HomePage() {
 						Get started with deemix
 					</h1>
 					<p className="text-sm text-muted-foreground max-w-md">
-						You need a Deezer ARL token to start downloading music.
-						Head to Settings to log in.
+						Sign in to download music and manage your playlists.
 					</p>
 				</div>
 				<Card className="max-w-sm w-full">
 					<CardHeader>
-						<CardTitle>Not logged in</CardTitle>
+						<CardTitle>Welcome to deemix</CardTitle>
 						<CardDescription>
-							Connect your Deezer account to access your library and
-							download music.
+							Sign in with Google to get started, or browse as a guest.
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="flex flex-col gap-2">
+						<Link href="/login">
+							<Button className="w-full gap-2">
+								Sign in
+								<ArrowRight className="size-4" />
+							</Button>
+						</Link>
+					</CardContent>
+				</Card>
+			</div>
+		);
+	}
+
+	if (!isDeezerConnected) {
+		return (
+			<div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+				<div className="text-center space-y-2">
+					<h1 className="text-2xl font-semibold tracking-tight">
+						Connect your Deezer account
+					</h1>
+					<p className="text-sm text-muted-foreground max-w-md">
+						You need a Deezer ARL token to browse and download music.
+						Head to Settings to connect.
+					</p>
+				</div>
+				<Card className="max-w-sm w-full">
+					<CardHeader>
+						<CardTitle>Deezer not connected</CardTitle>
+						<CardDescription>
+							Add your Deezer ARL in Settings to access your library and download music.
 						</CardDescription>
 					</CardHeader>
 					<CardContent>

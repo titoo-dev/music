@@ -1,25 +1,22 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { getSessionDZ } from "@/lib/server-state";
+import { NextRequest } from "next/server";
+import { ok, fail, handleError, requireDeezer } from "../v1/_lib/helpers";
 
 export async function GET(request: NextRequest) {
 	try {
 		const searchParams = request.nextUrl.searchParams;
 		const child = parseInt(searchParams.get("child") || "0", 10);
 
-		const sessionDZ = getSessionDZ();
-		const dz = sessionDZ["default"];
-		if (!dz?.loggedIn) {
-			return NextResponse.json({ error: "notLoggedIn" }, { status: 403 });
-		}
+		const { dz, error } = await requireDeezer(request);
+		if (error) return error;
 
 		const [user, selectedAccount] = dz.changeAccount(child);
 
-		return NextResponse.json({
+		return ok({
 			user,
 			selectedAccount,
 			childs: dz.childs,
 		});
-	} catch (e: any) {
-		return NextResponse.json({ error: e.message }, { status: 500 });
+	} catch (e) {
+		return handleError(e);
 	}
 }

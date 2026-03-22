@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { ok, fail, handleError, requireAuth, requireApp, requireAuthAndApp } from "../../_lib/helpers";
+import { prisma } from "@/lib/prisma";
+import { ok, fail, handleError, requireApp, requireDeezerAndApp } from "../../_lib/helpers";
 
 // GET /api/v1/downloads/queue — Fetch current download queue
 export async function GET() {
@@ -16,7 +17,7 @@ export async function GET() {
 // POST /api/v1/downloads/queue — Add URL(s) to download queue
 export async function POST(request: NextRequest) {
 	try {
-		const { dz, app, error } = await requireAuthAndApp();
+		const { userId, dz, app, error } = await requireDeezerAndApp(request);
 		if (error) return error;
 
 		const { url, bitrate } = await request.json();
@@ -25,10 +26,28 @@ export async function POST(request: NextRequest) {
 			return fail("MISSING_URL", "A URL or array of URLs is required.", 400);
 		}
 
-		const effectiveBitrate = bitrate ?? app.settings.maxBitrate;
+		// Check for already-downloaded tracks (single track URLs only)
 		const urls = Array.isArray(url) ? url : [url];
+		for (const u of urls) {
+			const trackMatch = String(u).match(/deezer\.com\/(?:\w+\/)?track\/(\d+)/);
+			if (trackMatch) {
+				const trackId = trackMatch[1];
+				const existing = await prisma.downloadHistory.findUnique({
+					where: { userId_trackId: { userId, trackId } },
+				});
+				if (existing) {
+					return fail(
+						"ALREADY_DOWNLOADED",
+						`Track "${existing.title}" by ${existing.artist} was already downloaded on ${existing.downloadedAt.toLocaleDateString()}.`,
+						409
+					);
+				}
+			}
+		}
 
-		const result = await app.addToQueue(dz, urls, effectiveBitrate);
+		const effectiveBitrate = bitrate ?? app.settings.maxBitrate;
+
+		const result = await app.addToQueue(dz, urls, effectiveBitrate, false, userId);
 		return ok(result);
 	} catch (e) {
 		return handleError(e);

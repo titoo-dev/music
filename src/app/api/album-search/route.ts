@@ -1,6 +1,6 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { getSessionDZ } from "@/lib/server-state";
+import { NextRequest } from "next/server";
 import { clean_search_query } from "@/lib/deezer/utils";
+import { ok, fail, handleError, getGuestOrUserDz } from "../v1/_lib/helpers";
 
 export async function GET(request: NextRequest) {
 	try {
@@ -11,22 +11,19 @@ export async function GET(request: NextRequest) {
 
 		const term = clean_search_query(rawTerm);
 		if (!term) {
-			return NextResponse.json({ error: "Missing search term" }, { status: 400 });
+			return fail("MISSING_TERM", "A search term is required.", 400);
 		}
 
-		const sessionDZ = getSessionDZ();
-		const dz = sessionDZ["default"];
-		if (!dz?.loggedIn) {
-			return NextResponse.json({ error: "notLoggedIn" }, { status: 403 });
-		}
+		const { dz } = await getGuestOrUserDz(request);
+		if (!dz) return fail("NO_DEEZER", "Deezer is not available. Sign in or configure a service ARL.", 503);
 
 		const results = await dz.api.search_album(term, {
 			index: start,
 			limit: nb,
 		});
 
-		return NextResponse.json(results);
-	} catch (e: any) {
-		return NextResponse.json({ error: e.message }, { status: 500 });
+		return ok(results);
+	} catch (e) {
+		return handleError(e);
 	}
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchData, postToServer } from "@/utils/api";
-import { useLoginStore } from "@/stores/useLoginStore";
+import { useAuthStore } from "@/stores/useAuthStore";
 import { qualities } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -127,17 +127,14 @@ function TagCheckbox({
 
 export default function SettingsPage() {
 	const {
-		arl,
-		setArl,
-		loggedIn,
-		user,
-		setUser,
+		isAuthenticated,
+		isDeezerConnected,
+		deezerUser,
+		setDeezerUser,
 		setChilds,
 		setCurrentChild,
-		setLoggedIn,
-		logout,
-	} = useLoginStore();
-	const [arlInput, setArlInput] = useState(arl);
+	} = useAuthStore();
+	const [arlInput, setArlInput] = useState("");
 	const [settings, setSettings] = useState<any>(null);
 	const [spotifySettings, setSpotifySettings] = useState<any>(null);
 	const [loading, setLoading] = useState(true);
@@ -158,31 +155,30 @@ export default function SettingsPage() {
 		loadSettings();
 	}, []);
 
-	const handleLogin = async () => {
+	const handleDeezerConnect = async () => {
 		if (!arlInput.trim()) return;
-		setLoginStatus("Logging in...");
+		setLoginStatus("Connecting to Deezer...");
 		try {
 			const res = await postToServer("auth/login-arl", {
 				arl: arlInput.trim(),
 			});
 			if (res.user) {
-				setArl(arlInput.trim());
-				setUser(res.user);
+				setDeezerUser(res.user);
 				setChilds(res.childs || []);
 				setCurrentChild(res.currentChild || 0);
-				setLoggedIn(true);
-				setLoginStatus("Logged in!");
+				setLoginStatus("Connected to Deezer!");
+				setArlInput("");
 			} else {
-				setLoginStatus("Login failed. Check your ARL.");
+				setLoginStatus("Connection failed. Check your ARL.");
 			}
 		} catch {
-			setLoginStatus("Login error.");
+			setLoginStatus("Connection error.");
 		}
 	};
 
-	const handleLogout = async () => {
+	const handleDeezerDisconnect = async () => {
 		await postToServer("auth/logout");
-		logout();
+		setDeezerUser(null);
 		setLoginStatus("");
 	};
 
@@ -237,33 +233,33 @@ export default function SettingsPage() {
 				<CardHeader>
 					<CardTitle>Deezer Account</CardTitle>
 					<CardDescription>
-						{loggedIn
-							? "You are logged in to Deezer."
+						{isDeezerConnected
+							? "Your Deezer account is connected."
 							: "Enter your ARL token to connect your Deezer account. You need this to download music."}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{loggedIn && user ? (
+					{isDeezerConnected && deezerUser ? (
 						<div className="flex items-center justify-between">
 							<div className="flex items-center gap-3">
 								<Avatar size="lg">
-									{user.picture ? (
+									{deezerUser.picture ? (
 										<AvatarImage
-											src={`https://e-cdns-images.dzcdn.net/images/user/${user.picture}/56x56-000000-80-0-0.jpg`}
+											src={`https://e-cdns-images.dzcdn.net/images/user/${deezerUser.picture}/56x56-000000-80-0-0.jpg`}
 										/>
 									) : (
 										<AvatarFallback>
-											{user.name?.charAt(0)?.toUpperCase() ||
+											{deezerUser.name?.charAt(0)?.toUpperCase() ||
 												"U"}
 										</AvatarFallback>
 									)}
 								</Avatar>
 								<div>
-									<p className="text-sm font-medium">{user.name}</p>
+									<p className="text-sm font-medium">{deezerUser.name}</p>
 									<Badge variant="secondary" className="mt-1">
-										{user.can_stream_lossless
+										{deezerUser.can_stream_lossless
 											? "HiFi"
-											: user.can_stream_hq
+											: deezerUser.can_stream_hq
 												? "Premium"
 												: "Free"}
 									</Badge>
@@ -272,11 +268,11 @@ export default function SettingsPage() {
 							<Button
 								variant="outline"
 								size="sm"
-								onClick={handleLogout}
+								onClick={handleDeezerDisconnect}
 								className="gap-1.5"
 							>
 								<LogOut className="size-3.5" />
-								Log out
+								Disconnect
 							</Button>
 						</div>
 					) : (
@@ -291,7 +287,7 @@ export default function SettingsPage() {
 									placeholder="Paste your ARL token here..."
 									className="flex-1"
 								/>
-								<Button onClick={handleLogin}>Log in</Button>
+								<Button onClick={handleDeezerConnect}>Connect</Button>
 							</div>
 							{loginStatus && (
 								<p className="text-sm text-muted-foreground">

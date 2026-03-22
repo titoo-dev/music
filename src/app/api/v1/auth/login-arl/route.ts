@@ -1,9 +1,13 @@
 import { NextRequest } from "next/server";
-import { getSessionDZ } from "@/lib/server-state";
-import { ok, fail, handleError } from "../../_lib/helpers";
+import { setUserDz } from "@/lib/server-state";
+import { prisma } from "@/lib/prisma";
+import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
 
 export async function POST(request: NextRequest) {
 	try {
+		const userResult = await requireUser(request);
+		if (userResult.error) return userResult.error;
+
 		const { arl, child } = await request.json();
 
 		if (!arl) {
@@ -18,8 +22,30 @@ export async function POST(request: NextRequest) {
 			return fail("LOGIN_FAILED", "Invalid ARL token or login failed.", 401);
 		}
 
-		const sessionDZ = getSessionDZ();
-		sessionDZ["default"] = dz;
+		// Store Deezer session in memory (keyed by better-auth user ID)
+		setUserDz(userResult.userId, dz);
+
+		// Persist ARL and Deezer user info in database
+		await prisma.deezerCredential.upsert({
+			where: { userId: userResult.userId },
+			update: {
+				arl,
+				deezerUserId: dz.currentUser?.id ?? null,
+				deezerUserName: dz.currentUser?.name ?? null,
+				deezerPicture: dz.currentUser?.picture ?? null,
+				canStreamHq: dz.currentUser?.can_stream_hq ?? false,
+				canStreamLossless: dz.currentUser?.can_stream_lossless ?? false,
+			},
+			create: {
+				userId: userResult.userId,
+				arl,
+				deezerUserId: dz.currentUser?.id ?? null,
+				deezerUserName: dz.currentUser?.name ?? null,
+				deezerPicture: dz.currentUser?.picture ?? null,
+				canStreamHq: dz.currentUser?.can_stream_hq ?? false,
+				canStreamLossless: dz.currentUser?.can_stream_lossless ?? false,
+			},
+		});
 
 		return ok({
 			user: dz.currentUser,
@@ -28,6 +54,7 @@ export async function POST(request: NextRequest) {
 			hasMultipleAccounts: dz.childs.length > 1,
 		});
 	} catch (e) {
+		console.error("[login-arl] Error:", e);
 		return handleError(e);
 	}
 }

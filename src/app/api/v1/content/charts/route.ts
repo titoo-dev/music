@@ -1,11 +1,12 @@
-import { ok, handleError, requireAuth } from "../../_lib/helpers";
+import { NextRequest } from "next/server";
+import { ok, fail, handleError, getGuestOrUserDz } from "../../_lib/helpers";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
 	try {
-		const auth = requireAuth();
-		if (auth.error) return auth.error;
+		const { dz } = await getGuestOrUserDz(request);
+		if (!dz) return fail("NO_DEEZER", "Deezer is not available. Sign in or configure a service ARL.", 503);
 
-		const charts = await auth.dz.api.get_countries_charts();
+		const charts = await dz.api.get_countries_charts();
 		return ok(charts);
 	} catch (e) {
 		return handleError(e);

@@ -141,7 +141,7 @@ export class DeemixApp {
 		return result;
 	}
 
-	async addToQueue(dz: any, url: string[], bitrate: number, retry = false) {
+	async addToQueue(dz: any, url: string[], bitrate: number, retry = false, userId?: string) {
 		await ensureImports();
 		if (!dz.loggedIn) throw new Error("NotLoggedIn");
 
@@ -187,11 +187,15 @@ export class DeemixApp {
 
 			this.queueOrder.push(downloadObj.uuid);
 			// Store full download data in memory (replaces disk persistence from old deemix)
-			this._downloadData[downloadObj.uuid] = downloadObj.toDict();
+			const fullData = downloadObj.toDict();
+			if (userId) fullData.__userId = userId;
+			this._downloadData[downloadObj.uuid] = fullData;
 			this.queue[downloadObj.uuid] = downloadObj.getEssentialDict();
 			this.queue[downloadObj.uuid].status = "inQueue";
+			if (userId) this.queue[downloadObj.uuid].userId = userId;
 			const slimmed = downloadObj.getSlimmedDict();
 			slimmed.status = "inQueue";
+			if (userId) slimmed.userId = userId;
 			slimmedObjects.push(slimmed);
 		});
 
@@ -253,8 +257,9 @@ export class DeemixApp {
 				continue;
 			}
 
+			const itemUserId = currentItem.__userId || null;
 			this.currentJob = new Downloader(dz, downloadObject, this.settings, this.listener, this.storageProvider || undefined);
-			this.listener.send("startDownload", currentUUID);
+			this.listener.send("startDownload", { uuid: currentUUID, userId: itemUserId });
 			await this.currentJob.start();
 
 			if (!downloadObject.isCanceled) {
@@ -269,12 +274,19 @@ export class DeemixApp {
 				this.queue[currentUUID] = {
 					...downloadObject.getSlimmedDict(),
 					status: this.queue[currentUUID].status,
+					userId: itemUserId,
 				};
+
+				// Record completed tracks in download history
+				if (itemUserId && this.queue[currentUUID].status !== "failed") {
+					this._recordDownloadHistory(itemUserId, downloadObject, currentItem);
+				}
 
 				this.listener.send("finishDownload", {
 					uuid: currentUUID,
 					status: this.queue[currentUUID].status,
 					extrasPath: downloadObject.extrasPath || "",
+					userId: itemUserId,
 				});
 			}
 
@@ -322,5 +334,58 @@ export class DeemixApp {
 			}
 		});
 		this.listener.send("removedFinishedDownloads");
+	}
+
+	/** Record completed track downloads in the database for history/dedup */
+	private async _recordDownloadHistory(userId: string, downloadObject: any, rawData: any) {
+		try {
+			const { prisma } = await import("@/lib/prisma");
+			const storageType = this.settings.storageType || "local";
+
+			// Use the slimmed download object info (always available)
+			const trackId = String(rawData.id || downloadObject.id || "");
+			const title = rawData.title || downloadObject.title || "";
+			const artist = rawData.artist || downloadObject.artist || "";
+			const cover = rawData.cover || downloadObject.cover || null;
+			const bitrate = rawData.bitrate || downloadObject.bitrate || 0;
+
+			if (rawData.__type__ === "Single" && trackId) {
+				await prisma.downloadHistory.upsert({
+					where: { userId_trackId: { userId, trackId } },
+					update: { downloadedAt: new Date() },
+					create: {
+						userId,
+						trackId,
+						title,
+						artist,
+						coverUrl: cover,
+						bitrate,
+						storageType,
+					},
+				});
+			}
+
+			// For collections (albums/playlists), record using the slimmed info
+			if (rawData.__type__ === "Collection") {
+				// Record the collection as a single entry using its ID
+				if (trackId) {
+					await prisma.downloadHistory.upsert({
+						where: { userId_trackId: { userId, trackId } },
+						update: { downloadedAt: new Date() },
+						create: {
+							userId,
+							trackId,
+							title,
+							artist,
+							coverUrl: cover,
+							bitrate,
+							storageType,
+						},
+					});
+				}
+			}
+		} catch (e) {
+			console.error("Failed to record download history:", e);
+		}
 	}
 }

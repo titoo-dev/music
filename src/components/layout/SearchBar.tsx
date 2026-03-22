@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isValidURL } from "@/utils/helpers";
 import { useDownload } from "@/hooks/useDownload";
-import { useLoginStore } from "@/stores/useLoginStore";
+import { useAuthStore } from "@/stores/useAuthStore";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 
@@ -18,7 +18,7 @@ export function SearchBar() {
 		setTerm(searchParams.get("term") ?? "");
 	}, [searchParams]);
 	const inputRef = useRef<HTMLInputElement>(null);
-	const loggedIn = useLoginStore((s) => s.loggedIn);
+	const loggedIn = useAuthStore((s) => s.isDeezerConnected);
 	const { download } = useDownload();
 
 	const handleSubmit = useCallback(

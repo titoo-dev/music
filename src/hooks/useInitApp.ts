@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/stores/useAppStore";
-import { useLoginStore } from "@/stores/useLoginStore";
-import { fetchData, postToServer } from "@/utils/api";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { fetchData } from "@/utils/api";
 
 export function useInitApp() {
 	const [initialized, setInitialized] = useState(false);
 	const setDeezerAvailable = useAppStore((s) => s.setDeezerAvailable);
 	const setSpotifyEnabled = useAppStore((s) => s.setSpotifyEnabled);
-	const { arl, setUser, setChilds, setLoggedIn, setCurrentChild } = useLoginStore();
+	const { setUser, setDeezerUser, setChilds, setLoading } = useAuthStore();
 
 	useEffect(() => {
 		if (initialized) return;
@@ -24,31 +24,23 @@ export function useInitApp() {
 				if (data.spotifyEnabled !== undefined) {
 					setSpotifyEnabled(data.spotifyEnabled);
 				}
-				if (data.currentUser) {
-					setUser(data.currentUser);
-					setLoggedIn(true);
+
+				// Better-auth user (Google identity)
+				if (data.user) {
+					setUser(data.user);
 				}
 
-				// Auto-login with stored ARL
-				if (!data.loggedIn && arl) {
-					try {
-						const loginRes = await postToServer("auth/login-arl", { arl });
-						if (loginRes.user) {
-							setUser(loginRes.user);
-							setChilds(loginRes.childs || []);
-							setCurrentChild(loginRes.currentChild || 0);
-							setLoggedIn(true);
-						}
-					} catch {
-						// Login failed silently
-					}
+				// Deezer connection (auto-restored from stored ARL)
+				if (data.deezerUser) {
+					setDeezerUser(data.deezerUser);
 				}
 			} catch (e) {
 				console.error("Failed to connect:", e);
 			}
+			setLoading(false);
 			setInitialized(true);
 		}
 
 		init();
-	}, [initialized, arl]);
+	}, [initialized]);
 }

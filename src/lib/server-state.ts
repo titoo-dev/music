@@ -4,21 +4,84 @@
 import type { Listener } from "@/lib/deemix/types/listener";
 import { broadcast } from "@/lib/broadcast";
 
-// We use a global variable to persist state across hot reloads in dev
+// ── Per-user Deezer session with TTL eviction ──
+
+interface DzSession {
+	dz: any;
+	lastAccess: number;
+}
+
+const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
 const globalForDeemix = globalThis as unknown as {
 	deemixApp: any;
-	sessionDZ: Record<string, any>;
+	sessionDZ: Map<string, DzSession>;
+	guestDZ: any;
 	initialized: boolean;
 };
 
-export function getSessionDZ(): Record<string, any> {
+/** Get a per-user Deezer session map (keyed by better-auth user ID) */
+export function getSessionDZ(): Map<string, DzSession> {
 	if (!globalForDeemix.sessionDZ) {
-		globalForDeemix.sessionDZ = {};
+		globalForDeemix.sessionDZ = new Map();
 	}
 	return globalForDeemix.sessionDZ;
 }
 
-// Lazy initialization - will be set up when the app module is ready
+/** Retrieve the Deezer instance for a specific user, refreshing TTL */
+export function getUserDz(userId: string): any | null {
+	const sessions = getSessionDZ();
+	const entry = sessions.get(userId);
+	if (!entry) return null;
+	entry.lastAccess = Date.now();
+	return entry.dz;
+}
+
+/** Store a Deezer instance for a specific user */
+export function setUserDz(userId: string, dz: any): void {
+	const sessions = getSessionDZ();
+	sessions.set(userId, { dz, lastAccess: Date.now() });
+	evictStaleSessions();
+}
+
+/** Remove a Deezer session for a specific user */
+export function removeUserDz(userId: string): void {
+	getSessionDZ().delete(userId);
+}
+
+/** Get or create a shared guest Deezer session (for browsing without auth) */
+export async function getGuestDz(): Promise<any | null> {
+	if (globalForDeemix.guestDZ?.loggedIn) return globalForDeemix.guestDZ;
+
+	const serviceArl = process.env.DEEMIX_SERVICE_ARL;
+	if (!serviceArl) return null;
+
+	try {
+		const { Deezer } = await import("@/lib/deezer");
+		const dz = new Deezer();
+		const loggedIn = await dz.loginViaArl(serviceArl);
+		if (loggedIn) {
+			globalForDeemix.guestDZ = dz;
+			return dz;
+		}
+	} catch {
+		// Guest Deezer unavailable
+	}
+	return null;
+}
+
+function evictStaleSessions() {
+	const sessions = getSessionDZ();
+	const now = Date.now();
+	for (const [userId, entry] of sessions) {
+		if (now - entry.lastAccess > SESSION_TTL_MS) {
+			sessions.delete(userId);
+		}
+	}
+}
+
+// ── DeemixApp singleton ──
+
 let _deemixApp: any = null;
 let _initPromise: Promise<any> | null = null;
 
