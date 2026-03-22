@@ -66,7 +66,7 @@ export function DownloadPanel() {
 	return (
 		<aside
 			className={`
-				fixed right-0 top-[calc(4rem+3px)] z-20 flex h-[calc(100%-4rem-3px)] flex-col overflow-hidden
+				fixed right-0 top-[calc(7.5rem+5px)] md:top-[calc(4rem+3px)] z-20 flex h-[calc(100%-7.5rem-5px)] md:h-[calc(100%-4rem-3px)] flex-col overflow-hidden
 				bg-background transition-all duration-300 ease-in-out
 				${downloadsOpen ? "w-full sm:w-[340px] translate-x-0 border-l-[3px] border-foreground" : "w-0 translate-x-full border-l-0"}
 			`}
@@ -83,7 +83,7 @@ export function DownloadPanel() {
 
 			<div className="flex min-w-0 w-full flex-col h-full">
 				{/* Header */}
-				<div className="flex h-14 items-center justify-between border-b-[3px] border-foreground px-4">
+				<div className="flex items-center justify-between border-b-[3px] border-foreground px-4 py-4">
 					<div className="flex items-center gap-2.5">
 						<div className="flex h-7 w-7 items-center justify-center border-[2px] border-foreground bg-accent">
 							<ArrowDownToLine className="h-3.5 w-3.5 text-foreground" />

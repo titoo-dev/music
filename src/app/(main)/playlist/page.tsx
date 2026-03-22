@@ -9,7 +9,8 @@ import { convertDuration } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { PreviewButton } from "@/components/audio/PreviewButton";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { CoverImage } from "@/components/ui/cover-image";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
@@ -37,7 +38,7 @@ function PlaylistContent() {
 	const { download, isLoading } = useDownload();
 
 	const allTrackIds = tracks.map((t: any) => String(t.id || t.SNG_ID)).filter(Boolean);
-	const { downloaded, markDownloaded } = useDownloadedTracks(allTrackIds);
+	const { downloaded } = useDownloadedTracks(allTrackIds);
 
 	useEffect(() => {
 		if (!id) return;
@@ -65,7 +66,6 @@ function PlaylistContent() {
 	const trackUrl = (trackId: string) => `https://www.deezer.com/track/${trackId}`;
 	const handleDownloadTrack = (trackId: string) => {
 		download(trackUrl(trackId));
-		markDownloaded(String(trackId));
 	};
 
 	if (loading)
@@ -182,22 +182,12 @@ function PlaylistContent() {
 										previewUrl,
 									}}
 								/>
-								{downloaded.has(String(trackId)) ? (
-									<span className="hidden sm:flex items-center justify-center size-7 text-emerald-500" title="Already downloaded">
-										<CheckCircle2 className="size-3.5" />
-									</span>
-								) : (
-									<Button
-										variant="ghost"
-										size="xs"
-										onClick={() => handleDownloadTrack(trackId)}
-										disabled={isLoading(trackUrl(trackId))}
-										className="hidden sm:inline-flex gap-1.5"
-									>
-										{isLoading(trackUrl(trackId)) && <Loader2 className="size-3 animate-spin" />}
-										{isLoading(trackUrl(trackId)) ? "Adding..." : "Download"}
-									</Button>
-								)}
+								<TrackDownloadStatus
+									trackId={trackId}
+									isAlreadyDownloaded={downloaded.has(String(trackId))}
+									apiLoading={isLoading(trackUrl(trackId))}
+									onDownload={() => handleDownloadTrack(trackId)}
+								/>
 								<AddToPlaylist
 									track={{
 										trackId: String(trackId),

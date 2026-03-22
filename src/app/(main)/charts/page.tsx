@@ -7,6 +7,8 @@ import { convertDuration } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Download, Loader2 } from "lucide-react";
+import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
+import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { CoverImage } from "@/components/ui/cover-image";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
@@ -32,6 +34,8 @@ export default function ChartsPage() {
 	const [loading, setLoading] = useState(true);
 	const [loadingTracks, setLoadingTracks] = useState(false);
 	const { download, isLoading } = useDownload();
+	const allTrackIds = tracks.map((t: any) => String(t.id || t.SNG_ID)).filter(Boolean);
+	const { downloaded } = useDownloadedTracks(allTrackIds);
 
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewPlaying = usePreviewStore((s) => s.isPlaying);
@@ -164,17 +168,12 @@ export default function ChartsPage() {
 												previewUrl,
 											}}
 										/>
-										<Button
-											size="icon-sm"
-											variant="ghost"
-											onClick={() =>
-												handleDownload(trackId, "track")
-											}
-											disabled={isLoading(deezerUrl(trackId, "track"))}
-											className="hidden sm:inline-flex"
-										>
-											{isLoading(deezerUrl(trackId, "track")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-										</Button>
+										<TrackDownloadStatus
+											trackId={trackId}
+											isAlreadyDownloaded={downloaded.has(String(trackId))}
+											apiLoading={isLoading(deezerUrl(trackId, "track"))}
+											onDownload={() => handleDownload(trackId, "track")}
+										/>
 									</div>
 									{idx < tracks.length - 1 && <Separator />}
 								</div>

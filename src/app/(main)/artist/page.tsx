@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Download, Loader2 } from "lucide-react";
+import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
+import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { CoverImage } from "@/components/ui/cover-image";
 import { PreviewButton } from "@/components/audio/PreviewButton";
@@ -37,6 +39,8 @@ function ArtistContent() {
 	const [discography, setDiscography] = useState<any>({});
 	const [loading, setLoading] = useState(true);
 	const { download, isLoading } = useDownload();
+	const allTrackIds = topTracks.map((t: any) => String(t.SNG_ID || t.id)).filter(Boolean);
+	const { downloaded } = useDownloadedTracks(allTrackIds);
 
 	useEffect(() => {
 		if (!id) return;
@@ -189,15 +193,12 @@ function ArtistContent() {
 											previewUrl,
 										}}
 									/>
-									<Button
-										variant="ghost"
-										size="icon-sm"
-										onClick={() => handleDownload(trackId, "track")}
-										disabled={isLoading(trackUrl)}
-										className="hidden sm:inline-flex"
-										>
-										{isLoading(trackUrl) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-									</Button>
+									<TrackDownloadStatus
+										trackId={trackId}
+										isAlreadyDownloaded={downloaded.has(String(trackId))}
+										apiLoading={isLoading(trackUrl)}
+										onDownload={() => handleDownload(trackId, "track")}
+									/>
 									<AddToPlaylist
 										track={{
 											trackId: String(trackId),

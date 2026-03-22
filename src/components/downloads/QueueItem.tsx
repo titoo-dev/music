@@ -5,7 +5,7 @@ import { postToServer } from "@/utils/api";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
-import { X, Check, AlertTriangle, XCircle, Loader2, Clock, FolderOpen } from "lucide-react";
+import { X, Check, AlertTriangle, XCircle, Loader2, Clock } from "lucide-react";
 
 interface Props {
 	item: QueueItemType;
@@ -58,11 +58,6 @@ export function QueueItem({ item }: Props) {
 		postToServer("downloads/cancel", { uuid: item.uuid });
 	};
 
-	const handleOpenFolder = () => {
-		postToServer("system/open-folder", { path: item.extrasPath });
-	};
-
-	const isDone = ["completed", "withErrors", "failed"].includes(item.status);
 
 	const config = statusConfig[item.status] || {
 		label: item.status,
@@ -123,8 +118,8 @@ export function QueueItem({ item }: Props) {
 					</div>
 				)}
 
-				{/* Status for non-downloading items */}
-				{!isDownloading && (
+				{/* Status for non-downloading items (skip completed — cover badge is enough) */}
+				{!isDownloading && item.status !== "completed" && (
 					<div className={`mt-1 inline-flex items-center gap-1 ${config.className}`}>
 						{config.icon}
 						<span className="text-[10px] font-medium">{config.label}</span>
@@ -134,17 +129,6 @@ export function QueueItem({ item }: Props) {
 
 			{/* Action buttons */}
 			<div className="flex shrink-0 items-center gap-0.5">
-				{isDone && item.extrasPath && (
-					<Button
-						variant="ghost"
-						size="icon-xs"
-						onClick={handleOpenFolder}
-						className="text-muted-foreground/50 hover:text-foreground hover:bg-muted"
-						title="Ouvrir le dossier"
-					>
-						<FolderOpen className="h-3 w-3" />
-					</Button>
-				)}
 				<Button
 					variant="ghost"
 					size="icon-xs"

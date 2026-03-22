@@ -241,7 +241,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 							downloadsOpen ? "hidden sm:block sm:mr-[340px]" : ""
 						}`}
 					>
-						<main className="mx-auto w-full max-w-6xl px-3 py-6 sm:px-6 lg:px-8 min-w-0">
+						<main className="mx-auto w-full max-w-6xl px-3 pt-6 pb-24 sm:px-6 lg:px-8 min-w-0">
 							{children}
 						</main>
 					</ScrollArea>

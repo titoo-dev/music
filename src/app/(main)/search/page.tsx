@@ -9,12 +9,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
 	Tabs,
-	TabsList,
-	TabsTrigger,
 	TabsContent,
 } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Download, Loader2, CheckCircle2 } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
+import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
@@ -98,8 +97,6 @@ function SearchContent() {
 	const deezerUrl = (id: string | number, type: string) => `https://www.deezer.com/${type}/${id}`;
 	const handleDownload = (id: string | number, type: string) => {
 		download(deezerUrl(id, type));
-		// Optimistically mark as downloaded for tracks
-		if (type === "track") markDownloaded(String(id));
 	};
 	const hasMore = tab !== "all" && results?.data && results?.total && results.data.length < results.total;
 
@@ -118,7 +115,7 @@ function SearchContent() {
 		return ids;
 	})();
 
-	const { downloaded, markDownloaded } = useDownloadedTracks(allTrackIds);
+	const { downloaded } = useDownloadedTracks(allTrackIds);
 
 	if (!term) {
 		return (
@@ -141,13 +138,27 @@ function SearchContent() {
 				value={tab}
 				onValueChange={(value) => setTab(value as SearchTab)}
 			>
-				<TabsList>
-					<TabsTrigger value="all">All</TabsTrigger>
-					<TabsTrigger value="track">Tracks</TabsTrigger>
-					<TabsTrigger value="album">Albums</TabsTrigger>
-					<TabsTrigger value="artist">Artists</TabsTrigger>
-					<TabsTrigger value="playlist">Playlists</TabsTrigger>
-				</TabsList>
+				<div className="flex flex-wrap gap-1.5">
+					{([
+						["all", "All"],
+						["track", "Tracks"],
+						["album", "Albums"],
+						["artist", "Artists"],
+						["playlist", "Playlists"],
+					] as const).map(([value, label]) => (
+						<button
+							key={value}
+							onClick={() => setTab(value)}
+							className={`px-3 py-1.5 text-xs font-black uppercase tracking-wider border-2 border-foreground transition-colors ${
+								tab === value
+									? "bg-foreground text-background"
+									: "bg-muted text-foreground hover:bg-accent"
+							}`}
+						>
+							{label}
+						</button>
+					))}
+				</div>
 
 				{loading && (
 					<div className="flex items-center justify-center py-12">
@@ -404,20 +415,12 @@ function TrackRow({
 					previewUrl,
 				}}
 			/>
-			{downloaded?.has(String(id)) ? (
-				<span className="flex items-center justify-center size-7 text-emerald-500" title="Already downloaded">
-					<CheckCircle2 className="size-3.5" />
-				</span>
-			) : (
-				<Button
-					size="icon-sm"
-					variant="ghost"
-					onClick={() => onDownload(id, "track")}
-					disabled={isLoading(deezerUrl(id, "track"))}
-					>
-					{isLoading(deezerUrl(id, "track")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-				</Button>
-			)}
+			<TrackDownloadStatus
+				trackId={id}
+				isAlreadyDownloaded={downloaded?.has(String(id)) ?? false}
+				apiLoading={isLoading(deezerUrl(id, "track"))}
+				onDownload={() => onDownload(id, "track")}
+			/>
 			<AddToPlaylist
 				track={{
 					trackId: String(id),

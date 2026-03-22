@@ -8,7 +8,8 @@ import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
-import { Loader2, ArrowLeft, Download, Trash2, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowLeft, Download, Trash2 } from "lucide-react";
+import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import Link from "next/link";
 import { PlayButton } from "@/components/audio/PlayButton";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
@@ -47,7 +48,7 @@ export default function PlaylistDetailPage() {
 	const isDownloadsPlaylist = playlist?.title === "Downloads";
 
 	const allTrackIds = playlist?.tracks.map((t) => t.trackId) || [];
-	const { downloaded, markDownloaded } = useDownloadedTracks(allTrackIds);
+	const { downloaded } = useDownloadedTracks(allTrackIds);
 
 	useEffect(() => {
 		if (!isAuthenticated || !params.id) {
@@ -102,14 +103,12 @@ export default function PlaylistDetailPage() {
 
 	const handleDownloadTrack = (trackId: string) => {
 		download(`https://www.deezer.com/track/${trackId}`);
-		markDownloaded(trackId);
 	};
 
 	const handleDownloadAll = () => {
 		if (!playlist) return;
 		for (const track of playlist.tracks) {
 			download(`https://www.deezer.com/track/${track.trackId}`);
-			markDownloaded(track.trackId);
 		}
 	};
 
@@ -242,25 +241,12 @@ export default function PlaylistDetailPage() {
 									{formatDuration(track.duration)}
 								</span>
 								<div className="flex gap-1 items-center shrink-0">
-									{isTrackDownloaded ? (
-										<span className="flex items-center justify-center size-7 sm:size-8 text-emerald-500" title="Already downloaded">
-											<CheckCircle2 className="size-3.5" />
-										</span>
-									) : (
-										<Button
-											variant="ghost"
-											size="icon"
-											className="size-7 sm:size-8"
-											onClick={() => handleDownloadTrack(track.trackId)}
-											disabled={isLoading(trackUrl)}
-										>
-											{isLoading(trackUrl) ? (
-												<Loader2 className="size-3.5 animate-spin" />
-											) : (
-												<Download className="size-3.5" />
-											)}
-										</Button>
-									)}
+									<TrackDownloadStatus
+										trackId={track.trackId}
+										isAlreadyDownloaded={isTrackDownloaded}
+										apiLoading={isLoading(trackUrl)}
+										onDownload={() => handleDownloadTrack(track.trackId)}
+									/>
 									<AddToPlaylist
 										track={{
 											trackId: track.trackId,
