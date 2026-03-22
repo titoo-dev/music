@@ -1,6 +1,6 @@
 export default class BasePlugin {
 	/* constructor () {} */
-	setup() {
+	async setup() {
 		return this;
 	}
 

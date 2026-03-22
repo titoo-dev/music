@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: "App not initialized" }, { status: 500 });
 		}
 
-		deemixApp.saveSettings(settings, spotifySettings);
+		await deemixApp.saveSettings(settings, spotifySettings);
 		return NextResponse.json(deemixApp.getSettings(), {
 			headers: { "Cache-Control": "no-store" },
 		});

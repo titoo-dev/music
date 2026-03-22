@@ -119,7 +119,7 @@ export default function ChartsPage() {
 							const trackCover =
 								track.album?.cover_small ||
 								getCoverUrl(track.ALB_PICTURE, 56);
-							const previewUrl = track.MEDIA?.[0]?.HREF || track.preview || "";
+							const previewUrl = (track.MEDIA?.[0]?.HREF || track.preview || "").replace("http://", "https://");
 
 							return (
 								<div key={trackId || idx}>

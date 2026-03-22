@@ -4,15 +4,19 @@ import { useEffect, useRef, useCallback } from "react";
 import { useQueueStore } from "@/stores/useQueueStore";
 import { useAppStore } from "@/stores/useAppStore";
 
-const WS_PORT = 6595;
+function getWsUrl() {
+	if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
+	const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+	const port = process.env.NEXT_PUBLIC_WS_PORT || "6595";
+	return `${protocol}://${window.location.hostname}:${port}`;
+}
 
 export function useSocket() {
 	const wsRef = useRef<WebSocket | null>(null);
 	const { addToQueue, updateQueueItem, removeFromQueue, setCurrent } = useQueueStore();
 
 	const connect = useCallback(() => {
-		const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-		const url = `${protocol}://${window.location.hostname}:${WS_PORT}`;
+		const url = getWsUrl();
 
 		const ws = new WebSocket(url);
 		wsRef.current = ws;

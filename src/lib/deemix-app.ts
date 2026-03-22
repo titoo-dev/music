@@ -3,6 +3,7 @@
 
 import type { Listener } from "@/lib/deemix/types/listener";
 import type { Settings } from "@/lib/deemix/types/Settings";
+import type { ConfigStore } from "@/lib/deemix/config-store/ConfigStore";
 
 import type { StorageProvider } from "@/lib/deemix/storage/StorageProvider";
 
@@ -17,7 +18,6 @@ let Single: any;
 let Collection: any;
 let Convertable: any;
 let SpotifyPlugin: any;
-let utils: any;
 let createStorageProvider: any;
 
 let _initialized = false;
@@ -38,7 +38,6 @@ async function ensureImports() {
 		Collection = deemix.Collection;
 		Convertable = deemix.Convertable;
 		SpotifyPlugin = deemix.SpotifyPlugin;
-		utils = deemix.utils;
 		createStorageProvider = deemix.createStorageProvider;
 		_initialized = true;
 	} catch (e) {
@@ -54,6 +53,7 @@ export class DeemixApp {
 	latestVersion: string | null;
 	plugins: Record<string, any>;
 	settings: Settings;
+	configStore: ConfigStore;
 	storageProvider: StorageProvider | null;
 	listener: Listener;
 	_wsBroadcast?: (key: string, data: any) => void;
@@ -62,7 +62,7 @@ export class DeemixApp {
 	// Single/Collection instances with trackAPI/albumAPI data
 	private _downloadData: Record<string, any> = {};
 
-	constructor(listener: Listener) {
+	constructor(listener: Listener, configStore: ConfigStore) {
 		this.queueOrder = [];
 		this.queue = {};
 		this.currentJob = null;
@@ -70,6 +70,7 @@ export class DeemixApp {
 		this.latestVersion = null;
 		this.listener = listener;
 		this.settings = {} as Settings;
+		this.configStore = configStore;
 		this.storageProvider = null;
 		// init() is called externally after construction (awaited by server-state.ts)
 	}
@@ -77,17 +78,14 @@ export class DeemixApp {
 	async init() {
 		await ensureImports();
 		if (loadSettings) {
-			const configFolder = utils?.getConfigFolder?.() || "";
-			if (configFolder) {
-				this.settings = loadSettings(configFolder);
-			}
+			this.settings = await loadSettings(this.configStore);
 		}
 		if (createStorageProvider) {
 			this.storageProvider = createStorageProvider(this.settings);
 		}
 		if (SpotifyPlugin) {
-			this.plugins.spotify = new SpotifyPlugin();
-			this.plugins.spotify.setup();
+			this.plugins.spotify = new SpotifyPlugin(this.configStore);
+			await this.plugins.spotify.setup();
 		}
 	}
 
@@ -119,16 +117,16 @@ export class DeemixApp {
 		};
 	}
 
-	saveSettings(newSettings: Settings, newSpotifySettings: any) {
-		if (saveSettings && utils?.getConfigFolder) {
-			saveSettings(newSettings, utils.getConfigFolder());
+	async saveSettings(newSettings: Settings, newSpotifySettings: any) {
+		if (saveSettings) {
+			await saveSettings(newSettings, this.configStore);
 		}
 		this.settings = newSettings;
 		if (createStorageProvider) {
 			this.storageProvider = createStorageProvider(this.settings);
 		}
 		if (this.plugins.spotify?.saveSettings) {
-			this.plugins.spotify.saveSettings(newSpotifySettings);
+			await this.plugins.spotify.saveSettings(newSpotifySettings);
 		}
 	}
 

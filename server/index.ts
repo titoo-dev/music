@@ -7,6 +7,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 const PORT = parseInt(process.env.WS_PORT || "6595");
+const NEXT_URL = process.env.NEXT_URL || "http://localhost:3000";
 
 // Track all connected clients
 const clients = new Set<WebSocket>();
@@ -39,20 +40,20 @@ function handleClientMessage(key: string, data: any, ws: WebSocket) {
 	switch (key) {
 		case "removeFromQueue":
 			// Forward to the deemix app via HTTP API call to Next.js
-			fetch(`http://localhost:3000/api/remove-from-queue`, {
+			fetch(`${NEXT_URL}/api/remove-from-queue`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ uuid: data }),
 			}).catch(() => {});
 			break;
 		case "cancelAllDownloads":
-			fetch(`http://localhost:3000/api/cancel-all`, { method: "POST" }).catch(() => {});
+			fetch(`${NEXT_URL}/api/cancel-all`, { method: "POST" }).catch(() => {});
 			break;
 		case "removeFinishedDownloads":
-			fetch(`http://localhost:3000/api/remove-finished`, { method: "POST" }).catch(() => {});
+			fetch(`${NEXT_URL}/api/remove-finished`, { method: "POST" }).catch(() => {});
 			break;
 		case "saveSettings":
-			fetch(`http://localhost:3000/api/settings`, {
+			fetch(`${NEXT_URL}/api/settings`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(data),

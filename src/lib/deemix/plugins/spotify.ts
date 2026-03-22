@@ -8,7 +8,7 @@ import {
 	TrackNotOnDeezer,
 } from "../errors";
 import { type Settings } from "../types/Settings";
-import { getConfigFolder } from "../utils/localpaths";
+import type { ConfigStore } from "../config-store/ConfigStore";
 import {
 	SpotifyApi,
 	type MaxInt,
@@ -16,9 +16,7 @@ import {
 } from "@spotify/web-api-ts-sdk";
 import { queue } from "async";
 import { Deezer, type DeezerTrack } from "@/lib/deezer";
-import fs from "fs";
 import got from "got";
-import { sep } from "path";
 import BasePlugin from "./base";
 
 interface CachedTrack {
@@ -35,26 +33,22 @@ export default class SpotifyPlugin extends BasePlugin {
 	credentials: { clientId: string; clientSecret: string };
 	settings: { fallbackSearch: boolean };
 	enabled: boolean;
-	configFolder: string;
+	configStore: ConfigStore;
 	sp: SpotifyApi;
 
-	constructor(configFolder = undefined) {
+	constructor(configStore: ConfigStore) {
 		super();
 		this.credentials = { clientId: "", clientSecret: "" };
 		this.settings = {
 			fallbackSearch: false,
 		};
 		this.enabled = false;
-		/* this.sp */
-		this.configFolder = configFolder || getConfigFolder();
-		this.configFolder += `spotify${sep}`;
+		this.configStore = configStore;
 		return this;
 	}
 
-	override setup() {
-		fs.mkdirSync(this.configFolder, { recursive: true });
-
-		this.loadSettings();
+	override async setup() {
+		await this.loadSettings();
 		return this;
 	}
 
@@ -106,7 +100,7 @@ export default class SpotifyPlugin extends BasePlugin {
 	}
 
 	async generateTrackItem(dz: Deezer, linkId: string, bitrate: number) {
-		const cache = this.loadCache();
+		const cache = await this.loadCache();
 
 		let cachedTrack: CachedTrack;
 
@@ -115,7 +109,7 @@ export default class SpotifyPlugin extends BasePlugin {
 		} else {
 			cachedTrack = await this.getTrack(linkId);
 			cache.tracks[linkId] = cachedTrack;
-			this.saveCache(cache);
+			await this.saveCache(cache);
 		}
 
 		if (cachedTrack.isrc) {
@@ -137,7 +131,7 @@ export default class SpotifyPlugin extends BasePlugin {
 				if (trackID !== "0") {
 					cachedTrack.id = trackID;
 					cache.tracks[linkId] = cachedTrack;
-					this.saveCache(cache);
+					await this.saveCache(cache);
 				}
 			}
 			if (cachedTrack.id !== 0)
@@ -148,7 +142,7 @@ export default class SpotifyPlugin extends BasePlugin {
 	}
 
 	async generateAlbumItem(dz: Deezer, link_id, bitrate) {
-		const cache = this.loadCache();
+		const cache = await this.loadCache();
 
 		let cachedAlbum;
 		if (cache.albums[link_id]) {
@@ -156,7 +150,7 @@ export default class SpotifyPlugin extends BasePlugin {
 		} else {
 			cachedAlbum = await this.getAlbum(link_id);
 			cache.albums[link_id] = cachedAlbum;
-			this.saveCache(cache);
+			await this.saveCache(cache);
 		}
 
 		try {
@@ -288,7 +282,7 @@ export default class SpotifyPlugin extends BasePlugin {
 		settings: Settings,
 		listener: any = null
 	): Promise<Collection> {
-		const cache = this.loadCache();
+		const cache = await this.loadCache();
 
 		let conversion = 0;
 		let conversionNext = 0;
@@ -311,7 +305,7 @@ export default class SpotifyPlugin extends BasePlugin {
 				} else {
 					cachedTrack = await this.getTrack(track.id, track);
 					cache.tracks[track.id] = cachedTrack;
-					this.saveCache(cache);
+					await this.saveCache(cache);
 				}
 
 				let trackAPI: DeezerTrack;
@@ -334,7 +328,7 @@ export default class SpotifyPlugin extends BasePlugin {
 						if (trackID !== "0") {
 							cachedTrack.id = trackID;
 							cache.tracks[track.id] = cachedTrack;
-							this.saveCache(cache);
+							await this.saveCache(cache);
 						}
 					}
 					if (cachedTrack.id !== "0")
@@ -398,13 +392,12 @@ export default class SpotifyPlugin extends BasePlugin {
 		if (listener)
 			listener.send("finishConversion", returnCollection.getSlimmedDict());
 
-		fs.writeFileSync(this.configFolder + "cache.json", JSON.stringify(cache));
+		await this.saveCache(cache);
 		return returnCollection;
 	}
 
 	_convertPlaylistStructure(spotifyPlaylist) {
 		let cover = null;
-		// Mickey: some playlists can be faulty, for example https://open.spotify.com/playlist/7vyEjAGrXOIjqlC8pZRupW
 		if (spotifyPlaylist?.images?.length) cover = spotifyPlaylist.images[0].url;
 
 		const deezerPlaylist = {
@@ -450,64 +443,25 @@ export default class SpotifyPlugin extends BasePlugin {
 		return deezerPlaylist;
 	}
 
-	loadSettings() {
-		if (!fs.existsSync(this.configFolder + "config.json")) {
-			fs.writeFileSync(
-				this.configFolder + "config.json",
-				JSON.stringify(
-					{
-						...this.credentials,
-						...this.settings,
-					},
-					null,
-					2
-				)
-			);
+	async loadSettings() {
+		const saved = await this.configStore.get<any>("spotify_config");
+
+		if (!saved) {
+			await this.saveSettings();
+			return;
 		}
-		let settings;
-		try {
-			settings = JSON.parse(
-				fs.readFileSync(this.configFolder + "config.json").toString()
-			);
-		} catch (e) {
-			if (e.name === "SyntaxError") {
-				fs.writeFileSync(
-					this.configFolder + "config.json",
-					JSON.stringify(
-						{
-							...this.credentials,
-							...this.settings,
-						},
-						null,
-						2
-					)
-				);
-			}
-			settings = JSON.parse(
-				JSON.stringify({
-					...this.credentials,
-					...this.settings,
-				})
-			);
-		}
-		this.setSettings(settings);
+
+		this.setSettings(saved);
 		this.checkCredentials();
 	}
 
-	saveSettings(newSettings?: any) {
+	async saveSettings(newSettings?: any) {
 		if (newSettings) this.setSettings(newSettings);
 		this.checkCredentials();
-		fs.writeFileSync(
-			this.configFolder + "config.json",
-			JSON.stringify(
-				{
-					...this.credentials,
-					...this.settings,
-				},
-				null,
-				2
-			)
-		);
+		await this.configStore.set("spotify_config", {
+			...this.credentials,
+			...this.settings,
+		});
 	}
 
 	getSettings() {
@@ -519,8 +473,8 @@ export default class SpotifyPlugin extends BasePlugin {
 
 	setSettings(newSettings) {
 		this.credentials = {
-			clientId: newSettings.clientId,
-			clientSecret: newSettings.clientSecret,
+			clientId: newSettings.clientId || "",
+			clientSecret: newSettings.clientSecret || "",
 		};
 		const settings = { ...newSettings };
 		delete settings.clientId;
@@ -528,29 +482,13 @@ export default class SpotifyPlugin extends BasePlugin {
 		this.settings = settings;
 	}
 
-	loadCache() {
-		let cache;
-		try {
-			cache = JSON.parse(
-				fs.readFileSync(this.configFolder + "cache.json").toString()
-			);
-		} catch (e) {
-			if (e.name === "SyntaxError") {
-				fs.writeFileSync(
-					this.configFolder + "cache.json",
-					JSON.stringify({ tracks: {}, albums: {} }, null, 2)
-				);
-			}
-			cache = { tracks: {}, albums: {} };
-		}
-		return cache;
+	async loadCache() {
+		const cache = await this.configStore.get<any>("spotify_cache");
+		return cache || { tracks: {}, albums: {} };
 	}
 
-	saveCache(newCache) {
-		fs.writeFileSync(
-			this.configFolder + "cache.json",
-			JSON.stringify(newCache)
-		);
+	async saveCache(newCache) {
+		await this.configStore.set("spotify_cache", newCache);
 	}
 
 	checkCredentials() {
@@ -573,11 +511,11 @@ export default class SpotifyPlugin extends BasePlugin {
 		return this.credentials;
 	}
 
-	setCredentials(clientId, clientSecret) {
+	async setCredentials(clientId, clientSecret) {
 		clientId = clientId.trim();
 		clientSecret = clientSecret.trim();
 
 		this.credentials = { clientId, clientSecret };
-		this.saveSettings();
+		await this.saveSettings();
 	}
 }

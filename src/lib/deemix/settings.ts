@@ -1,7 +1,6 @@
 import { TrackFormats } from "@/lib/deezer";
-import { getMusicFolder, getConfigFolder } from "./utils/localpaths";
-import fs from "fs";
 import { type Settings } from "./types/Settings";
+import type { ConfigStore } from "./config-store/ConfigStore";
 
 // Should the lib overwrite files?
 export const OverwriteOption = {
@@ -22,7 +21,7 @@ export const FeaturesOption = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-	downloadLocation: getMusicFolder(),
+	downloadLocation: "/data/music/",
 	tracknameTemplate: "%artist% - %title%",
 	albumTracknameTemplate: "%tracknumber% - %title%",
 	playlistTracknameTemplate: "%artist% - %title%",
@@ -114,33 +113,24 @@ export const DEFAULT_SETTINGS: Settings = {
 	},
 };
 
-export function saveSettings(settings: Settings, configFolder) {
-	configFolder = configFolder || getConfigFolder();
-	if (!fs.existsSync(configFolder)) fs.mkdirSync(configFolder);
-
-	fs.writeFileSync(
-		configFolder + "config.json",
-		JSON.stringify(settings, null, 2)
-	);
+export async function saveSettings(
+	settings: Settings,
+	configStore: ConfigStore
+) {
+	await configStore.set("settings", settings);
 }
 
-export function loadSettings(configFolder: string) {
-	configFolder = configFolder || getConfigFolder();
-	if (!fs.existsSync(configFolder)) fs.mkdirSync(configFolder);
+export async function loadSettings(configStore: ConfigStore) {
+	let settings = await configStore.get<Settings>("settings");
 
-	if (!fs.existsSync(configFolder + "config.json"))
-		saveSettings(DEFAULT_SETTINGS, configFolder);
-
-	let settings: Settings;
-	try {
-		settings = JSON.parse(
-			fs.readFileSync(configFolder + "config.json").toString()
-		);
-	} catch (e) {
-		if (e.name === "SyntaxError") saveSettings(DEFAULT_SETTINGS, configFolder);
+	if (!settings) {
+		await saveSettings(DEFAULT_SETTINGS, configStore);
 		settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 	}
-	if (check(settings) > 0) saveSettings(settings, configFolder);
+
+	if (check(settings) > 0) {
+		await saveSettings(settings, configStore);
+	}
 
 	// Environment variable overrides for S3 storage
 	if (process.env.DEEMIX_STORAGE_TYPE) {
@@ -150,11 +140,18 @@ export function loadSettings(configFolder: string) {
 		settings.s3 = {
 			...settings.s3,
 			endpoint: process.env.DEEMIX_S3_ENDPOINT,
-			region: process.env.DEEMIX_S3_REGION || settings.s3?.region || "us-east-1",
-			bucket: process.env.DEEMIX_S3_BUCKET || settings.s3?.bucket || "deemix-music",
-			accessKeyId: process.env.DEEMIX_S3_ACCESS_KEY || settings.s3?.accessKeyId || "",
-			secretAccessKey: process.env.DEEMIX_S3_SECRET_KEY || settings.s3?.secretAccessKey || "",
-			pathPrefix: process.env.DEEMIX_S3_PATH_PREFIX || settings.s3?.pathPrefix || "",
+			region:
+				process.env.DEEMIX_S3_REGION || settings.s3?.region || "us-east-1",
+			bucket:
+				process.env.DEEMIX_S3_BUCKET || settings.s3?.bucket || "deemix-music",
+			accessKeyId:
+				process.env.DEEMIX_S3_ACCESS_KEY || settings.s3?.accessKeyId || "",
+			secretAccessKey:
+				process.env.DEEMIX_S3_SECRET_KEY ||
+				settings.s3?.secretAccessKey ||
+				"",
+			pathPrefix:
+				process.env.DEEMIX_S3_PATH_PREFIX || settings.s3?.pathPrefix || "",
 		};
 	}
 

@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
 		const { settings, spotifySettings } = await request.json();
 
-		app.saveSettings(settings, spotifySettings);
+		await app.saveSettings(settings, spotifySettings);
 		return ok(app.getSettings());
 	} catch (e) {
 		return handleError(e);

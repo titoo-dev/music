@@ -129,7 +129,7 @@ function ArtistContent() {
 								getCoverUrl(track.ALB_PICTURE, 56);
 							const albumId = track.ALB_ID || track.album?.id;
 							const albumTitle = track.ALB_TITLE || track.album?.title;
-							const previewUrl = track.MEDIA?.[0]?.HREF || track.preview || "";
+							const previewUrl = (track.MEDIA?.[0]?.HREF || track.preview || "").replace("http://", "https://");
 							const trackUrl = deezerUrl(trackId, "track");
 
 							return (

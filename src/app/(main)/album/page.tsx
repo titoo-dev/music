@@ -134,7 +134,7 @@ function AlbumContent() {
 						const trackCover = track.ALB_PICTURE
 							? getCoverUrl(track.ALB_PICTURE, 56)
 							: track.album?.cover_small;
-						const previewUrl = track.MEDIA?.[0]?.HREF || track.preview || "";
+						const previewUrl = (track.MEDIA?.[0]?.HREF || track.preview || "").replace("http://", "https://");
 
 						return (
 							<div

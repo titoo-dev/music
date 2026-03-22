@@ -319,7 +319,7 @@ function TrackRow({
 	const cover =
 		track.album?.cover_small ||
 		getCoverUrl(track.ALB_PICTURE, 56);
-	const previewUrl = track.MEDIA?.[0]?.HREF || track.preview || "";
+	const previewUrl = (track.MEDIA?.[0]?.HREF || track.preview || "").replace("http://", "https://");
 
 	return (
 		<div className="flex items-center gap-3 px-4 py-2.5 group hover:bg-muted/50 transition-colors">

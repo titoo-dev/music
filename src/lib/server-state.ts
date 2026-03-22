@@ -36,8 +36,13 @@ export async function getDeemixApp() {
 async function initializeDeemixApp() {
 	// Dynamic import to avoid issues during build
 	try {
+		const { createConfigStore } = await import(
+			"@/lib/deemix/config-store/index"
+		);
+		const configStore = await createConfigStore();
+
 		const { DeemixApp } = await import("@/lib/deemix-app");
-		const app = new DeemixApp(createListener());
+		const app = new DeemixApp(createListener(), configStore);
 		await app.init(); // Must await before returning
 		globalForDeemix.deemixApp = app;
 		return app;
@@ -55,4 +60,3 @@ function createListener(): Listener {
 		},
 	};
 }
-
