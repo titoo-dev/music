@@ -17,7 +17,9 @@ export function PlayButton({ track, queue, size = "sm", className }: PlayButtonP
 	const play = usePlayerStore((s) => s.play);
 	const pause = usePlayerStore((s) => s.pause);
 
-	const isThisPlaying = currentTrack?.trackId === track.trackId && isPlaying;
+	const isThisTrack = currentTrack?.trackId === track.trackId;
+	const isThisPlaying = isThisTrack && isPlaying;
+	const resume = usePlayerStore((s) => s.resume);
 
 	return (
 		<Button
@@ -35,6 +37,8 @@ export function PlayButton({ track, queue, size = "sm", className }: PlayButtonP
 				e.stopPropagation();
 				if (isThisPlaying) {
 					pause();
+				} else if (isThisTrack) {
+					resume();
 				} else {
 					play(track, queue);
 				}

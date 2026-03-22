@@ -132,7 +132,7 @@ export default function DownloadHistoryPage() {
 										<PlayButton
 											track={playerTrack}
 											queue={playerQueue}
-											className="opacity-0 group-hover:opacity-100 transition-opacity"
+											className=""
 										/>
 									)}
 									<div className="relative shrink-0 size-10 rounded overflow-hidden bg-muted">

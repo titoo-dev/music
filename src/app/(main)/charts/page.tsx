@@ -171,7 +171,7 @@ export default function ChartsPage() {
 												handleDownload(trackId, "track")
 											}
 											disabled={isLoading(deezerUrl(trackId, "track"))}
-											className="opacity-0 group-hover:opacity-100 transition-opacity"
+											className=""
 										>
 											{isLoading(deezerUrl(trackId, "track")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
 										</Button>

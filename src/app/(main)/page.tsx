@@ -248,14 +248,14 @@ export default function HomePage() {
 											className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
 										/>
 									</Link>
-									<div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center pointer-events-none">
+									<div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
 										<Button
 											size="sm"
 											onClick={() =>
 												handleDownload(item.id, "playlist")
 											}
 											disabled={isLoading(deezerUrl(item.id, "playlist"))}
-											className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1.5 pointer-events-auto"
+											className="gap-1.5 pointer-events-auto"
 										>
 											{isLoading(deezerUrl(item.id, "playlist")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
 											{isLoading(deezerUrl(item.id, "playlist")) ? "Adding..." : "Download"}

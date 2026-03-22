@@ -192,7 +192,7 @@ function PlaylistContent() {
 										size="xs"
 										onClick={() => handleDownloadTrack(trackId)}
 										disabled={isLoading(trackUrl(trackId))}
-										className="opacity-0 group-hover:opacity-100 transition-opacity gap-1.5"
+										className="gap-1.5"
 									>
 										{isLoading(trackUrl(trackId)) && <Loader2 className="size-3 animate-spin" />}
 										{isLoading(trackUrl(trackId)) ? "Adding..." : "Download"}
@@ -206,7 +206,7 @@ function PlaylistContent() {
 										coverUrl: trackCover,
 										duration: trackDuration ? Number(trackDuration) : null,
 									}}
-									className="size-7 opacity-0 group-hover:opacity-100 transition-opacity"
+									className="size-7"
 								/>
 							</div>
 						);

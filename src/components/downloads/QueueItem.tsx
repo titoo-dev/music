@@ -133,7 +133,7 @@ export function QueueItem({ item }: Props) {
 			</div>
 
 			{/* Action buttons */}
-			<div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-all group-hover:opacity-100">
+			<div className="flex shrink-0 items-center gap-0.5">
 				{isDone && item.extrasPath && (
 					<Button
 						variant="ghost"

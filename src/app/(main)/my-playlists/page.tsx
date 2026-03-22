@@ -173,7 +173,7 @@ export default function MyPlaylistsPage() {
 							{pl.title !== "Downloads" && <Button
 								variant="ghost"
 								size="icon"
-								className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500"
+								className="absolute top-2 right-2 text-muted-foreground hover:text-red-500"
 								onClick={(e) => {
 									e.preventDefault();
 									setDeleteTarget(pl);

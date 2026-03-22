@@ -188,7 +188,7 @@ export default function PlaylistDetailPage() {
 									<PlayButton
 										track={playerTrack}
 										queue={playerQueue}
-										className="opacity-0 group-hover:opacity-100 transition-opacity"
+										className=""
 									/>
 								) : (
 									<span className="w-7 text-right text-xs text-muted-foreground shrink-0">
@@ -232,7 +232,7 @@ export default function PlaylistDetailPage() {
 										<Button
 											variant="ghost"
 											size="icon"
-											className="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
+											className="size-8"
 											onClick={() => handleDownloadTrack(track.trackId)}
 											disabled={isLoading(trackUrl)}
 										>
@@ -252,12 +252,12 @@ export default function PlaylistDetailPage() {
 											coverUrl: track.coverUrl,
 											duration: track.duration,
 										}}
-										className="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
+										className="size-8"
 									/>
 									<Button
 										variant="ghost"
 										size="icon"
-										className="size-8 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+										className="size-8 text-muted-foreground hover:text-red-500"
 										onClick={() => handleRemoveTrack(track.trackId)}
 									>
 										<Trash2 className="size-3.5" />
