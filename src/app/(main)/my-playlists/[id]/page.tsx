@@ -141,15 +141,16 @@ export default function PlaylistDetailPage() {
 
 	return (
 		<div className="space-y-6">
-			<div className="flex items-center gap-3">
+			<div className="flex items-center gap-3 min-w-0">
 				<Button
 					variant="ghost"
 					size="icon"
+					className="shrink-0"
 					onClick={() => router.push("/my-playlists")}
 				>
 					<ArrowLeft className="size-4" />
 				</Button>
-				<div className="flex-1">
+				<div className="flex-1 min-w-0">
 					<h1 className="text-brutal-lg">{playlist.title}</h1>
 					{playlist.description && (
 						<p className="text-sm text-muted-foreground mt-1">{playlist.description}</p>

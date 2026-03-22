@@ -64,7 +64,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 	const displayName = user?.name || deezerUser?.name || "User";
 
 	return (
-		<div className="flex min-h-screen bg-background">
+		<div className="flex min-h-screen bg-background max-w-full overflow-x-hidden">
 			{/* ─── Desktop Sidebar ─── */}
 			<aside className="hidden border-r-[3px] border-foreground bg-sidebar md:fixed md:inset-y-0 md:z-40 md:flex md:w-56 md:flex-col">
 				{/* Logo */}
@@ -120,7 +120,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 			</aside>
 
 			{/* ─── Main Area ─── */}
-			<div className="flex flex-1 flex-col md:pl-56">
+			<div className="flex flex-1 flex-col min-w-0 md:pl-56">
 				{/* Top bar */}
 				<header className="sticky top-0 z-30 border-b-[3px] border-foreground bg-background">
 					<div className="flex h-16 items-center gap-4 px-4 sm:px-6">
@@ -234,9 +234,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 				</header>
 
 				{/* ─── Main Content + Downloads Panel ─── */}
-				<div className="flex flex-1 overflow-hidden">
+				<div className="flex flex-1 overflow-hidden min-w-0">
 					<ScrollArea
-						className={`flex-1 transition-all duration-300 ${
+						className={`flex-1 min-w-0 transition-all duration-300 ${
 							downloadsOpen ? "hidden sm:block sm:mr-[340px]" : ""
 						}`}
 					>
