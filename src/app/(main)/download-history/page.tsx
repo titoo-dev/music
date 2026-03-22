@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Loader2, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { PlayButton } from "@/components/audio/PlayButton";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 
 interface DownloadItem {
 	id: string;
@@ -101,41 +103,64 @@ export default function DownloadHistoryPage() {
 			) : (
 				<>
 					<div className="space-y-1">
-						{items.map((item) => (
-							<div
-								key={item.id}
-								className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/50 transition-colors"
-							>
-								<div className="shrink-0 size-10 rounded overflow-hidden bg-muted">
-									{item.coverUrl ? (
-										<CoverImage
-											src={item.coverUrl}
-											alt={item.title}
-											className="size-10"
+						{items.map((item) => {
+							const playerTrack: PlayerTrack = {
+								trackId: item.trackId,
+								title: item.title,
+								artist: item.artist,
+								cover: item.coverUrl,
+								duration: null,
+							};
+							const playerQueue: PlayerTrack[] = items.map((i) => ({
+								trackId: i.trackId,
+								title: i.title,
+								artist: i.artist,
+								cover: i.coverUrl,
+								duration: null,
+							}));
+							return (
+								<div
+									key={item.id}
+									className="group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/50 transition-colors"
+								>
+									{item.storageType === "s3" && (
+										<PlayButton
+											track={playerTrack}
+											queue={playerQueue}
+											className="opacity-0 group-hover:opacity-100 transition-opacity"
 										/>
-									) : (
-										<div className="size-10 flex items-center justify-center text-xs text-muted-foreground">
-											?
-										</div>
 									)}
+									<div className="shrink-0 size-10 rounded overflow-hidden bg-muted">
+										{item.coverUrl ? (
+											<CoverImage
+												src={item.coverUrl}
+												alt={item.title}
+												className="size-10"
+											/>
+										) : (
+											<div className="size-10 flex items-center justify-center text-xs text-muted-foreground">
+												?
+											</div>
+										)}
+									</div>
+									<div className="flex-1 min-w-0">
+										<p className="text-sm font-medium truncate">{item.title}</p>
+										<p className="text-xs text-muted-foreground truncate">
+											{item.artist}
+											{item.album ? ` \u00B7 ${item.album}` : ""}
+										</p>
+									</div>
+									<div className="shrink-0 text-right">
+										<p className="text-xs text-muted-foreground">
+											{bitrateLabels[item.bitrate] || `${item.bitrate}`}
+										</p>
+										<p className="text-xs text-muted-foreground">
+											{new Date(item.downloadedAt).toLocaleDateString()}
+										</p>
+									</div>
 								</div>
-								<div className="flex-1 min-w-0">
-									<p className="text-sm font-medium truncate">{item.title}</p>
-									<p className="text-xs text-muted-foreground truncate">
-										{item.artist}
-										{item.album ? ` \u00B7 ${item.album}` : ""}
-									</p>
-								</div>
-								<div className="shrink-0 text-right">
-									<p className="text-xs text-muted-foreground">
-										{bitrateLabels[item.bitrate] || `${item.bitrate}`}
-									</p>
-									<p className="text-xs text-muted-foreground">
-										{new Date(item.downloadedAt).toLocaleDateString()}
-									</p>
-								</div>
-							</div>
-						))}
+							);
+						})}
 					</div>
 
 					{/* Pagination */}

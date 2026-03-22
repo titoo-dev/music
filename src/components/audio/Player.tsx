@@ -1,0 +1,224 @@
+"use client";
+
+import { usePlayerStore } from "@/stores/usePlayerStore";
+import { CoverImage } from "@/components/ui/cover-image";
+import { Button } from "@/components/ui/button";
+import { motion, AnimatePresence } from "motion/react";
+
+function formatTime(seconds: number) {
+	if (!seconds || !isFinite(seconds)) return "0:00";
+	const m = Math.floor(seconds / 60);
+	const s = Math.floor(seconds % 60);
+	return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function seek(time: number) {
+	(window as any).__deemixAudioSeek?.(time);
+}
+
+export function Player() {
+	const currentTrack = usePlayerStore((s) => s.currentTrack);
+	const isPlaying = usePlayerStore((s) => s.isPlaying);
+	const volume = usePlayerStore((s) => s.volume);
+	const currentTime = usePlayerStore((s) => s.currentTime);
+	const duration = usePlayerStore((s) => s.duration);
+	const shuffle = usePlayerStore((s) => s.shuffle);
+	const repeat = usePlayerStore((s) => s.repeat);
+	const queue = usePlayerStore((s) => s.queue);
+
+	const toggle = usePlayerStore((s) => s.toggle);
+	const stop = usePlayerStore((s) => s.stop);
+	const next = usePlayerStore((s) => s.next);
+	const prev = usePlayerStore((s) => s.prev);
+	const setVolume = usePlayerStore((s) => s.setVolume);
+	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+	const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
+
+	const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+	const hasQueue = queue.length > 1;
+
+	return (
+		<AnimatePresence>
+			{currentTrack && (
+				<motion.div
+					key="player"
+					initial={{ y: 80, opacity: 0 }}
+					animate={{ y: 0, opacity: 1 }}
+					exit={{ y: 80, opacity: 0 }}
+					transition={{ type: "spring", damping: 25, stiffness: 300 }}
+					className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/40 bg-background/95 backdrop-blur-xl md:left-56"
+				>
+					{/* Progress bar (clickable) */}
+					<div
+						className="group relative h-1 w-full cursor-pointer bg-muted transition-all hover:h-1.5"
+						onClick={(e) => {
+							const rect = e.currentTarget.getBoundingClientRect();
+							const pct = (e.clientX - rect.left) / rect.width;
+							seek(pct * duration);
+						}}
+					>
+						<div
+							className="absolute inset-y-0 left-0 bg-foreground transition-all"
+							style={{ width: `${progress}%` }}
+						/>
+					</div>
+
+					<div className="flex items-center gap-4 px-4 py-2.5">
+						{/* Track info */}
+						<div className="flex items-center gap-3 min-w-0 w-[30%]">
+							<CoverImage
+								src={currentTrack.cover}
+								className="h-10 w-10 shrink-0 rounded-lg shadow-sm"
+							/>
+							<div className="min-w-0">
+								<p className="truncate text-sm font-medium leading-tight">
+									{currentTrack.title}
+								</p>
+								<p className="truncate text-xs text-muted-foreground leading-tight">
+									{currentTrack.artist}
+								</p>
+							</div>
+						</div>
+
+						{/* Controls */}
+						<div className="flex items-center justify-center gap-1 flex-1">
+							{/* Shuffle */}
+							{hasQueue && (
+								<Button
+									variant="ghost"
+									size="icon"
+									className={`h-8 w-8 hidden sm:flex ${shuffle ? "text-foreground" : "text-muted-foreground"}`}
+									onClick={toggleShuffle}
+								>
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+										<polyline points="16 3 21 3 21 8" />
+										<line x1="4" y1="20" x2="21" y2="3" />
+										<polyline points="21 16 21 21 16 21" />
+										<line x1="15" y1="15" x2="21" y2="21" />
+										<line x1="4" y1="4" x2="9" y2="9" />
+									</svg>
+								</Button>
+							)}
+
+							{/* Prev */}
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-8 w-8 text-muted-foreground hover:text-foreground"
+								onClick={prev}
+							>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+									<rect x="2" y="4" width="3" height="16" rx="1" />
+									<path d="M22 4L9 12L22 20V4Z" />
+								</svg>
+							</Button>
+
+							{/* Play/Pause */}
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-10 w-10 rounded-full bg-foreground text-background hover:bg-foreground/90"
+								onClick={toggle}
+							>
+								{isPlaying ? (
+									<svg width="16" height="16" viewBox="0 0 12 12" fill="currentColor">
+										<rect x="1" y="1" width="3.5" height="10" rx="0.5" />
+										<rect x="7.5" y="1" width="3.5" height="10" rx="0.5" />
+									</svg>
+								) : (
+									<svg width="16" height="16" viewBox="0 0 12 12" fill="currentColor">
+										<path d="M2.5 1.5L10.5 6L2.5 10.5V1.5Z" />
+									</svg>
+								)}
+							</Button>
+
+							{/* Next */}
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-8 w-8 text-muted-foreground hover:text-foreground"
+								onClick={next}
+							>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+									<rect x="19" y="4" width="3" height="16" rx="1" />
+									<path d="M2 4L15 12L2 20V4Z" />
+								</svg>
+							</Button>
+
+							{/* Repeat */}
+							{hasQueue && (
+								<Button
+									variant="ghost"
+									size="icon"
+									className={`h-8 w-8 hidden sm:flex ${repeat !== "off" ? "text-foreground" : "text-muted-foreground"}`}
+									onClick={toggleRepeat}
+								>
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+										<polyline points="17 1 21 5 17 9" />
+										<path d="M3 11V9a4 4 0 0 1 4-4h14" />
+										<polyline points="7 23 3 19 7 15" />
+										<path d="M21 13v2a4 4 0 0 1-4 4H3" />
+									</svg>
+									{repeat === "one" && (
+										<span className="absolute text-[8px] font-bold">1</span>
+									)}
+								</Button>
+							)}
+						</div>
+
+						{/* Time + Volume */}
+						<div className="flex items-center gap-3 justify-end w-[30%]">
+							<span className="text-xs text-muted-foreground tabular-nums hidden sm:block">
+								{formatTime(currentTime)} / {formatTime(duration)}
+							</span>
+
+							{/* Volume */}
+							<div className="hidden md:flex items-center gap-1.5">
+								<svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									strokeWidth="2"
+									className="shrink-0 text-muted-foreground"
+								>
+									<path d="M11 5L6 9H2v6h4l5 4V5z" />
+									{volume > 0 && <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
+									{volume > 50 && <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />}
+								</svg>
+								<input
+									type="range"
+									min={0}
+									max={100}
+									value={volume}
+									onChange={(e) => setVolume(parseInt(e.target.value))}
+									className="w-20 h-1 accent-foreground cursor-pointer"
+								/>
+							</div>
+
+							{/* Close */}
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-muted-foreground hover:text-foreground"
+								onClick={stop}
+							>
+								<svg
+									width="12"
+									height="12"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									strokeWidth="2.5"
+								>
+									<path d="M18 6L6 18M6 6l12 12" />
+								</svg>
+							</Button>
+						</div>
+					</div>
+				</motion.div>
+			)}
+		</AnimatePresence>
+	);
+}

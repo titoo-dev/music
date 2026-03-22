@@ -1,0 +1,47 @@
+{
+  "feature": "Audio Streaming (S3 only)",
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Fix _recordDownloadHistory to save storagePath",
+      "description": "The storagePath field in DownloadHistory is never populated. Use downloadObject.files[].path to save the actual S3-compatible path for each track after download completes.",
+      "status": "done",
+      "files": ["src/lib/deemix-app.ts"]
+    },
+    {
+      "id": 2,
+      "title": "Create S3 streaming utility",
+      "description": "Create a reusable utility to get an S3 client from app settings and convert storagePath to S3 key. Handles GetObjectCommand with Range header support.",
+      "status": "done",
+      "files": ["src/lib/s3-stream.ts"]
+    },
+    {
+      "id": 3,
+      "title": "Create GET /api/v1/stream/[trackId] route",
+      "description": "API route that authenticates user, looks up DownloadHistory, streams the file from S3 with HTTP Range support (for seeking). Returns proper Content-Type based on file extension.",
+      "status": "done",
+      "files": ["src/app/api/v1/stream/[trackId]/route.ts"]
+    },
+    {
+      "id": 4,
+      "title": "Create usePlayerStore (Zustand)",
+      "description": "Full player state: current track, play queue, playback state, volume, repeat/shuffle, next/prev navigation. Separate from usePreviewStore (which stays for 30s Deezer clips).",
+      "status": "done",
+      "files": ["src/stores/usePlayerStore.ts"]
+    },
+    {
+      "id": 5,
+      "title": "Create Player component",
+      "description": "Full audio player UI with progress bar (seekable), volume control, next/prev, queue display. Uses <audio> element pointed at /api/v1/stream/{trackId}.",
+      "status": "done",
+      "files": ["src/components/audio/AudioEngine.tsx", "src/components/audio/Player.tsx", "src/components/audio/PlayButton.tsx"]
+    },
+    {
+      "id": 6,
+      "title": "Integrate play buttons in download history / playlists",
+      "description": "Add play buttons on tracks in download history and playlist views that trigger usePlayerStore.play(track).",
+      "status": "done",
+      "files": ["src/app/(main)/download-history/page.tsx", "src/app/(main)/my-playlists/[id]/page.tsx"]
+    }
+  ]
+}

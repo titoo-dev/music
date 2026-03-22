@@ -342,6 +342,14 @@ export class DeemixApp {
 			const { prisma } = await import("@/lib/prisma");
 			const storageType = this.settings.storageType || "local";
 
+			// Build a map of trackId → storagePath from completed files
+			const filePathMap = new Map<string, string>();
+			for (const file of downloadObject.files || []) {
+				if (file?.data?.id && file.path) {
+					filePathMap.set(String(file.data.id), String(file.path));
+				}
+			}
+
 			// Use the slimmed download object info (always available)
 			const trackId = String(rawData.id || downloadObject.id || "");
 			const title = rawData.title || downloadObject.title || "";
@@ -350,9 +358,10 @@ export class DeemixApp {
 			const bitrate = rawData.bitrate || downloadObject.bitrate || 0;
 
 			if (rawData.__type__ === "Single" && trackId) {
+				const storagePath = filePathMap.get(trackId) || null;
 				await prisma.downloadHistory.upsert({
 					where: { userId_trackId: { userId, trackId } },
-					update: { downloadedAt: new Date() },
+					update: { downloadedAt: new Date(), storagePath },
 					create: {
 						userId,
 						trackId,
@@ -361,6 +370,7 @@ export class DeemixApp {
 						coverUrl: cover,
 						bitrate,
 						storageType,
+						storagePath,
 					},
 				});
 
@@ -375,21 +385,24 @@ export class DeemixApp {
 				});
 			}
 
-			// For collections (albums/playlists), record using the slimmed info
+			// For collections (albums/playlists), record each individual track
 			if (rawData.__type__ === "Collection") {
-				// Record the collection as a single entry using its ID
-				if (trackId) {
+				for (const file of downloadObject.files || []) {
+					if (!file?.data?.id) continue;
+					const fileTrackId = String(file.data.id);
+					const storagePath = file.path ? String(file.path) : null;
 					await prisma.downloadHistory.upsert({
-						where: { userId_trackId: { userId, trackId } },
-						update: { downloadedAt: new Date() },
+						where: { userId_trackId: { userId, trackId: fileTrackId } },
+						update: { downloadedAt: new Date(), storagePath },
 						create: {
 							userId,
-							trackId,
-							title,
-							artist,
+							trackId: fileTrackId,
+							title: file.data.title || "",
+							artist: file.data.artist || "",
 							coverUrl: cover,
 							bitrate,
 							storageType,
+							storagePath,
 						},
 					});
 				}

@@ -10,6 +10,8 @@ import { CoverImage } from "@/components/ui/cover-image";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { Loader2, ArrowLeft, Download, Trash2, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
+import { PlayButton } from "@/components/audio/PlayButton";
+import type { PlayerTrack } from "@/stores/usePlayerStore";
 
 interface PlaylistTrack {
 	id: string;
@@ -156,14 +158,38 @@ export default function PlaylistDetailPage() {
 					{playlist.tracks.map((track, idx) => {
 						const trackUrl = `https://www.deezer.com/track/${track.trackId}`;
 						const isTrackDownloaded = isDownloadsPlaylist || downloaded.has(track.trackId);
+						const playerTrack: PlayerTrack = {
+							trackId: track.trackId,
+							title: track.title,
+							artist: track.artist,
+							cover: track.coverUrl,
+							duration: track.duration,
+						};
+						const playerQueue: PlayerTrack[] = playlist.tracks
+							.filter((t) => isDownloadsPlaylist || downloaded.has(t.trackId))
+							.map((t) => ({
+								trackId: t.trackId,
+								title: t.title,
+								artist: t.artist,
+								cover: t.coverUrl,
+								duration: t.duration,
+							}));
 						return (
 							<div
 								key={track.id}
 								className="group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/50 transition-colors"
 							>
-								<span className="w-6 text-right text-xs text-muted-foreground shrink-0">
-									{idx + 1}
-								</span>
+								{isTrackDownloaded ? (
+									<PlayButton
+										track={playerTrack}
+										queue={playerQueue}
+										className="opacity-0 group-hover:opacity-100 transition-opacity"
+									/>
+								) : (
+									<span className="w-7 text-right text-xs text-muted-foreground shrink-0">
+										{idx + 1}
+									</span>
+								)}
 								<div className="shrink-0 size-10 rounded overflow-hidden bg-muted">
 									{track.coverUrl ? (
 										<CoverImage

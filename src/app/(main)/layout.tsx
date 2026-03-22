@@ -31,6 +31,8 @@ import {
 import { Menu, Settings, Info, LogOut, Music, History } from "lucide-react";
 import { AudioPreview } from "@/components/audio/AudioPreview";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
+import { AudioEngine } from "@/components/audio/AudioEngine";
+import { Player } from "@/components/audio/Player";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
 	useSocket();
@@ -270,9 +272,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 				</SheetContent>
 			</Sheet>
 
-			{/* ─── Audio Preview ─── */}
+			{/* ─── Audio ─── */}
 			<AudioPreview />
 			<MiniPlayer />
+			<AudioEngine />
+			<Player />
 		</div>
 	);
 }
