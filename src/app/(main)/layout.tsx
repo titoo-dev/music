@@ -34,6 +34,7 @@ import { MiniPlayer } from "@/components/audio/MiniPlayer";
 import { AudioEngine } from "@/components/audio/AudioEngine";
 import { Player } from "@/components/audio/Player";
 import { FullscreenPlayer } from "@/components/audio/FullscreenPlayer";
+import { TrackActionSheet } from "@/components/tracks/TrackActionSheet";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
 	useSocket();
@@ -275,6 +276,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 			<AudioEngine />
 			<Player />
 			<FullscreenPlayer />
+			<TrackActionSheet />
 		</div>
 	);
 }

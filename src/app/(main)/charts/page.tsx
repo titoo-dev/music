@@ -9,6 +9,8 @@ import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Download, Loader2 } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
+import { longPressHandlers } from "@/hooks/useLongPress";
+import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
@@ -37,6 +39,7 @@ export default function ChartsPage() {
 	const allTrackIds = tracks.map((t: any) => String(t.id || t.SNG_ID)).filter(Boolean);
 	const { downloaded } = useDownloadedTracks(allTrackIds);
 
+	const openSheet = useTrackActionStore((s) => s.openSheet);
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewPlaying = usePreviewStore((s) => s.isPlaying);
 	const playerTrack = usePlayerStore((s) => s.currentTrack);
@@ -136,10 +139,29 @@ export default function ChartsPage() {
 							const isPlayerActive = playerTrack?.trackId === String(trackId) && playerPlaying;
 							const isActive = isPreviewActive || isPlayerActive;
 							const isPaused = (previewTrack?.id === String(trackId) && !previewPlaying) || (playerTrack?.trackId === String(trackId) && !playerPlaying);
+							const trackArtistId = track.artist?.id || track.ART_ID;
+							const trackAlbumId = track.album?.id || track.ALB_ID;
+							const trackAlbumTitle = track.album?.title || track.ALB_TITLE;
+							const lp = longPressHandlers(() => {
+								openSheet(
+									{
+										id: String(trackId),
+										title: trackTitle,
+										artist: trackArtist,
+										cover: trackCover || undefined,
+										duration: trackDuration ? Number(trackDuration) : undefined,
+										albumId: trackAlbumId ? String(trackAlbumId) : undefined,
+										albumTitle: trackAlbumTitle || undefined,
+										artistId: trackArtistId ? String(trackArtistId) : undefined,
+										previewUrl: previewUrl || undefined,
+									},
+									{ onDownload: () => handleDownload(trackId, "track") }
+								);
+							});
 
 							return (
 								<div key={trackId || idx}>
-									<div className={`flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 overflow-hidden group transition-colors ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}>
+									<div {...lp} className={`flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 overflow-hidden group transition-colors select-none ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}>
 										<span className="w-8 text-right tabular-nums flex items-center justify-end">
 											{isActive || isPaused ? (
 												<PlaybackIndicator paused={isPaused} />

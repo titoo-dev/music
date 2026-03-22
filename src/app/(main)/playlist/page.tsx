@@ -16,6 +16,8 @@ import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { longPressHandlers } from "@/hooks/useLongPress";
+import { useTrackActionStore } from "@/stores/useTrackActionStore";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -56,6 +58,7 @@ function PlaylistContent() {
 		loadPlaylist();
 	}, [id]);
 
+	const openSheet = useTrackActionStore((s) => s.openSheet);
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewPlaying = usePreviewStore((s) => s.isPlaying);
 	const playerTrack = usePlayerStore((s) => s.currentTrack);
@@ -148,11 +151,27 @@ function PlaylistContent() {
 						const isPlayerActive = playerTrack?.trackId === String(trackId) && playerPlaying;
 						const isActive = isPreviewActive || isPlayerActive;
 						const isPaused = (previewTrack?.id === String(trackId) && !previewPlaying) || (playerTrack?.trackId === String(trackId) && !playerPlaying);
+						const trackArtistId = track.ART_ID || track.artist?.id;
+						const lp = longPressHandlers(() => {
+							openSheet(
+								{
+									id: String(trackId),
+									title: trackTitle,
+									artist: trackArtist,
+									cover: trackCover || undefined,
+									duration: trackDuration ? Number(trackDuration) : undefined,
+									artistId: trackArtistId ? String(trackArtistId) : undefined,
+									previewUrl: previewUrl || undefined,
+								},
+								{ onDownload: () => handleDownloadTrack(trackId) }
+							);
+						});
 
 						return (
 							<div
 								key={trackId || idx}
-								className={`flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-2 sm:py-3 overflow-hidden border-b-[2px] border-foreground last:border-b-0 transition-colors ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"} group`}
+								{...lp}
+								className={`flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-2 sm:py-3 overflow-hidden border-b-[2px] border-foreground last:border-b-0 transition-colors select-none ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"} group`}
 							>
 								<span className="w-6 text-right tabular-nums flex items-center justify-end">
 									{isActive || isPaused ? (

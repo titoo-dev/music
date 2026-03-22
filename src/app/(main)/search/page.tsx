@@ -14,6 +14,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Download, Loader2 } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
+import { useLongPress } from "@/hooks/useLongPress";
+import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
@@ -373,8 +375,26 @@ function TrackRow({
 	const isActive = isPreviewActive || isPlayerActive;
 	const isPaused = (previewTrack?.id === String(id) && !previewPlaying) || (playerTrack?.trackId === String(id) && !playerPlaying);
 
+	const openSheet = useTrackActionStore((s) => s.openSheet);
+	const longPress = useLongPress(() => {
+		openSheet(
+			{
+				id: String(id),
+				title,
+				artist: artistName,
+				cover: cover || undefined,
+				duration: duration ? Number(duration) : undefined,
+				albumId: albumId ? String(albumId) : undefined,
+				albumTitle,
+				artistId: artistId ? String(artistId) : undefined,
+				previewUrl: previewUrl || undefined,
+			},
+			{ onDownload: () => onDownload(id, "track") }
+		);
+	});
+
 	return (
-		<div className={`flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 overflow-hidden group transition-colors ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}>
+		<div {...longPress} className={`flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 overflow-hidden group transition-colors select-none ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}>
 			<div className="relative">
 				<CoverImage src={cover} className={`size-9 sm:size-10 border-0 transition-opacity ${isActive ? "opacity-50" : ""}`} />
 				{(isActive || isPaused) && (

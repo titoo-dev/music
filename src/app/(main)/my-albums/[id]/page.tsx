@@ -23,6 +23,8 @@ import Link from "next/link";
 import { PlayButton } from "@/components/audio/PlayButton";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
+import { longPressHandlers } from "@/hooks/useLongPress";
+import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { preloadTrack } from "@/components/audio/AudioEngine";
 
 function PlayAllButton({ queue }: { queue: PlayerTrack[] }) {
@@ -84,6 +86,7 @@ export default function AlbumDetailPage() {
 	const [loading, setLoading] = useState(true);
 	const [deleting, setDeleting] = useState(false);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const openSheet = useTrackActionStore((s) => s.openSheet);
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
 	const playerPlaying = usePlayerStore((s) => s.isPlaying);
 	const stopPlayer = usePlayerStore((s) => s.stop);
@@ -272,11 +275,21 @@ export default function AlbumDetailPage() {
 							};
 							const isActive = currentPlayerTrack?.trackId === track.trackId && playerPlaying;
 							const isPaused = currentPlayerTrack?.trackId === track.trackId && !playerPlaying;
+							const lp = longPressHandlers(() => {
+								openSheet({
+									id: track.trackId,
+									title: track.title,
+									artist: track.artist,
+									cover: track.coverUrl || undefined,
+									duration: track.duration || undefined,
+								});
+							});
 
 							return (
 								<div
 									key={track.id}
-									className={`group flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 overflow-hidden transition-colors border-b-[2px] border-foreground last:border-b-0 ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}
+									{...lp}
+									className={`group flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 overflow-hidden transition-colors border-b-[2px] border-foreground last:border-b-0 select-none ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}
 								>
 									<PlayButton
 										track={playerTrack}
