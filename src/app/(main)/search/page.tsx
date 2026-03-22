@@ -18,6 +18,7 @@ import { Download, Loader2, CheckCircle2 } from "lucide-react";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
+import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -399,6 +400,17 @@ function TrackRow({
 					{isLoading(deezerUrl(id, "track")) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
 				</Button>
 			)}
+			<AddToPlaylist
+				track={{
+					trackId: String(id),
+					title,
+					artist: artistName,
+					album: albumTitle,
+					coverUrl: cover,
+					duration: duration ? Number(duration) : null,
+				}}
+				className="size-7 opacity-0 group-hover:opacity-100 transition-opacity"
+			/>
 		</div>
 	);
 }

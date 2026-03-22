@@ -13,7 +13,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Download, ArrowRight, Loader2 } from "lucide-react";
+import { Download, ArrowRight, Loader2, Music } from "lucide-react";
 import { CoverImage } from "@/components/ui/cover-image";
 
 function getCoverUrl(hash: string, size = 500) {
@@ -38,8 +38,18 @@ interface ChartItem {
 	nb_tracks?: number;
 }
 
+interface UserPlaylist {
+	id: string;
+	title: string;
+	description: string | null;
+	coverUrl: string | null;
+	updatedAt: string;
+	_count: { tracks: number };
+}
+
 export default function HomePage() {
 	const [charts, setCharts] = useState<ChartItem[]>([]);
+	const [playlists, setPlaylists] = useState<UserPlaylist[]>([]);
 	const [loading, setLoading] = useState(true);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const user = useAuthStore((s) => s.user);
@@ -57,6 +67,19 @@ export default function HomePage() {
 		}
 		loadHome();
 	}, []);
+
+	useEffect(() => {
+		if (!isAuthenticated) return;
+		async function loadPlaylists() {
+			try {
+				const data = await fetchData("playlists");
+				if (data) setPlaylists(data);
+			} catch {
+				// ignore
+			}
+		}
+		loadPlaylists();
+	}, [isAuthenticated]);
 
 	const { download, isLoading } = useDownload();
 	const deezerUrl = (id: string, type: string) => `https://www.deezer.com/${type}/${id}`;
@@ -143,6 +166,52 @@ export default function HomePage() {
 					Browse charts or search for something to download.
 				</p>
 			</div>
+
+			{/* User Playlists */}
+			{playlists.length > 0 && (
+				<section className="space-y-4">
+					<div className="flex items-center justify-between">
+						<h2 className="text-lg font-medium">My Playlists</h2>
+						<Link
+							href="/my-playlists"
+							className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+						>
+							View all
+							<ArrowRight className="size-3" />
+						</Link>
+					</div>
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+						{playlists.slice(0, 10).map((pl) => (
+							<Link
+								key={pl.id}
+								href={`/my-playlists/${pl.id}`}
+								className="group rounded-xl overflow-hidden bg-muted/30 no-underline"
+							>
+								<div className="w-full aspect-square bg-muted/50 flex items-center justify-center">
+									{pl.coverUrl ? (
+										<CoverImage
+											src={pl.coverUrl}
+											alt={pl.title}
+											loading="lazy"
+											className="w-full aspect-square transition-transform duration-200 group-hover:scale-[1.02]"
+										/>
+									) : (
+										<Music className="size-12 text-muted-foreground/30" />
+									)}
+								</div>
+								<div className="p-3">
+									<p className="text-sm font-medium truncate group-hover:underline">
+										{pl.title}
+									</p>
+									<p className="text-xs text-muted-foreground mt-0.5">
+										{pl._count.tracks} track{pl._count.tracks !== 1 ? "s" : ""}
+									</p>
+								</div>
+							</Link>
+						))}
+					</div>
+				</section>
+			)}
 
 			{charts.length === 0 ? (
 				<div className="flex flex-col items-center justify-center py-24 gap-2">

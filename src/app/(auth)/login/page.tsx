@@ -27,15 +27,23 @@ export default function LoginPage() {
 				provider: "google",
 				callbackURL: "/",
 			});
-			// better-auth returns the redirect URL — navigate to it
 			const data = result as any;
-			if (data?.url) {
-				window.location.href = data.url;
-			} else if (data?.data?.url) {
-				window.location.href = data.data.url;
+			// Check for error response
+			if (data?.error) {
+				setError(data.error.message || "Sign in failed. Please try again.");
+				setLoading(false);
+				return;
 			}
-		} catch {
-			setError("Sign in failed. Please try again.");
+			// better-auth returns the redirect URL — navigate to it
+			const url = data?.url || data?.data?.url;
+			if (url) {
+				window.location.href = url;
+			} else {
+				setError("No redirect URL received. Check your Google OAuth configuration.");
+				setLoading(false);
+			}
+		} catch (e: any) {
+			setError(e?.message || "Sign in failed. Please try again.");
 			setLoading(false);
 		}
 	};

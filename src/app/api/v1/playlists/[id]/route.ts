@@ -72,6 +72,10 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
 			return fail("NOT_FOUND", "Playlist not found.", 404);
 		}
 
+		if (playlist.title === "Downloads") {
+			return fail("PROTECTED", "The Downloads playlist cannot be deleted.", 403);
+		}
+
 		await prisma.playlist.delete({ where: { id } });
 
 		return ok({ deleted: true });

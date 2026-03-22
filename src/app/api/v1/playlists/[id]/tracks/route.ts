@@ -89,12 +89,25 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
 			return fail("MISSING_TRACK_IDS", "trackIds array is required.", 400);
 		}
 
+		const stringIds = trackIds.map(String);
+
+		// Remove tracks from playlist
 		await prisma.playlistTrack.deleteMany({
 			where: {
 				playlistId: id,
-				trackId: { in: trackIds.map(String) },
+				trackId: { in: stringIds },
 			},
 		});
+
+		// Only clear download history when removing from the "Downloads" playlist
+		if (playlist.title === "Downloads") {
+			await prisma.downloadHistory.deleteMany({
+				where: {
+					userId,
+					trackId: { in: stringIds },
+				},
+			});
+		}
 
 		return ok({ removed: trackIds.length });
 	} catch (e) {

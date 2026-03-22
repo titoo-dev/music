@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Download, Loader2 } from "lucide-react";
+import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { CoverImage } from "@/components/ui/cover-image";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 
@@ -180,6 +181,17 @@ function ArtistContent() {
 									>
 										{isLoading(trackUrl) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
 									</Button>
+									<AddToPlaylist
+										track={{
+											trackId: String(trackId),
+											title: trackTitle,
+											artist: trackArtist,
+											album: albumTitle,
+											coverUrl: trackCover,
+											duration: trackDuration ? Number(trackDuration) : null,
+										}}
+										className="size-7 opacity-0 group-hover:opacity-100 transition-opacity"
+									/>
 								</div>
 							);
 						})}

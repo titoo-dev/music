@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useDownload } from "@/hooks/useDownload";
+import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2, ArrowLeft, Download, Trash2 } from "lucide-react";
+import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
+import { Loader2, ArrowLeft, Download, Trash2, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 
 interface PlaylistTrack {
@@ -34,6 +36,11 @@ export default function PlaylistDetailPage() {
 	const [loading, setLoading] = useState(true);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const { download, isLoading } = useDownload();
+
+	const isDownloadsPlaylist = playlist?.title === "Downloads";
+
+	const allTrackIds = playlist?.tracks.map((t) => t.trackId) || [];
+	const { downloaded, markDownloaded } = useDownloadedTracks(allTrackIds);
 
 	useEffect(() => {
 		if (!isAuthenticated || !params.id) {
@@ -73,12 +80,14 @@ export default function PlaylistDetailPage() {
 
 	const handleDownloadTrack = (trackId: string) => {
 		download(`https://www.deezer.com/track/${trackId}`);
+		markDownloaded(trackId);
 	};
 
 	const handleDownloadAll = () => {
 		if (!playlist) return;
 		for (const track of playlist.tracks) {
 			download(`https://www.deezer.com/track/${track.trackId}`);
+			markDownloaded(track.trackId);
 		}
 	};
 
@@ -127,7 +136,7 @@ export default function PlaylistDetailPage() {
 						{playlist.tracks.length} track{playlist.tracks.length !== 1 ? "s" : ""}
 					</p>
 				</div>
-				{playlist.tracks.length > 0 && (
+				{!isDownloadsPlaylist && playlist.tracks.length > 0 && !playlist.tracks.every((t) => downloaded.has(t.trackId)) && (
 					<Button size="sm" className="gap-1.5" onClick={handleDownloadAll}>
 						<Download className="size-4" />
 						Download All
@@ -146,6 +155,7 @@ export default function PlaylistDetailPage() {
 				<div className="space-y-1">
 					{playlist.tracks.map((track, idx) => {
 						const trackUrl = `https://www.deezer.com/track/${track.trackId}`;
+						const isTrackDownloaded = isDownloadsPlaylist || downloaded.has(track.trackId);
 						return (
 							<div
 								key={track.id}
@@ -177,24 +187,41 @@ export default function PlaylistDetailPage() {
 								<span className="text-xs text-muted-foreground shrink-0">
 									{formatDuration(track.duration)}
 								</span>
-								<div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+								<div className="flex gap-1 items-center">
+									{isTrackDownloaded ? (
+										<span className="flex items-center justify-center size-8 text-emerald-500" title="Already downloaded">
+											<CheckCircle2 className="size-3.5" />
+										</span>
+									) : (
+										<Button
+											variant="ghost"
+											size="icon"
+											className="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
+											onClick={() => handleDownloadTrack(track.trackId)}
+											disabled={isLoading(trackUrl)}
+										>
+											{isLoading(trackUrl) ? (
+												<Loader2 className="size-3.5 animate-spin" />
+											) : (
+												<Download className="size-3.5" />
+											)}
+										</Button>
+									)}
+									<AddToPlaylist
+										track={{
+											trackId: track.trackId,
+											title: track.title,
+											artist: track.artist,
+											album: track.album,
+											coverUrl: track.coverUrl,
+											duration: track.duration,
+										}}
+										className="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
+									/>
 									<Button
 										variant="ghost"
 										size="icon"
-										className="size-8"
-										onClick={() => handleDownloadTrack(track.trackId)}
-										disabled={isLoading(trackUrl)}
-									>
-										{isLoading(trackUrl) ? (
-											<Loader2 className="size-3.5 animate-spin" />
-										) : (
-											<Download className="size-3.5" />
-										)}
-									</Button>
-									<Button
-										variant="ghost"
-										size="icon"
-										className="size-8 text-muted-foreground hover:text-red-500"
+										className="size-8 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
 										onClick={() => handleRemoveTrack(track.trackId)}
 									>
 										<Trash2 className="size-3.5" />

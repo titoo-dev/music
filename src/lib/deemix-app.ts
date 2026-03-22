@@ -363,6 +363,16 @@ export class DeemixApp {
 						storageType,
 					},
 				});
+
+				// Auto-add to "Downloads" playlist
+				await this._addToDownloadsPlaylist(prisma, userId, {
+					trackId,
+					title,
+					artist,
+					album: rawData.album || downloadObject.album || null,
+					coverUrl: cover,
+					duration: rawData.duration || downloadObject.duration || null,
+				});
 			}
 
 			// For collections (albums/playlists), record using the slimmed info
@@ -383,9 +393,134 @@ export class DeemixApp {
 						},
 					});
 				}
+
+				// Auto-add each track from the collection to "Downloads" playlist
+				const tracks = rawData.collection?.tracks_gw || rawData.tracks_gw || [];
+				if (tracks.length > 0) {
+					await this._addCollectionToDownloadsPlaylist(prisma, userId, tracks);
+				}
 			}
 		} catch (e) {
 			console.error("Failed to record download history:", e);
+		}
+	}
+
+	/** Find or create the "Downloads" playlist for a user, then add a track */
+	private async _addToDownloadsPlaylist(
+		prisma: any,
+		userId: string,
+		track: { trackId: string; title: string; artist: string; album: string | null; coverUrl: string | null; duration: number | null }
+	) {
+		try {
+			// Find or create the Downloads playlist
+			let playlist = await prisma.playlist.findFirst({
+				where: { userId, title: "Downloads" },
+			});
+			if (!playlist) {
+				playlist = await prisma.playlist.create({
+					data: {
+						userId,
+						title: "Downloads",
+						description: "Automatically added when you download tracks",
+					},
+				});
+			}
+
+			// Get next position
+			const lastTrack = await prisma.playlistTrack.findFirst({
+				where: { playlistId: playlist.id },
+				orderBy: { position: "desc" },
+			});
+			const nextPosition = (lastTrack?.position ?? -1) + 1;
+
+			// Upsert the track (skip if already in playlist)
+			await prisma.playlistTrack.upsert({
+				where: {
+					playlistId_trackId: {
+						playlistId: playlist.id,
+						trackId: track.trackId,
+					},
+				},
+				update: {},
+				create: {
+					playlistId: playlist.id,
+					trackId: track.trackId,
+					title: track.title,
+					artist: track.artist,
+					album: track.album,
+					coverUrl: track.coverUrl,
+					duration: track.duration,
+					position: nextPosition,
+				},
+			});
+
+			// Update playlist timestamp
+			await prisma.playlist.update({
+				where: { id: playlist.id },
+				data: { updatedAt: new Date() },
+			});
+		} catch (e) {
+			console.error("Failed to add track to Downloads playlist:", e);
+		}
+	}
+
+	/** Add all tracks from a collection download to the Downloads playlist */
+	private async _addCollectionToDownloadsPlaylist(prisma: any, userId: string, tracks: any[]) {
+		try {
+			let playlist = await prisma.playlist.findFirst({
+				where: { userId, title: "Downloads" },
+			});
+			if (!playlist) {
+				playlist = await prisma.playlist.create({
+					data: {
+						userId,
+						title: "Downloads",
+						description: "Automatically added when you download tracks",
+					},
+				});
+			}
+
+			const lastTrack = await prisma.playlistTrack.findFirst({
+				where: { playlistId: playlist.id },
+				orderBy: { position: "desc" },
+			});
+			let nextPosition = (lastTrack?.position ?? -1) + 1;
+
+			for (const t of tracks) {
+				const trackId = String(t.SNG_ID || t.id || "");
+				if (!trackId) continue;
+
+				try {
+					await prisma.playlistTrack.upsert({
+						where: {
+							playlistId_trackId: {
+								playlistId: playlist.id,
+								trackId,
+							},
+						},
+						update: {},
+						create: {
+							playlistId: playlist.id,
+							trackId,
+							title: t.SNG_TITLE || t.title || "",
+							artist: t.ART_NAME || t.artist || "",
+							album: t.ALB_TITLE || t.album || null,
+							coverUrl: t.ALB_PICTURE ? `https://e-cdns-images.dzcdn.net/images/cover/${t.ALB_PICTURE}/500x500-000000-80-0-0.jpg` : null,
+							duration: t.DURATION ? parseInt(t.DURATION, 10) : null,
+							position: nextPosition++,
+						},
+					});
+				} catch {
+					// Skip duplicates
+				}
+			}
+
+			await prisma.playlist.update({
+				where: { id: playlist.id },
+				data: { updatedAt: new Date() },
+			});
+		} catch (e) {
+			console.error("Failed to add collection to Downloads playlist:", e);
 		}
 	}
 }

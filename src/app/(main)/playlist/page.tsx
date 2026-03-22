@@ -4,12 +4,14 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { useDownload } from "@/hooks/useDownload";
+import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { convertDuration } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { PreviewButton } from "@/components/audio/PreviewButton";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { CoverImage } from "@/components/ui/cover-image";
+import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -31,6 +33,9 @@ function PlaylistContent() {
 	const [loading, setLoading] = useState(true);
 	const { download, isLoading } = useDownload();
 
+	const allTrackIds = tracks.map((t: any) => String(t.id || t.SNG_ID)).filter(Boolean);
+	const { downloaded, markDownloaded } = useDownloadedTracks(allTrackIds);
+
 	useEffect(() => {
 		if (!id) return;
 		async function loadPlaylist() {
@@ -50,7 +55,10 @@ function PlaylistContent() {
 	const playlistUrl = `https://www.deezer.com/playlist/${id}`;
 	const handleDownloadAll = () => download(playlistUrl);
 	const trackUrl = (trackId: string) => `https://www.deezer.com/track/${trackId}`;
-	const handleDownloadTrack = (trackId: string) => download(trackUrl(trackId));
+	const handleDownloadTrack = (trackId: string) => {
+		download(trackUrl(trackId));
+		markDownloaded(String(trackId));
+	};
 
 	if (loading)
 		return (
@@ -158,16 +166,32 @@ function PlaylistContent() {
 										previewUrl,
 									}}
 								/>
-								<Button
-									variant="ghost"
-									size="xs"
-									onClick={() => handleDownloadTrack(trackId)}
-									disabled={isLoading(trackUrl(trackId))}
-									className="opacity-0 group-hover:opacity-100 transition-opacity gap-1.5"
-								>
-									{isLoading(trackUrl(trackId)) && <Loader2 className="size-3 animate-spin" />}
-									{isLoading(trackUrl(trackId)) ? "Adding..." : "Download"}
-								</Button>
+								{downloaded.has(String(trackId)) ? (
+									<span className="flex items-center justify-center size-7 text-emerald-500" title="Already downloaded">
+										<CheckCircle2 className="size-3.5" />
+									</span>
+								) : (
+									<Button
+										variant="ghost"
+										size="xs"
+										onClick={() => handleDownloadTrack(trackId)}
+										disabled={isLoading(trackUrl(trackId))}
+										className="opacity-0 group-hover:opacity-100 transition-opacity gap-1.5"
+									>
+										{isLoading(trackUrl(trackId)) && <Loader2 className="size-3 animate-spin" />}
+										{isLoading(trackUrl(trackId)) ? "Adding..." : "Download"}
+									</Button>
+								)}
+								<AddToPlaylist
+									track={{
+										trackId: String(trackId),
+										title: trackTitle,
+										artist: trackArtist,
+										coverUrl: trackCover,
+										duration: trackDuration ? Number(trackDuration) : null,
+									}}
+									className="size-7 opacity-0 group-hover:opacity-100 transition-opacity"
+								/>
 							</div>
 						);
 					})}

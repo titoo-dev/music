@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Loader2, Check } from "lucide-react";
+import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 
 function getCoverUrl(picture: string, size = 500) {
 	if (!picture) return "/placeholder.jpg";
@@ -178,6 +179,17 @@ function AlbumContent() {
 									) : null}
 									{isLoading(trackUrl(trackId)) ? "Adding..." : "Download"}
 								</Button>
+								<AddToPlaylist
+									track={{
+										trackId: String(trackId),
+										title: trackTitle,
+										artist: trackArtist,
+										album: title,
+										coverUrl: trackCover,
+										duration: trackDuration ? Number(trackDuration) : null,
+									}}
+									className="size-8 opacity-0 group-hover:opacity-100 transition-opacity"
+								/>
 							</div>
 						);
 					})}

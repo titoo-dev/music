@@ -41,5 +41,13 @@ export function useDownloadedTracks(trackIds: string[]) {
 		setDownloaded((prev) => new Set(prev).add(trackId));
 	}, []);
 
-	return { downloaded, markDownloaded };
+	const markUndownloaded = useCallback((...ids: string[]) => {
+		setDownloaded((prev) => {
+			const next = new Set(prev);
+			for (const id of ids) next.delete(id);
+			return next;
+		});
+	}, []);
+
+	return { downloaded, markDownloaded, markUndownloaded };
 }

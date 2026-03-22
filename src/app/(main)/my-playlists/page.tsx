@@ -39,6 +39,8 @@ export default function MyPlaylistsPage() {
 	const [loading, setLoading] = useState(true);
 	const [newTitle, setNewTitle] = useState("");
 	const [creating, setCreating] = useState(false);
+	const [deleteTarget, setDeleteTarget] = useState<PlaylistItem | null>(null);
+	const [deleting, setDeleting] = useState(false);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
 	const loadPlaylists = async () => {
@@ -69,13 +71,17 @@ export default function MyPlaylistsPage() {
 		setCreating(false);
 	};
 
-	const handleDelete = async (id: string) => {
+	const handleDelete = async () => {
+		if (!deleteTarget) return;
+		setDeleting(true);
 		try {
-			await fetch(`/api/v1/playlists/${id}`, { method: "DELETE" });
-			setPlaylists((prev) => prev.filter((p) => p.id !== id));
+			await fetch(`/api/v1/playlists/${deleteTarget.id}`, { method: "DELETE" });
+			setPlaylists((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+			setDeleteTarget(null);
 		} catch {
 			// ignore
 		}
+		setDeleting(false);
 	};
 
 	if (!isAuthenticated) {
@@ -164,21 +170,44 @@ export default function MyPlaylistsPage() {
 									</p>
 								</CardContent>
 							</Link>
-							<Button
+							{pl.title !== "Downloads" && <Button
 								variant="ghost"
 								size="icon"
 								className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500"
 								onClick={(e) => {
 									e.preventDefault();
-									handleDelete(pl.id);
+									setDeleteTarget(pl);
 								}}
 							>
 								<Trash2 className="size-4" />
-							</Button>
+							</Button>}
 						</Card>
 					))}
 				</div>
 			)}
+
+			<Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Delete playlist</DialogTitle>
+						<DialogDescription>
+							Are you sure you want to delete &ldquo;{deleteTarget?.title}&rdquo;?
+							{deleteTarget && deleteTarget._count.tracks > 0 && (
+								<> It contains {deleteTarget._count.tracks} track{deleteTarget._count.tracks !== 1 ? "s" : ""}. This action cannot be undone.</>
+							)}
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setDeleteTarget(null)}>
+							Cancel
+						</Button>
+						<Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+							{deleting && <Loader2 className="size-3.5 animate-spin mr-1.5" />}
+							Delete
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }
