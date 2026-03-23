@@ -18,7 +18,7 @@ import {
 	AlertDialogTitle,
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, ArrowLeft, Disc3, Trash2, Play, Pause } from "lucide-react";
+import { Loader2, ArrowLeft, Disc3, Trash2, Play, Pause, ArrowDownUp } from "lucide-react";
 import Link from "next/link";
 import { PlayButton } from "@/components/audio/PlayButton";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
@@ -26,6 +26,7 @@ import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { longPressHandlers } from "@/hooks/useLongPress";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { preloadTrack } from "@/components/audio/AudioEngine";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
 
 function PlayAllButton({ queue }: { queue: PlayerTrack[] }) {
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
@@ -87,6 +88,9 @@ export default function AlbumDetailPage() {
 	const [deleting, setDeleting] = useState(false);
 	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const { prefs, updatePrefs } = useUserPreferences();
+	const sortOrder = prefs.albumSortOrder ?? "asc";
+	const setSortOrder = (order: "asc" | "desc") => updatePrefs({ albumSortOrder: order });
 	const openSheet = useTrackActionStore((s) => s.openSheet);
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
 	const playerPlaying = usePlayerStore((s) => s.isPlaying);
@@ -164,7 +168,9 @@ export default function AlbumDetailPage() {
 		);
 	}
 
-	const playerQueue: PlayerTrack[] = album.tracks.map((t) => ({
+	const sortedTracks = sortOrder === "asc" ? album.tracks : [...album.tracks].reverse();
+
+	const playerQueue: PlayerTrack[] = sortedTracks.map((t) => ({
 		trackId: t.trackId,
 		title: t.title,
 		artist: t.artist,
@@ -256,9 +262,22 @@ export default function AlbumDetailPage() {
 
 			{/* Tracklist */}
 			<div>
-				<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em] mb-4">
-					Tracklist
-				</h2>
+				<div className="flex items-center justify-between mb-4">
+					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
+						Tracklist
+					</h2>
+					{album.tracks.length > 1 && (
+						<Button
+							variant="outline"
+							size="sm"
+							className="gap-1.5"
+							onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+						>
+							<ArrowDownUp className="size-3.5" />
+							{sortOrder === "asc" ? "Oldest first" : "Newest first"}
+						</Button>
+					)}
+				</div>
 				{album.tracks.length === 0 ? (
 					<div className="flex flex-col items-center justify-center py-16 gap-2">
 						<p className="text-sm text-muted-foreground font-bold uppercase">No tracks found.</p>
@@ -268,7 +287,7 @@ export default function AlbumDetailPage() {
 					</div>
 				) : (
 					<div className="space-y-1">
-						{album.tracks.map((track, idx) => {
+						{sortedTracks.map((track, idx) => {
 							const playerTrack: PlayerTrack = {
 								trackId: track.trackId,
 								title: track.title,

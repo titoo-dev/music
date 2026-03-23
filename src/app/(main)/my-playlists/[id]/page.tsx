@@ -8,7 +8,7 @@ import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
-import { Loader2, ArrowLeft, Download, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, Download, Trash2, ArrowDownUp } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import Link from "next/link";
 import { PlayButton } from "@/components/audio/PlayButton";
@@ -17,6 +17,7 @@ import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { longPressHandlers } from "@/hooks/useLongPress";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { preloadTrack } from "@/components/audio/AudioEngine";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
 
 interface PlaylistTrack {
 	id: string;
@@ -42,6 +43,9 @@ export default function PlaylistDetailPage() {
 	const [playlist, setPlaylist] = useState<PlaylistDetail | null>(null);
 	const [loading, setLoading] = useState(true);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const { prefs, updatePrefs } = useUserPreferences();
+	const sortOrder = prefs.playlistSortOrder ?? "asc";
+	const setSortOrder = (order: "asc" | "desc") => updatePrefs({ playlistSortOrder: order });
 	const { download, isLoading } = useDownload();
 	const openSheet = useTrackActionStore((s) => s.openSheet);
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
@@ -130,6 +134,12 @@ export default function PlaylistDetailPage() {
 		);
 	}
 
+	const sortedTracks = playlist
+		? [...playlist.tracks].sort((a, b) =>
+				sortOrder === "asc" ? a.position - b.position : b.position - a.position
+			)
+		: [];
+
 	if (!playlist) {
 		return (
 			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
@@ -161,12 +171,25 @@ export default function PlaylistDetailPage() {
 						{playlist.tracks.length} track{playlist.tracks.length !== 1 ? "s" : ""}
 					</p>
 				</div>
-				{!isDownloadsPlaylist && playlist.tracks.length > 0 && !playlist.tracks.every((t) => downloaded.has(t.trackId)) && (
-					<Button size="sm" className="gap-1.5" onClick={handleDownloadAll}>
-						<Download className="size-4" />
-						Download All
-					</Button>
-				)}
+				<div className="flex items-center gap-2 shrink-0">
+					{!isDownloadsPlaylist && playlist.tracks.length > 0 && !playlist.tracks.every((t) => downloaded.has(t.trackId)) && (
+						<Button size="sm" className="gap-1.5" onClick={handleDownloadAll}>
+							<Download className="size-4" />
+							Download All
+						</Button>
+					)}
+					{playlist.tracks.length > 1 && (
+						<Button
+							variant="outline"
+							size="sm"
+							className="gap-1.5"
+							onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+						>
+							<ArrowDownUp className="size-3.5" />
+							{sortOrder === "asc" ? "Oldest first" : "Newest first"}
+						</Button>
+					)}
+				</div>
 			</div>
 
 			{playlist.tracks.length === 0 ? (
@@ -178,7 +201,7 @@ export default function PlaylistDetailPage() {
 				</div>
 			) : (
 				<div className="space-y-1">
-					{playlist.tracks.map((track, idx) => {
+					{sortedTracks.map((track, idx) => {
 						const trackUrl = `https://www.deezer.com/track/${track.trackId}`;
 						const isTrackDownloaded = isDownloadsPlaylist || downloaded.has(track.trackId);
 						const playerTrack: PlayerTrack = {
@@ -188,7 +211,7 @@ export default function PlaylistDetailPage() {
 							cover: track.coverUrl,
 							duration: track.duration,
 						};
-						const playerQueue: PlayerTrack[] = playlist.tracks
+						const playerQueue: PlayerTrack[] = sortedTracks
 							.filter((t) => isDownloadsPlaylist || downloaded.has(t.trackId))
 							.map((t) => ({
 								trackId: t.trackId,
