@@ -138,7 +138,7 @@ export function DownloadPanel() {
 				)}
 
 				{/* Content */}
-				<ScrollArea className="flex-1">
+				<ScrollArea className="flex-1 min-h-0">
 					{allItems.length === 0 && (
 						<div className="flex flex-col items-center justify-center py-24 px-6 text-center">
 							<div className="mb-4 flex h-14 w-14 items-center justify-center border-2 sm:border-[3px] border-foreground bg-muted">
