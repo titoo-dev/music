@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import path from "path";
 import { prisma } from "@/lib/prisma";
 import { getDeemixApp } from "@/lib/server-state";
 import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
@@ -89,39 +88,43 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
 		if (trackIds.length > 0) {
 			const downloads = await prisma.downloadHistory.findMany({
 				where: { userId, trackId: { in: trackIds } },
-				select: { storagePath: true, trackId: true },
+				select: { storagePath: true, trackId: true, storedTrackId: true },
 			});
 
-			const app = await getDeemixApp();
-			const storageProvider = app?.storageProvider;
-			if (storageProvider && downloads.length > 0) {
-				// Collect unique parent directories
-				const dirs = new Set<string>();
-				for (const dl of downloads) {
-					if (dl.storagePath) {
-						try {
-							await storageProvider.deleteFile(dl.storagePath);
-						} catch {
-							// Continue even if a file deletion fails
-						}
-						dirs.add(path.dirname(dl.storagePath));
-					}
-				}
-
-				// Clean up parent directories (covers, extras, empty folders)
-				for (const dir of dirs) {
-					try {
-						await storageProvider.deleteDirectory(dir);
-					} catch {
-						// Ignore — directory may still have other files
-					}
-				}
-			}
-
-			// Delete download history for these tracks
+			// Delete download history entries for this user first
 			await prisma.downloadHistory.deleteMany({
 				where: { userId, trackId: { in: trackIds } },
 			});
+
+			// Only delete S3 files if no other users reference the same StoredTrack
+			const app = await getDeemixApp();
+			const storageProvider = app?.storageProvider;
+			if (storageProvider && downloads.length > 0) {
+				for (const dl of downloads) {
+					if (!dl.storagePath) continue;
+
+					if (dl.storedTrackId) {
+						// Check if any other DownloadHistory still references this StoredTrack
+						const otherRefs = await prisma.downloadHistory.count({
+							where: { storedTrackId: dl.storedTrackId },
+						});
+						if (otherRefs > 0) continue; // Other users still need this file
+
+						// No more references — safe to delete the file and StoredTrack record
+						try {
+							await storageProvider.deleteFile(dl.storagePath);
+						} catch { /* ignore */ }
+						try {
+							await prisma.storedTrack.delete({ where: { id: dl.storedTrackId } });
+						} catch { /* ignore */ }
+					} else {
+						// Legacy record without StoredTrack — delete directly
+						try {
+							await storageProvider.deleteFile(dl.storagePath);
+						} catch { /* ignore */ }
+					}
+				}
+			}
 		}
 
 		await prisma.playlist.delete({ where: { id } });

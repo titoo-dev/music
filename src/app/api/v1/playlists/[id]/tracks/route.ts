@@ -101,12 +101,39 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
 
 		// Only clear download history when removing from the "Downloads" playlist
 		if (playlist.title === "Downloads") {
+			// Fetch StoredTrack refs before deleting history (for ref-counting cleanup)
+			const downloads = await prisma.downloadHistory.findMany({
+				where: { userId, trackId: { in: stringIds } },
+				select: { storedTrackId: true, storagePath: true },
+			});
+
 			await prisma.downloadHistory.deleteMany({
 				where: {
 					userId,
 					trackId: { in: stringIds },
 				},
 			});
+
+			// Clean up StoredTrack + S3 files if no other users reference them
+			for (const dl of downloads) {
+				if (!dl.storedTrackId) continue;
+				const otherRefs = await prisma.downloadHistory.count({
+					where: { storedTrackId: dl.storedTrackId },
+				});
+				if (otherRefs === 0) {
+					// No more references — safe to delete StoredTrack and file
+					try {
+						const { getDeemixApp } = await import("@/lib/server-state");
+						const app = await getDeemixApp();
+						if (app?.storageProvider && dl.storagePath) {
+							await app.storageProvider.deleteFile(dl.storagePath);
+						}
+					} catch { /* ignore */ }
+					try {
+						await prisma.storedTrack.delete({ where: { id: dl.storedTrackId } });
+					} catch { /* ignore */ }
+				}
+			}
 		}
 
 		return ok({ removed: trackIds.length });

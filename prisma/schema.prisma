@@ -183,25 +183,44 @@ model Album {
   @@map("album")
 }
 
-model DownloadHistory {
-  id           String   @id @default(cuid())
-  userId       String
-  trackId      String
-  title        String
-  artist       String
-  album        String?
-  albumId      String?
-  coverUrl     String?
-  bitrate      Int
-  fileSize     Int?
-  storagePath  String?
-  storageType  String
-  downloadedAt DateTime @default(now())
+model StoredTrack {
+  id          String   @id @default(cuid())
+  trackId     String
+  bitrate     Int
+  storagePath String
+  storageType String
+  fileSize    Int?
+  createdAt   DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  downloads DownloadHistory[]
+
+  @@unique([trackId, bitrate])
+  @@index([trackId])
+  @@map("stored_track")
+}
+
+model DownloadHistory {
+  id             String   @id @default(cuid())
+  userId         String
+  trackId        String
+  title          String
+  artist         String
+  album          String?
+  albumId        String?
+  coverUrl       String?
+  bitrate        Int
+  fileSize       Int?
+  storagePath    String?
+  storageType    String
+  storedTrackId  String?
+  downloadedAt   DateTime @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storedTrack StoredTrack? @relation(fields: [storedTrackId], references: [id])
 
   @@unique([userId, trackId])
   @@index([userId])
   @@index([trackId])
+  @@index([storedTrackId])
   @@map("download_history")
 }

@@ -16,18 +16,22 @@ export async function GET(
 
 		const download = await prisma.downloadHistory.findUnique({
 			where: { userId_trackId: { userId: userResult.userId, trackId } },
-			select: { storagePath: true, storageType: true },
+			include: { storedTrack: { select: { storagePath: true, storageType: true } } },
 		});
 
-		if (!download?.storagePath) {
+		// Resolve storage path: prefer StoredTrack (global dedup), fallback to direct storagePath
+		const storagePath = download?.storedTrack?.storagePath ?? download?.storagePath;
+		const storageType = download?.storedTrack?.storageType ?? download?.storageType;
+
+		if (!storagePath) {
 			return fail("NOT_FOUND", "Track not found in your downloads.", 404);
 		}
 
-		if (download.storageType !== "s3") {
+		if (storageType !== "s3") {
 			return fail("UNSUPPORTED_STORAGE", "Only S3 storage is supported.", 400);
 		}
 
-		const { url, contentType } = await getPresignedUrl(download.storagePath, 900);
+		const { url, contentType } = await getPresignedUrl(storagePath, 900);
 
 		return ok({ url, contentType });
 	} catch (e: unknown) {

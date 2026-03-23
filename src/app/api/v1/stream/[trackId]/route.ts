@@ -16,17 +16,22 @@ export async function GET(
 
 		const download = await prisma.downloadHistory.findUnique({
 			where: { userId_trackId: { userId: userResult.userId, trackId } },
+			include: { storedTrack: true },
 		});
 
 		if (!download) {
 			return fail("NOT_FOUND", "Track not found in your downloads.", 404);
 		}
 
-		if (!download.storagePath) {
+		// Resolve storage path: prefer StoredTrack (global dedup), fallback to direct storagePath
+		const storagePath = download.storedTrack?.storagePath ?? download.storagePath;
+		const storageType = download.storedTrack?.storageType ?? download.storageType;
+
+		if (!storagePath) {
 			return fail("NO_FILE", "No file path recorded for this track.", 404);
 		}
 
-		if (download.storageType !== "s3") {
+		if (storageType !== "s3") {
 			return fail("UNSUPPORTED_STORAGE", "Only S3 storage is supported for streaming.", 400);
 		}
 
@@ -34,7 +39,7 @@ export async function GET(
 
 		// If no range requested, stream the whole file
 		if (!rangeHeader) {
-			const { body, contentLength, contentType } = await streamObject(download.storagePath);
+			const { body, contentLength, contentType } = await streamObject(storagePath);
 
 			return new Response(body, {
 				status: 200,
@@ -49,7 +54,7 @@ export async function GET(
 
 		// Range request for seeking
 		const { body, contentLength, contentRange, contentType, statusCode } =
-			await streamObject(download.storagePath, rangeHeader);
+			await streamObject(storagePath, rangeHeader);
 
 		const headers: Record<string, string> = {
 			"Content-Type": contentType,

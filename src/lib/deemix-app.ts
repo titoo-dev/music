@@ -61,6 +61,9 @@ export class DeemixApp {
 	// Stores toDict() output keyed by UUID, needed by startQueue to reconstruct
 	// Single/Collection instances with trackAPI/albumAPI data
 	private _downloadData: Record<string, any> = {};
+	// Lock map: "trackId_bitrate" → Promise that resolves when the download completes.
+	// Prevents concurrent downloads of the same track by different users.
+	private _downloadLocks: Map<string, Promise<void>> = new Map();
 
 	constructor(listener: Listener, configStore: ConfigStore) {
 		this.queueOrder = [];
@@ -258,6 +261,17 @@ export class DeemixApp {
 			}
 
 			const itemUserId = currentItem.__userId || null;
+
+			// Acquire download locks for dedup. For Single tracks, lock by trackId+bitrate.
+			// For collections, individual tracks are deduped in _recordDownloadHistory.
+			const trackLocks: Array<{ release: () => void }> = [];
+			if (currentItem.__type__ === "Single" && currentItem.id) {
+				const lock = this.acquireDownloadLock(String(currentItem.id), currentItem.bitrate || 0);
+				if (!lock.alreadyInProgress) {
+					trackLocks.push(lock);
+				}
+			}
+
 			this.currentJob = new Downloader(dz, downloadObject, this.settings, this.listener, this.storageProvider || undefined);
 			this.listener.send("startDownload", { uuid: currentUUID, userId: itemUserId });
 			await this.currentJob.start();
@@ -277,9 +291,9 @@ export class DeemixApp {
 					userId: itemUserId,
 				};
 
-				// Record completed tracks in download history
+				// Record completed tracks in download history (creates StoredTrack entries)
 				if (itemUserId && this.queue[currentUUID].status !== "failed") {
-					this._recordDownloadHistory(itemUserId, downloadObject, currentItem);
+					await this._recordDownloadHistory(itemUserId, downloadObject, currentItem);
 				}
 
 				this.listener.send("finishDownload", {
@@ -289,6 +303,9 @@ export class DeemixApp {
 					userId: itemUserId,
 				});
 			}
+
+			// Release download locks after recording history
+			for (const lock of trackLocks) lock.release();
 
 			// Clean up full download data (no longer needed after completion)
 			delete this._downloadData[currentUUID];
@@ -336,7 +353,58 @@ export class DeemixApp {
 		this.listener.send("removedFinishedDownloads");
 	}
 
-	/** Record completed track downloads in the database for history/dedup */
+	/** Acquire a download lock for a track+bitrate combo. Returns a release function. */
+	acquireDownloadLock(trackId: string, bitrate: number): { alreadyInProgress: boolean; waitForExisting: () => Promise<void>; release: () => void } {
+		const lockKey = `${trackId}_${bitrate}`;
+		const existing = this._downloadLocks.get(lockKey);
+		if (existing) {
+			return {
+				alreadyInProgress: true,
+				waitForExisting: () => existing,
+				release: () => {},
+			};
+		}
+		let releaseFn: () => void;
+		const lockPromise = new Promise<void>((resolve) => {
+			releaseFn = resolve;
+		});
+		this._downloadLocks.set(lockKey, lockPromise);
+		return {
+			alreadyInProgress: false,
+			waitForExisting: () => Promise.resolve(),
+			release: () => {
+				this._downloadLocks.delete(lockKey);
+				releaseFn();
+			},
+		};
+	}
+
+	/** Check if a track already exists in StoredTrack (global, cross-user dedup) */
+	async findStoredTrack(trackId: string, bitrate: number): Promise<{ id: string; storagePath: string; storageType: string } | null> {
+		try {
+			const { prisma } = await import("@/lib/prisma");
+			return await prisma.storedTrack.findUnique({
+				where: { trackId_bitrate: { trackId, bitrate } },
+				select: { id: true, storagePath: true, storageType: true },
+			});
+		} catch {
+			return null;
+		}
+	}
+
+	/** Create or get a StoredTrack entry and return its id */
+	async upsertStoredTrack(trackId: string, bitrate: number, storagePath: string, storageType: string, fileSize?: number): Promise<string> {
+		const { prisma } = await import("@/lib/prisma");
+		const stored = await prisma.storedTrack.upsert({
+			where: { trackId_bitrate: { trackId, bitrate } },
+			update: { storagePath, storageType, fileSize },
+			create: { trackId, bitrate, storagePath, storageType, fileSize },
+		});
+		return stored.id;
+	}
+
+	/** Record completed track downloads in the database for history/dedup.
+	 *  Creates StoredTrack entries for global dedup and links them to per-user DownloadHistory. */
 	private async _recordDownloadHistory(userId: string, downloadObject: any, rawData: any) {
 		try {
 			const { prisma } = await import("@/lib/prisma");
@@ -359,9 +427,16 @@ export class DeemixApp {
 
 			if (rawData.__type__ === "Single" && trackId) {
 				const storagePath = filePathMap.get(trackId) || null;
+
+				// Upsert global StoredTrack for cross-user dedup
+				let storedTrackId: string | null = null;
+				if (storagePath) {
+					storedTrackId = await this.upsertStoredTrack(trackId, bitrate, storagePath, storageType);
+				}
+
 				await prisma.downloadHistory.upsert({
 					where: { userId_trackId: { userId, trackId } },
-					update: { downloadedAt: new Date(), storagePath },
+					update: { downloadedAt: new Date(), storagePath, storedTrackId },
 					create: {
 						userId,
 						trackId,
@@ -371,6 +446,7 @@ export class DeemixApp {
 						bitrate,
 						storageType,
 						storagePath,
+						storedTrackId,
 					},
 				});
 
@@ -396,9 +472,16 @@ export class DeemixApp {
 					if (!file?.data?.id) continue;
 					const fileTrackId = String(file.data.id);
 					const storagePath = file.path ? String(file.path) : null;
+
+					// Upsert global StoredTrack for each track in the collection
+					let storedTrackId: string | null = null;
+					if (storagePath) {
+						storedTrackId = await this.upsertStoredTrack(fileTrackId, bitrate, storagePath, storageType);
+					}
+
 					await prisma.downloadHistory.upsert({
 						where: { userId_trackId: { userId, trackId: fileTrackId } },
-						update: { downloadedAt: new Date(), storagePath, albumId },
+						update: { downloadedAt: new Date(), storagePath, albumId, storedTrackId },
 						create: {
 							userId,
 							trackId: fileTrackId,
@@ -410,6 +493,7 @@ export class DeemixApp {
 							bitrate,
 							storageType,
 							storagePath,
+							storedTrackId,
 						},
 					});
 				}
