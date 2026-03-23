@@ -26,6 +26,7 @@ model User {
   playlists     Playlist[]
   downloads     DownloadHistory[]
   albums        Album[]
+  sharedTracks  SharedTrack[]
 
   @@map("user")
 }
@@ -192,7 +193,8 @@ model StoredTrack {
   fileSize    Int?
   createdAt   DateTime @default(now())
 
-  downloads DownloadHistory[]
+  downloads    DownloadHistory[]
+  sharedTracks SharedTrack[]
 
   @@unique([trackId, bitrate])
   @@index([trackId])
@@ -223,4 +225,28 @@ model DownloadHistory {
   @@index([trackId])
   @@index([storedTrackId])
   @@map("download_history")
+}
+
+// ─── Track Sharing ───
+
+model SharedTrack {
+  id            String    @id @default(cuid())
+  shareId       String    @unique
+  trackId       String
+  userId        String
+  title         String
+  artist        String
+  album         String?
+  coverUrl      String?
+  duration      Int?
+  storedTrackId String
+  expiresAt     DateTime?
+  plays         Int       @default(0)
+  createdAt     DateTime  @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storedTrack StoredTrack @relation(fields: [storedTrackId], references: [id])
+
+  @@index([userId])
+  @@map("shared_track")
 }

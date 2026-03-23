@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { fetchData } from "@/utils/api";
+import { useShareStore } from "@/stores/useShareStore";
 
 export function useInitApp() {
 	const [initialized, setInitialized] = useState(false);
@@ -28,6 +29,8 @@ export function useInitApp() {
 				// Better-auth user (Google identity)
 				if (data.user) {
 					setUser(data.user);
+					// Load shared tracks for the authenticated user
+					useShareStore.getState().load();
 				}
 
 				// Deezer connection (auto-restored from stored ARL)

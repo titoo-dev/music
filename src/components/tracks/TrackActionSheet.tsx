@@ -5,6 +5,8 @@ import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { useQueueStore } from "@/stores/useQueueStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
+import { useShareStore } from "@/stores/useShareStore";
+import { ShareDialog } from "./ShareDialog";
 import {
 	Sheet,
 	SheetContent,
@@ -30,6 +32,8 @@ import {
 	ArrowLeft,
 	Plus,
 	Check,
+	Share2,
+	Link as LinkIcon,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -273,12 +277,14 @@ export function TrackActionSheet() {
 	const callbacks = useTrackActionStore((s) => s.callbacks);
 	const closeSheet = useTrackActionStore((s) => s.closeSheet);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const sharedMap = useShareStore((s) => s.shared);
 
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewPlaying = usePreviewStore((s) => s.isPlaying);
 	const togglePreview = usePreviewStore((s) => s.toggle);
 
 	const [view, setView] = useState<"actions" | "playlists">("actions");
+	const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
 	// Reset view when sheet opens
 	useEffect(() => {
@@ -309,11 +315,19 @@ export function TrackActionSheet() {
 		closeSheet();
 	}, [callbacks, closeSheet]);
 
+	const isShared = track ? sharedMap.has(track.id) : false;
+
+	const handleShare = useCallback(() => {
+		if (!track) return;
+		setShareDialogOpen(true);
+	}, [track]);
+
 	if (!track) return null;
 
 	const durationStr = formatDuration(track.duration);
 
 	return (
+		<>
 		<Sheet open={open} onOpenChange={(o) => !o && closeSheet()}>
 			<SheetContent
 				side="bottom"
@@ -373,6 +387,21 @@ export function TrackActionSheet() {
 							/>
 						)}
 
+						{/* Share */}
+						{isAuthenticated && (
+							<ActionRow
+								icon={
+									isShared ? (
+										<LinkIcon className="size-4 text-primary" />
+									) : (
+										<Share2 className="size-4" />
+									)
+								}
+								label={isShared ? "Manage share link" : "Share track"}
+								onClick={handleShare}
+							/>
+						)}
+
 						{/* Go to Album */}
 						{track.albumId && (
 							<Link
@@ -422,6 +451,17 @@ export function TrackActionSheet() {
 				)}
 			</SheetContent>
 		</Sheet>
+
+		{track && (
+			<ShareDialog
+				open={shareDialogOpen}
+				onOpenChange={setShareDialogOpen}
+				trackId={track.id}
+				duration={track.duration}
+				onShared={closeSheet}
+			/>
+		)}
+		</>
 	);
 }
 

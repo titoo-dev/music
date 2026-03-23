@@ -8,6 +8,7 @@ import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
+import { ShareButton } from "@/components/tracks/ShareButton";
 import { Loader2, ArrowLeft, Download, Trash2, ArrowDownUp } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import Link from "next/link";
@@ -283,6 +284,11 @@ export default function PlaylistDetailPage() {
 									{formatDuration(track.duration)}
 								</span>
 								<div className="flex gap-1 items-center shrink-0">
+									<ShareButton
+										trackId={track.trackId}
+										duration={track.duration}
+										className="hidden sm:flex size-8 text-muted-foreground hover:text-foreground"
+									/>
 									<TrackDownloadStatus
 										trackId={track.trackId}
 										isAlreadyDownloaded={isTrackDownloaded}
