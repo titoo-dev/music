@@ -1,0 +1,136 @@
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/
+
+# Build output
+.next/
+out/
+build/
+coverage/
+
+# Generated code (regenerated via prisma generate)
+src/generated/
+
+# Lock files (large, not useful for code understanding)
+package-lock.json
+
+# Environment / secrets
+.env*
+!.env.example
+
+# Assets that aren't code
+public/*.svg
+public/*.png
+
+# Docker / deployment
+.dockerignore
+
+# IDE / OS
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+.vercel/
+
+# Legacy API routes (original implementations, superseded by v1/)
+src/app/api/add-to-queue/
+src/app/api/album-search/
+src/app/api/cancel-all/
+src/app/api/change-account/
+src/app/api/check-updates/
+src/app/api/connect/
+src/app/api/home/
+src/app/api/login-arl/
+src/app/api/login-email/
+src/app/api/logout/
+src/app/api/main-search/
+src/app/api/new-releases/
+src/app/api/queue/
+src/app/api/remove-finished/
+src/app/api/remove-from-queue/
+src/app/api/retry-download/
+src/app/api/search/
+src/app/api/settings/
+src/app/api/spotify-status/
+src/app/api/tracklist/
+src/app/api/user-albums/
+src/app/api/user-artists/
+src/app/api/user-playlists/
+src/app/api/user-spotify-playlists/
+src/app/api/user-tracks/
+
+# ──────────────────────────────────────────────
+# src/lib internals — keep only entry points,
+# ignore implementation details.
+# Read these on-demand when modifying them.
+# ──────────────────────────────────────────────
+
+# Deemix utils (all internal helpers)
+src/lib/deemix/utils/core.ts
+src/lib/deemix/utils/crypto.ts
+src/lib/deemix/utils/deezer.ts
+src/lib/deemix/utils/downloadUtils.ts
+src/lib/deemix/utils/downloadImage.ts
+src/lib/deemix/utils/getPreferredBitrate.ts
+src/lib/deemix/utils/localpaths.ts
+src/lib/deemix/utils/pathtemplates.ts
+
+# Deemix download-object generators (internal factories)
+src/lib/deemix/download-objects/generateTrackItem.ts
+src/lib/deemix/download-objects/generateAlbumItem.ts
+src/lib/deemix/download-objects/generatePlaylistItem.ts
+src/lib/deemix/download-objects/generateArtistTopItem.ts
+
+# Deemix storage implementations (keep interface + factory)
+src/lib/deemix/storage/LocalStorageProvider.ts
+src/lib/deemix/storage/S3StorageProvider.ts
+
+# Deemix config-store implementation (keep interface + factory)
+src/lib/deemix/config-store/PostgresConfigStore.ts
+
+# Deemix plugin implementation (keep base class)
+src/lib/deemix/plugins/spotify.ts
+
+# Deemix type internals (keep Track.ts, Album.ts, index.ts)
+src/lib/deemix/types/Artist.ts
+src/lib/deemix/types/CustomDate.ts
+src/lib/deemix/types/Lyrics.ts
+src/lib/deemix/types/Picture.ts
+src/lib/deemix/types/Playlist.ts
+src/lib/deemix/types/listener.ts
+src/lib/deemix/types/Settings.ts
+
+# Deemix errors (internal)
+src/lib/deemix/errors.ts
+
+# Deezer internals (keep deezer.ts, api.ts, gw.ts, index.ts)
+src/lib/deezer/types.ts
+src/lib/deezer/utils.ts
+src/lib/deezer/errors.ts
+src/lib/deezer/store.ts
+src/lib/deezer/schema/track-schema.ts
+src/lib/deezer/schema/album-schema.ts
+src/lib/deezer/schema/playlist-schema.ts
+src/lib/deezer/schema/contributor-schema.ts
+
+# shadcn/ui primitives (generated, rarely modified)
+src/components/ui/alert-dialog.tsx
+src/components/ui/avatar.tsx
+src/components/ui/badge.tsx
+src/components/ui/button.tsx
+src/components/ui/card.tsx
+src/components/ui/carousel.tsx
+src/components/ui/checkbox.tsx
+src/components/ui/collapsible.tsx
+src/components/ui/dialog.tsx
+src/components/ui/dropdown-menu.tsx
+src/components/ui/input.tsx
+src/components/ui/label.tsx
+src/components/ui/progress.tsx
+src/components/ui/scroll-area.tsx
+src/components/ui/select.tsx
+src/components/ui/separator.tsx
+src/components/ui/sheet.tsx
+src/components/ui/switch.tsx
+src/components/ui/tabs.tsx
+src/components/ui/tooltip.tsx
