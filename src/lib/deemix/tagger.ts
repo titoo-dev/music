@@ -1,11 +1,12 @@
 import { ID3Writer } from "browser-id3-writer";
 import Metaflac from "metaflac-js2";
-import fs from "fs";
+import fs from "fs/promises";
+import fsSync from "fs";
 import Track from "./types/Track";
 import type { Tags } from "./types/Settings";
 
-function tagID3(path: string, track: Track, save: Tags) {
-	const songBuffer = fs.readFileSync(path);
+async function tagID3(path: string, track: Track, save: Tags) {
+	const songBuffer = await fs.readFile(path);
 	const writer = new ID3Writer(songBuffer.buffer);
 
 	if (save.title) writer.setFrame("TIT2", track.title);
@@ -56,9 +57,12 @@ function tagID3(path: string, track: Track, save: Tags) {
 
 	// Referencing ID3 standard
 	// https://id3.org/id3v2.3.0#TDAT
-	// The 'Date' frame is a numeric string in the DDMM format.
-	if (save.date)
-		writer.setFrame("TDAT", "" + track.date.day + track.date.month);
+	// The 'Date' frame is a numeric string in the DDMM format (zero-padded).
+	if (save.date) {
+		const day = String(track.date.day).padStart(2, "0");
+		const month = String(track.date.month).padStart(2, "0");
+		writer.setFrame("TDAT", day + month);
+	}
 
 	if (save.length) writer.setFrame("TLEN", track.duration * 1000);
 	if (save.bpm && track.bpm) writer.setFrame("TBPM", track.bpm);
@@ -140,7 +144,7 @@ function tagID3(path: string, track: Track, save: Tags) {
 	// }
 
 	if (save.cover && track.album.embeddedCoverPath) {
-		const coverArrayBuffer = fs.readFileSync(track.album.embeddedCoverPath);
+		const coverArrayBuffer = await fs.readFile(track.album.embeddedCoverPath);
 		if (coverArrayBuffer.length !== 0) {
 			writer.setFrame("APIC", {
 				type: 3,
@@ -159,10 +163,10 @@ function tagID3(path: string, track: Track, save: Tags) {
 		taggedSongBuffer = tagID3v1(taggedSongBuffer, track, save);
 	}
 
-	fs.writeFileSync(path, taggedSongBuffer);
+	await fs.writeFile(path, taggedSongBuffer);
 }
 
-function tagFLAC(path, track, save) {
+async function tagFLAC(path, track, save) {
 	const flac = new Metaflac(path);
 	flac.removeAllTags();
 
@@ -274,7 +278,7 @@ function tagFLAC(path, track, save) {
 	}
 
 	if (save.cover && track.album.embeddedCoverPath) {
-		const picture = fs.readFileSync(track.album.embeddedCoverPath);
+		const picture = await fs.readFile(track.album.embeddedCoverPath);
 		if (picture.length !== 0) flac.importPicture(picture);
 	}
 

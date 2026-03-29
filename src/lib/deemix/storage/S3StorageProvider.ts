@@ -6,6 +6,7 @@ import {
 	DeleteObjectCommand,
 	ListObjectsV2Command,
 	DeleteObjectsCommand,
+	CopyObjectCommand,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import fs from "fs";
@@ -188,6 +189,33 @@ export class S3StorageProvider implements StorageProvider {
 		if (tempPath) return tempPath;
 		throw new Error(
 			`No local temp file found for ${filePath}. Call createWriteStream first.`
+		);
+	}
+
+	async rename(oldPath: string, newPath: string): Promise<void> {
+		// If there's a local temp file mapping (pre-upload), just remap the reference
+		const tempPath = this.tempFiles.get(oldPath);
+		if (tempPath) {
+			this.tempFiles.delete(oldPath);
+			this.tempFiles.set(newPath, tempPath);
+			return;
+		}
+
+		// Otherwise, rename on S3 via copy + delete
+		const oldKey = this.toS3Key(oldPath);
+		const newKey = this.toS3Key(newPath);
+		await this.client.send(
+			new CopyObjectCommand({
+				Bucket: this.bucket,
+				CopySource: `${this.bucket}/${oldKey}`,
+				Key: newKey,
+			})
+		);
+		await this.client.send(
+			new DeleteObjectCommand({
+				Bucket: this.bucket,
+				Key: oldKey,
+			})
 		);
 	}
 }

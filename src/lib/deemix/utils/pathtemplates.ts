@@ -15,9 +15,18 @@ const bitrateLabels = {
 	[TrackFormats.LOCAL]: "MP3",
 };
 
+// Windows reserved device names that cannot be used as file/folder names
+const WINDOWS_RESERVED = /^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\.|$)/i;
+
 export function fixName(txt: string, char = "_") {
 	txt = txt + "";
 	txt = txt.replace(/[\0/\\:*?"<>|]/g, char);
+	// Remove zero-width and control Unicode characters
+	txt = txt.replace(/[\u200B-\u200F\u2028-\u202F\uFEFF\u0000-\u001F\u007F]/g, "");
+	// Escape Windows reserved device names
+	if (WINDOWS_RESERVED.test(txt)) {
+		txt = `_${txt}`;
+	}
 	return txt.normalize("NFC");
 }
 
@@ -179,6 +188,16 @@ export function generatePath(
 		const tempPath = filename.slice(0, filename.indexOf("/"));
 		filepath += `/${tempPath}`;
 		filename = filename.slice(tempPath.length + 1);
+	}
+
+	// Ensure total path length stays within OS limits (255 chars safe cross-platform)
+	const MAX_PATH = 255;
+	const estimatedExtLen = 5; // .flac is the longest
+	const fullPath = `${filepath}/${filename}`;
+	if (fullPath.length + estimatedExtLen > MAX_PATH) {
+		const overflow = fullPath.length + estimatedExtLen - MAX_PATH;
+		filename = filename.slice(0, Math.max(1, filename.length - overflow));
+		filename = antiDot(filename);
 	}
 
 	return {

@@ -14,6 +14,8 @@ import { USER_AGENT_HEADER, pipeline } from "../utils/index";
 const TEMPDIR = tmpdir() + "/deemix-imgs";
 mkdirSync(TEMPDIR, { recursive: true });
 
+const MAX_IMAGE_RETRIES = 3;
+
 export async function downloadImage(
 	url: string,
 	path: string,
@@ -30,7 +32,8 @@ async function downloadImageWithProvider(
 	url: string,
 	path: string,
 	overwrite: string,
-	storageProvider: StorageProvider
+	storageProvider: StorageProvider,
+	_retryCount = 0
 ) {
 	if (
 		(await storageProvider.exists(path)) &&
@@ -103,7 +106,8 @@ async function downloadImageWithProvider(
 			].includes(e.code) ||
 			(downloadStream.destroyed && error === "DownloadTimeout")
 		) {
-			return downloadImageWithProvider(url, path, overwrite, storageProvider);
+			if (_retryCount >= MAX_IMAGE_RETRIES) return null;
+			return downloadImageWithProvider(url, path, overwrite, storageProvider, _retryCount + 1);
 		}
 		console.trace(e);
 		throw e;
@@ -114,7 +118,8 @@ async function downloadImageWithProvider(
 async function downloadImageLocal(
 	url: string,
 	path: string,
-	overwrite: string
+	overwrite: string,
+	_retryCount = 0
 ) {
 	if (
 		existsSync(path) &&
@@ -183,7 +188,8 @@ async function downloadImageLocal(
 			].includes(e.code) ||
 			(downloadStream.destroyed && error === "DownloadTimeout")
 		) {
-			return downloadImageLocal(url, path, overwrite);
+			if (_retryCount >= MAX_IMAGE_RETRIES) return null;
+			return downloadImageLocal(url, path, overwrite, _retryCount + 1);
 		}
 		console.trace(e);
 		throw e;

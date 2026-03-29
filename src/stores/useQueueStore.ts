@@ -68,11 +68,20 @@ export const useQueueStore = create<QueueState>((set) => ({
 		}),
 	updateQueueItem: (uuid, data) =>
 		set((s) => {
+			// Filter out non-numeric values for numeric fields to prevent type corruption
+			const sanitized = { ...data };
+			if ("downloaded" in sanitized && typeof sanitized.downloaded !== "number") {
+				delete sanitized.downloaded;
+			}
+			if ("failed" in sanitized && typeof sanitized.failed !== "number") {
+				delete sanitized.failed;
+			}
+
 			if (s.queue[uuid]) {
 				return {
 					queue: {
 						...s.queue,
-						[uuid]: { ...s.queue[uuid], ...data },
+						[uuid]: { ...s.queue[uuid], ...sanitized },
 					},
 				};
 			}
@@ -81,7 +90,7 @@ export const useQueueStore = create<QueueState>((set) => ({
 			return {
 				queue: {
 					...s.queue,
-					[uuid]: { uuid, status: "inQueue", ...data } as QueueItem,
+					[uuid]: { uuid, status: "inQueue", ...sanitized } as QueueItem,
 				},
 				queueOrder: s.queueOrder.includes(uuid)
 					? s.queueOrder

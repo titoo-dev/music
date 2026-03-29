@@ -3,12 +3,13 @@
 import { useEffect, useRef } from "react";
 import { useQueueStore } from "@/stores/useQueueStore";
 
-const POLL_INTERVAL = 1000;
+const ACTIVE_POLL_INTERVAL = 1000;
+const IDLE_POLL_INTERVAL = 30000;
 
 /**
  * Polls /api/queue to sync download status from the server.
- * Active when there are items in the queue that aren't completed/failed.
- * This ensures UI stays in sync even if WebSocket is unavailable.
+ * Fast polling (1s) when active downloads exist, slow polling (30s) otherwise
+ * to catch items added while WS was disconnected.
  */
 export function useQueuePolling() {
 	const queue = useQueueStore((s) => s.queue);
@@ -20,14 +21,6 @@ export function useQueuePolling() {
 	);
 
 	useEffect(() => {
-		if (!hasActiveItems) {
-			if (intervalRef.current) {
-				clearInterval(intervalRef.current);
-				intervalRef.current = null;
-			}
-			return;
-		}
-
 		async function poll() {
 			try {
 				const res = await fetch("/api/v1/downloads/queue");
@@ -42,9 +35,14 @@ export function useQueuePolling() {
 			}
 		}
 
-		// Poll immediately, then on interval
+		const interval = hasActiveItems ? ACTIVE_POLL_INTERVAL : IDLE_POLL_INTERVAL;
+
+		if (intervalRef.current) {
+			clearInterval(intervalRef.current);
+		}
+
 		poll();
-		intervalRef.current = setInterval(poll, POLL_INTERVAL);
+		intervalRef.current = setInterval(poll, interval);
 
 		return () => {
 			if (intervalRef.current) {

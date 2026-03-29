@@ -1,5 +1,4 @@
-import { each, queue } from "async";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import {
 	Deezer,
 	TrackFormats,
@@ -81,7 +80,7 @@ export class Downloader {
 		this.coverQueue = {};
 	}
 
-	log(data, state) {
+	log(data: any, state: string) {
 		if (this.listener) {
 			this.listener.send("downloadInfo", {
 				uuid: this.downloadObject.uuid,
@@ -92,7 +91,7 @@ export class Downloader {
 		}
 	}
 
-	warn(data, state, solution) {
+	warn(data: any, state: string, solution: string) {
 		this.listener.send("downloadWarn", {
 			uuid: this.downloadObject.uuid,
 			data,
@@ -109,30 +108,33 @@ export class Downloader {
 			});
 			if (track) await this.afterDownloadSingle(track);
 		} else if (this.downloadObject instanceof Collection) {
-			const tracks = [];
+			const tracks: any[] = [];
 
-			const q = queue(
-				async (data: { track: APITrack; pos: number }, callback) => {
-					if (this.downloadObject instanceof Collection) {
-						const { track, pos } = data;
-						tracks[pos] = await this.downloadWrapper({
-							trackAPI: track,
-							albumAPI: this.downloadObject.collection.albumAPI,
-							playlistAPI: this.downloadObject.collection.playlistAPI,
-						});
+			const concurrency = this.settings.queueConcurrency;
+			const trackList = this.downloadObject.collection.tracks;
+
+			if (trackList.length) {
+				// Process tracks with concurrency using native Promise
+				let index = 0;
+				const runNext = async (): Promise<void> => {
+					while (index < trackList.length) {
+						const pos = index++;
+						const track = trackList[pos];
+						if (this.downloadObject instanceof Collection) {
+							tracks[pos] = await this.downloadWrapper({
+								trackAPI: track,
+								albumAPI: this.downloadObject.collection.albumAPI,
+								playlistAPI: this.downloadObject.collection.playlistAPI,
+							});
+						}
 					}
+				};
 
-					callback();
-				},
-				this.settings.queueConcurrency
-			);
-
-			if (this.downloadObject.collection.tracks.length) {
-				this.downloadObject.collection.tracks.forEach((track, pos) => {
-					q.push({ track, pos }, () => {});
-				});
-
-				await q.drain();
+				const workers = Array.from(
+					{ length: Math.min(concurrency, trackList.length) },
+					() => runNext()
+				);
+				await Promise.all(workers);
 			}
 			await this.afterDownloadCollection(tracks);
 		}
@@ -154,26 +156,16 @@ export class Downloader {
 		});
 	}
 
-	async download(
-		extraData: { trackAPI: APITrack; albumAPI?: APIAlbum; playlistAPI?: any },
-		track?: Track
-	) {
-		const returnData = <any>{};
-		const { trackAPI, albumAPI, playlistAPI } = extraData;
+	// --- download() broken into focused steps ---
 
-		if (this.downloadObject.isCanceled) throw new DownloadCanceled();
-		if (trackAPI.id === 0) throw new DownloadFailed("notOnDeezer");
-
-		trackAPI.size = this.downloadObject.size;
-
-		let itemData = {
-			id: trackAPI.id,
-			title: trackAPI.title,
-			artist: trackAPI.artist.name,
-		};
-
-		if (!track) {
-			track = new Track();
+	private async enrichTrack(
+		trackAPI: APITrack,
+		albumAPI?: APIAlbum,
+		playlistAPI?: any,
+		existingTrack?: Track
+	): Promise<Track> {
+		const track = existingTrack || new Track();
+		if (!existingTrack) {
 			track.parseTrack(trackAPI);
 			if (albumAPI) {
 				track.album = new Album(albumAPI.id, albumAPI.title);
@@ -184,34 +176,20 @@ export class Downloader {
 			}
 		}
 
-		// Enrich track with additional data
 		try {
-			await track.parseData(
-				this.dz,
-				trackAPI.id,
-				trackAPI,
-				albumAPI,
-				playlistAPI
-			);
-		} catch (e) {
-			if (e.name === "AlbumDoesntExists") {
-				throw new DownloadFailed("albumDoesntExists");
-			}
-			if (e.name === "MD5NotFound") {
-				throw new DownloadFailed("notLoggedIn");
-			}
+			await track.parseData(this.dz, trackAPI.id, trackAPI, albumAPI, playlistAPI);
+		} catch (e: any) {
+			if (e.name === "AlbumDoesntExists") throw new DownloadFailed("albumDoesntExists");
+			if (e.name === "MD5NotFound") throw new DownloadFailed("notLoggedIn");
 			throw e;
 		}
+		return track;
+	}
 
-		if (this.downloadObject.isCanceled) throw new DownloadCanceled();
-
-		// Check if the track is encoded
+	private async resolveFormat(track: Track) {
 		if (track.MD5 === 0) throw new DownloadFailed("notEncoded", track);
-
-		// Check the target bitrate
-		let selectedFormat;
 		try {
-			selectedFormat = await getPreferredBitrate(
+			return await getPreferredBitrate(
 				this.dz,
 				track,
 				this.bitrate,
@@ -220,109 +198,17 @@ export class Downloader {
 				this.downloadObject.uuid,
 				this.listener
 			);
-		} catch (e) {
-			if (e.name === "WrongLicense") {
-				throw new DownloadFailed("wrongLicense");
-			}
-			if (e.name === "WrongGeolocation") {
-				throw new DownloadFailed("wrongGeolocation", track);
-			}
-			if (e.name === "PreferredBitrateNotFound") {
-				throw new DownloadFailed("wrongBitrate", track);
-			}
-			if (e.name === "TrackNot360") {
-				throw new DownloadFailed("no360RA");
-			}
+		} catch (e: any) {
+			if (e.name === "WrongLicense") throw new DownloadFailed("wrongLicense");
+			if (e.name === "WrongGeolocation") throw new DownloadFailed("wrongGeolocation", track);
+			if (e.name === "PreferredBitrateNotFound") throw new DownloadFailed("wrongBitrate", track);
+			if (e.name === "TrackNot360") throw new DownloadFailed("no360RA");
 			console.error(e);
 			throw e;
 		}
-		track.bitrate = selectedFormat;
-		track.album.bitrate = selectedFormat;
+	}
 
-		track.applySettings(this.settings);
-
-		const { filename, filepath, artistPath, coverPath, extrasPath } =
-			generatePath(track, this.downloadObject.type, this.settings);
-
-		// Make sure the filepath exists
-		await this.storageProvider.ensureDir(filepath);
-		const extension = extensions[track.bitrate];
-		let writepath = `${filepath}/${filename}${extension}`;
-
-		const shouldDownload = await checkShouldDownload(
-			filename,
-			filepath,
-			extension,
-			writepath,
-			this.settings.overwriteFile,
-			track,
-			this.storageProvider
-		);
-
-		// Adding tags
-		if (
-			!shouldDownload &&
-			[OverwriteOption.ONLY_TAGS, OverwriteOption.OVERWRITE].includes(
-				this.settings.overwriteFile
-			)
-		) {
-			tagTrack(extension, writepath, track, this.settings.tags);
-		}
-
-		if (!shouldDownload) {
-			if (this.listener) {
-				this.listener.send("updateQueue", {
-					uuid: this.downloadObject.uuid,
-					alreadyDownloaded: true,
-					downloadPath: writepath,
-					extrasPath: this.downloadObject.extrasPath,
-				});
-			}
-
-			returnData.filename = writepath.slice(extrasPath.length + 1);
-			returnData.data = itemData;
-			returnData.path = String(writepath);
-
-			this.downloadObject.files.push(returnData);
-
-			if (
-				this.downloadObject instanceof Single ||
-				this.downloadObject instanceof Collection
-			) {
-				this.downloadObject.completeTrackProgress(this.listener);
-			}
-
-			this.downloadObject.downloaded += 1;
-			return returnData;
-		}
-
-		if (this.downloadObject.isCanceled) throw new DownloadCanceled();
-
-		if (this.settings.overwriteFile === OverwriteOption.KEEP_BOTH) {
-			const originalFilename = `${filepath}/${filename}`;
-
-			let c = 0;
-			let currentFilename = originalFilename;
-			while (await this.storageProvider.exists(currentFilename + extension)) {
-				c++;
-				currentFilename = `${originalFilename} (${c})`;
-			}
-
-			writepath = currentFilename + extension;
-		}
-
-		itemData = {
-			id: track.id,
-			title: track.title,
-			artist: track.mainArtist.name,
-		};
-
-		// Save extrasPath
-		if (extrasPath && !this.downloadObject.extrasPath) {
-			this.downloadObject.extrasPath = extrasPath;
-		}
-
-		// Generate covers URLs
+	private async prepareCoverArt(track: Track) {
 		let embeddedImageFormat = `jpg-${this.settings.jpegImageQuality}`;
 		if (this.settings.embeddedArtworkPNG) embeddedImageFormat = "png";
 
@@ -336,19 +222,18 @@ export class Downloader {
 			track.album.isPlaylist ? "pl" + track.playlist.id : "alb" + track.album.id
 		}_${this.settings.embeddedArtworkSize}${ext}`;
 
-		// Download and cache the coverart
 		if (!this.coverQueue[track.album.embeddedCoverPath]) {
 			this.coverQueue[track.album.embeddedCoverPath] = await downloadImage(
 				track.album.embeddedCoverURL,
 				track.album.embeddedCoverPath
 			);
 		}
-		track.album.embeddedCoverPath =
-			this.coverQueue[track.album.embeddedCoverPath];
+		track.album.embeddedCoverPath = this.coverQueue[track.album.embeddedCoverPath];
 		if (this.coverQueue[track.album.embeddedCoverPath])
 			delete this.coverQueue[track.album.embeddedCoverPath];
+	}
 
-		// Save local album art
+	private collectArtworkURLs(track: Track, returnData: any, coverPath?: string, artistPath?: string) {
 		if (coverPath) {
 			returnData.albumURLs = [];
 			this.settings.localArtworkFormat.split(",").forEach((picFormat) => {
@@ -356,13 +241,8 @@ export class Downloader {
 					let extendedFormat = picFormat;
 					if (extendedFormat === "jpg")
 						extendedFormat += `-${this.settings.jpegImageQuality}`;
-					const url = track.album.pic.getURL(
-						this.settings.localArtworkSize,
-						extendedFormat
-					);
-					// Skip non deezer pictures at the wrong format
-					if (track.album.pic instanceof StaticPicture && picFormat !== "jpg")
-						return;
+					const url = track.album.pic.getURL(this.settings.localArtworkSize, extendedFormat);
+					if (track.album.pic instanceof StaticPicture && picFormat !== "jpg") return;
 					returnData.albumURLs.push({ url, ext: picFormat });
 				}
 			});
@@ -375,18 +255,12 @@ export class Downloader {
 			);
 		}
 
-		// Save artist art
 		if (artistPath) {
 			returnData.artistURLs = [];
 			this.settings.localArtworkFormat.split(",").forEach((picFormat) => {
-				// Deezer doesn't support png artist images
 				if (picFormat === "jpg") {
 					const extendedFormat = `${picFormat}-${this.settings.jpegImageQuality}`;
-					const url = track.album.mainArtist.pic.getURL(
-						this.settings.localArtworkSize,
-						extendedFormat
-					);
-					// Skip non deezer pictures at the wrong format
+					const url = track.album.mainArtist.pic.getURL(this.settings.localArtworkSize, extendedFormat);
 					if (track.album.mainArtist.pic.md5 === "") return;
 					returnData.artistURLs.push({ url, ext: picFormat });
 				}
@@ -400,7 +274,6 @@ export class Downloader {
 			);
 		}
 
-		// Save playlist art
 		if (track.playlist) {
 			if (this.playlistURLs.length === 0) {
 				this.settings.localArtworkFormat.split(",").forEach((picFormat) => {
@@ -408,25 +281,15 @@ export class Downloader {
 						let extendedFormat = picFormat;
 						if (extendedFormat === "jpg")
 							extendedFormat += `-${this.settings.jpegImageQuality}`;
-						const url = track.playlist.pic.getURL(
-							this.settings.localArtworkSize,
-							extendedFormat
-						);
-						// Skip non deezer pictures at the wrong format
-						if (
-							track.playlist.pic instanceof StaticPicture &&
-							picFormat !== "jpg"
-						)
-							return;
+						const url = track.playlist.pic.getURL(this.settings.localArtworkSize, extendedFormat);
+						if (track.playlist.pic instanceof StaticPicture && picFormat !== "jpg") return;
 						this.playlistURLs.push({ url, ext: picFormat });
 					}
 				});
 			}
 			if (!this.playlistCovername) {
 				track.playlist.bitrate = track.bitrate;
-				track.playlist.dateString = track.playlist.date.format(
-					this.settings.dateFormat
-				);
+				track.playlist.dateString = track.playlist.date.format(this.settings.dateFormat);
 				this.playlistCovername = generateAlbumName(
 					this.settings.coverImageTemplate,
 					track.playlist,
@@ -435,38 +298,143 @@ export class Downloader {
 				);
 			}
 		}
+	}
 
-		// Save lyrics in lrc file
+	private async saveLyrics(track: Track, filepath: string, filename: string) {
 		if (this.settings.syncedLyrics && track.lyrics?.sync) {
 			if (
 				!(await this.storageProvider.exists(`${filepath}/${filename}.lrc`)) ||
-				[OverwriteOption.OVERWRITE, OverwriteOption.ONLY_TAGS].includes(
-					this.settings.overwriteFile
-				)
+				[OverwriteOption.OVERWRITE, OverwriteOption.ONLY_TAGS].includes(this.settings.overwriteFile)
 			) {
-				await this.storageProvider.writeFile(`${filepath}/${filename}.lrc`, track.lyrics.sync);
+				const lrcHeader = track.lyrics.generateLrcHeader(track);
+				await this.storageProvider.writeFile(`${filepath}/${filename}.lrc`, lrcHeader + track.lyrics.sync);
 			}
 		}
+	}
 
-		// Download the track
+	private async downloadAndTag(track: Track, writepath: string, extension: string) {
 		track.downloadURL = track.urls[formatsName[track.bitrate]];
 		if (!track.downloadURL) throw new DownloadFailed("notAvailable", track);
 		try {
 			await streamTrack(writepath, track, this.downloadObject, this.listener, this.storageProvider);
 		} catch (e) {
-			if (e instanceof HTTPError)
-				throw new DownloadFailed("notAvailable", track);
+			if (e instanceof HTTPError) throw new DownloadFailed("notAvailable", track);
 			throw e;
 		}
 
-		// Tag the track (operates on local temp file for S3, final path for local)
 		if (!track.local) {
 			const localPath = this.storageProvider.getLocalPath(writepath);
-			tagTrack(extension, localPath, track, this.settings.tags);
+			await tagTrack(extension, localPath, track, this.settings.tags);
 		}
 
-		// Finalize: upload to S3 if needed (after tagging)
 		await this.storageProvider.finalizeStream(writepath);
+	}
+
+	async download(
+		extraData: { trackAPI: APITrack; albumAPI?: APIAlbum; playlistAPI?: any },
+		track?: Track
+	) {
+		const returnData = {} as any;
+		const { trackAPI, albumAPI, playlistAPI } = extraData;
+
+		if (this.downloadObject.isCanceled) throw new DownloadCanceled();
+		if (trackAPI.id === 0) throw new DownloadFailed("notOnDeezer");
+
+		trackAPI.size = this.downloadObject.size;
+
+		let itemData: any = {
+			id: trackAPI.id,
+			title: trackAPI.title,
+			artist: trackAPI.artist.name,
+		};
+
+		// Step 1: Enrich track
+		track = await this.enrichTrack(trackAPI, albumAPI, playlistAPI, track);
+		if (this.downloadObject.isCanceled) throw new DownloadCanceled();
+
+		// Step 2: Resolve format/bitrate
+		const selectedFormat = await this.resolveFormat(track);
+		track.bitrate = selectedFormat as typeof track.bitrate;
+		track.album.bitrate = selectedFormat;
+		track.applySettings(this.settings);
+
+		// Step 3: Generate paths
+		const { filename, filepath, artistPath, coverPath, extrasPath } =
+			generatePath(track, this.downloadObject.type, this.settings);
+
+		await this.storageProvider.ensureDir(filepath);
+		const extension = extensions[track.bitrate];
+		let writepath = `${filepath}/${filename}${extension}`;
+
+		// Step 4: Check if should download
+		const shouldDownload = await checkShouldDownload(
+			filename, filepath, extension, writepath,
+			this.settings.overwriteFile, track, this.storageProvider
+		);
+
+		if (
+			!shouldDownload &&
+			[OverwriteOption.ONLY_TAGS, OverwriteOption.OVERWRITE].includes(this.settings.overwriteFile)
+		) {
+			await tagTrack(extension, writepath, track, this.settings.tags);
+		}
+
+		if (!shouldDownload) {
+			this.downloadObject.files.push(returnData);
+			if (this.downloadObject instanceof Single || this.downloadObject instanceof Collection) {
+				this.downloadObject.completeTrackProgress(this.listener);
+			}
+			this.downloadObject.downloaded += 1;
+			if (this.listener) {
+				this.listener.send("updateQueue", {
+					uuid: this.downloadObject.uuid,
+					alreadyDownloaded: true,
+					downloaded: this.downloadObject.downloaded,
+					downloadPath: writepath,
+					extrasPath: this.downloadObject.extrasPath,
+				});
+			}
+			returnData.filename = writepath.slice(extrasPath.length + 1);
+			returnData.data = itemData;
+			returnData.path = String(writepath);
+			return returnData;
+		}
+
+		if (this.downloadObject.isCanceled) throw new DownloadCanceled();
+
+		if (this.settings.overwriteFile === OverwriteOption.KEEP_BOTH) {
+			const originalFilename = `${filepath}/${filename}`;
+			let c = 0;
+			let currentFilename = originalFilename;
+			while (await this.storageProvider.exists(currentFilename + extension)) {
+				c++;
+				currentFilename = `${originalFilename} (${c})`;
+			}
+			writepath = currentFilename + extension;
+		}
+
+		itemData = {
+			id: track.id,
+			title: track.title,
+			artist: track.mainArtist.name,
+			duration: track.duration,
+		};
+
+		if (extrasPath && !this.downloadObject.extrasPath) {
+			this.downloadObject.extrasPath = extrasPath;
+		}
+
+		// Step 5: Prepare cover art
+		await this.prepareCoverArt(track);
+
+		// Step 6: Collect artwork URLs
+		this.collectArtworkURLs(track, returnData, coverPath, artistPath);
+
+		// Step 7: Save lyrics
+		await this.saveLyrics(track, filepath, filename);
+
+		// Step 8: Download + tag + finalize
+		await this.downloadAndTag(track, writepath, extension);
 
 		if (track.searched) returnData.searched = true;
 		this.downloadObject.downloaded += 1;
@@ -474,7 +442,7 @@ export class Downloader {
 		if (this.listener) {
 			this.listener.send("updateQueue", {
 				uuid: this.downloadObject.uuid,
-				downloaded: true,
+				downloaded: this.downloadObject.downloaded,
 				downloadPath: String(writepath),
 				extrasPath: String(this.downloadObject.extrasPath),
 			});
@@ -492,25 +460,22 @@ export class Downloader {
 	) {
 		const { trackAPI } = extraData;
 
-		// Temp metadata to generate logs
 		const itemData = {
 			id: trackAPI.id,
 			title: trackAPI.title,
 			artist: trackAPI.artist.name,
 		};
 
-		let result;
+		let result: any;
 		try {
 			result = await this.download(extraData, track);
-		} catch (e) {
+		} catch (e: any) {
 			if (e instanceof DownloadFailed) {
 				if (e.track) {
 					const track = e.track;
 					if (track.fallbackID !== 0) {
 						this.warn(itemData, e.errid, "fallback");
-						const gwTrack = await this.dz.gw.get_track_with_fallback(
-							track.fallbackID
-						);
+						const gwTrack = await this.dz.gw.get_track_with_fallback(track.fallbackID);
 						track.parseEssentialData(map_track(gwTrack));
 						return await this.downloadWrapper(extraData, track);
 					}
@@ -526,8 +491,7 @@ export class Downloader {
 						}
 						if (fallbackID !== 0) {
 							this.warn(itemData, e.errid, "fallback");
-							const gwTrack =
-								await this.dz.gw.get_track_with_fallback(fallbackID);
+							const gwTrack = await this.dz.gw.get_track_with_fallback(fallbackID);
 							track.parseEssentialData(map_track(gwTrack));
 							return await this.downloadWrapper(extraData, track);
 						}
@@ -535,13 +499,10 @@ export class Downloader {
 					if (!track.searched && this.settings.fallbackSearch) {
 						this.warn(itemData, e.errid, "search");
 						const searchedID = await this.dz.api.get_track_id_from_metadata(
-							track.mainArtist.name,
-							track.title,
-							track.album.title
+							track.mainArtist.name, track.title, track.album.title
 						);
 						if (searchedID !== "0") {
-							const gwTrack =
-								await this.dz.gw.get_track_with_fallback(searchedID);
+							const gwTrack = await this.dz.gw.get_track_with_fallback(searchedID);
 							track.parseEssentialData(map_track(gwTrack));
 							track.searched = true;
 							this.log(itemData, "searchFallback");
@@ -552,32 +513,19 @@ export class Downloader {
 					e.message = ErrorMessages[e.errid];
 				}
 				result = {
-					error: {
-						message: e.message,
-						errid: e.errid,
-						data: itemData,
-						type: "track",
-					},
+					error: { message: e.message, errid: e.errid, data: itemData, type: "track" },
 				};
 			} else if (e instanceof DownloadCanceled) {
 				return;
 			} else {
 				result = {
-					error: {
-						message: e.message,
-						data: itemData,
-						stack: String(e.stack),
-						type: "track",
-					},
+					error: { message: e.message, data: itemData, stack: String(e.stack), type: "track" },
 				};
 			}
 		}
 
 		if (result.error) {
-			if (
-				this.downloadObject instanceof Single ||
-				this.downloadObject instanceof Collection
-			) {
+			if (this.downloadObject instanceof Single || this.downloadObject instanceof Collection) {
 				this.downloadObject.completeTrackProgress(this.listener);
 			}
 			this.downloadObject.failed += 1;
@@ -599,7 +547,7 @@ export class Downloader {
 		return result;
 	}
 
-	afterDownloadErrorReport(position, error, itemData = {}) {
+	afterDownloadErrorReport(position: string, error: any, itemData: any = {}) {
 		this.downloadObject.errors.push({
 			message: error.message,
 			stack: String(error.stack),
@@ -618,45 +566,53 @@ export class Downloader {
 		}
 	}
 
+	// --- Shared post-download helpers ---
+
+	private async saveTrackArtwork(track: any, itemData?: any) {
+		try {
+			if (this.settings.saveArtwork && track.albumPath) {
+				await Promise.all(
+					(track.albumURLs || []).map((image: any) =>
+						downloadImage(
+							image.url,
+							`${track.albumPath}/${track.albumFilename}.${image.ext}`,
+							this.settings.overwriteFile,
+							this.storageProvider
+						)
+					)
+				);
+			}
+		} catch (e) {
+			this.afterDownloadErrorReport("SaveLocalAlbumArt", e, itemData);
+		}
+
+		try {
+			if (this.settings.saveArtworkArtist && track.artistPath) {
+				await Promise.all(
+					(track.artistURLs || []).map((image: any) =>
+						downloadImage(
+							image.url,
+							`${track.artistPath}/${track.artistFilename}.${image.ext}`,
+							this.settings.overwriteFile,
+							this.storageProvider
+						)
+					)
+				);
+			}
+		} catch (e) {
+			this.afterDownloadErrorReport("SaveLocalArtistArt", e, itemData);
+		}
+	}
+
 	async afterDownloadSingle(track: any) {
 		if (!track) return;
 		if (!this.downloadObject.extrasPath) {
 			this.downloadObject.extrasPath = this.settings.downloadLocation;
 		}
 
-		// Save local album artwork
-		try {
-			if (this.settings.saveArtwork && track.albumPath) {
-				await each(track.albumURLs, async (image: any) => {
-					await downloadImage(
-						image.url,
-						`${track.albumPath}/${track.albumFilename}.${image.ext}`,
-						this.settings.overwriteFile,
-						this.storageProvider
-					);
-				});
-			}
-		} catch (e) {
-			this.afterDownloadErrorReport("SaveLocalAlbumArt", e);
-		}
+		await this.saveTrackArtwork(track);
 
-		// Save local artist artwork
-		try {
-			if (this.settings.saveArtworkArtist && track.artistPath) {
-				await each(track.artistURLs, async (image: any) => {
-					await downloadImage(
-						image.url,
-						`${track.artistPath}/${track.artistFilename}.${image.ext}`,
-						this.settings.overwriteFile,
-						this.storageProvider
-					);
-				});
-			}
-		} catch (e) {
-			this.afterDownloadErrorReport("SaveLocalArtistArt", e);
-		}
-
-		// Create searched logfile
+		// Create searched logfile (append mode for single)
 		try {
 			if (this.settings.logSearched && track.searched) {
 				const filename = `${track.data.artist} - ${track.data.title}`;
@@ -684,39 +640,46 @@ export class Downloader {
 		// Execute command after download
 		try {
 			if (this.settings.executeCommand !== "") {
-				const child = exec(
-					this.settings.executeCommand
-						.replaceAll("%folder%", shellEscape(this.downloadObject.extrasPath))
-						.replaceAll("%filename%", shellEscape(track.filename)),
-					(error, stdout, stderr) => {
-						if (error) this.afterDownloadErrorReport("ExecuteCommand", error);
-						const itemData = { stderr, stdout };
-						if (stderr) this.log(itemData, "stderr");
-						if (stdout) this.log(itemData, "stdout");
-					}
-				);
-
-				await new Promise((resolve) => {
-					child.on("close", resolve);
-				});
+				await this.executePostCommand(this.downloadObject.extrasPath, track.filename);
 			}
 		} catch (e) {
 			this.afterDownloadErrorReport("ExecuteCommand", e);
 		}
 	}
 
-	async afterDownloadCollection(tracks) {
+	private async executePostCommand(folder: string, filename = "") {
+		const command = this.settings.executeCommand
+			.replaceAll("%folder%", shellEscape(folder))
+			.replaceAll("%filename%", shellEscape(filename));
+
+		return new Promise<void>((resolve) => {
+			const child = execFile(
+				process.platform === "win32" ? "cmd" : "/bin/sh",
+				process.platform === "win32" ? ["/c", command] : ["-c", command],
+				{ env: { ...process.env, DEEMIX_FOLDER: folder, DEEMIX_FILENAME: filename } },
+				(error, stdout, stderr) => {
+					if (error) this.afterDownloadErrorReport("ExecuteCommand", error);
+					const itemData = { stderr, stdout };
+					if (stderr) this.log(itemData, "stderr");
+					if (stdout) this.log(itemData, "stdout");
+				}
+			);
+			child.on("close", resolve);
+		});
+	}
+
+	async afterDownloadCollection(tracks: any[]) {
 		if (!this.downloadObject.extrasPath) {
 			this.downloadObject.extrasPath = this.settings.downloadLocation;
 		}
 
-		const playlist = [];
+		const playlist: { filename: string; duration?: number; artist?: string; title?: string }[] = [];
 		let errors = "";
 		let searched = "";
 
 		for (let i = 0; i < tracks.length; i++) {
 			const track = tracks[i];
-			if (!track) return;
+			if (!track) continue;
 
 			if (track.error) {
 				if (!track.error.data)
@@ -727,40 +690,14 @@ export class Downloader {
 			if (track.searched)
 				searched += `${track.data.artist} - ${track.data.title}\r\n`;
 
-			// Save local album artwork
-			try {
-				if (this.settings.saveArtwork && track.albumPath) {
-					await each(track.albumURLs, async (image: any) => {
-						await downloadImage(
-							image.url,
-							`${track.albumPath}/${track.albumFilename}.${image.ext}`,
-							this.settings.overwriteFile,
-							this.storageProvider
-						);
-					});
-				}
-			} catch (e) {
-				this.afterDownloadErrorReport("SaveLocalAlbumArt", e, track.data);
-			}
+			await this.saveTrackArtwork(track, track.data);
 
-			// Save local artist artwork
-			try {
-				if (this.settings.saveArtworkArtist && track.artistPath) {
-					await each(track.artistURLs, async (image: any) => {
-						await downloadImage(
-							image.url,
-							`${track.artistPath}/${track.artistFilename}.${image.ext}`,
-							this.settings.overwriteFile,
-							this.storageProvider
-						);
-					});
-				}
-			} catch (e) {
-				this.afterDownloadErrorReport("SaveLocalArtistArt", e, track.data);
-			}
-
-			// Save filename for playlist file
-			playlist[i] = track.filename || "";
+			playlist[i] = {
+				filename: track.filename || "",
+				duration: track.data?.duration,
+				artist: track.data?.artist,
+				title: track.data?.title,
+			};
 		}
 
 		// Create errors logfile
@@ -791,14 +728,16 @@ export class Downloader {
 				this.playlistCovername &&
 				!this.settings.tags.savePlaylistAsCompilation
 			) {
-				await each(this.playlistURLs, async (image) => {
-					await downloadImage(
-						image.url,
-						`${this.downloadObject.extrasPath}/${this.playlistCovername}.${image.ext}`,
-						this.settings.overwriteFile,
-						this.storageProvider
-					);
-				});
+				await Promise.all(
+					this.playlistURLs.map((image) =>
+						downloadImage(
+							image.url,
+							`${this.downloadObject.extrasPath}/${this.playlistCovername}.${image.ext}`,
+							this.settings.overwriteFile,
+							this.storageProvider
+						)
+					)
+				);
 			}
 		} catch (e) {
 			this.afterDownloadErrorReport("SavePlaylistArt", e);
@@ -813,9 +752,19 @@ export class Downloader {
 						this.downloadObject,
 						this.settings
 					) || "playlist";
+				const m3u8Lines = ["#EXTM3U"];
+				for (const entry of playlist) {
+					if (!entry || !entry.filename) continue;
+					const duration = entry.duration || -1;
+					const display = entry.artist && entry.title
+						? `${entry.artist} - ${entry.title}`
+						: entry.filename;
+					m3u8Lines.push(`#EXTINF:${duration},${display}`);
+					m3u8Lines.push(entry.filename);
+				}
 				await this.storageProvider.writeFile(
 					`${this.downloadObject.extrasPath}/${filename}.m3u8`,
-					playlist.join("\n")
+					m3u8Lines.join("\n")
 				);
 			}
 		} catch (e) {
@@ -825,21 +774,7 @@ export class Downloader {
 		// Execute command after download
 		try {
 			if (this.settings.executeCommand !== "") {
-				const child = exec(
-					this.settings.executeCommand
-						.replaceAll("%folder%", shellEscape(this.downloadObject.extrasPath))
-						.replaceAll("%filename%", ""),
-					(error, stdout, stderr) => {
-						if (error) this.afterDownloadErrorReport("ExecuteCommand", error);
-						const itemData = { stderr, stdout };
-						if (stderr) this.log(itemData, "stderr");
-						if (stdout) this.log(itemData, "stdout");
-					}
-				);
-
-				await new Promise((resolve) => {
-					child.on("close", resolve);
-				});
+				await this.executePostCommand(this.downloadObject.extrasPath);
 			}
 		} catch (e) {
 			this.afterDownloadErrorReport("ExecuteCommand", e);

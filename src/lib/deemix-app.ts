@@ -345,9 +345,11 @@ export class DeemixApp {
 	}
 
 	clearCompletedDownloads() {
+		const doneStatuses = ["completed", "withErrors", "failed"];
 		Object.values(this.queue).forEach((downloadObject: any) => {
-			if (downloadObject.status === "completed") {
+			if (doneStatuses.includes(downloadObject.status)) {
 				delete this.queue[downloadObject.uuid];
+				delete this._downloadData[downloadObject.uuid];
 			}
 		});
 		this.listener.send("removedFinishedDownloads");

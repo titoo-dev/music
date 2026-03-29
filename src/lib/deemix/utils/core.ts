@@ -18,7 +18,9 @@ export function canWrite(path: PathLike) {
 }
 
 export function generateReplayGainString(trackGain: number) {
-	return `${Math.round((trackGain + 18.4) * -100) / 100} dB`;
+	const gain = Math.round((trackGain + 18.4) * -100) / 100;
+	const sign = gain >= 0 ? "+" : "";
+	return `${sign}${gain.toFixed(2)} dB`;
 }
 
 export function changeCase(text: string, caseType: string) {

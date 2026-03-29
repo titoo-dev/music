@@ -37,8 +37,21 @@ export class Lyrics {
 						timestamp = syncLyricsJson[notEmptyLine].lrc_timestamp;
 					}
 				}
-				this.sync += timestamp + currentLine + "\r\n";
+				this.sync += timestamp + currentLine + "\n";
 			}
 		}
+	}
+
+	generateLrcHeader(track: { title: string; mainArtist: { name: string }; album: { title: string }; duration: number }) {
+		const lines: string[] = [];
+		if (track.title) lines.push(`[ti:${track.title}]`);
+		if (track.mainArtist?.name) lines.push(`[ar:${track.mainArtist.name}]`);
+		if (track.album?.title) lines.push(`[al:${track.album.title}]`);
+		if (track.duration) {
+			const min = Math.floor(track.duration / 60);
+			const sec = String(track.duration % 60).padStart(2, "0");
+			lines.push(`[length:${min}:${sec}]`);
+		}
+		return lines.length > 0 ? lines.join("\n") + "\n" : "";
 	}
 }

@@ -7,7 +7,7 @@ import {
 	generateBlowfishKey,
 	decryptChunk,
 } from "./utils/crypto";
-import { DownloadCanceled, DownloadEmpty } from "./errors";
+import { DownloadCanceled, DownloadEmpty, DownloadFailed } from "./errors";
 import type { StorageProvider } from "./storage/StorageProvider";
 
 import { USER_AGENT_HEADER, pipeline } from "./utils/index";
@@ -38,12 +38,15 @@ export function generateStreamURL(sngID, md5, mediaVersion, format) {
 }
 
 export function reverseStreamURL(url) {
-	const urlPart = url.slice(url.find("/1/") + 3);
+	const urlPart = url.slice(url.indexOf("/1/") + 3);
 	return reverseStreamPath(urlPart);
 }
 
-export async function streamTrack(writepath, track, downloadObject, listener, storageProvider?: StorageProvider) {
+const MAX_STREAM_RETRIES = 5;
+
+export async function streamTrack(writepath, track, downloadObject, listener, storageProvider?: StorageProvider, _retryCount = 0) {
 	if (downloadObject && downloadObject.isCanceled) throw new DownloadCanceled();
+	const partPath = writepath + ".part";
 	const headers = { "User-Agent": USER_AGENT_HEADER };
 	let chunkLength = 0;
 	let complete = 0;
@@ -52,8 +55,8 @@ export async function streamTrack(writepath, track, downloadObject, listener, st
 		track.downloadURL.includes("/media/");
 	let blowfishKey;
 	const outputStream = storageProvider
-		? storageProvider.createWriteStream(writepath)
-		: fs.createWriteStream(writepath);
+		? storageProvider.createWriteStream(partPath)
+		: fs.createWriteStream(partPath);
 	let timeout = null;
 
 	const itemData = {
@@ -169,9 +172,9 @@ export async function streamTrack(writepath, track, downloadObject, listener, st
 		await pipeline(request, decrypter, depadder, outputStream);
 	} catch (e) {
 		if (storageProvider) {
-			await storageProvider.deleteFile(writepath);
-		} else if (fs.existsSync(writepath)) {
-			fs.unlinkSync(writepath);
+			await storageProvider.deleteFile(partPath);
+		} else if (fs.existsSync(partPath)) {
+			fs.unlinkSync(partPath);
 		}
 		if (
 			e instanceof ReadError ||
@@ -189,6 +192,9 @@ export async function streamTrack(writepath, track, downloadObject, listener, st
 					(chunkLength / complete / downloadObject.size) * 100;
 				downloadObject.updateProgress(listener);
 			}
+			if (_retryCount >= MAX_STREAM_RETRIES) {
+				throw new DownloadCanceled();
+			}
 			if (listener) {
 				listener.send("downloadInfo", {
 					uuid: downloadObject.uuid,
@@ -197,7 +203,7 @@ export async function streamTrack(writepath, track, downloadObject, listener, st
 					state: "downloadTimeout",
 				});
 			}
-			return await streamTrack(writepath, track, downloadObject, listener, storageProvider);
+			return await streamTrack(writepath, track, downloadObject, listener, storageProvider, _retryCount + 1);
 		} else if (request.destroyed) {
 			switch (error) {
 				case "DownloadEmpty":
@@ -211,5 +217,26 @@ export async function streamTrack(writepath, track, downloadObject, listener, st
 			console.trace(e);
 			throw e;
 		}
+	}
+
+	// Verify downloaded size matches expected content-length
+	if (complete > 0 && chunkLength !== complete) {
+		if (storageProvider) {
+			await storageProvider.deleteFile(partPath);
+		} else if (fs.existsSync(partPath)) {
+			fs.unlinkSync(partPath);
+		}
+		if (_retryCount >= MAX_STREAM_RETRIES) {
+			throw new DownloadFailed("notAvailable", track);
+		}
+		return await streamTrack(writepath, track, downloadObject, listener, storageProvider, _retryCount + 1);
+	}
+
+	// Atomic rename: .part → final path
+	// For StorageProvider (S3), remap the temp file reference so finalizeStream/getLocalPath use the right key
+	if (storageProvider) {
+		await storageProvider.rename(partPath, writepath);
+	} else {
+		fs.renameSync(partPath, writepath);
 	}
 }

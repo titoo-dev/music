@@ -43,4 +43,8 @@ export class LocalStorageProvider implements StorageProvider {
 	getLocalPath(filePath: string): string {
 		return filePath;
 	}
+
+	async rename(oldPath: string, newPath: string): Promise<void> {
+		fs.renameSync(oldPath, newPath);
+	}
 }

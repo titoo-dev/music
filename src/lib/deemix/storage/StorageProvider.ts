@@ -9,4 +9,5 @@ export interface StorageProvider {
 	deleteDirectory(dirPath: string): Promise<void>;
 	getFileSize(filePath: string): Promise<number>;
 	getLocalPath(filePath: string): string;
+	rename(oldPath: string, newPath: string): Promise<void>;
 }

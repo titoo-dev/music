@@ -25,30 +25,30 @@ async function parseLink(link: string) {
 	if (link.includes("&")) link = link.slice(0, link.indexOf("&"));
 	if (link.endsWith("/")) link = link.slice(0, -1); // Remove last slash if present
 
-	let link_type, link_id;
-	let link_data;
+	let link_type: string | undefined;
+	let link_id: string | undefined;
 
 	if (!link.includes("deezer")) return [link, link_type, link_id]; // return if not a deezer link
 
-	if (link.search(/\/track\/(.+)/g) !== -1) {
+	let match: RegExpMatchArray | null;
+	if ((match = link.match(/\/track\/(.+)/))) {
 		link_type = "track";
-		link_id = /\/track\/(.+)/g.exec(link)[1];
-	} else if (link.search(/\/playlist\/(\d+)/g) !== -1) {
+		link_id = match[1];
+	} else if ((match = link.match(/\/playlist\/(\d+)/))) {
 		link_type = "playlist";
-		link_id = /\/playlist\/(\d+)/g.exec(link)[1];
-	} else if (link.search(/\/album\/(.+)/g) !== -1) {
+		link_id = match[1];
+	} else if ((match = link.match(/\/album\/(.+)/))) {
 		link_type = "album";
-		link_id = /\/album\/(.+)/g.exec(link)[1];
-	} else if (link.search(/\/artist\/(\d+)\/top_track/g) !== -1) {
+		link_id = match[1];
+	} else if ((match = link.match(/\/artist\/(\d+)\/top_track/))) {
 		link_type = "artist_top";
-		link_id = /\/artist\/(\d+)\/top_track/g.exec(link)[1];
-	} else if (link.search(/\/artist\/(\d+)\/(.+)/g) !== -1) {
-		link_data = /\/artist\/(\d+)\/(.+)/g.exec(link);
-		link_type = `artist_${link_data[2]}`;
-		link_id = link_data[1];
-	} else if (link.search(/\/artist\/(\d+)/g) !== -1) {
+		link_id = match[1];
+	} else if ((match = link.match(/\/artist\/(\d+)\/(.+)/))) {
+		link_type = `artist_${match[2]}`;
+		link_id = match[1];
+	} else if ((match = link.match(/\/artist\/(\d+)/))) {
 		link_type = "artist";
-		link_id = /\/artist\/(\d+)/g.exec(link)[1];
+		link_id = match[1];
 	}
 
 	return [link, link_type, link_id];

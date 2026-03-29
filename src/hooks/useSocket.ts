@@ -12,6 +12,21 @@ function getWsUrl() {
 	return `${protocol}://${window.location.hostname}:${port}`;
 }
 
+/** Fetch queue from server and sync into store (used after WS reconnect) */
+async function syncQueueFromServer() {
+	try {
+		const res = await fetch("/api/v1/downloads/queue");
+		if (!res.ok) return;
+		const data = await res.json();
+		const queueData = data.data ?? data;
+		if (queueData.queue) {
+			useQueueStore.getState().syncFromServer(queueData.queue, queueData.current);
+		}
+	} catch {
+		// ignore
+	}
+}
+
 export function useSocket() {
 	const wsRef = useRef<WebSocket | null>(null);
 	const { addToQueue, updateQueueItem, removeFromQueue, setCurrent } = useQueueStore();
@@ -24,6 +39,8 @@ export function useSocket() {
 
 		ws.onopen = () => {
 			console.log("[WS] Connected");
+			// Re-sync queue after reconnection to catch missed events
+			syncQueueFromServer();
 		};
 
 		ws.onmessage = (event) => {

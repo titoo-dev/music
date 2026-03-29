@@ -40,7 +40,9 @@ export async function getPreferredBitrate(
 	let isGeolocked = false;
 	let wrongLicense = false;
 
-	async function testURL(track: Track, url: string, formatName: string) {
+	const MAX_TEST_URL_RETRIES = 3;
+
+	async function testURL(track: Track, url: string, formatName: string, _retryCount = 0) {
 		if (!url) return false;
 		let request: CancelableRequest<GotResponse<string>>;
 		try {
@@ -64,7 +66,8 @@ export async function getPreferredBitrate(
 				return true;
 			}
 			if (e instanceof ReadError || e instanceof TimeoutError) {
-				return await testURL(track, url, formatName);
+				if (_retryCount >= MAX_TEST_URL_RETRIES) return false;
+				return await testURL(track, url, formatName, _retryCount + 1);
 			}
 			if (e instanceof HTTPError) return false;
 			console.trace(e);
