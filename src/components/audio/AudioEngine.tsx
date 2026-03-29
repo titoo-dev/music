@@ -388,18 +388,17 @@ export function AudioEngine() {
 		adjustVolume(audio, volume / 100, { duration: 300 });
 	}, [volume, isPlaying]);
 
-	// Seek: respond to _seekTo signal from prev() restart
+	// Seek: respond to _seekTo signal from prev() restart or seek()
 	const seekTo = usePlayerStore((s) => s._seekTo);
 	useEffect(() => {
 		if (seekTo === null) return;
 		const audio = audioRef.current;
 		if (audio) {
 			audio.currentTime = seekTo;
-			setCurrentTime(seekTo);
 		}
 		// Clear the signal so it doesn't re-fire
 		usePlayerStore.setState({ _seekTo: null });
-	}, [seekTo, setCurrentTime]);
+	}, [seekTo]);
 
 	// --- Media Session position update ---
 	const onPositionUpdate = useCallback(() => {
@@ -435,7 +434,12 @@ export function AudioEngine() {
 	handlersRef.current.onTimeUpdate = () => {
 		const audio = audioRef.current;
 		if (!audio) return;
-		setCurrentTime(audio.currentTime);
+		// Throttle store writes to ~4Hz to avoid excessive re-renders
+		const now = audio.currentTime;
+		const last = usePlayerStore.getState().currentTime;
+		if (Math.abs(now - last) >= 0.25) {
+			setCurrentTime(now);
+		}
 		onPositionUpdate();
 
 		// Preload next track at 50% progress
@@ -489,20 +493,6 @@ export function AudioEngine() {
 	handlersRef.current.onPlaying = () => {
 		setBuffering(false);
 	};
-
-	// Expose seek function for Player UI
-	useEffect(() => {
-		(window as any).__deemixAudioSeek = (time: number) => {
-			const audio = audioRef.current;
-			if (audio) {
-				audio.currentTime = time;
-				setCurrentTime(time);
-			}
-		};
-		return () => {
-			delete (window as any).__deemixAudioSeek;
-		};
-	}, [setCurrentTime]);
 
 	// --- Media Session API ---
 

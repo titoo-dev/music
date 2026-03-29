@@ -1,13 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-
-function formatTime(seconds: number) {
-	if (!seconds || !isFinite(seconds)) return "0:00";
-	const m = Math.floor(seconds / 60);
-	const s = Math.floor(seconds % 60);
-	return `${m}:${s.toString().padStart(2, "0")}`;
-}
+import { formatTime } from "@/utils/format-time";
 
 interface SeekBarProps {
 	currentTime: number;
@@ -25,7 +19,11 @@ export function SeekBar({
 	const barRef = useRef<HTMLDivElement>(null);
 	const [dragProgress, setDragProgress] = useState<number | null>(null);
 	const isDragging = useRef(false);
-	const lastClientXRef = useRef(0);
+	// Use refs for duration/onSeek so mouse event closures always read latest values
+	const durationRef = useRef(duration);
+	durationRef.current = duration;
+	const onSeekRef = useRef(onSeek);
+	onSeekRef.current = onSeek;
 
 	const computeProgress = useCallback(
 		(clientX: number) => {
@@ -36,11 +34,21 @@ export function SeekBar({
 		[]
 	);
 
+	const commitSeek = useCallback(
+		(pct: number) => {
+			setDragProgress(null);
+			const d = durationRef.current;
+			if (d > 0) {
+				onSeekRef.current(pct * d);
+			}
+		},
+		[],
+	);
+
 	// Touch handlers
 	const handleTouchStart = useCallback(
 		(e: React.TouchEvent) => {
 			isDragging.current = true;
-			lastClientXRef.current = e.touches[0].clientX;
 			const pct = computeProgress(e.touches[0].clientX);
 			setDragProgress(pct);
 		},
@@ -50,22 +58,23 @@ export function SeekBar({
 	const handleTouchMove = useCallback(
 		(e: React.TouchEvent) => {
 			if (!isDragging.current) return;
-			lastClientXRef.current = e.touches[0].clientX;
 			const pct = computeProgress(e.touches[0].clientX);
 			setDragProgress(pct);
 		},
 		[computeProgress]
 	);
 
-	const handleTouchEnd = useCallback(() => {
-		if (!isDragging.current) return;
-		isDragging.current = false;
-		const pct = computeProgress(lastClientXRef.current);
-		setDragProgress(null);
-		if (duration > 0) {
-			onSeek(pct * duration);
-		}
-	}, [computeProgress, duration, onSeek]);
+	const handleTouchEnd = useCallback(
+		(e: React.TouchEvent) => {
+			if (!isDragging.current) return;
+			isDragging.current = false;
+			// Use last known touch position from touchmove/touchstart
+			const lastTouch = e.changedTouches[0];
+			const pct = computeProgress(lastTouch.clientX);
+			commitSeek(pct);
+		},
+		[computeProgress, commitSeek],
+	);
 
 	// Mouse handlers
 	const handleMouseDown = useCallback(
@@ -73,20 +82,17 @@ export function SeekBar({
 			isDragging.current = true;
 			const pct = computeProgress(e.clientX);
 			setDragProgress(pct);
+			// Track the last known position for mouseup
+			let lastPct = pct;
 
 			const handleMouseMove = (ev: MouseEvent) => {
-				lastClientXRef.current = ev.clientX;
-				const p = computeProgress(ev.clientX);
-				setDragProgress(p);
+				lastPct = computeProgress(ev.clientX);
+				setDragProgress(lastPct);
 			};
 
 			const handleMouseUp = () => {
 				isDragging.current = false;
-				const pct = computeProgress(lastClientXRef.current);
-				setDragProgress(null);
-				if (duration > 0) {
-					onSeek(pct * duration);
-				}
+				commitSeek(lastPct);
 				window.removeEventListener("mousemove", handleMouseMove);
 				window.removeEventListener("mouseup", handleMouseUp);
 			};
@@ -94,7 +100,7 @@ export function SeekBar({
 			window.addEventListener("mousemove", handleMouseMove);
 			window.addEventListener("mouseup", handleMouseUp);
 		},
-		[computeProgress, duration, onSeek]
+		[computeProgress, commitSeek]
 	);
 
 	const baseProgress = duration > 0 ? currentTime / duration : 0;

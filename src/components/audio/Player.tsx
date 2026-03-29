@@ -7,16 +7,10 @@ import { Button } from "@/components/ui/button";
 import { SeekBar } from "./SeekBar";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2 } from "lucide-react";
-
-function formatTime(seconds: number) {
-	if (!seconds || !isFinite(seconds)) return "0:00";
-	const m = Math.floor(seconds / 60);
-	const s = Math.floor(seconds % 60);
-	return `${m}:${s.toString().padStart(2, "0")}`;
-}
+import { formatTime } from "@/utils/format-time";
 
 function seek(time: number) {
-	(window as any).__deemixAudioSeek?.(time);
+	usePlayerStore.getState().seek(time);
 }
 
 export function Player() {

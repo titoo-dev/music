@@ -22,7 +22,7 @@ interface PlayerState {
 	duration: number;
 	shuffle: boolean;
 	repeat: RepeatMode;
-	/** Set by prev() to signal AudioEngine to seek; AudioEngine clears it after seeking. */
+	/** Set by prev()/seek() to signal AudioEngine to seek; AudioEngine clears it after seeking. */
 	_seekTo: number | null;
 	fullscreenOpen: boolean;
 
@@ -35,6 +35,8 @@ interface PlayerState {
 	prev: () => void;
 	/** Like prev() but always goes to previous track (no restart-if->3s). Used by fullscreen swipe. */
 	prevTrack: () => void;
+	/** Seek to a specific time (seconds). Updates currentTime immediately and signals AudioEngine. */
+	seek: (time: number) => void;
 	setVolume: (v: number) => void;
 	setCurrentTime: (t: number) => void;
 	setDuration: (d: number) => void;
@@ -190,6 +192,7 @@ export const usePlayerStore = create<PlayerState>()(
 				});
 			},
 
+			seek: (time) => set({ currentTime: time, _seekTo: time }),
 			setVolume: (volume) => set({ volume }),
 			setCurrentTime: (currentTime) => set({ currentTime }),
 			setDuration: (duration) => set({ duration }),

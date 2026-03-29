@@ -14,17 +14,11 @@ import {
 } from "@/components/ui/carousel";
 import { motion, AnimatePresence, useDragControls } from "motion/react";
 import { Loader2 } from "lucide-react";
+import { formatTime } from "@/utils/format-time";
 import type { PlayerTrack } from "@/stores/usePlayerStore";
 
-function formatTime(seconds: number) {
-	if (!seconds || !isFinite(seconds)) return "0:00";
-	const m = Math.floor(seconds / 60);
-	const s = Math.floor(seconds % 60);
-	return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
 function seek(time: number) {
-	(window as any).__deemixAudioSeek?.(time);
+	usePlayerStore.getState().seek(time);
 }
 
 
