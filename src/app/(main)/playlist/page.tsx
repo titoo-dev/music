@@ -6,6 +6,7 @@ import { fetchData } from "@/utils/api";
 import { useDownload } from "@/hooks/useDownload";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { convertDuration } from "@/utils/helpers";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
@@ -140,6 +141,8 @@ function PlaylistContent() {
 						const trackId = track.id || track.SNG_ID;
 						const trackTitle = track.title || track.SNG_TITLE;
 						const trackArtist = track.artist?.name || track.ART_NAME;
+						const trackAlbumId = track.ALB_ID || track.album?.id;
+						const trackAlbumTitle = track.ALB_TITLE || track.album?.title;
 						const trackDuration = track.duration || track.DURATION || 0;
 						const trackCover =
 							track.album?.cover_small ||
@@ -184,7 +187,21 @@ function PlaylistContent() {
 										{trackTitle}
 									</p>
 									<p className="text-xs text-muted-foreground truncate">
-										{trackArtist}
+										{trackArtistId ? (
+											<Link href={`/artist?id=${trackArtistId}`} className="hover:underline hover:text-foreground transition-colors">
+												{trackArtist}
+											</Link>
+										) : trackArtist}
+										{trackAlbumTitle ? (
+											<>
+												{" · "}
+												{trackAlbumId ? (
+													<Link href={`/album?id=${trackAlbumId}`} className="hover:underline hover:text-foreground transition-colors">
+														{trackAlbumTitle}
+													</Link>
+												) : trackAlbumTitle}
+											</>
+										) : ""}
 									</p>
 								</div>
 								<span className="hidden sm:inline text-xs font-mono text-muted-foreground tabular-nums">

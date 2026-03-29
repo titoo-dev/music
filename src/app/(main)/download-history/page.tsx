@@ -157,7 +157,16 @@ export default function DownloadHistoryPage() {
 										<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : ""}`}>{item.title}</p>
 										<p className="text-xs text-muted-foreground truncate">
 											{item.artist}
-											{item.album ? ` \u00B7 ${item.album}` : ""}
+											{item.album ? (
+												<>
+													{" · "}
+													{item.albumId ? (
+														<Link href={`/album?id=${item.albumId}`} className="hover:underline hover:text-foreground transition-colors">
+															{item.album}
+														</Link>
+													) : item.album}
+												</>
+											) : ""}
 										</p>
 									</div>
 									<div className="shrink-0 text-right">

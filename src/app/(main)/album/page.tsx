@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { useDownload } from "@/hooks/useDownload";
 import { convertDuration } from "@/utils/helpers";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -217,6 +218,7 @@ function AlbumContent() {
 					{tracks.map((track: any, idx: number) => {
 						const trackTitle = track.SNG_TITLE || track.title || "";
 						const trackArtist = track.ART_NAME || track.artist?.name || "";
+						const trackArtistId = track.ART_ID || track.artist?.id;
 						const trackId = track.SNG_ID || track.id;
 						const trackNum = track.TRACK_NUMBER || track.track_position || idx + 1;
 						const trackDuration = track.DURATION || track.duration || 0;
@@ -265,7 +267,11 @@ function AlbumContent() {
 										{track.VERSION ? ` ${track.VERSION}` : ""}
 									</p>
 									<p className="text-xs text-muted-foreground truncate">
-										{trackArtist}
+										{trackArtistId ? (
+											<Link href={`/artist?id=${trackArtistId}`} className="hover:underline hover:text-foreground transition-colors">
+												{trackArtist}
+											</Link>
+										) : trackArtist}
 									</p>
 								</div>
 								<span className="hidden sm:inline text-xs text-muted-foreground tabular-nums font-mono">
