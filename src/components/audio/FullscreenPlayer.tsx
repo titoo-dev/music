@@ -1,7 +1,8 @@
 "use client";
 
-import { memo, useEffect, useRef, useMemo } from "react";
+import { memo, useEffect, useRef, useMemo, useCallback } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
 import { SeekBar } from "./SeekBar";
@@ -114,9 +115,23 @@ const CoverCarousel = memo(function CoverCarousel({
 /* ─── Track Info ─── */
 function TrackInfo() {
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
+	const openSheet = useTrackActionStore((s) => s.openSheet);
+
+	const handleContextMenu = useCallback((e: React.MouseEvent) => {
+		e.preventDefault();
+		if (!currentTrack) return;
+		openSheet({
+			id: currentTrack.trackId,
+			title: currentTrack.title,
+			artist: currentTrack.artist,
+			cover: currentTrack.cover,
+			duration: currentTrack.duration,
+		});
+	}, [currentTrack, openSheet]);
+
 	if (!currentTrack) return null;
 	return (
-		<div className="shrink-0 px-8 pb-3">
+		<div className="shrink-0 px-8 pb-3" onContextMenu={handleContextMenu}>
 			<p className="truncate text-brutal-md">{currentTrack.title}</p>
 			<p className="truncate text-sm font-bold uppercase tracking-wide text-muted-foreground">
 				{currentTrack.artist}

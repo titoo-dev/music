@@ -1,6 +1,7 @@
 "use client";
 
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
 import { SeekBar } from "./SeekBar";
@@ -38,8 +39,21 @@ export function Player() {
 	const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
 
 	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
+	const openSheet = useTrackActionStore((s) => s.openSheet);
 
 	const hasQueue = queue.length > 1;
+
+	const handleContextMenu = (e: React.MouseEvent) => {
+		e.preventDefault();
+		if (!currentTrack) return;
+		openSheet({
+			id: currentTrack.trackId,
+			title: currentTrack.title,
+			artist: currentTrack.artist,
+			cover: currentTrack.cover,
+			duration: currentTrack.duration,
+		});
+	};
 
 	return (
 		<AnimatePresence>
@@ -67,6 +81,7 @@ export function Player() {
 						<div
 							className="flex items-center gap-3 min-w-0 w-[30%] cursor-pointer md:cursor-default"
 							onClick={() => setFullscreenOpen(true)}
+							onContextMenu={handleContextMenu}
 						>
 							<CoverImage
 								src={currentTrack.cover}

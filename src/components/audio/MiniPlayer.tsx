@@ -1,6 +1,8 @@
 "use client";
 
+import { useCallback } from "react";
 import { usePreviewStore } from "@/stores/usePreviewStore";
+import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "motion/react";
@@ -9,6 +11,19 @@ import { Loader2 } from "lucide-react";
 export function MiniPlayer() {
 	const { currentTrack, isPlaying, isBuffering, toggle, stop, volume, setVolume } =
 		usePreviewStore();
+	const openSheet = useTrackActionStore((s) => s.openSheet);
+
+	const handleContextMenu = useCallback((e: React.MouseEvent) => {
+		e.preventDefault();
+		if (!currentTrack) return;
+		openSheet({
+			id: String(currentTrack.id),
+			title: currentTrack.title,
+			artist: currentTrack.artist,
+			cover: currentTrack.cover,
+			previewUrl: currentTrack.previewUrl,
+		});
+	}, [currentTrack, openSheet]);
 
 	return (
 		<AnimatePresence>
@@ -28,7 +43,7 @@ export function MiniPlayer() {
 					/>
 
 					{/* Track info */}
-					<div className="min-w-0 max-w-[140px]">
+					<div className="min-w-0 max-w-[140px]" onContextMenu={handleContextMenu}>
 						<p className="truncate text-sm font-bold leading-tight">
 							{currentTrack.title}
 						</p>
