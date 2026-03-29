@@ -12,6 +12,8 @@ interface PreviewState {
 	isPlaying: boolean;
 	isBuffering: boolean;
 	volume: number;
+	/** Whether the main player was playing before preview started (for auto-resume). */
+	_mainWasPlaying: boolean;
 
 	play: (track: PreviewState["currentTrack"]) => void;
 	pause: () => void;
@@ -19,6 +21,7 @@ interface PreviewState {
 	toggle: (track: PreviewState["currentTrack"]) => void;
 	setVolume: (v: number) => void;
 	setBuffering: (b: boolean) => void;
+	setMainWasPlaying: (v: boolean) => void;
 }
 
 export const usePreviewStore = create<PreviewState>()(
@@ -28,6 +31,7 @@ export const usePreviewStore = create<PreviewState>()(
 			isPlaying: false,
 			isBuffering: false,
 			volume: 80,
+			_mainWasPlaying: false,
 
 			play: (track) => set({ currentTrack: track, isPlaying: true, isBuffering: true }),
 			pause: () => set({ isPlaying: false }),
@@ -42,6 +46,7 @@ export const usePreviewStore = create<PreviewState>()(
 			},
 			setVolume: (volume) => set({ volume }),
 			setBuffering: (isBuffering) => set({ isBuffering }),
+			setMainWasPlaying: (_mainWasPlaying) => set({ _mainWasPlaying }),
 		}),
 		{
 			name: "deemix-preview",

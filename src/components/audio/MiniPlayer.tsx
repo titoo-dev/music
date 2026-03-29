@@ -34,6 +34,8 @@ export function MiniPlayer() {
 					animate={{ y: 0, opacity: 1 }}
 					exit={{ y: 80, opacity: 0 }}
 					transition={{ type: "spring", damping: 25, stiffness: 300 }}
+					role="region"
+					aria-label="Preview player"
 					className="fixed bottom-5 right-5 z-50 flex items-center gap-3 border-2 sm:border-[3px] border-foreground bg-background px-4 py-3 shadow-[var(--shadow-brutal-hover)]"
 				>
 					{/* Cover */}
@@ -76,6 +78,7 @@ export function MiniPlayer() {
 							min={0}
 							max={100}
 							value={volume}
+							aria-label="Preview volume"
 							onChange={(e) => setVolume(parseInt(e.target.value))}
 							className="w-16 h-1 accent-primary cursor-pointer"
 						/>
@@ -85,6 +88,7 @@ export function MiniPlayer() {
 					<Button
 						variant="ghost"
 						size="icon"
+						aria-label={isPlaying ? "Pause preview" : "Play preview"}
 						className="h-8 w-8 border-[2px] border-foreground"
 						onClick={() => toggle(currentTrack)}
 					>
@@ -116,6 +120,7 @@ export function MiniPlayer() {
 					<Button
 						variant="ghost"
 						size="icon"
+						aria-label="Close preview"
 						className="h-6 w-6"
 						onClick={stop}
 					>

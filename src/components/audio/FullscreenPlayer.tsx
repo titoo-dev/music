@@ -177,6 +177,8 @@ function Controls() {
 			<Button
 				variant="ghost"
 				size="icon"
+				aria-label="Shuffle"
+				aria-pressed={shuffle}
 				className={`h-12 w-12 ${
 					!hasQueue ? "opacity-30 pointer-events-none" : ""
 				} ${shuffle ? "text-primary" : "text-muted-foreground"}`}
@@ -191,14 +193,14 @@ function Controls() {
 				</svg>
 			</Button>
 
-			<Button variant="ghost" size="icon" className="h-14 w-14 text-foreground" onClick={prevTrack}>
+			<Button variant="ghost" size="icon" aria-label="Previous track" className="h-14 w-14 text-foreground" onClick={prevTrack}>
 				<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
 					<rect x="2" y="4" width="3" height="16" rx="0" />
 					<path d="M22 4L9 12L22 20V4Z" />
 				</svg>
 			</Button>
 
-			<Button variant="secondary" size="icon" className="h-[72px] w-[72px] border-[3px]" onClick={toggle}>
+			<Button variant="secondary" size="icon" aria-label={isPlaying ? "Pause" : "Play"} className="h-[72px] w-[72px] border-[3px]" onClick={toggle}>
 				{isBuffering ? (
 					<Loader2 className="h-8 w-8 animate-spin" />
 				) : isPlaying ? (
@@ -213,7 +215,7 @@ function Controls() {
 				)}
 			</Button>
 
-			<Button variant="ghost" size="icon" className="h-14 w-14 text-foreground" onClick={next}>
+			<Button variant="ghost" size="icon" aria-label="Next track" className="h-14 w-14 text-foreground" onClick={next}>
 				<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
 					<rect x="19" y="4" width="3" height="16" rx="0" />
 					<path d="M2 4L15 12L2 20V4Z" />
@@ -223,6 +225,8 @@ function Controls() {
 			<Button
 				variant="ghost"
 				size="icon"
+				aria-label={`Repeat ${repeat}`}
+				aria-pressed={repeat !== "off"}
 				className={`h-12 w-12 relative ${
 					!hasQueue ? "opacity-30 pointer-events-none" : ""
 				} ${repeat !== "off" ? "text-primary" : "text-muted-foreground"}`}
@@ -290,6 +294,8 @@ export function FullscreenPlayer() {
 					dragConstraints={{ top: 0, bottom: 0 }}
 					dragElastic={{ top: 0, bottom: 0.4 }}
 					onDragEnd={handleDragEnd}
+					role="dialog"
+					aria-label="Now playing"
 					className="fixed inset-0 z-[60] flex flex-col bg-background md:hidden"
 				>
 					{/* Drag handle */}
@@ -305,6 +311,7 @@ export function FullscreenPlayer() {
 						<Button
 							variant="ghost"
 							size="icon"
+							aria-label="Close fullscreen player"
 							className="h-9 w-9"
 							onClick={() => setFullscreenOpen(false)}
 						>

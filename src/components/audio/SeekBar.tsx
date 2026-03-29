@@ -107,9 +107,20 @@ export function SeekBar({
 	const displayProgress = dragProgress ?? baseProgress;
 	const isThin = variant === "thin";
 
+	const ariaValueText = duration > 0
+		? `${formatTime(dragProgress !== null ? dragProgress * duration : currentTime)} of ${formatTime(duration)}`
+		: "0:00";
+
 	return (
 		<div
 			ref={barRef}
+			role="slider"
+			aria-label="Track progress"
+			aria-valuenow={Math.round(dragProgress !== null ? dragProgress * duration : currentTime)}
+			aria-valuemin={0}
+			aria-valuemax={Math.round(duration)}
+			aria-valuetext={ariaValueText}
+			tabIndex={0}
 			className={`relative flex items-center w-full cursor-pointer select-none ${
 				isThin ? "h-8" : "h-10"
 			}`}
@@ -118,6 +129,16 @@ export function SeekBar({
 			onTouchMove={handleTouchMove}
 			onTouchEnd={handleTouchEnd}
 			onMouseDown={handleMouseDown}
+			onKeyDown={(e) => {
+				if (duration <= 0) return;
+				if (e.key === "ArrowRight") {
+					e.stopPropagation();
+					onSeekRef.current(Math.min(duration, currentTime + 5));
+				} else if (e.key === "ArrowLeft") {
+					e.stopPropagation();
+					onSeekRef.current(Math.max(0, currentTime - 5));
+				}
+			}}
 		>
 			{/* Time tooltip during drag */}
 			{dragProgress !== null && (

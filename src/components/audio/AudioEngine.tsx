@@ -190,10 +190,14 @@ export function AudioEngine() {
 	const resume = usePlayerStore((s) => s.resume);
 
 	const setBuffering = usePlayerStore((s) => s.setBuffering);
+	const setError = usePlayerStore((s) => s.setError);
 
-	const previewStop = usePreviewStore((s) => s.stop);
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewIsPlaying = usePreviewStore((s) => s.isPlaying);
+
+	// Error retry counter
+	const retryCountRef = useRef(0);
+	const MAX_RETRIES = 2;
 
 	// --- Stable event handler delegation via refs ---
 	const handlersRef = useRef({
@@ -254,21 +258,35 @@ export function AudioEngine() {
 		};
 	}, [attachEvents, detachEvents]);
 
-	// Stop preview when full player starts
+	// Stop preview when full player resumes
 	useEffect(() => {
-		if (currentTrack && isPlaying) previewStop();
-	}, [currentTrack, isPlaying, previewStop]);
+		if (currentTrack && isPlaying) {
+			const preview = usePreviewStore.getState();
+			if (preview.currentTrack) preview.stop();
+		}
+	}, [currentTrack, isPlaying]);
 
-	// Stop stream player when preview starts
+	// Pause (not stop) stream player when preview starts; resume when preview ends
 	useEffect(() => {
 		if (previewTrack && previewIsPlaying) {
-			const audio = audioRef.current;
-			if (audio) {
-				audio.pause();
-				audio.src = "";
+			const { isPlaying: mainPlaying } = usePlayerStore.getState();
+			usePreviewStore.getState().setMainWasPlaying(mainPlaying);
+			if (mainPlaying) {
+				const audio = audioRef.current;
+				if (audio) {
+					adjustVolume(audio, 0, { duration: 300 }).then(() => {
+						if (!usePlayerStore.getState().isPlaying) return;
+						audio.pause();
+						usePlayerStore.getState().pause();
+					});
+				}
 			}
-			prevTrackIdRef.current = null;
-			usePlayerStore.getState().stop();
+		} else if (!previewTrack && !previewIsPlaying) {
+			// Preview ended — resume main player if it was playing before
+			if (usePreviewStore.getState()._mainWasPlaying && usePlayerStore.getState().currentTrack) {
+				usePlayerStore.getState().resume();
+			}
+			usePreviewStore.getState().setMainWasPlaying(false);
 		}
 	}, [previewTrack, previewIsPlaying]);
 
@@ -306,6 +324,8 @@ export function AudioEngine() {
 
 		if (currentTrack.trackId !== prevTrackIdRef.current) {
 			const gen = ++loadGenRef.current;
+			retryCountRef.current = 0;
+			setError(null);
 			// Prevent the play/pause effect from re-starting the old audio
 			skipPlayEffectRef.current = true;
 
@@ -465,12 +485,13 @@ export function AudioEngine() {
 
 	handlersRef.current.onError = () => {
 		const audio = audioRef.current;
-		if (!audio || !usePresigned || !currentTrack) return;
+		if (!audio || !currentTrack) return;
 		const src = audio.src;
-		if (src && !src.includes("/api/v1/stream/")) {
+
+		// First: try falling back from presigned URL to proxy stream
+		if (usePresigned && src && !src.includes("/api/v1/stream/")) {
 			usePresigned = false;
 			urlCache.clear();
-			// Invalidate preloaded elements (presigned URLs are now invalid)
 			for (const [, a] of preloadCache) {
 				evictedAudio.add(a);
 				a.src = "";
@@ -478,6 +499,28 @@ export function AudioEngine() {
 			preloadCache.clear();
 			audio.src = `/api/v1/stream/${currentTrack.trackId}`;
 			audio.load();
+			return;
+		}
+
+		// Retry up to MAX_RETRIES times
+		retryCountRef.current++;
+		if (retryCountRef.current <= MAX_RETRIES) {
+			setTimeout(() => {
+				if (audioRef.current && currentTrack) {
+					audioRef.current.src = `/api/v1/stream/${currentTrack.trackId}`;
+					audioRef.current.load();
+				}
+			}, 1000 * retryCountRef.current);
+			return;
+		}
+
+		// All retries exhausted — set error and auto-skip
+		setError(`Can't play "${currentTrack.title}"`);
+		const { queue, queueIndex } = usePlayerStore.getState();
+		if (queueIndex + 1 < queue.length) {
+			setTimeout(() => next(), 1500);
+		} else {
+			pause();
 		}
 	};
 
@@ -546,10 +589,8 @@ export function AudioEngine() {
 			[
 				"seekto",
 				(details) => {
-					const audio = audioRef.current;
-					if (audio && details.seekTime != null) {
-						audio.currentTime = details.seekTime;
-						setCurrentTime(details.seekTime);
+					if (details.seekTime != null) {
+						usePlayerStore.getState().seek(details.seekTime);
 					}
 				},
 			],
@@ -559,8 +600,7 @@ export function AudioEngine() {
 					const audio = audioRef.current;
 					if (audio) {
 						const offset = details.seekOffset ?? 10;
-						audio.currentTime = Math.max(0, audio.currentTime - offset);
-						setCurrentTime(audio.currentTime);
+						usePlayerStore.getState().seek(Math.max(0, audio.currentTime - offset));
 					}
 				},
 			],
@@ -570,11 +610,7 @@ export function AudioEngine() {
 					const audio = audioRef.current;
 					if (audio) {
 						const offset = details.seekOffset ?? 10;
-						audio.currentTime = Math.min(
-							audio.duration || 0,
-							audio.currentTime + offset,
-						);
-						setCurrentTime(audio.currentTime);
+						usePlayerStore.getState().seek(Math.min(audio.duration || 0, audio.currentTime + offset));
 					}
 				},
 			],
@@ -595,7 +631,7 @@ export function AudioEngine() {
 				} catch {}
 			}
 		};
-	}, [pause, resume, prev, next, setCurrentTime]);
+	}, [pause, resume, prev, next]);
 
 	// No JSX audio element — all managed imperatively for preload swapping
 	return null;

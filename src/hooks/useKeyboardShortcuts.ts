@@ -8,9 +8,11 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
  * - Space: play/pause
  * - ArrowRight: next track
  * - ArrowLeft: previous track
- * - M: mute/unmute
+ * - Shift+ArrowRight / L: seek forward 10s
+ * - Shift+ArrowLeft / J: seek backward 10s
  * - ArrowUp: volume up
  * - ArrowDown: volume down
+ * - M: mute/unmute
  */
 export function useKeyboardShortcuts() {
 	useEffect(() => {
@@ -39,13 +41,23 @@ export function useKeyboardShortcuts() {
 				case "ArrowRight": {
 					e.preventDefault();
 					if (!state.currentTrack) return;
-					state.next();
+					if (e.shiftKey) {
+						// Shift+ArrowRight: seek forward 10s
+						state.seek(Math.min(state.duration, state.currentTime + 10));
+					} else {
+						state.next();
+					}
 					break;
 				}
 				case "ArrowLeft": {
 					e.preventDefault();
 					if (!state.currentTrack) return;
-					state.prev();
+					if (e.shiftKey) {
+						// Shift+ArrowLeft: seek backward 10s
+						state.seek(Math.max(0, state.currentTime - 10));
+					} else {
+						state.prev();
+					}
 					break;
 				}
 				case "ArrowUp": {
@@ -56,6 +68,18 @@ export function useKeyboardShortcuts() {
 				case "ArrowDown": {
 					e.preventDefault();
 					state.setVolume(Math.max(0, state.volume - 5));
+					break;
+				}
+				case "l":
+				case "L": {
+					if (!state.currentTrack) return;
+					state.seek(Math.min(state.duration, state.currentTime + 10));
+					break;
+				}
+				case "j":
+				case "J": {
+					if (!state.currentTrack) return;
+					state.seek(Math.max(0, state.currentTime - 10));
 					break;
 				}
 				case "m":

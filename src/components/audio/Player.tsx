@@ -35,6 +35,8 @@ export function Player() {
 	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
 	const openSheet = useTrackActionStore((s) => s.openSheet);
 
+	const error = usePlayerStore((s) => s.error);
+
 	const hasQueue = queue.length > 1;
 
 	const handleContextMenu = (e: React.MouseEvent) => {
@@ -54,12 +56,21 @@ export function Player() {
 			{currentTrack && (
 				<motion.div
 					key="player"
+					role="region"
+					aria-label="Player controls"
 					initial={{ y: 80, opacity: 0 }}
 					animate={{ y: 0, opacity: 1 }}
 					exit={{ y: 80, opacity: 0 }}
 					transition={{ type: "spring", damping: 25, stiffness: 300 }}
 					className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/40 bg-background/95 backdrop-blur-xl md:left-56 pb-[env(safe-area-inset-bottom)]"
 				>
+					{/* Error banner */}
+					{error && (
+						<div className="bg-destructive/10 text-destructive text-xs font-medium text-center py-1 px-4" role="alert">
+							{error}
+						</div>
+					)}
+
 					{/* Progress bar (touch-friendly) */}
 					<div className="group/seekbar -mb-3">
 						<SeekBar
@@ -98,6 +109,8 @@ export function Player() {
 								<Button
 									variant="ghost"
 									size="icon"
+									aria-label="Shuffle"
+									aria-pressed={shuffle}
 									className={`h-8 w-8 hidden sm:flex ${shuffle ? "text-foreground" : "text-muted-foreground"}`}
 									onClick={toggleShuffle}
 								>
@@ -115,6 +128,7 @@ export function Player() {
 							<Button
 								variant="ghost"
 								size="icon"
+								aria-label="Previous track"
 								className="h-8 w-8 text-muted-foreground hover:text-foreground"
 								onClick={prev}
 							>
@@ -128,6 +142,7 @@ export function Player() {
 							<Button
 								variant="ghost"
 								size="icon"
+								aria-label={isPlaying ? "Pause" : "Play"}
 								className="h-10 w-10 rounded-full bg-foreground text-background hover:bg-foreground/90"
 								onClick={toggle}
 							>
@@ -149,6 +164,7 @@ export function Player() {
 							<Button
 								variant="ghost"
 								size="icon"
+								aria-label="Next track"
 								className="h-8 w-8 text-muted-foreground hover:text-foreground"
 								onClick={next}
 							>
@@ -163,6 +179,8 @@ export function Player() {
 								<Button
 									variant="ghost"
 									size="icon"
+									aria-label={`Repeat ${repeat}`}
+									aria-pressed={repeat !== "off"}
 									className={`h-8 w-8 hidden sm:flex ${repeat !== "off" ? "text-foreground" : "text-muted-foreground"}`}
 									onClick={toggleRepeat}
 								>
@@ -205,6 +223,7 @@ export function Player() {
 									min={0}
 									max={100}
 									value={volume}
+									aria-label="Volume"
 									onChange={(e) => setVolume(parseInt(e.target.value))}
 									className="w-20 h-1 accent-foreground cursor-pointer"
 								/>
@@ -214,6 +233,7 @@ export function Player() {
 							<Button
 								variant="ghost"
 								size="icon"
+								aria-label="Close player"
 								className="h-7 w-7 text-muted-foreground hover:text-foreground"
 								onClick={stop}
 							>

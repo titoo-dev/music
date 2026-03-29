@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { useQueueStore } from "@/stores/useQueueStore";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { usePlayerStore } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { useShareStore } from "@/stores/useShareStore";
 import { ShareDialog } from "./ShareDialog";
@@ -19,7 +20,9 @@ import { Input } from "@/components/ui/input";
 import { CoverImage } from "@/components/ui/cover-image";
 import {
 	Download,
+	ListEnd,
 	ListPlus,
+	ListStart,
 	Play,
 	Pause,
 	Trash2,
@@ -291,6 +294,9 @@ export function TrackActionSheet() {
 		if (open) setView("actions");
 	}, [open]);
 
+	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
+	const hasPlayerQueue = usePlayerStore((s) => s.queue.length > 0);
+
 	const isPreviewActive =
 		track && previewTrack?.id === track.id && previewPlaying;
 
@@ -304,6 +310,31 @@ export function TrackActionSheet() {
 			previewUrl: track.previewUrl,
 		});
 	}, [track, togglePreview]);
+
+	const toPlayerTrack = useCallback(() => {
+		if (!track) return null;
+		return {
+			trackId: track.id,
+			title: track.title,
+			artist: track.artist,
+			cover: track.cover ?? null,
+			duration: track.duration ?? null,
+		};
+	}, [track]);
+
+	const handlePlayNext = useCallback(() => {
+		const pt = toPlayerTrack();
+		if (!pt) return;
+		usePlayerStore.getState().addNext(pt);
+		closeSheet();
+	}, [toPlayerTrack, closeSheet]);
+
+	const handleAddToQueue = useCallback(() => {
+		const pt = toPlayerTrack();
+		if (!pt) return;
+		usePlayerStore.getState().addToQueue(pt);
+		closeSheet();
+	}, [toPlayerTrack, closeSheet]);
 
 	const handleDownload = useCallback(() => {
 		callbacks.onDownload?.();
@@ -367,6 +398,24 @@ export function TrackActionSheet() {
 								}
 								label={isPreviewActive ? "Pause preview" : "Play preview"}
 								onClick={handlePreview}
+							/>
+						)}
+
+						{/* Play Next */}
+						{hasPlayerQueue && currentPlayerTrack?.trackId !== track.id && (
+							<ActionRow
+								icon={<ListStart className="size-4" />}
+								label="Play next"
+								onClick={handlePlayNext}
+							/>
+						)}
+
+						{/* Add to Queue */}
+						{hasPlayerQueue && currentPlayerTrack?.trackId !== track.id && (
+							<ActionRow
+								icon={<ListEnd className="size-4" />}
+								label="Add to queue"
+								onClick={handleAddToQueue}
 							/>
 						)}
 
