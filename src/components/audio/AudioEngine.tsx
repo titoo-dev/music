@@ -4,8 +4,26 @@ import { useEffect, useRef, useCallback } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { adjustVolume } from "@/utils/adjust-volume";
+import {
+	getCachedBlobUrl,
+	prefetchTrack as cachePrefetch,
+	isCached,
+	cacheTrack,
+	setCacheLimit,
+} from "@/lib/audio-cache";
 
-// --- URL Cache ---
+// Restore cache limit from localStorage
+if (typeof window !== "undefined") {
+	try {
+		const saved = localStorage.getItem("deemix-cache-limit");
+		if (saved) {
+			const bytes = parseInt(saved, 10);
+			if (!isNaN(bytes) && bytes > 0) setCacheLimit(bytes);
+		}
+	} catch {}
+}
+
+// --- URL Cache (for presigned URLs only) ---
 const urlCache = new Map<string, { url: string; fetchedAt: number }>();
 const URL_CACHE_TTL = 12 * 60 * 1000; // 12 minutes (presigned URLs valid for 15)
 let usePresigned = true;
@@ -30,7 +48,22 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 	}
 }
 
+/**
+ * Resolve audio URL for a track. Priority:
+ * 1. IndexedDB blob URL (instant, zero network)
+ * 2. Presigned S3 URL (direct browser streaming)
+ * 3. Proxied stream API (fallback)
+ */
 async function getTrackUrl(trackId: string): Promise<string> {
+	// 1. Check IndexedDB cache — instant blob URL
+	try {
+		const blobUrl = await getCachedBlobUrl(trackId);
+		if (blobUrl) return blobUrl;
+	} catch {
+		// Cache miss — continue to network
+	}
+
+	// 2. Presigned URL
 	if (usePresigned) {
 		const url = await fetchPresignedUrl(trackId);
 		if (url) {
@@ -43,15 +76,14 @@ async function getTrackUrl(trackId: string): Promise<string> {
 			return url;
 		}
 	}
+
+	// 3. Proxied stream (Service Worker will cache the response)
 	return `/api/v1/stream/${trackId}`;
 }
 
-// --- Audio Preload Cache ---
-// Stores pre-buffered Audio elements so playback starts instantly
+// --- Audio Preload Cache (in-memory HTMLAudioElement pool) ---
 const preloadCache = new Map<string, HTMLAudioElement>();
 const MAX_PRELOADED = 6;
-// Tracks elements that were evicted or abandoned — prevents stale URL resolutions
-// from setting src on elements that are no longer needed.
 const evictedAudio = new WeakSet<HTMLAudioElement>();
 
 export function preloadTrack(trackId: string) {
@@ -73,13 +105,64 @@ export function preloadTrack(trackId: string) {
 	preloadCache.set(trackId, audio);
 
 	getTrackUrl(trackId).then((url) => {
-		// Only skip if the element was explicitly evicted/abandoned.
-		// When AudioEngine adopts an element (removes from cache), we still
-		// want the URL to be set so the audio can load.
 		if (evictedAudio.has(audio)) return;
 		audio.src = url;
 		audio.load();
 	});
+}
+
+// --- Smart Prefetch: background cache upcoming queue tracks ---
+let prefetchAbort: AbortController | null = null;
+
+function smartPrefetchQueue() {
+	// Cancel any in-flight prefetch batch
+	prefetchAbort?.abort();
+	prefetchAbort = new AbortController();
+	const signal = prefetchAbort.signal;
+
+	const { queue, queueIndex } = usePlayerStore.getState();
+	if (queue.length === 0) return;
+
+	// Prefetch strategy: next 5 tracks, then previous 2
+	const prefetchIds: string[] = [];
+
+	// Next tracks (higher priority)
+	for (let i = 1; i <= 5 && queueIndex + i < queue.length; i++) {
+		prefetchIds.push(queue[queueIndex + i].trackId);
+	}
+	// Previous tracks (lower priority)
+	for (let i = 1; i <= 2 && queueIndex - i >= 0; i++) {
+		prefetchIds.push(queue[queueIndex - i].trackId);
+	}
+
+	// Background prefetch with concurrency=2, respecting abort
+	(async () => {
+		for (const trackId of prefetchIds) {
+			if (signal.aborted) return;
+			// Don't await all at once — stagger to avoid bandwidth saturation
+			await cachePrefetch(trackId);
+		}
+	})();
+}
+
+/**
+ * Cache current track after it starts playing (if not already cached).
+ * This ensures every played track gets persisted to IndexedDB.
+ */
+async function cacheCurrentTrackInBackground(trackId: string) {
+	if (await isCached(trackId)) return;
+
+	try {
+		const res = await fetch(`/api/v1/stream/${trackId}`, {
+			credentials: "include",
+		});
+		if (!res.ok) return;
+		const contentType = res.headers.get("Content-Type") || "audio/mpeg";
+		const blob = await res.blob();
+		await cacheTrack(trackId, blob, contentType);
+	} catch {
+		// Non-critical
+	}
 }
 
 /**
@@ -113,7 +196,6 @@ export function AudioEngine() {
 	const previewIsPlaying = usePreviewStore((s) => s.isPlaying);
 
 	// --- Stable event handler delegation via refs ---
-	// Audio element event handlers always call the latest callback through this ref
 	const handlersRef = useRef({
 		onCanPlay: () => {},
 		onTimeUpdate: () => {},
@@ -167,6 +249,8 @@ export function AudioEngine() {
 				a.src = "";
 			}
 			preloadCache.clear();
+			// Cancel background prefetch
+			prefetchAbort?.abort();
 		};
 	}, [attachEvents, detachEvents]);
 
@@ -188,16 +272,24 @@ export function AudioEngine() {
 		}
 	}, [previewTrack, previewIsPlaying]);
 
-	// --- Preload adjacent tracks when queue position changes ---
+	// --- Preload adjacent tracks + smart background prefetch ---
 	useEffect(() => {
 		if (!currentTrack) return;
 		const { queue, queueIndex } = usePlayerStore.getState();
+
+		// Immediate preload: adjacent tracks (in-memory Audio elements for instant swap)
 		if (queueIndex + 1 < queue.length) {
 			preloadTrack(queue[queueIndex + 1].trackId);
 		}
 		if (queueIndex - 1 >= 0) {
 			preloadTrack(queue[queueIndex - 1].trackId);
 		}
+
+		// Background IndexedDB prefetch: next 5 + prev 2 tracks
+		smartPrefetchQueue();
+
+		// Cache current track if not already cached
+		cacheCurrentTrackInBackground(currentTrack.trackId);
 	}, [currentTrack]);
 
 	// --- Load new track ---

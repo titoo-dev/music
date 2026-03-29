@@ -19,6 +19,7 @@ import { longPressHandlers } from "@/hooks/useLongPress";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { usePrefetch } from "@/hooks/usePrefetch";
 
 interface PlaylistTrack {
 	id: string;
@@ -57,6 +58,12 @@ export default function PlaylistDetailPage() {
 
 	const allTrackIds = playlist?.tracks.map((t) => t.trackId) || [];
 	const { downloaded } = useDownloadedTracks(allTrackIds);
+
+	// Background prefetch: cache all downloaded tracks into IndexedDB for instant playback
+	const downloadedTrackIds = playlist?.tracks
+		.filter((t) => isDownloadsPlaylist || downloaded.has(t.trackId))
+		.map((t) => t.trackId) || [];
+	usePrefetch(downloadedTrackIds);
 
 	useEffect(() => {
 		if (!isAuthenticated || !params.id) {

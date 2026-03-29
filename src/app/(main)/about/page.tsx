@@ -4,6 +4,7 @@ import { useAppStore } from "@/stores/useAppStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { AudioCacheManager } from "@/components/audio/AudioCacheManager";
 
 export default function AboutPage() {
 	const { currentVersion, latestVersion, updateAvailable } = useAppStore();
@@ -53,6 +54,9 @@ export default function AboutPage() {
 					)}
 				</CardContent>
 			</Card>
+
+			{/* Audio Cache */}
+			<AudioCacheManager />
 
 			{/* Credits */}
 			<div className="text-center space-y-2">

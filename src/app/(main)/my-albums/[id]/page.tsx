@@ -27,6 +27,7 @@ import { longPressHandlers } from "@/hooks/useLongPress";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { usePrefetch } from "@/hooks/usePrefetch";
 
 function PlayAllButton({ queue }: { queue: PlayerTrack[] }) {
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
@@ -134,7 +135,11 @@ export default function AlbumDetailPage() {
 		load();
 	}, [params.id, isAuthenticated]);
 
-	// Preload first few tracks for instant playback
+	// Background prefetch: cache all album tracks into IndexedDB for instant playback
+	const albumTrackIds = album?.tracks.map((t) => t.trackId) || [];
+	usePrefetch(albumTrackIds);
+
+	// Preload first few tracks for instant playback (in-memory Audio elements)
 	useEffect(() => {
 		if (!album || album.tracks.length === 0) return;
 		for (const track of album.tracks.slice(0, 3)) {
