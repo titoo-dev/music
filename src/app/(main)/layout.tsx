@@ -9,6 +9,7 @@ import { DownloadPanel } from "@/components/downloads/DownloadPanel";
 import { useSocket } from "@/hooks/useSocket";
 import { useInitApp } from "@/hooks/useInitApp";
 import { useQueuePolling } from "@/hooks/useQueuePolling";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { authClient } from "@/lib/auth-client";
@@ -40,6 +41,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 	useSocket();
 	useInitApp();
 	useQueuePolling();
+	useKeyboardShortcuts();
 
 	const sidebarOpen = useAppStore((s) => s.sidebarOpen);
 	const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);

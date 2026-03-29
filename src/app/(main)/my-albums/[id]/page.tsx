@@ -18,6 +18,8 @@ import {
 	AlertDialogTitle,
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
+import { ShareButton } from "@/components/tracks/ShareButton";
 import { Loader2, ArrowLeft, Disc3, Trash2, Play, Pause, ArrowDownUp } from "lucide-react";
 import Link from "next/link";
 import { PlayButton } from "@/components/audio/PlayButton";
@@ -115,6 +117,34 @@ export default function AlbumDetailPage() {
 		}
 		setDeleting(false);
 		setDeleteDialogOpen(false);
+	};
+
+	const handleRemoveTrack = async (trackId: string) => {
+		if (!album) return;
+		if (currentPlayerTrack?.trackId === trackId) {
+			stopPlayer();
+		}
+		try {
+			const res = await fetch(`/api/v1/albums/${album.id}/tracks`, {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ trackIds: [trackId] }),
+			});
+			const json = await res.json();
+			if (json.success) {
+				if (json.data.albumDeleted) {
+					router.push("/");
+				} else {
+					setAlbum((prev) =>
+						prev
+							? { ...prev, tracks: prev.tracks.filter((t) => t.trackId !== trackId) }
+							: null
+					);
+				}
+			}
+		} catch {
+			// ignore
+		}
 	};
 
 	useEffect(() => {
@@ -303,13 +333,18 @@ export default function AlbumDetailPage() {
 							const isActive = currentPlayerTrack?.trackId === track.trackId && playerPlaying;
 							const isPaused = currentPlayerTrack?.trackId === track.trackId && !playerPlaying;
 							const lp = longPressHandlers(() => {
-								openSheet({
-									id: track.trackId,
-									title: track.title,
-									artist: track.artist,
-									cover: track.coverUrl || undefined,
-									duration: track.duration || undefined,
-								});
+								openSheet(
+									{
+										id: track.trackId,
+										title: track.title,
+										artist: track.artist,
+										cover: track.coverUrl || undefined,
+										duration: track.duration || undefined,
+									},
+									{
+										onDelete: () => handleRemoveTrack(track.trackId),
+									}
+								);
 							});
 
 							return (
@@ -351,6 +386,35 @@ export default function AlbumDetailPage() {
 									<span className="hidden sm:inline text-xs text-muted-foreground font-mono shrink-0">
 										{formatDuration(track.duration)}
 									</span>
+									<div className="flex gap-1 items-center shrink-0">
+										<ShareButton
+											trackId={track.trackId}
+											duration={track.duration}
+											className="hidden sm:flex size-8 text-muted-foreground hover:text-foreground"
+										/>
+										<AddToPlaylist
+											track={{
+												trackId: track.trackId,
+												title: track.title,
+												artist: track.artist,
+												album: track.album,
+												coverUrl: track.coverUrl,
+												duration: track.duration,
+											}}
+											className="hidden sm:flex size-8"
+										/>
+										<Button
+											variant="ghost"
+											size="icon"
+											className="hidden sm:flex size-8 text-muted-foreground hover:text-red-500"
+											onClick={(e) => {
+												e.stopPropagation();
+												handleRemoveTrack(track.trackId);
+											}}
+										>
+											<Trash2 className="size-3.5" />
+										</Button>
+									</div>
 								</div>
 							);
 						})}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { useDownload } from "@/hooks/useDownload";
 import { convertDuration } from "@/utils/helpers";
@@ -41,8 +41,29 @@ type SearchTab = "all" | "track" | "album" | "artist" | "playlist";
 
 function SearchContent() {
 	const searchParams = useSearchParams();
+	const router = useRouter();
+	const pathname = usePathname();
 	const term = searchParams.get("term") || "";
-	const [tab, setTab] = useState<SearchTab>("all");
+	const tabParam = searchParams.get("tab") as SearchTab | null;
+	const [tab, setTabState] = useState<SearchTab>(tabParam || "all");
+
+	// Sync tab to URL
+	const setTab = useCallback((newTab: SearchTab) => {
+		setTabState(newTab);
+		const params = new URLSearchParams(searchParams.toString());
+		if (newTab === "all") {
+			params.delete("tab");
+		} else {
+			params.set("tab", newTab);
+		}
+		router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+	}, [searchParams, router, pathname]);
+
+	// Sync from URL on param change (e.g. browser back/forward)
+	useEffect(() => {
+		const urlTab = searchParams.get("tab") as SearchTab | null;
+		setTabState(urlTab || "all");
+	}, [searchParams]);
 	const [results, setResults] = useState<any>(null);
 	const [loading, setLoading] = useState(false);
 	const [loadingMore, setLoadingMore] = useState(false);
