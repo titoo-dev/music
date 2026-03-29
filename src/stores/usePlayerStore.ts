@@ -16,6 +16,7 @@ interface PlayerState {
 	queue: PlayerTrack[];
 	queueIndex: number;
 	isPlaying: boolean;
+	isBuffering: boolean;
 	volume: number;
 	currentTime: number;
 	duration: number;
@@ -37,6 +38,7 @@ interface PlayerState {
 	setVolume: (v: number) => void;
 	setCurrentTime: (t: number) => void;
 	setDuration: (d: number) => void;
+	setBuffering: (b: boolean) => void;
 	toggleShuffle: () => void;
 	toggleRepeat: () => void;
 	setFullscreenOpen: (v: boolean) => void;
@@ -50,6 +52,7 @@ export const usePlayerStore = create<PlayerState>()(
 			queue: [],
 			queueIndex: -1,
 			isPlaying: false,
+			isBuffering: false,
 			volume: 80,
 			currentTime: 0,
 			duration: 0,
@@ -67,6 +70,7 @@ export const usePlayerStore = create<PlayerState>()(
 						queue,
 						queueIndex: idx >= 0 ? idx : 0,
 						isPlaying: true,
+						isBuffering: true,
 						currentTime: 0,
 					});
 				} else if (state.currentTrack?.trackId === track.trackId) {
@@ -77,6 +81,7 @@ export const usePlayerStore = create<PlayerState>()(
 						queue: [track],
 						queueIndex: 0,
 						isPlaying: true,
+						isBuffering: true,
 						currentTime: 0,
 					});
 				}
@@ -85,7 +90,7 @@ export const usePlayerStore = create<PlayerState>()(
 			pause: () => set({ isPlaying: false }),
 			resume: () => set({ isPlaying: true }),
 			toggle: () => set((s) => ({ isPlaying: !s.isPlaying })),
-			stop: () => set({ currentTrack: null, isPlaying: false, currentTime: 0, duration: 0, fullscreenOpen: false }),
+			stop: () => set({ currentTrack: null, isPlaying: false, isBuffering: false, currentTime: 0, duration: 0, fullscreenOpen: false }),
 
 			next: () => {
 				const { queue, queueIndex, shuffle, repeat } = get();
@@ -117,6 +122,7 @@ export const usePlayerStore = create<PlayerState>()(
 					currentTrack: queue[nextIndex],
 					queueIndex: nextIndex,
 					isPlaying: true,
+					isBuffering: true,
 					currentTime: 0,
 				});
 			},
@@ -138,6 +144,7 @@ export const usePlayerStore = create<PlayerState>()(
 							currentTrack: queue[queue.length - 1],
 							queueIndex: queue.length - 1,
 							isPlaying: true,
+							isBuffering: true,
 							currentTime: 0,
 						});
 					} else {
@@ -150,6 +157,7 @@ export const usePlayerStore = create<PlayerState>()(
 					currentTrack: queue[queueIndex - 1],
 					queueIndex: queueIndex - 1,
 					isPlaying: true,
+					isBuffering: true,
 					currentTime: 0,
 				});
 			},
@@ -164,6 +172,7 @@ export const usePlayerStore = create<PlayerState>()(
 							currentTrack: queue[queue.length - 1],
 							queueIndex: queue.length - 1,
 							isPlaying: true,
+							isBuffering: true,
 							currentTime: 0,
 						});
 					} else {
@@ -176,6 +185,7 @@ export const usePlayerStore = create<PlayerState>()(
 					currentTrack: queue[queueIndex - 1],
 					queueIndex: queueIndex - 1,
 					isPlaying: true,
+					isBuffering: true,
 					currentTime: 0,
 				});
 			},
@@ -183,6 +193,7 @@ export const usePlayerStore = create<PlayerState>()(
 			setVolume: (volume) => set({ volume }),
 			setCurrentTime: (currentTime) => set({ currentTime }),
 			setDuration: (duration) => set({ duration }),
+			setBuffering: (isBuffering) => set({ isBuffering }),
 			toggleShuffle: () => set((s) => ({ shuffle: !s.shuffle })),
 			setFullscreenOpen: (fullscreenOpen) => set({ fullscreenOpen }),
 			toggleRepeat: () =>
@@ -197,6 +208,7 @@ export const usePlayerStore = create<PlayerState>()(
 					queueIndex: startIndex,
 					currentTrack: queue[startIndex],
 					isPlaying: true,
+					isBuffering: true,
 					currentTime: 0,
 				});
 			},

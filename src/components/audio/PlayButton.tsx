@@ -3,6 +3,7 @@
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
 interface PlayButtonProps {
 	track: PlayerTrack;
@@ -14,11 +15,13 @@ interface PlayButtonProps {
 export function PlayButton({ track, queue, size = "sm", className }: PlayButtonProps) {
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
+	const isBuffering = usePlayerStore((s) => s.isBuffering);
 	const play = usePlayerStore((s) => s.play);
 	const pause = usePlayerStore((s) => s.pause);
 
 	const isThisTrack = currentTrack?.trackId === track.trackId;
 	const isThisPlaying = isThisTrack && isPlaying;
+	const isThisBuffering = isThisTrack && isBuffering;
 	const resume = usePlayerStore((s) => s.resume);
 
 	return (
@@ -44,7 +47,9 @@ export function PlayButton({ track, queue, size = "sm", className }: PlayButtonP
 				}
 			}}
 		>
-			{isThisPlaying ? (
+			{isThisBuffering ? (
+				<Loader2 className="h-3 w-3 animate-spin" />
+			) : isThisPlaying ? (
 				<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
 					<rect x="1" y="1" width="3.5" height="10" rx="0.5" />
 					<rect x="7.5" y="1" width="3.5" height="10" rx="0.5" />

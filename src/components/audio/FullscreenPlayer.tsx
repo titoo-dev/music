@@ -12,6 +12,7 @@ import {
 	type CarouselApi,
 } from "@/components/ui/carousel";
 import { motion, AnimatePresence, useDragControls } from "motion/react";
+import { Loader2 } from "lucide-react";
 import type { PlayerTrack } from "@/stores/usePlayerStore";
 
 function formatTime(seconds: number) {
@@ -151,6 +152,7 @@ function SeekSection() {
 /* ─── Controls ─── */
 function Controls() {
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
+	const isBuffering = usePlayerStore((s) => s.isBuffering);
 	const shuffle = usePlayerStore((s) => s.shuffle);
 	const repeat = usePlayerStore((s) => s.repeat);
 	const hasQueue = usePlayerStore((s) => s.queue.length > 1);
@@ -188,7 +190,9 @@ function Controls() {
 			</Button>
 
 			<Button variant="secondary" size="icon" className="h-[72px] w-[72px] border-[3px]" onClick={toggle}>
-				{isPlaying ? (
+				{isBuffering ? (
+					<Loader2 className="h-8 w-8 animate-spin" />
+				) : isPlaying ? (
 					<svg width="30" height="30" viewBox="0 0 12 12" fill="currentColor">
 						<rect x="1" y="1" width="3.5" height="10" rx="0" />
 						<rect x="7.5" y="1" width="3.5" height="10" rx="0" />

@@ -106,6 +106,8 @@ export function AudioEngine() {
 	const pause = usePlayerStore((s) => s.pause);
 	const resume = usePlayerStore((s) => s.resume);
 
+	const setBuffering = usePlayerStore((s) => s.setBuffering);
+
 	const previewStop = usePreviewStore((s) => s.stop);
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewIsPlaying = usePreviewStore((s) => s.isPlaying);
@@ -118,6 +120,8 @@ export function AudioEngine() {
 		onEnded: () => {},
 		onError: () => {},
 		onLoadedMetadata: () => {},
+		onWaiting: () => {},
+		onPlaying: () => {},
 	});
 
 	const attachEvents = useCallback((audio: HTMLAudioElement) => {
@@ -126,6 +130,8 @@ export function AudioEngine() {
 		audio.onended = () => handlersRef.current.onEnded();
 		audio.onerror = () => handlersRef.current.onError();
 		audio.onloadedmetadata = () => handlersRef.current.onLoadedMetadata();
+		audio.onwaiting = () => handlersRef.current.onWaiting();
+		audio.onplaying = () => handlersRef.current.onPlaying();
 	}, []);
 
 	const detachEvents = useCallback((audio: HTMLAudioElement) => {
@@ -134,6 +140,8 @@ export function AudioEngine() {
 		audio.onended = null;
 		audio.onerror = null;
 		audio.onloadedmetadata = null;
+		audio.onwaiting = null;
+		audio.onplaying = null;
 	}, []);
 
 	// --- Initialize audio element (client-only) ---
@@ -227,6 +235,7 @@ export function AudioEngine() {
 
 				if (preloaded.readyState >= 2) {
 					// Already buffered — play immediately
+					setBuffering(false);
 					setDuration(preloaded.duration || 0);
 					if (usePlayerStore.getState().isPlaying) {
 						skipPlayEffectRef.current = true;
@@ -320,6 +329,7 @@ export function AudioEngine() {
 	handlersRef.current.onCanPlay = () => {
 		const audio = audioRef.current;
 		if (!audio) return;
+		setBuffering(false);
 		setDuration(audio.duration || 0);
 		onPositionUpdate();
 		if (usePlayerStore.getState().isPlaying) {
@@ -378,6 +388,14 @@ export function AudioEngine() {
 	handlersRef.current.onLoadedMetadata = () => {
 		const audio = audioRef.current;
 		if (audio) setDuration(audio.duration || 0);
+	};
+
+	handlersRef.current.onWaiting = () => {
+		setBuffering(true);
+	};
+
+	handlersRef.current.onPlaying = () => {
+		setBuffering(false);
 	};
 
 	// Expose seek function for Player UI

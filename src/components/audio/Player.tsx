@@ -5,6 +5,7 @@ import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
 import { SeekBar } from "./SeekBar";
 import { motion, AnimatePresence } from "motion/react";
+import { Loader2 } from "lucide-react";
 
 function formatTime(seconds: number) {
 	if (!seconds || !isFinite(seconds)) return "0:00";
@@ -20,6 +21,7 @@ function seek(time: number) {
 export function Player() {
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
+	const isBuffering = usePlayerStore((s) => s.isBuffering);
 	const volume = usePlayerStore((s) => s.volume);
 	const currentTime = usePlayerStore((s) => s.currentTime);
 	const duration = usePlayerStore((s) => s.duration);
@@ -120,7 +122,9 @@ export function Player() {
 								className="h-10 w-10 rounded-full bg-foreground text-background hover:bg-foreground/90"
 								onClick={toggle}
 							>
-								{isPlaying ? (
+								{isBuffering ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : isPlaying ? (
 									<svg width="16" height="16" viewBox="0 0 12 12" fill="currentColor">
 										<rect x="1" y="1" width="3.5" height="10" rx="0.5" />
 										<rect x="7.5" y="1" width="3.5" height="10" rx="0.5" />

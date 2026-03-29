@@ -6,7 +6,7 @@ import { adjustVolume } from "@/utils/adjust-volume";
 
 export function AudioPreview() {
 	const audioRef = useRef<HTMLAudioElement>(null);
-	const { currentTrack, isPlaying, volume, pause, stop } = usePreviewStore();
+	const { currentTrack, isPlaying, volume, pause, stop, setBuffering } = usePreviewStore();
 	const prevTrackIdRef = useRef<string | null>(null);
 
 	// Handle track changes
@@ -62,10 +62,11 @@ export function AudioPreview() {
 	const onCanPlay = useCallback(() => {
 		const audio = audioRef.current;
 		if (!audio || !isPlaying) return;
+		setBuffering(false);
 		audio.volume = 0;
 		audio.play();
 		adjustVolume(audio, volume / 100, { duration: 400 });
-	}, [isPlaying, volume]);
+	}, [isPlaying, volume, setBuffering]);
 
 	const onTimeUpdate = useCallback(() => {
 		const audio = audioRef.current;
@@ -82,12 +83,22 @@ export function AudioPreview() {
 		stop();
 	}, [stop]);
 
+	const onWaiting = useCallback(() => {
+		setBuffering(true);
+	}, [setBuffering]);
+
+	const onPlaying = useCallback(() => {
+		setBuffering(false);
+	}, [setBuffering]);
+
 	return (
 		<audio
 			ref={audioRef}
 			onCanPlay={onCanPlay}
 			onTimeUpdate={onTimeUpdate}
 			onEnded={onEnded}
+			onWaiting={onWaiting}
+			onPlaying={onPlaying}
 			preload="auto"
 			className="hidden"
 		/>

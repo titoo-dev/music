@@ -10,6 +10,7 @@ interface PreviewState {
 		previewUrl: string;
 	} | null;
 	isPlaying: boolean;
+	isBuffering: boolean;
 	volume: number;
 
 	play: (track: PreviewState["currentTrack"]) => void;
@@ -17,6 +18,7 @@ interface PreviewState {
 	stop: () => void;
 	toggle: (track: PreviewState["currentTrack"]) => void;
 	setVolume: (v: number) => void;
+	setBuffering: (b: boolean) => void;
 }
 
 export const usePreviewStore = create<PreviewState>()(
@@ -24,20 +26,22 @@ export const usePreviewStore = create<PreviewState>()(
 		(set, get) => ({
 			currentTrack: null,
 			isPlaying: false,
+			isBuffering: false,
 			volume: 80,
 
-			play: (track) => set({ currentTrack: track, isPlaying: true }),
+			play: (track) => set({ currentTrack: track, isPlaying: true, isBuffering: true }),
 			pause: () => set({ isPlaying: false }),
-			stop: () => set({ currentTrack: null, isPlaying: false }),
+			stop: () => set({ currentTrack: null, isPlaying: false, isBuffering: false }),
 			toggle: (track) => {
 				const { currentTrack, isPlaying } = get();
 				if (currentTrack?.id === track?.id && isPlaying) {
 					set({ isPlaying: false });
 				} else {
-					set({ currentTrack: track, isPlaying: true });
+					set({ currentTrack: track, isPlaying: true, isBuffering: true });
 				}
 			},
 			setVolume: (volume) => set({ volume }),
+			setBuffering: (isBuffering) => set({ isBuffering }),
 		}),
 		{
 			name: "deemix-preview",

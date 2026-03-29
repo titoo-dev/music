@@ -4,9 +4,10 @@ import { usePreviewStore } from "@/stores/usePreviewStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "motion/react";
+import { Loader2 } from "lucide-react";
 
 export function MiniPlayer() {
-	const { currentTrack, isPlaying, toggle, stop, volume, setVolume } =
+	const { currentTrack, isPlaying, isBuffering, toggle, stop, volume, setVolume } =
 		usePreviewStore();
 
 	return (
@@ -72,7 +73,9 @@ export function MiniPlayer() {
 						className="h-8 w-8 border-[2px] border-foreground"
 						onClick={() => toggle(currentTrack)}
 					>
-						{isPlaying ? (
+						{isBuffering ? (
+							<Loader2 className="h-4 w-4 animate-spin" />
+						) : isPlaying ? (
 							<svg
 								width="15"
 								height="15"

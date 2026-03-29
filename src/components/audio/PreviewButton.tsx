@@ -3,6 +3,7 @@
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
 interface PreviewButtonProps {
 	track: {
@@ -17,11 +18,13 @@ interface PreviewButtonProps {
 }
 
 export function PreviewButton({ track, size = "sm", className }: PreviewButtonProps) {
-	const { currentTrack, isPlaying, toggle } = usePreviewStore();
+	const { currentTrack, isPlaying, isBuffering, toggle } = usePreviewStore();
 
 	if (!track.previewUrl) return null;
 
-	const isThisPlaying = currentTrack?.id === track.id && isPlaying;
+	const isThisTrack = currentTrack?.id === track.id;
+	const isThisPlaying = isThisTrack && isPlaying;
+	const isThisBuffering = isThisTrack && isBuffering;
 
 	const sizeClasses = {
 		sm: "h-7 w-7",
@@ -52,7 +55,9 @@ export function PreviewButton({ track, size = "sm", className }: PreviewButtonPr
 				});
 			}}
 		>
-			{isThisPlaying ? (
+			{isThisBuffering ? (
+				<Loader2 className="h-3 w-3 animate-spin" />
+			) : isThisPlaying ? (
 				<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
 					<rect x="1" y="1" width="3.5" height="10" rx="0.5" />
 					<rect x="7.5" y="1" width="3.5" height="10" rx="0.5" />
