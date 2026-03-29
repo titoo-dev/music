@@ -16,11 +16,9 @@ import { Download, Loader2, CheckCircle2 } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { useLongPress } from "@/hooks/useLongPress";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
-import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
-import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
@@ -457,31 +455,11 @@ function TrackRow({
 			<span className="hidden sm:inline text-xs text-muted-foreground font-mono tabular-nums">
 				{duration ? convertDuration(duration) : ""}
 			</span>
-			<PreviewButton
-				track={{
-					id,
-					title,
-					artist: artistName,
-					cover: cover || "",
-					previewUrl,
-				}}
-			/>
 			<TrackDownloadStatus
 				trackId={id}
 				isAlreadyDownloaded={downloaded?.has(String(id)) ?? false}
 				apiLoading={isLoading(deezerUrl(id, "track"))}
 				onDownload={() => onDownload(id, "track")}
-			/>
-			<AddToPlaylist
-				track={{
-					trackId: String(id),
-					title,
-					artist: artistName,
-					album: albumTitle,
-					coverUrl: cover,
-					duration: duration ? Number(duration) : null,
-				}}
-				className="hidden sm:flex size-7"
 			/>
 		</div>
 	);

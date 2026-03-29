@@ -7,9 +7,7 @@ import { useDownload } from "@/hooks/useDownload";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
-import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
-import { ShareButton } from "@/components/tracks/ShareButton";
-import { Loader2, ArrowLeft, Download, Trash2, ArrowDownUp } from "lucide-react";
+import { Loader2, ArrowLeft, Download, ArrowDownUp } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import Link from "next/link";
 import { PlayButton } from "@/components/audio/PlayButton";
@@ -166,7 +164,7 @@ export default function PlaylistDetailPage() {
 					variant="ghost"
 					size="icon"
 					className="shrink-0"
-					onClick={() => router.push("/my-playlists")}
+					onClick={() => router.back()}
 				>
 					<ArrowLeft className="size-4" />
 				</Button>
@@ -290,38 +288,12 @@ export default function PlaylistDetailPage() {
 								<span className="hidden sm:inline text-xs text-muted-foreground shrink-0 font-mono">
 									{formatDuration(track.duration)}
 								</span>
-								<div className="flex gap-1 items-center shrink-0">
-									<ShareButton
-										trackId={track.trackId}
-										duration={track.duration}
-										className="hidden sm:flex size-8 text-muted-foreground hover:text-foreground"
-									/>
-									<TrackDownloadStatus
-										trackId={track.trackId}
-										isAlreadyDownloaded={isTrackDownloaded}
-										apiLoading={isLoading(trackUrl)}
-										onDownload={() => handleDownloadTrack(track.trackId)}
-									/>
-									<AddToPlaylist
-										track={{
-											trackId: track.trackId,
-											title: track.title,
-											artist: track.artist,
-											album: track.album,
-											coverUrl: track.coverUrl,
-											duration: track.duration,
-										}}
-										className="hidden sm:flex size-8"
-									/>
-									<Button
-										variant="ghost"
-										size="icon"
-										className="hidden sm:flex size-8 text-muted-foreground hover:text-red-500"
-										onClick={() => handleRemoveTrack(track.trackId)}
-									>
-										<Trash2 className="size-3.5" />
-									</Button>
-								</div>
+								<TrackDownloadStatus
+									trackId={track.trackId}
+									isAlreadyDownloaded={isTrackDownloaded}
+									apiLoading={isLoading(trackUrl)}
+									onDownload={() => handleDownloadTrack(track.trackId)}
+								/>
 							</div>
 						);
 					})}

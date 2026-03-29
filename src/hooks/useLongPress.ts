@@ -42,10 +42,11 @@ export function useLongPress(callback: () => void, options?: LongPressOptions) {
 	}, []);
 
 	const contextMenu = useCallback((e: React.MouseEvent) => {
-		if (isLongPressRef.current) {
-			e.preventDefault();
+		e.preventDefault();
+		if (!isLongPressRef.current) {
+			callback();
 		}
-	}, []);
+	}, [callback]);
 
 	return {
 		onTouchStart: start,
@@ -85,7 +86,10 @@ export function longPressHandlers(callback: () => void, ms = 500) {
 		},
 		onTouchEnd: () => clearTimeout(timer),
 		onContextMenu: (e: React.MouseEvent) => {
-			if (isLP) e.preventDefault();
+			e.preventDefault();
+			if (!isLP) {
+				callback();
+			}
 		},
 	};
 }

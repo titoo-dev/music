@@ -13,9 +13,7 @@ import { Download, Loader2, CheckCircle2 } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
-import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { CoverImage } from "@/components/ui/cover-image";
-import { PreviewButton } from "@/components/audio/PreviewButton";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
@@ -206,31 +204,11 @@ function ArtistContent() {
 									<span className="hidden sm:inline text-xs text-muted-foreground tabular-nums font-mono">
 										{convertDuration(trackDuration)}
 									</span>
-									<PreviewButton
-										track={{
-											id: trackId,
-											title: trackTitle,
-											artist: trackArtist,
-											cover: trackCover || "",
-											previewUrl,
-										}}
-									/>
 									<TrackDownloadStatus
 										trackId={trackId}
 										isAlreadyDownloaded={downloaded.has(String(trackId))}
 										apiLoading={isLoading(trackUrl)}
 										onDownload={() => handleDownload(trackId, "track")}
-									/>
-									<AddToPlaylist
-										track={{
-											trackId: String(trackId),
-											title: trackTitle,
-											artist: trackArtist,
-											album: albumTitle,
-											coverUrl: trackCover,
-											duration: trackDuration ? Number(trackDuration) : null,
-										}}
-										className="hidden sm:flex size-7"
 									/>
 								</div>
 							);

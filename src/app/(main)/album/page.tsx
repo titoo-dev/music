@@ -8,14 +8,12 @@ import { convertDuration } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { PreviewButton } from "@/components/audio/PreviewButton";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Loader2, CheckCircle2, Clock, Download } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { useQueueStore } from "@/stores/useQueueStore";
-import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { longPressHandlers } from "@/hooks/useLongPress";
@@ -273,31 +271,11 @@ function AlbumContent() {
 								<span className="hidden sm:inline text-xs text-muted-foreground tabular-nums font-mono">
 									{convertDuration(trackDuration)}
 								</span>
-								<PreviewButton
-									track={{
-										id: trackId,
-										title: trackTitle,
-										artist: trackArtist,
-										cover: trackCover || "",
-										previewUrl,
-									}}
-								/>
 								<TrackDownloadStatus
 									trackId={trackId}
 									isAlreadyDownloaded={downloaded.has(String(trackId))}
 									apiLoading={isLoading(trackUrl(trackId))}
 									onDownload={() => handleDownloadTrack(trackId)}
-								/>
-								<AddToPlaylist
-									track={{
-										trackId: String(trackId),
-										title: trackTitle,
-										artist: trackArtist,
-										album: title,
-										coverUrl: trackCover,
-										duration: trackDuration ? Number(trackDuration) : null,
-									}}
-									className="hidden sm:flex size-8"
 								/>
 							</div>
 						);

@@ -8,11 +8,9 @@ import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { convertDuration } from "@/utils/helpers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { PreviewButton } from "@/components/audio/PreviewButton";
 import { Loader2 } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { CoverImage } from "@/components/ui/cover-image";
-import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
@@ -192,30 +190,11 @@ function PlaylistContent() {
 								<span className="hidden sm:inline text-xs font-mono text-muted-foreground tabular-nums">
 									{convertDuration(trackDuration)}
 								</span>
-								<PreviewButton
-									track={{
-										id: trackId,
-										title: trackTitle,
-										artist: trackArtist,
-										cover: trackCover || "",
-										previewUrl,
-									}}
-								/>
 								<TrackDownloadStatus
 									trackId={trackId}
 									isAlreadyDownloaded={downloaded.has(String(trackId))}
 									apiLoading={isLoading(trackUrl(trackId))}
 									onDownload={() => handleDownloadTrack(trackId)}
-								/>
-								<AddToPlaylist
-									track={{
-										trackId: String(trackId),
-										title: trackTitle,
-										artist: trackArtist,
-										coverUrl: trackCover,
-										duration: trackDuration ? Number(trackDuration) : null,
-									}}
-									className="hidden sm:flex size-7"
 								/>
 							</div>
 						);
