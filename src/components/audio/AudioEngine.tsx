@@ -28,11 +28,20 @@ const urlCache = new Map<string, { url: string; fetchedAt: number }>();
 const URL_CACHE_TTL = 12 * 60 * 1000; // 12 minutes (presigned URLs valid for 15)
 let usePresigned = true;
 
+function pruneUrlCache() {
+	const now = Date.now();
+	for (const [key, val] of urlCache) {
+		if (now - val.fetchedAt >= URL_CACHE_TTL) urlCache.delete(key);
+	}
+}
+
 async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 	const cached = urlCache.get(trackId);
 	if (cached && Date.now() - cached.fetchedAt < URL_CACHE_TTL) {
 		return cached.url;
 	}
+
+	pruneUrlCache();
 
 	try {
 		const res = await fetch(`/api/v1/stream-url/${trackId}`);
@@ -444,9 +453,13 @@ export function AudioEngine() {
 		setDuration(audio.duration || 0);
 		onPositionUpdate();
 		if (usePlayerStore.getState().isPlaying) {
-			audio.volume = 0;
-			audio.play().catch(() => {});
 			const targetVolume = usePlayerStore.getState().volume / 100;
+			// Only reset volume and call play() if not already playing — prevents
+			// double-fade when canplay fires after we already started the element.
+			if (audio.paused) {
+				audio.volume = 0;
+				audio.play().catch(() => {});
+			}
 			adjustVolume(audio, targetVolume, { duration: 800 });
 		}
 	};

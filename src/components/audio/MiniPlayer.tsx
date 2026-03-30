@@ -54,8 +54,8 @@ export function MiniPlayer() {
 						</p>
 					</div>
 
-					{/* Volume */}
-					<div className="hidden sm:flex items-center gap-1.5">
+					{/* Volume — always visible, compact on mobile */}
+					<div className="flex items-center gap-1.5">
 						<svg
 							width="13"
 							height="13"
@@ -63,7 +63,7 @@ export function MiniPlayer() {
 							fill="none"
 							stroke="currentColor"
 							strokeWidth="2"
-							className="shrink-0 text-foreground"
+							className="shrink-0 text-foreground hidden sm:block"
 						>
 							<path d="M11 5L6 9H2v6h4l5 4V5z" />
 							{volume > 0 && (
@@ -80,7 +80,7 @@ export function MiniPlayer() {
 							value={volume}
 							aria-label="Preview volume"
 							onChange={(e) => setVolume(parseInt(e.target.value))}
-							className="w-16 h-1 accent-primary cursor-pointer"
+							className="w-12 sm:w-16 h-1 accent-primary cursor-pointer"
 						/>
 					</div>
 

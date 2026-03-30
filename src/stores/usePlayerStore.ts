@@ -265,7 +265,11 @@ export const usePlayerStore = create<PlayerState>()(
 				set(goToIndex(queueIndex - 1, queue));
 			},
 
-			seek: (time) => set({ currentTime: time, _seekTo: time }),
+			seek: (time) => {
+				const { duration } = get();
+				const clamped = Math.max(0, duration > 0 ? Math.min(time, duration) : time);
+				set({ currentTime: clamped, _seekTo: clamped });
+			},
 			setError: (error) => set({ error }),
 			setVolume: (volume) => set({ volume }),
 			setCurrentTime: (currentTime) => set({ currentTime }),

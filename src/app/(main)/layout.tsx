@@ -33,6 +33,7 @@ import { Menu, Info, LogOut, Music, History } from "lucide-react";
 import { AudioPreview } from "@/components/audio/AudioPreview";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
 import { AudioEngine } from "@/components/audio/AudioEngine";
+import { AudioEngineErrorBoundary } from "@/components/audio/AudioEngineErrorBoundary";
 import { Player } from "@/components/audio/Player";
 import { FullscreenPlayer } from "@/components/audio/FullscreenPlayer";
 import { TrackActionSheet } from "@/components/tracks/TrackActionSheet";
@@ -269,7 +270,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 			{/* ─── Audio ─── */}
 			<AudioPreview />
 			<MiniPlayer />
-			<AudioEngine />
+			<AudioEngineErrorBoundary>
+				<AudioEngine />
+			</AudioEngineErrorBoundary>
 			<Player />
 			<FullscreenPlayer />
 			<TrackActionSheet />
