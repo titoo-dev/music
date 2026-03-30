@@ -5,6 +5,14 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { adjustVolume } from "@/utils/adjust-volume";
 import {
+	initAudioCtx,
+	connectAudioElement,
+	isConnectedOrFailed,
+	measureRms,
+	applyNormGain,
+	resetNormGain,
+} from "@/utils/audio-context";
+import {
 	getCachedBlobUrl,
 	prefetchTrack as cachePrefetch,
 	isCached,
@@ -203,6 +211,7 @@ export function AudioEngine() {
 	const playbackRate = usePlayerStore((s) => s.playbackRate);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
 	const sleepTimerEnd = usePlayerStore((s) => s.sleepTimerEnd);
+	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
 
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewIsPlaying = usePreviewStore((s) => s.isPlaying);
@@ -214,6 +223,9 @@ export function AudioEngine() {
 	// Crossfade state
 	const crossfadeActiveRef = useRef(false);
 	const outgoingAudioRef = useRef<HTMLAudioElement | null>(null);
+
+	// Normalization: measured once per track at t=3s
+	const normMeasuredRef = useRef(false);
 
 	// --- Stable event handler delegation via refs ---
 	const handlersRef = useRef({
@@ -349,6 +361,9 @@ export function AudioEngine() {
 					outgoingAudioRef.current = null;
 				}
 			}
+			// Reset normalization for the incoming track
+			normMeasuredRef.current = false;
+			resetNormGain();
 			const gen = ++loadGenRef.current;
 			retryCountRef.current = 0;
 			setError(null);
@@ -441,6 +456,14 @@ export function AudioEngine() {
 		if (audio) audio.playbackRate = playbackRate;
 	}, [playbackRate]);
 
+	// Normalization toggle — reset gain when turned off
+	useEffect(() => {
+		if (!normalizationEnabled) {
+			normMeasuredRef.current = false;
+			resetNormGain();
+		}
+	}, [normalizationEnabled]);
+
 	// Sleep timer
 	useEffect(() => {
 		if (!sleepTimerEnd) return;
@@ -511,6 +534,28 @@ export function AudioEngine() {
 			setCurrentTime(now);
 		}
 		onPositionUpdate();
+
+		// Connect to Web Audio API on first timeUpdate after playback starts.
+		// This provides audio data for the visualizer and normalization.
+		// Idempotent — skipped once connected or if connection fails (CORS etc.).
+		if (!isConnectedOrFailed(audio)) {
+			initAudioCtx();
+			connectAudioElement(audio);
+		}
+
+		// Normalization: measure RMS at t=3s (once per track, if enabled)
+		if (normalizationEnabled && !normMeasuredRef.current && audio.currentTime >= 3.0) {
+			normMeasuredRef.current = true;
+			const rms = measureRms();
+			if (rms > 0) {
+				// Target −18.4 dBFS (≈ −14 LUFS for most music)
+				const rawGain = 0.12 / rms;
+				// Cap boost so normGain × userVol ≤ 1.0 to prevent clipping
+				const userVol = usePlayerStore.getState().volume / 100;
+				const maxBoost = userVol > 0 ? 1.0 / userVol : 1.5;
+				applyNormGain(Math.min(rawGain, maxBoost));
+			}
+		}
 
 		// Preload next track at 50% progress
 		if (audio.duration > 0 && audio.currentTime / audio.duration > 0.5) {

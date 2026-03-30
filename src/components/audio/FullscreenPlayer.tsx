@@ -19,7 +19,9 @@ import {
 	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
+	DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
+import { AudioVisualizer } from "./AudioVisualizer";
 import { motion, AnimatePresence, useDragControls } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { formatTime } from "@/utils/format-time";
@@ -268,6 +270,8 @@ function ExtraControls() {
 	const setSleepTimer = usePlayerStore((s) => s.setSleepTimer);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
 	const setCrossfadeDuration = usePlayerStore((s) => s.setCrossfadeDuration);
+	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
+	const toggleNormalization = usePlayerStore((s) => s.toggleNormalization);
 
 	const sleepActive = sleepTimerEnd !== null;
 
@@ -323,6 +327,13 @@ function ExtraControls() {
 							{s === 0 ? "Off" : `${s}s`}
 						</DropdownMenuItem>
 					))}
+					<DropdownMenuSeparator />
+					<DropdownMenuCheckboxItem
+						checked={normalizationEnabled}
+						onClick={toggleNormalization}
+					>
+						Loudness norm
+					</DropdownMenuCheckboxItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
 		</div>
@@ -410,6 +421,9 @@ export function FullscreenPlayer() {
 
 					<CoverCarousel queue={queue} />
 					<TrackInfo />
+					<div className="shrink-0 h-8 px-8 overflow-hidden">
+						<AudioVisualizer barCount={32} className="w-full h-full text-foreground" />
+					</div>
 					<SeekSection />
 					<ExtraControls />
 					<Controls />

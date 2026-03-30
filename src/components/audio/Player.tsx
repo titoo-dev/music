@@ -12,7 +12,9 @@ import {
 	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
+	DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
+import { AudioVisualizer } from "./AudioVisualizer";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { formatTime } from "@/utils/format-time";
@@ -51,6 +53,8 @@ export function Player() {
 	const setSleepTimer = usePlayerStore((s) => s.setSleepTimer);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
 	const setCrossfadeDuration = usePlayerStore((s) => s.setCrossfadeDuration);
+	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
+	const toggleNormalization = usePlayerStore((s) => s.toggleNormalization);
 
 	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
 	const openSheet = useTrackActionStore((s) => s.openSheet);
@@ -97,6 +101,11 @@ export function Player() {
 							{error}
 						</div>
 					)}
+
+					{/* Frequency visualizer (desktop only) */}
+					<div className="hidden md:block h-3.5 overflow-hidden">
+						<AudioVisualizer barCount={44} className="text-foreground" />
+					</div>
 
 					{/* Progress bar (touch-friendly) */}
 					<div className="group/seekbar -mb-3">
@@ -300,6 +309,13 @@ export function Player() {
 											{s === 0 ? "Off" : `${s}s`}
 										</DropdownMenuItem>
 									))}
+									<DropdownMenuSeparator />
+									<DropdownMenuCheckboxItem
+										checked={normalizationEnabled}
+										onClick={toggleNormalization}
+									>
+										Loudness norm
+									</DropdownMenuCheckboxItem>
 								</DropdownMenuContent>
 							</DropdownMenu>
 
