@@ -151,7 +151,8 @@ export const usePlayerStore = create<PlayerState>()(
 			resume: () => set({ isPlaying: true }),
 			toggle: () => set((s) => ({ isPlaying: !s.isPlaying })),
 			stop: () => set({
-				currentTrack: null, isPlaying: false, isBuffering: false,
+				currentTrack: null, queue: [], queueIndex: -1,
+				isPlaying: false, isBuffering: false,
 				currentTime: 0, duration: 0, error: null, fullscreenOpen: false,
 				_shuffleOrder: [], _shufflePos: 0,
 			}),
@@ -468,7 +469,18 @@ export const usePlayerStore = create<PlayerState>()(
 		}),
 		{
 			name: "deemix-player",
-			partialize: (state) => ({ volume: state.volume, shuffle: state.shuffle, repeat: state.repeat }),
+			partialize: (state) => ({
+				volume: state.volume,
+				shuffle: state.shuffle,
+				repeat: state.repeat,
+				// Persist playback context so the player bar is restored on refresh.
+				// isPlaying is NOT persisted — audio never auto-starts on page load.
+				queue: state.queue,
+				queueIndex: state.queueIndex,
+				currentTrack: state.currentTrack,
+				_shuffleOrder: state._shuffleOrder,
+				_shufflePos: state._shufflePos,
+			}),
 		}
 	)
 );

@@ -111,10 +111,10 @@ export function Player() {
 									size="icon"
 									aria-label="Shuffle"
 									aria-pressed={shuffle}
-									className={`h-8 w-8 hidden sm:flex ${shuffle ? "text-foreground" : "text-muted-foreground"}`}
+									className={`h-7 w-7 sm:h-8 sm:w-8 ${shuffle ? "text-foreground" : "text-muted-foreground"}`}
 									onClick={toggleShuffle}
 								>
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+									<svg width="12" height="12" className="sm:w-[14px] sm:h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
 										<polyline points="16 3 21 3 21 8" />
 										<line x1="4" y1="20" x2="21" y2="3" />
 										<polyline points="21 16 21 21 16 21" />
@@ -146,7 +146,7 @@ export function Player() {
 								className="h-10 w-10 rounded-full bg-foreground text-background hover:bg-foreground/90"
 								onClick={toggle}
 							>
-								{isBuffering ? (
+								{isPlaying && isBuffering ? (
 									<Loader2 className="h-4 w-4 animate-spin" />
 								) : isPlaying ? (
 									<svg width="16" height="16" viewBox="0 0 12 12" fill="currentColor">
@@ -181,10 +181,10 @@ export function Player() {
 									size="icon"
 									aria-label={`Repeat ${repeat}`}
 									aria-pressed={repeat !== "off"}
-									className={`h-8 w-8 hidden sm:flex ${repeat !== "off" ? "text-foreground" : "text-muted-foreground"}`}
+									className={`h-7 w-7 sm:h-8 sm:w-8 relative ${repeat !== "off" ? "text-foreground" : "text-muted-foreground"}`}
 									onClick={toggleRepeat}
 								>
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+									<svg width="12" height="12" className="sm:w-[14px] sm:h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
 										<polyline points="17 1 21 5 17 9" />
 										<path d="M3 11V9a4 4 0 0 1 4-4h14" />
 										<polyline points="7 23 3 19 7 15" />
@@ -199,8 +199,8 @@ export function Player() {
 
 						{/* Time + Volume */}
 						<div className="flex items-center gap-3 justify-end w-[30%]">
-							<span className="text-xs text-muted-foreground tabular-nums hidden sm:block">
-								{formatTime(currentTime)} / {formatTime(duration)}
+							<span className="text-xs text-muted-foreground tabular-nums">
+								{formatTime(currentTime)}<span className="hidden sm:inline"> / {formatTime(duration)}</span>
 							</span>
 
 							{/* Volume */}

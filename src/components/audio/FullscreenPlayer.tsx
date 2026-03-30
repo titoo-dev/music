@@ -201,7 +201,7 @@ function Controls() {
 			</Button>
 
 			<Button variant="secondary" size="icon" aria-label={isPlaying ? "Pause" : "Play"} className="h-[72px] w-[72px] border-[3px]" onClick={toggle}>
-				{isBuffering ? (
+				{isPlaying && isBuffering ? (
 					<Loader2 className="h-8 w-8 animate-spin" />
 				) : isPlaying ? (
 					<svg width="30" height="30" viewBox="0 0 12 12" fill="currentColor">
