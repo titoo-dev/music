@@ -41,6 +41,11 @@ interface PlayerState {
 	error: string | null;
 	fullscreenOpen: boolean;
 
+	// P2 features
+	sleepTimerEnd: number | null;
+	playbackRate: number;
+	crossfadeDuration: number;
+
 	// Shuffle history (P1)
 	/** Pre-computed shuffled order of queue indices. Empty when shuffle is off. */
 	_shuffleOrder: number[];
@@ -67,6 +72,9 @@ interface PlayerState {
 	toggleRepeat: () => void;
 	setFullscreenOpen: (v: boolean) => void;
 	playQueue: (queue: PlayerTrack[], startIndex?: number) => void;
+	setSleepTimer: (minutes: number | null) => void;
+	setPlaybackRate: (rate: number) => void;
+	setCrossfadeDuration: (seconds: number) => void;
 
 	// Queue management (P2)
 	/** Insert a track right after the current track ("Play Next"). */
@@ -109,6 +117,9 @@ export const usePlayerStore = create<PlayerState>()(
 			_seekTo: null,
 			error: null,
 			fullscreenOpen: false,
+			sleepTimerEnd: null,
+			playbackRate: 1.0,
+			crossfadeDuration: 0,
 			_shuffleOrder: [],
 			_shufflePos: 0,
 
@@ -155,6 +166,7 @@ export const usePlayerStore = create<PlayerState>()(
 				isPlaying: false, isBuffering: false,
 				currentTime: 0, duration: 0, error: null, fullscreenOpen: false,
 				_shuffleOrder: [], _shufflePos: 0,
+				sleepTimerEnd: null,
 			}),
 
 			next: () => {
@@ -294,6 +306,11 @@ export const usePlayerStore = create<PlayerState>()(
 			},
 
 			setFullscreenOpen: (fullscreenOpen) => set({ fullscreenOpen }),
+			setSleepTimer: (minutes) => {
+				set({ sleepTimerEnd: minutes === null ? null : Date.now() + minutes * 60 * 1000 });
+			},
+			setPlaybackRate: (playbackRate) => set({ playbackRate }),
+			setCrossfadeDuration: (crossfadeDuration) => set({ crossfadeDuration }),
 			toggleRepeat: () =>
 				set((s) => ({
 					repeat: s.repeat === "off" ? "all" : s.repeat === "all" ? "one" : "off",
@@ -480,6 +497,8 @@ export const usePlayerStore = create<PlayerState>()(
 				currentTrack: state.currentTrack,
 				_shuffleOrder: state._shuffleOrder,
 				_shufflePos: state._shufflePos,
+				playbackRate: state.playbackRate,
+				crossfadeDuration: state.crossfadeDuration,
 			}),
 		}
 	)

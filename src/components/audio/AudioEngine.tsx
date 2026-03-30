@@ -200,6 +200,9 @@ export function AudioEngine() {
 
 	const setBuffering = usePlayerStore((s) => s.setBuffering);
 	const setError = usePlayerStore((s) => s.setError);
+	const playbackRate = usePlayerStore((s) => s.playbackRate);
+	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
+	const sleepTimerEnd = usePlayerStore((s) => s.sleepTimerEnd);
 
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewIsPlaying = usePreviewStore((s) => s.isPlaying);
@@ -207,6 +210,10 @@ export function AudioEngine() {
 	// Error retry counter
 	const retryCountRef = useRef(0);
 	const MAX_RETRIES = 2;
+
+	// Crossfade state
+	const crossfadeActiveRef = useRef(false);
+	const outgoingAudioRef = useRef<HTMLAudioElement | null>(null);
 
 	// --- Stable event handler delegation via refs ---
 	const handlersRef = useRef({
@@ -332,6 +339,16 @@ export function AudioEngine() {
 		}
 
 		if (currentTrack.trackId !== prevTrackIdRef.current) {
+			// Cancel any in-progress crossfade on manual track change
+			if (crossfadeActiveRef.current) {
+				crossfadeActiveRef.current = false;
+				if (outgoingAudioRef.current) {
+					outgoingAudioRef.current.pause();
+					outgoingAudioRef.current.src = "";
+					evictedAudio.add(outgoingAudioRef.current);
+					outgoingAudioRef.current = null;
+				}
+			}
 			const gen = ++loadGenRef.current;
 			retryCountRef.current = 0;
 			setError(null);
@@ -358,6 +375,7 @@ export function AudioEngine() {
 					// Already buffered — play immediately
 					setBuffering(false);
 					setDuration(preloaded.duration || 0);
+					preloaded.playbackRate = usePlayerStore.getState().playbackRate;
 					if (usePlayerStore.getState().isPlaying) {
 						skipPlayEffectRef.current = true;
 						preloaded.volume = 0;
@@ -417,6 +435,24 @@ export function AudioEngine() {
 		adjustVolume(audio, volume / 100, { duration: 300 });
 	}, [volume, isPlaying]);
 
+	// Playback rate
+	useEffect(() => {
+		const audio = audioRef.current;
+		if (audio) audio.playbackRate = playbackRate;
+	}, [playbackRate]);
+
+	// Sleep timer
+	useEffect(() => {
+		if (!sleepTimerEnd) return;
+		const interval = setInterval(() => {
+			if (Date.now() >= sleepTimerEnd) {
+				usePlayerStore.getState().pause();
+				usePlayerStore.getState().setSleepTimer(null);
+			}
+		}, 1000);
+		return () => clearInterval(interval);
+	}, [sleepTimerEnd]);
+
 	// Seek: respond to _seekTo signal from prev() restart or seek()
 	const seekTo = usePlayerStore((s) => s._seekTo);
 	useEffect(() => {
@@ -451,6 +487,7 @@ export function AudioEngine() {
 		if (!audio) return;
 		setBuffering(false);
 		setDuration(audio.duration || 0);
+		audio.playbackRate = usePlayerStore.getState().playbackRate;
 		onPositionUpdate();
 		if (usePlayerStore.getState().isPlaying) {
 			const targetVolume = usePlayerStore.getState().volume / 100;
@@ -480,6 +517,73 @@ export function AudioEngine() {
 			const { queue, queueIndex } = usePlayerStore.getState();
 			if (queueIndex + 1 < queue.length) {
 				preloadTrack(queue[queueIndex + 1].trackId);
+			}
+		}
+
+		// --- Crossfade ---
+		const timeLeft = audio.duration - audio.currentTime;
+		if (
+			crossfadeDuration > 0 &&
+			!crossfadeActiveRef.current &&
+			audio.duration > crossfadeDuration * 2 && // skip very short tracks
+			timeLeft > 0 &&
+			timeLeft <= crossfadeDuration &&
+			repeat !== "one"
+		) {
+			const { queue, queueIndex, shuffle, _shuffleOrder, _shufflePos, repeat: rep } = usePlayerStore.getState();
+
+			// Determine next queue index (mirrors next() logic)
+			let nextQueueIndex = -1;
+			if (shuffle && _shuffleOrder.length > 0) {
+				const nextPos = _shufflePos + 1;
+				if (nextPos < _shuffleOrder.length) nextQueueIndex = _shuffleOrder[nextPos];
+				// skip crossfade on last shuffle track (re-shuffle would happen)
+			} else {
+				if (queueIndex + 1 < queue.length) nextQueueIndex = queueIndex + 1;
+				else if (rep === "all") nextQueueIndex = 0;
+			}
+
+			if (nextQueueIndex >= 0) {
+				const nextTrack = queue[nextQueueIndex];
+				const preloaded = preloadCache.get(nextTrack.trackId);
+
+				if (preloaded && preloaded.readyState >= 3) {
+					crossfadeActiveRef.current = true;
+					const fadeDuration = timeLeft * 1000;
+
+					// Detach events from outgoing audio so its onended doesn't trigger next()
+					const outgoing = audio;
+					detachEvents(outgoing);
+					outgoingAudioRef.current = outgoing;
+
+					// Swap to incoming audio
+					preloadCache.delete(nextTrack.trackId);
+					attachEvents(preloaded);
+					audioRef.current = preloaded;
+					prevTrackIdRef.current = nextTrack.trackId;
+					skipPlayEffectRef.current = true;
+
+					preloaded.playbackRate = playbackRate;
+					preloaded.volume = 0;
+					preloaded.currentTime = 0;
+					preloaded.play().catch(() => {});
+
+					const targetVol = usePlayerStore.getState().volume / 100;
+					adjustVolume(outgoing, 0, { duration: fadeDuration });
+					adjustVolume(preloaded, targetVol, { duration: fadeDuration });
+
+					// Advance store state to next track
+					usePlayerStore.getState().next();
+
+					// Clean up outgoing after fade
+					setTimeout(() => {
+						outgoing.pause();
+						outgoing.src = "";
+						evictedAudio.add(outgoing);
+						outgoingAudioRef.current = null;
+						crossfadeActiveRef.current = false;
+					}, fadeDuration + 300);
+				}
 			}
 		}
 	};

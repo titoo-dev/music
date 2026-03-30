@@ -5,9 +5,23 @@ import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
 import { SeekBar } from "./SeekBar";
+import {
+	DropdownMenu,
+	DropdownMenuTrigger,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { formatTime } from "@/utils/format-time";
+
+const SPEED_STEPS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+function formatRate(rate: number): string {
+	return rate === 1 ? "1×" : `${rate}×`;
+}
 
 function seek(time: number) {
 	usePlayerStore.getState().seek(time);
@@ -31,6 +45,12 @@ export function Player() {
 	const setVolume = usePlayerStore((s) => s.setVolume);
 	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 	const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
+	const playbackRate = usePlayerStore((s) => s.playbackRate);
+	const setPlaybackRate = usePlayerStore((s) => s.setPlaybackRate);
+	const sleepTimerEnd = usePlayerStore((s) => s.sleepTimerEnd);
+	const setSleepTimer = usePlayerStore((s) => s.setSleepTimer);
+	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
+	const setCrossfadeDuration = usePlayerStore((s) => s.setCrossfadeDuration);
 
 	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
 	const openSheet = useTrackActionStore((s) => s.openSheet);
@@ -38,6 +58,13 @@ export function Player() {
 	const error = usePlayerStore((s) => s.error);
 
 	const hasQueue = queue.length > 1;
+	const sleepActive = sleepTimerEnd !== null;
+
+	function cycleSpeed() {
+		const idx = SPEED_STEPS.indexOf(playbackRate);
+		const next = SPEED_STEPS[(idx + 1) % SPEED_STEPS.length];
+		setPlaybackRate(next);
+	}
 
 	const handleContextMenu = (e: React.MouseEvent) => {
 		e.preventDefault();
@@ -228,6 +255,53 @@ export function Player() {
 									className="w-20 h-1 accent-foreground cursor-pointer"
 								/>
 							</div>
+
+							{/* Speed control */}
+							<Button
+								variant="ghost"
+								size="sm"
+								aria-label={`Playback speed ${formatRate(playbackRate)}`}
+								className="hidden md:flex h-7 px-1.5 text-xs font-mono text-muted-foreground hover:text-foreground"
+								onClick={cycleSpeed}
+							>
+								{formatRate(playbackRate)}
+							</Button>
+
+							{/* Sleep timer + crossfade settings */}
+							<DropdownMenu>
+								<DropdownMenuTrigger
+									aria-label="Sleep timer and crossfade settings"
+									className={`hidden md:inline-flex h-7 w-7 items-center justify-center rounded-md ${sleepActive ? "text-foreground" : "text-muted-foreground"} hover:bg-accent hover:text-foreground`}
+								>
+									<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+										<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+									</svg>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent side="top" align="end">
+									<DropdownMenuLabel>Sleep timer</DropdownMenuLabel>
+									{sleepActive && (
+										<DropdownMenuItem onClick={() => setSleepTimer(null)}>
+											Turn off
+										</DropdownMenuItem>
+									)}
+									{([5, 10, 15, 30, 45, 60] as const).map((m) => (
+										<DropdownMenuItem key={m} onClick={() => setSleepTimer(m)}>
+											{m} min
+										</DropdownMenuItem>
+									))}
+									<DropdownMenuSeparator />
+									<DropdownMenuLabel>Crossfade</DropdownMenuLabel>
+									{([0, 1, 2, 3, 5, 8] as const).map((s) => (
+										<DropdownMenuItem
+											key={s}
+											onClick={() => setCrossfadeDuration(s)}
+											className={crossfadeDuration === s ? "font-semibold" : ""}
+										>
+											{s === 0 ? "Off" : `${s}s`}
+										</DropdownMenuItem>
+									))}
+								</DropdownMenuContent>
+							</DropdownMenu>
 
 							{/* Close */}
 							<Button
