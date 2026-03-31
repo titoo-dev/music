@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { useLyricsStore } from "@/stores/useLyricsStore";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,7 @@ import {
 	DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { AudioVisualizer } from "./AudioVisualizer";
+import { LyricsDisplay } from "./LyricsDisplay";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { formatTime } from "@/utils/format-time";
@@ -59,7 +62,18 @@ export function Player() {
 	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
 	const openSheet = useTrackActionStore((s) => s.openSheet);
 
+	const lyricsVisible = useLyricsStore((s) => s.visible);
+	const toggleLyrics = useLyricsStore((s) => s.toggleVisible);
+	const fetchLyrics = useLyricsStore((s) => s.fetchLyrics);
+
 	const error = usePlayerStore((s) => s.error);
+
+	// Auto-fetch lyrics when visible and track changes
+	useEffect(() => {
+		if (lyricsVisible && currentTrack) {
+			fetchLyrics(currentTrack.trackId, currentTrack.duration);
+		}
+	}, [lyricsVisible, currentTrack, fetchLyrics]);
 
 	const hasQueue = queue.length > 1;
 	const sleepActive = sleepTimerEnd !== null;
@@ -95,6 +109,24 @@ export function Player() {
 					transition={{ type: "spring", damping: 25, stiffness: 300 }}
 					className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/40 bg-background/95 backdrop-blur-xl md:left-56 pb-[env(safe-area-inset-bottom)]"
 				>
+					{/* Lyrics panel */}
+					<AnimatePresence>
+						{lyricsVisible && (
+							<motion.div
+								key="lyrics-panel"
+								initial={{ height: 0, opacity: 0 }}
+								animate={{ height: 320, opacity: 1 }}
+								exit={{ height: 0, opacity: 0 }}
+								transition={{ type: "spring", damping: 25, stiffness: 300 }}
+								className="overflow-hidden border-b border-border/40"
+							>
+								<div className="h-[320px] flex flex-col">
+									<LyricsDisplay />
+								</div>
+							</motion.div>
+						)}
+					</AnimatePresence>
+
 					{/* Error banner */}
 					{error && (
 						<div className="bg-destructive/10 text-destructive text-xs font-medium text-center py-1 px-4" role="alert">
@@ -264,6 +296,22 @@ export function Player() {
 									className="w-20 h-1 accent-foreground cursor-pointer"
 								/>
 							</div>
+
+							{/* Lyrics toggle */}
+							<Button
+								variant="ghost"
+								size="icon"
+								aria-label="Toggle lyrics"
+								aria-pressed={lyricsVisible}
+								className={`hidden md:inline-flex h-7 w-7 ${lyricsVisible ? "text-primary" : "text-muted-foreground"} hover:text-foreground`}
+								onClick={toggleLyrics}
+							>
+								<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+									<path d="M9 18V5l12-2v13" />
+									<circle cx="6" cy="18" r="3" />
+									<circle cx="18" cy="16" r="3" />
+								</svg>
+							</Button>
 
 							{/* Speed control */}
 							<Button

@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useRef, useMemo, useCallback } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { useLyricsStore } from "@/stores/useLyricsStore";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
 	DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { AudioVisualizer } from "./AudioVisualizer";
+import { LyricsDisplay } from "./LyricsDisplay";
 import { motion, AnimatePresence, useDragControls } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { formatTime } from "@/utils/format-time";
@@ -348,6 +350,9 @@ export function FullscreenPlayer() {
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const queue = usePlayerStore((s) => s.queue);
 	const dragControls = useDragControls();
+	const lyricsVisible = useLyricsStore((s) => s.visible);
+	const toggleLyrics = useLyricsStore((s) => s.toggleVisible);
+	const fetchLyrics = useLyricsStore((s) => s.fetchLyrics);
 
 	useEffect(() => {
 		if (fullscreenOpen) {
@@ -363,6 +368,13 @@ export function FullscreenPlayer() {
 			setFullscreenOpen(false);
 		}
 	}, [currentTrack, fullscreenOpen, setFullscreenOpen]);
+
+	// Auto-fetch lyrics when visible and track changes
+	useEffect(() => {
+		if (lyricsVisible && currentTrack) {
+			fetchLyrics(currentTrack.trackId, currentTrack.duration);
+		}
+	}, [lyricsVisible, currentTrack, fetchLyrics]);
 
 	const handleDragEnd = (
 		_: any,
@@ -414,16 +426,38 @@ export function FullscreenPlayer() {
 							</svg>
 						</Button>
 						<span className="brutal-label flex-1 text-center text-muted-foreground">
-							Now Playing
+							{lyricsVisible ? "Lyrics" : "Now Playing"}
 						</span>
-						<div className="w-9" />
+						<Button
+							variant="ghost"
+							size="icon"
+							aria-label="Toggle lyrics"
+							aria-pressed={lyricsVisible}
+							className={`h-9 w-9 ${lyricsVisible ? "text-primary" : "text-muted-foreground"}`}
+							onClick={toggleLyrics}
+						>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+								<path d="M9 18V5l12-2v13" />
+								<circle cx="6" cy="18" r="3" />
+								<circle cx="18" cy="16" r="3" />
+							</svg>
+						</Button>
 					</div>
 
-					<CoverCarousel queue={queue} />
-					<TrackInfo />
-					<div className="shrink-0 h-8 px-8 overflow-hidden">
-						<AudioVisualizer barCount={32} className="w-full h-full text-foreground" />
-					</div>
+					{lyricsVisible ? (
+						<>
+							<TrackInfo />
+							<LyricsDisplay compact />
+						</>
+					) : (
+						<>
+							<CoverCarousel queue={queue} />
+							<TrackInfo />
+							<div className="shrink-0 h-8 px-8 overflow-hidden">
+								<AudioVisualizer barCount={32} className="w-full h-full text-foreground" />
+							</div>
+						</>
+					)}
 					<SeekSection />
 					<ExtraControls />
 					<Controls />
