@@ -10,6 +10,7 @@ import {
 	Info,
 	Music,
 	History,
+	Settings,
 } from "lucide-react";
 
 const navItems = [
@@ -23,6 +24,7 @@ const authItems = [
 ];
 
 const secondaryItems = [
+	{ path: "/settings", label: "Settings", icon: Settings },
 	{ path: "/about", label: "About", icon: Info },
 ];
 
