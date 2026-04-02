@@ -47,9 +47,6 @@ interface PlayerState {
 	crossfadeDuration: number;
 	normalizationEnabled: boolean;
 
-	// P3 features
-	hlsEnabled: boolean;
-
 	// Shuffle history (P1)
 	/** Pre-computed shuffled order of queue indices. Empty when shuffle is off. */
 	_shuffleOrder: number[];
@@ -80,7 +77,6 @@ interface PlayerState {
 	setPlaybackRate: (rate: number) => void;
 	setCrossfadeDuration: (seconds: number) => void;
 	toggleNormalization: () => void;
-	toggleHls: () => void;
 
 	// Queue management (P2)
 	/** Insert a track right after the current track ("Play Next"). */
@@ -127,7 +123,6 @@ export const usePlayerStore = create<PlayerState>()(
 			playbackRate: 1.0,
 			crossfadeDuration: 0,
 			normalizationEnabled: false,
-			hlsEnabled: true,
 			_shuffleOrder: [],
 			_shufflePos: 0,
 
@@ -320,7 +315,6 @@ export const usePlayerStore = create<PlayerState>()(
 			setPlaybackRate: (playbackRate) => set({ playbackRate }),
 			setCrossfadeDuration: (crossfadeDuration) => set({ crossfadeDuration }),
 			toggleNormalization: () => set((s) => ({ normalizationEnabled: !s.normalizationEnabled })),
-			toggleHls: () => set((s) => ({ hlsEnabled: !s.hlsEnabled })),
 			toggleRepeat: () =>
 				set((s) => ({
 					repeat: s.repeat === "off" ? "all" : s.repeat === "all" ? "one" : "off",
@@ -510,7 +504,6 @@ export const usePlayerStore = create<PlayerState>()(
 				playbackRate: state.playbackRate,
 				crossfadeDuration: state.crossfadeDuration,
 				normalizationEnabled: state.normalizationEnabled,
-				hlsEnabled: state.hlsEnabled,
 			}),
 		}
 	)

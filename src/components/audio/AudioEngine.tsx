@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import type Hls from "hls.js";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { adjustVolume } from "@/utils/adjust-volume";
@@ -68,9 +67,9 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 
 /**
  * Resolve audio URL for a track. Priority:
- * 1. IndexedDB blob URL (instant, zero network) — skipped in HLS mode
- * 2. Presigned S3 URL (direct browser streaming) — skipped in HLS mode
- * 3. Proxied stream API (fallback / HLS segments backend)
+ * 1. IndexedDB blob URL (instant, zero network)
+ * 2. Presigned S3 URL (direct browser streaming)
+ * 3. Proxied stream API (fallback)
  */
 async function getTrackUrl(trackId: string): Promise<string> {
 	// 1. Check IndexedDB cache — instant blob URL
@@ -97,12 +96,6 @@ async function getTrackUrl(trackId: string): Promise<string> {
 
 	// 3. Proxied stream (Service Worker will cache the response)
 	return `/api/v1/stream/${trackId}`;
-}
-
-/** Build HLS manifest URL for a track, passing duration hint if available. */
-function getHlsManifestUrl(trackId: string, duration: number | null): string {
-	const base = `/api/v1/hls/${trackId}`;
-	return duration ? `${base}?duration=${duration}` : base;
 }
 
 // --- Audio Preload Cache (in-memory HTMLAudioElement pool) ---
@@ -196,7 +189,6 @@ async function cacheCurrentTrackInBackground(trackId: string) {
  */
 export function AudioEngine() {
 	const audioRef = useRef<HTMLAudioElement | null>(null);
-	const hlsRef = useRef<Hls | null>(null);
 	const prevTrackIdRef = useRef<string | null>(null);
 	// Flag to skip play/pause effect when loadTrack already handled playback
 	const skipPlayEffectRef = useRef(false);
@@ -220,7 +212,6 @@ export function AudioEngine() {
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
 	const sleepTimerEnd = usePlayerStore((s) => s.sleepTimerEnd);
 	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
-	const hlsEnabled = usePlayerStore((s) => s.hlsEnabled);
 
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewIsPlaying = usePreviewStore((s) => s.isPlaying);
@@ -277,11 +268,6 @@ export function AudioEngine() {
 			attachEvents(audio);
 		}
 		return () => {
-			// Destroy hls.js instance
-			if (hlsRef.current) {
-				hlsRef.current.destroy();
-				hlsRef.current = null;
-			}
 			const audio = audioRef.current;
 			if (audio) {
 				detachEvents(audio);
@@ -333,9 +319,8 @@ export function AudioEngine() {
 	}, [previewTrack, previewIsPlaying]);
 
 	// --- Preload adjacent tracks + smart background prefetch ---
-	// Skipped in HLS mode: hls.js manages its own buffer; preload cache not used.
 	useEffect(() => {
-		if (!currentTrack || hlsEnabled) return;
+		if (!currentTrack) return;
 		const { queue, queueIndex } = usePlayerStore.getState();
 
 		// Immediate preload: adjacent tracks (in-memory Audio elements for instant swap)
@@ -351,7 +336,7 @@ export function AudioEngine() {
 
 		// Cache current track if not already cached
 		cacheCurrentTrackInBackground(currentTrack.trackId);
-	}, [currentTrack, hlsEnabled]);
+	}, [currentTrack]);
 
 	// --- Load new track ---
 	useEffect(() => {
@@ -359,11 +344,6 @@ export function AudioEngine() {
 		if (!audio) return;
 
 		if (!currentTrack) {
-			// Destroy hls instance if any
-			if (hlsRef.current) {
-				hlsRef.current.destroy();
-				hlsRef.current = null;
-			}
 			audio.pause();
 			audio.src = "";
 			prevTrackIdRef.current = null;
@@ -390,12 +370,6 @@ export function AudioEngine() {
 			// Prevent the play/pause effect from re-starting the old audio
 			skipPlayEffectRef.current = true;
 
-			// Destroy previous hls.js instance
-			if (hlsRef.current) {
-				hlsRef.current.destroy();
-				hlsRef.current = null;
-			}
-
 			// Immediately kill the old audio — hard stop, no fade
 			detachEvents(audio);
 			audio.pause();
@@ -404,84 +378,44 @@ export function AudioEngine() {
 
 			prevTrackIdRef.current = currentTrack.trackId;
 
-			const newAudio = new Audio();
-			newAudio.preload = "auto";
-			newAudio.crossOrigin = "anonymous";
-			audioRef.current = newAudio;
-			attachEvents(newAudio);
+			const preloaded = preloadCache.get(currentTrack.trackId);
 
-			if (hlsEnabled) {
-				// HLS mode: use hls.js for byte-range segment streaming
-				import("hls.js").then(({ default: HlsLib }) => {
-					if (loadGenRef.current !== gen) return;
+			if (preloaded) {
+				// Swap to the preloaded element (its buffer has the audio data)
+				audioRef.current = preloaded;
+				preloadCache.delete(currentTrack.trackId);
+				attachEvents(preloaded);
 
-					const manifestUrl = getHlsManifestUrl(currentTrack.trackId, currentTrack.duration);
-
-					if (HlsLib.isSupported()) {
-						const hls = new HlsLib({
-							enableWorker: true,
-							lowLatencyMode: false,
-							// Buffer enough for smooth playback without downloading the whole file
-							maxBufferLength: 60,
-							maxMaxBufferLength: 120,
-						});
-						hlsRef.current = hls;
-						hls.loadSource(manifestUrl);
-						hls.attachMedia(newAudio);
-						hls.on(HlsLib.Events.ERROR, (_event, data) => {
-							if (data.fatal && audioRef.current === newAudio) {
-								hlsRef.current?.destroy();
-								hlsRef.current = null;
-								// Fallback to direct stream
-								newAudio.src = `/api/v1/stream/${currentTrack.trackId}`;
-								newAudio.load();
-							}
-						});
-					} else if (newAudio.canPlayType("application/vnd.apple.mpegurl")) {
-						// Native HLS (Safari)
-						newAudio.src = manifestUrl;
-						newAudio.load();
-					} else {
-						// HLS not supported — fall back to direct stream
-						newAudio.src = `/api/v1/stream/${currentTrack.trackId}`;
-						newAudio.load();
+				if (preloaded.readyState >= 2) {
+					// Already buffered — play immediately
+					setBuffering(false);
+					setDuration(preloaded.duration || 0);
+					preloaded.playbackRate = usePlayerStore.getState().playbackRate;
+					if (usePlayerStore.getState().isPlaying) {
+						skipPlayEffectRef.current = true;
+						preloaded.volume = 0;
+						preloaded.play().catch(() => {});
+						const targetVol = usePlayerStore.getState().volume / 100;
+						adjustVolume(preloaded, targetVol, { duration: 800 });
 					}
-				});
-			} else {
-				// Direct mode: IndexedDB → presigned URL → proxy
-				const preloaded = preloadCache.get(currentTrack.trackId);
-
-				if (preloaded) {
-					// Swap to the preloaded element
-					audioRef.current = preloaded;
-					preloadCache.delete(currentTrack.trackId);
-					// Detach from newAudio (unused) and attach to preloaded
-					detachEvents(newAudio);
-					evictedAudio.add(newAudio);
-					attachEvents(preloaded);
-
-					if (preloaded.readyState >= 2) {
-						setBuffering(false);
-						setDuration(preloaded.duration || 0);
-						preloaded.playbackRate = usePlayerStore.getState().playbackRate;
-						if (usePlayerStore.getState().isPlaying) {
-							skipPlayEffectRef.current = true;
-							preloaded.volume = 0;
-							preloaded.play().catch(() => {});
-							const targetVol = usePlayerStore.getState().volume / 100;
-							adjustVolume(preloaded, targetVol, { duration: 800 });
-						}
-					}
-				} else {
-					getTrackUrl(currentTrack.trackId).then((url) => {
-						if (loadGenRef.current !== gen) return;
-						newAudio.src = url;
-						newAudio.load();
-					});
 				}
+				// If not ready yet, onCanPlay will fire and handle playback
+			} else {
+				// No preloaded data — load normally on a fresh element
+				const newAudio = new Audio();
+				newAudio.preload = "auto";
+				newAudio.crossOrigin = "anonymous";
+				audioRef.current = newAudio;
+				attachEvents(newAudio);
+
+				getTrackUrl(currentTrack.trackId).then((url) => {
+					if (loadGenRef.current !== gen) return;
+					newAudio.src = url;
+					newAudio.load();
+				});
 			}
 		}
-	}, [currentTrack, hlsEnabled, attachEvents, detachEvents, setDuration]);
+	}, [currentTrack, attachEvents, detachEvents, setDuration]);
 
 	// --- Play / pause with fade effects ---
 	useEffect(() => {
@@ -623,8 +557,8 @@ export function AudioEngine() {
 			}
 		}
 
-		// Preload next track at 50% progress (direct mode only — hls.js handles its own buffer)
-		if (!hlsEnabled && audio.duration > 0 && audio.currentTime / audio.duration > 0.5) {
+		// Preload next track at 50% progress
+		if (audio.duration > 0 && audio.currentTime / audio.duration > 0.5) {
 			const { queue, queueIndex } = usePlayerStore.getState();
 			if (queueIndex + 1 < queue.length) {
 				preloadTrack(queue[queueIndex + 1].trackId);
@@ -714,11 +648,6 @@ export function AudioEngine() {
 	handlersRef.current.onError = () => {
 		const audio = audioRef.current;
 		if (!audio || !currentTrack) return;
-
-		// In HLS mode, fatal errors are handled inside the hls.js ERROR event listener.
-		// Only handle non-fatal fallback errors here (e.g. native HLS on Safari).
-		if (hlsEnabled && hlsRef.current) return;
-
 		const src = audio.src;
 
 		// First: try falling back from presigned URL to proxy stream
