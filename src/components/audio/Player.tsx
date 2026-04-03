@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useLyricsStore } from "@/stores/useLyricsStore";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
@@ -76,6 +76,15 @@ export function Player() {
 	}, [lyricsVisible, currentTrack, fetchLyrics]);
 
 	const hasQueue = queue.length > 1;
+
+	const [isDesktop, setIsDesktop] = useState(false);
+	useEffect(() => {
+		const mq = window.matchMedia("(min-width: 768px)");
+		setIsDesktop(mq.matches);
+		const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+		mq.addEventListener("change", handler);
+		return () => mq.removeEventListener("change", handler);
+	}, []);
 	const sleepActive = sleepTimerEnd !== null;
 
 	function cycleSpeed() {
@@ -115,12 +124,12 @@ export function Player() {
 							<motion.div
 								key="lyrics-panel"
 								initial={{ height: 0, opacity: 0 }}
-								animate={{ height: 320, opacity: 1 }}
+								animate={{ height: isDesktop ? "calc(100vh - 90px)" : 380, opacity: 1 }}
 								exit={{ height: 0, opacity: 0 }}
 								transition={{ type: "spring", damping: 25, stiffness: 300 }}
 								className="overflow-hidden border-b border-border/40"
 							>
-								<div className="h-[320px] flex flex-col">
+								<div className="h-full flex flex-col">
 									<LyricsDisplay />
 								</div>
 							</motion.div>

@@ -22,63 +22,68 @@ const SyncedLyrics = memo(function SyncedLyrics({
 	compact?: boolean;
 }) {
 	const containerRef = useRef<HTMLDivElement>(null);
-	const activeRef = useRef<HTMLParagraphElement>(null);
 	const activeIndexRef = useRef(-1);
 
-	// Subscribe to currentTime outside React render cycle for perf
 	useEffect(() => {
+		const container = containerRef.current;
+		if (!container) return;
+
+		// Reset all lines to inactive when track/lines change
+		activeIndexRef.current = -1;
+		for (const el of container.children) {
+			(el as HTMLElement).dataset.active = "false";
+		}
+
+		// Subscribe to currentTime outside React render cycle for perf
 		const unsubscribe = usePlayerStore.subscribe((state) => {
 			const idx = getActiveIndex(lines, state.currentTime);
 			if (idx === activeIndexRef.current) return;
 			activeIndexRef.current = idx;
 
-			const container = containerRef.current;
-			if (!container) return;
-
-			const children = container.children;
-			for (let i = 0; i < children.length; i++) {
-				const el = children[i] as HTMLElement;
+			for (let i = 0; i < container.children.length; i++) {
+				const el = container.children[i] as HTMLElement;
+				el.dataset.active = i === idx ? "true" : "false";
 				if (i === idx) {
-					el.classList.add("text-foreground", "scale-[1.02]");
-					el.classList.remove("text-muted-foreground/40");
 					el.scrollIntoView({ behavior: "smooth", block: "center" });
-				} else {
-					el.classList.remove("text-foreground", "scale-[1.02]");
-					el.classList.add("text-muted-foreground/40");
 				}
 			}
 		});
 		return unsubscribe;
 	}, [lines]);
 
-	const handleClick = useCallback(
-		(line: LyricLine) => {
-			usePlayerStore.getState().seek(line.time);
-		},
-		[]
-	);
+	const handleClick = useCallback((line: LyricLine) => {
+		usePlayerStore.getState().seek(line.time);
+	}, []);
 
 	return (
-		<div
-			ref={containerRef}
-			className={`flex-1 overflow-y-auto overscroll-contain scrollbar-hide ${
-				compact ? "px-4 py-4 space-y-2" : "px-8 py-8 space-y-3"
-			}`}
-		>
-			{lines.map((line, i) => (
-				<p
-					key={i}
-					ref={i === 0 ? activeRef : undefined}
-					onClick={() => handleClick(line)}
-					className={`cursor-pointer transition-all duration-300 text-muted-foreground/40 ${
-						compact
-							? "text-base font-bold"
-							: "text-lg font-black uppercase tracking-wide"
-					} ${line.text === "" ? "h-4" : ""}`}
-				>
-					{line.text || "\u00A0"}
-				</p>
-			))}
+		<div className="relative flex-1 min-h-0">
+			{/* Top fade mask */}
+			<div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-gradient-to-b from-background to-transparent" />
+			{/* Bottom fade mask */}
+			<div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16 bg-gradient-to-t from-background to-transparent" />
+			<div
+				ref={containerRef}
+				className={`h-full overflow-y-auto overscroll-contain scrollbar-hide ${
+					compact ? "px-5 py-8 space-y-3" : "px-8 py-10 space-y-4"
+				}`}
+			>
+				{lines.map((line, i) => (
+					<p
+						key={i}
+						data-active="false"
+						onClick={() => handleClick(line)}
+						className={`cursor-pointer origin-left transition-all duration-500
+							text-muted-foreground/40
+							data-[active=true]:text-foreground
+							data-[active=true]:scale-105
+							${compact ? "text-lg font-bold" : "text-xl font-black tracking-wide"}
+							${line.text === "" ? "h-4" : ""}
+						`}
+					>
+						{line.text || "\u00A0"}
+					</p>
+				))}
+			</div>
 		</div>
 	);
 });
@@ -91,21 +96,64 @@ const PlainLyrics = memo(function PlainLyrics({
 	compact?: boolean;
 }) {
 	return (
-		<div
-			className={`flex-1 overflow-y-auto overscroll-contain scrollbar-hide ${
-				compact ? "px-4 py-4" : "px-8 py-8"
-			}`}
-		>
-			<pre
-				className={`whitespace-pre-wrap font-sans leading-relaxed text-muted-foreground ${
-					compact ? "text-sm" : "text-base font-medium"
+		<div className="relative flex-1 min-h-0">
+			{/* Top fade mask */}
+			<div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-12 bg-gradient-to-b from-background to-transparent" />
+			{/* Bottom fade mask */}
+			<div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-12 bg-gradient-to-t from-background to-transparent" />
+			<div
+				className={`h-full overflow-y-auto overscroll-contain scrollbar-hide ${
+					compact ? "px-5 py-8" : "px-8 py-8"
 				}`}
 			>
-				{text}
-			</pre>
+				<pre
+					className={`whitespace-pre-wrap font-sans leading-relaxed text-muted-foreground ${
+						compact ? "text-base" : "text-base font-medium"
+					}`}
+				>
+					{text}
+				</pre>
+			</div>
 		</div>
 	);
 });
+
+function MusicOffIcon({ className }: { className?: string }) {
+	return (
+		<svg
+			width="28"
+			height="28"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.5"
+			className={className}
+		>
+			<path d="M9 18V5l12-2v13" />
+			<circle cx="6" cy="18" r="3" />
+			<circle cx="18" cy="16" r="3" />
+			<line x1="2" y1="2" x2="22" y2="22" />
+		</svg>
+	);
+}
+
+function MusicIcon({ className }: { className?: string }) {
+	return (
+		<svg
+			width="28"
+			height="28"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.5"
+			className={className}
+		>
+			<path d="M9 18V5l12-2v13" />
+			<circle cx="6" cy="18" r="3" />
+			<circle cx="18" cy="16" r="3" />
+		</svg>
+	);
+}
 
 export function LyricsDisplay({ compact = false }: { compact?: boolean }) {
 	const isLoading = useLyricsStore((s) => s.isLoading);
@@ -125,16 +173,20 @@ export function LyricsDisplay({ compact = false }: { compact?: boolean }) {
 
 	if (error) {
 		return (
-			<div className="flex-1 flex items-center justify-center px-8">
-				<p className="text-sm text-muted-foreground text-center">{error}</p>
+			<div className="flex-1 flex flex-col items-center justify-center gap-3 px-8">
+				<MusicOffIcon className="text-muted-foreground/40" />
+				<p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/50 text-center">
+					{error}
+				</p>
 			</div>
 		);
 	}
 
 	if (instrumental) {
 		return (
-			<div className="flex-1 flex items-center justify-center px-8">
-				<p className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+			<div className="flex-1 flex flex-col items-center justify-center gap-3 px-8">
+				<MusicIcon className="text-muted-foreground/50" />
+				<p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/50">
 					Instrumental
 				</p>
 			</div>
@@ -142,11 +194,29 @@ export function LyricsDisplay({ compact = false }: { compact?: boolean }) {
 	}
 
 	if (syncedLines.length > 0) {
-		return <SyncedLyrics lines={syncedLines} compact={compact} />;
+		return (
+			<div className="flex-1 flex flex-col min-h-0">
+				<SyncedLyrics lines={syncedLines} compact={compact} />
+				{source && (
+					<p className="shrink-0 pb-2 pt-1 text-center text-[10px] font-medium uppercase tracking-widest text-muted-foreground/30">
+						via {source}
+					</p>
+				)}
+			</div>
+		);
 	}
 
 	if (plainLyrics) {
-		return <PlainLyrics text={plainLyrics} compact={compact} />;
+		return (
+			<div className="flex-1 flex flex-col min-h-0">
+				<PlainLyrics text={plainLyrics} compact={compact} />
+				{source && (
+					<p className="shrink-0 pb-2 pt-1 text-center text-[10px] font-medium uppercase tracking-widest text-muted-foreground/30">
+						via {source}
+					</p>
+				)}
+			</div>
+		);
 	}
 
 	return null;
