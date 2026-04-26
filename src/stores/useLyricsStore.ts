@@ -15,10 +15,12 @@ interface LyricsState {
 	isLoading: boolean;
 	error: string | null;
 	visible: boolean;
+	immersiveOpen: boolean;
 
 	fetchLyrics: (trackId: string, duration?: number | null) => Promise<void>;
 	setVisible: (v: boolean) => void;
 	toggleVisible: () => void;
+	setImmersiveOpen: (v: boolean) => void;
 	reset: () => void;
 }
 
@@ -45,6 +47,7 @@ export const useLyricsStore = create<LyricsState>()((set, get) => ({
 	isLoading: false,
 	error: null,
 	visible: false,
+	immersiveOpen: false,
 
 	fetchLyrics: async (trackId: string, duration?: number | null) => {
 		if (get().trackId === trackId && !get().error) return;
@@ -87,6 +90,18 @@ export const useLyricsStore = create<LyricsState>()((set, get) => ({
 	},
 
 	setVisible: (visible) => set({ visible }),
+	setImmersiveOpen: (immersiveOpen) => {
+		set({ immersiveOpen });
+		if (immersiveOpen) {
+			const { trackId } = get();
+			if (!trackId) {
+				const currentTrack = usePlayerStore.getState().currentTrack;
+				if (currentTrack) {
+					get().fetchLyrics(currentTrack.trackId, currentTrack.duration);
+				}
+			}
+		}
+	},
 	toggleVisible: () => {
 		const { visible, trackId } = get();
 		const newVisible = !visible;

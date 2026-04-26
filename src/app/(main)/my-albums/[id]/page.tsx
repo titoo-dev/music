@@ -5,8 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -212,43 +210,43 @@ export default function AlbumDetailPage() {
 	}));
 
 	return (
-		<div className="space-y-8">
-			{/* Album Header */}
-			<div className="flex flex-col md:flex-row gap-8">
-				<div className="flex items-start gap-3">
-					<Button
-						variant="ghost"
-						size="icon"
+		<div className="space-y-10">
+			{/* Album Hero */}
+			<div>
+				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3 flex items-center gap-2">
+					<button
 						onClick={() => router.push("/")}
-						className="mt-1"
+						className="inline-flex items-center justify-center w-5 h-5 hover:text-foreground transition-colors"
+						aria-label="Back"
 					>
-						<ArrowLeft className="size-4" />
-					</Button>
-					<div className="w-32 h-32 sm:w-48 sm:h-48 flex-shrink-0 overflow-hidden bg-muted border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] flex items-center justify-center">
+						<ArrowLeft className="size-3.5" />
+					</button>
+					ALBUM · DOWNLOADED · {new Date(album.downloadedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }).toUpperCase()}
+				</p>
+				<div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-end">
+					<div className="w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 flex-shrink-0 overflow-hidden bg-muted border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] flex items-center justify-center">
 						{album.coverUrl ? (
 							<CoverImage
 								src={album.coverUrl}
 								alt={album.title}
-								className="w-32 h-32 sm:w-48 sm:h-48"
+								className="w-full h-full"
 							/>
 						) : (
 							<Disc3 className="size-12 text-muted-foreground/30" />
 						)}
 					</div>
-				</div>
-				<div className="flex flex-col justify-end gap-3">
-					<Badge variant="secondary" className="w-fit">
-						Album
-					</Badge>
-					<h1 className="text-brutal-lg">
-						{album.title}
-					</h1>
-					<div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-						<span>{album.artist}</span>
-						<span className="text-border">·</span>
-						<span className="font-mono">{album.tracks.length} track{album.tracks.length !== 1 ? "s" : ""}</span>
-					</div>
-					<div className="flex items-center gap-2 mt-1">
+					<div className="flex flex-col justify-end gap-3 min-w-0 flex-1">
+						<h1 className="text-brutal-xl m-0">
+							{album.title}<span className="text-primary">.</span>
+						</h1>
+						<div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[12px] font-mono font-bold uppercase tracking-[0.05em] text-muted-foreground">
+							<span>BY <span className="text-primary">{album.artist}</span></span>
+							<span className="text-border">·</span>
+							<span>{album.tracks.length} TRACK{album.tracks.length !== 1 ? "S" : ""}</span>
+							<span className="text-border">·</span>
+							<span className="text-foreground">LOCAL</span>
+						</div>
+						<div className="flex items-center gap-2 flex-wrap mt-1">
 						{playerQueue.length > 0 && (
 							<PlayAllButton queue={playerQueue} />
 						)}
@@ -290,24 +288,28 @@ export default function AlbumDetailPage() {
 					</div>
 				</div>
 			</div>
+		</div>
 
-			<Separator />
-
-			{/* Tracklist */}
-			<div>
-				<div className="flex items-center justify-between mb-4">
-					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
-						Tracklist
-					</h2>
+		{/* Tracklist */}
+		<div>
+			<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
+					<div className="flex items-baseline gap-3">
+						<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
+							TRACKLIST
+						</h2>
+						<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
+							{album.tracks.length} TRACK{album.tracks.length !== 1 ? "S" : ""}
+						</span>
+					</div>
 					{album.tracks.length > 1 && (
 						<Button
 							variant="outline"
 							size="sm"
-							className="gap-1.5"
+							className="gap-1.5 font-mono uppercase tracking-[0.1em]"
 							onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
 						>
 							<ArrowDownUp className="size-3.5" />
-							{sortOrder === "asc" ? "Oldest first" : "Newest first"}
+							{sortOrder === "asc" ? "Oldest" : "Newest"}
 						</Button>
 					)}
 				</div>

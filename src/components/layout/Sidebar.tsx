@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { Button } from "@/components/ui/button";
 import {
 	Home,
 	Search,
@@ -14,18 +13,18 @@ import {
 } from "lucide-react";
 
 const navItems = [
-	{ path: "/", label: "Home", icon: Home },
-	{ path: "/search", label: "Search", icon: Search },
+	{ path: "/", label: "HOME", icon: Home },
+	{ path: "/search", label: "SEARCH", icon: Search },
 ];
 
 const authItems = [
-	{ path: "/my-playlists", label: "Playlists", icon: Music },
-	{ path: "/download-history", label: "History", icon: History },
+	{ path: "/my-playlists", label: "PLAYLISTS", icon: Music },
+	{ path: "/download-history", label: "HISTORY", icon: History },
 ];
 
 const secondaryItems = [
-	{ path: "/settings", label: "Settings", icon: Settings },
-	{ path: "/about", label: "About", icon: Info },
+	{ path: "/settings", label: "SETTINGS", icon: Settings },
+	{ path: "/about", label: "ABOUT", icon: Info },
 ];
 
 interface NavigationProps {
@@ -44,29 +43,30 @@ export function Navigation({ onNavigate }: NavigationProps) {
 		const Icon = item.icon;
 
 		return (
-			<Link key={item.path} href={item.path} className="no-underline" onClick={onNavigate}>
-				<Button
-					variant="ghost"
-					className={`w-full justify-start gap-3 px-4 py-3 text-sm font-bold uppercase tracking-wider border-transparent ${
-						isActive
-							? "bg-foreground text-background border-foreground"
-							: "text-muted-foreground hover:text-foreground hover:bg-muted"
-					}`}
-				>
-					<Icon className="h-4 w-4" />
-					<span>{item.label}</span>
-				</Button>
+			<Link
+				key={item.path}
+				href={item.path}
+				onClick={onNavigate}
+				className={`group relative flex items-center gap-3 px-[18px] py-3 no-underline border-l-[4px] font-mono text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${
+					isActive
+						? "border-l-accent bg-primary text-white"
+						: "border-l-transparent text-background/70 hover:bg-white/[0.08] hover:text-background"
+				}`}
+			>
+				<Icon className="h-4 w-4 shrink-0" />
+				<span className="truncate">{item.label}</span>
 			</Link>
 		);
 	};
 
 	return (
-		<nav className="flex h-full flex-col">
-			<div className="flex flex-col gap-0.5 px-3 py-3">
+		<nav className="flex h-full flex-col bg-foreground text-background">
+			{/* Top nav block */}
+			<div className="flex flex-col gap-0.5 py-3">
 				{navItems.map(renderItem)}
 				{isAuthenticated && (
 					<>
-						<div className="my-2 h-[2px] bg-foreground" />
+						<div className="my-2 mx-[18px] h-[2px] bg-background/30" />
 						{authItems.map(renderItem)}
 					</>
 				)}
@@ -74,8 +74,8 @@ export function Navigation({ onNavigate }: NavigationProps) {
 
 			<div className="flex-1" />
 
-			<div className="flex flex-col gap-0.5 px-3 pb-3">
-				<div className="mb-2 h-[2px] bg-foreground" />
+			{/* Bottom secondary block */}
+			<div className="flex flex-col gap-0.5 pb-3 pt-3 border-t-[2px] border-background/30">
 				{secondaryItems.map(renderItem)}
 			</div>
 		</nav>

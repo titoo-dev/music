@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useLyricsStore } from "@/stores/useLyricsStore";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
@@ -16,8 +15,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
-import { AudioVisualizer } from "./AudioVisualizer";
-import { LyricsDisplay } from "./LyricsDisplay";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { formatTime } from "@/utils/format-time";
@@ -64,27 +61,10 @@ export function Player() {
 
 	const lyricsVisible = useLyricsStore((s) => s.visible);
 	const toggleLyrics = useLyricsStore((s) => s.toggleVisible);
-	const fetchLyrics = useLyricsStore((s) => s.fetchLyrics);
 
 	const error = usePlayerStore((s) => s.error);
 
-	// Auto-fetch lyrics when visible and track changes
-	useEffect(() => {
-		if (lyricsVisible && currentTrack) {
-			fetchLyrics(currentTrack.trackId, currentTrack.duration);
-		}
-	}, [lyricsVisible, currentTrack, fetchLyrics]);
-
 	const hasQueue = queue.length > 1;
-
-	const [isDesktop, setIsDesktop] = useState(false);
-	useEffect(() => {
-		const mq = window.matchMedia("(min-width: 768px)");
-		setIsDesktop(mq.matches);
-		const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-		mq.addEventListener("change", handler);
-		return () => mq.removeEventListener("change", handler);
-	}, []);
 	const sleepActive = sleepTimerEnd !== null;
 
 	function cycleSpeed() {
@@ -116,40 +96,17 @@ export function Player() {
 					animate={{ y: 0, opacity: 1 }}
 					exit={{ y: 80, opacity: 0 }}
 					transition={{ type: "spring", damping: 25, stiffness: 300 }}
-					className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/40 bg-background/95 backdrop-blur-xl md:left-56 pb-[env(safe-area-inset-bottom)]"
+					className="fixed bottom-0 left-0 right-0 z-50 border-t-[3px] border-foreground bg-card md:left-60 pb-[env(safe-area-inset-bottom)]"
 				>
-					{/* Lyrics panel */}
-					<AnimatePresence>
-						{lyricsVisible && (
-							<motion.div
-								key="lyrics-panel"
-								initial={{ height: 0, opacity: 0 }}
-								animate={{ height: isDesktop ? "calc(100vh - 90px)" : 380, opacity: 1 }}
-								exit={{ height: 0, opacity: 0 }}
-								transition={{ type: "spring", damping: 25, stiffness: 300 }}
-								className="overflow-hidden border-b border-border/40"
-							>
-								<div className="h-full flex flex-col">
-									<LyricsDisplay />
-								</div>
-							</motion.div>
-						)}
-					</AnimatePresence>
-
 					{/* Error banner */}
 					{error && (
-						<div className="bg-destructive/10 text-destructive text-xs font-medium text-center py-1 px-4" role="alert">
+						<div className="bg-destructive text-white text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-center py-1 px-4 border-b-[2px] border-foreground" role="alert">
 							{error}
 						</div>
 					)}
 
-					{/* Frequency visualizer (desktop only) */}
-					<div className="hidden md:block h-3.5 overflow-hidden">
-						<AudioVisualizer barCount={44} className="text-foreground" />
-					</div>
-
-					{/* Progress bar (touch-friendly) */}
-					<div className="group/seekbar -mb-3">
+					{/* Progress bar (touch-friendly) — flush with top border */}
+					<div className="group/seekbar absolute -top-4 left-0 right-0">
 						<SeekBar
 							currentTime={currentTime}
 							duration={duration}
@@ -158,7 +115,7 @@ export function Player() {
 						/>
 					</div>
 
-					<div className="flex items-center gap-4 px-4 py-3.5">
+					<div className="flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3">
 						{/* Track info — tap opens fullscreen on mobile */}
 						<div
 							className="flex items-center gap-3 min-w-0 w-[30%] cursor-pointer md:cursor-default"
@@ -167,13 +124,13 @@ export function Player() {
 						>
 							<CoverImage
 								src={currentTrack.cover}
-								className="h-10 w-10 shrink-0 rounded-lg shadow-sm"
+								className="h-12 w-12 sm:h-14 sm:w-14 shrink-0 border-2 border-foreground"
 							/>
 							<div className="min-w-0">
-								<p className="truncate text-sm font-medium leading-tight">
+								<p className="truncate text-[13px] font-extrabold leading-tight tracking-[-0.01em]">
 									{currentTrack.title}
 								</p>
-								<p className="truncate text-xs text-muted-foreground leading-tight">
+								<p className="truncate text-[11px] text-muted-foreground leading-tight font-medium mt-0.5">
 									{currentTrack.artist}
 								</p>
 							</div>
@@ -206,7 +163,7 @@ export function Player() {
 								variant="ghost"
 								size="icon"
 								aria-label="Previous track"
-								className="h-8 w-8 text-muted-foreground hover:text-foreground"
+								className="h-8 w-8 text-foreground hover:bg-accent border-[2px] border-transparent hover:border-foreground"
 								onClick={prev}
 							>
 								<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -220,7 +177,7 @@ export function Player() {
 								variant="ghost"
 								size="icon"
 								aria-label={isPlaying ? "Pause" : "Play"}
-								className="h-10 w-10 rounded-full bg-foreground text-background hover:bg-foreground/90"
+								className="h-10 w-10 border-[2px] border-foreground bg-primary text-white hover:bg-primary/90 shadow-[var(--shadow-brutal-sm)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
 								onClick={toggle}
 							>
 								{isPlaying && isBuffering ? (
@@ -242,7 +199,7 @@ export function Player() {
 								variant="ghost"
 								size="icon"
 								aria-label="Next track"
-								className="h-8 w-8 text-muted-foreground hover:text-foreground"
+								className="h-8 w-8 text-foreground hover:bg-accent border-[2px] border-transparent hover:border-foreground"
 								onClick={next}
 							>
 								<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -275,12 +232,35 @@ export function Player() {
 						</div>
 
 						{/* Time + Volume */}
-						<div className="flex items-center gap-3 justify-end w-[30%]">
-							<span className="text-xs text-muted-foreground tabular-nums">
+						<div className="flex items-center gap-2 sm:gap-3 justify-end w-[30%]">
+							<span className="text-[10px] sm:text-[11px] font-mono font-bold text-muted-foreground tabular-nums tracking-[0.05em]">
 								{formatTime(currentTime)}<span className="hidden sm:inline"> / {formatTime(duration)}</span>
 							</span>
 
-							{/* Volume */}
+							{/* Lyrics toggle (LRC label like prototype) */}
+							<Button
+								variant="ghost"
+								size="sm"
+								aria-label="Toggle lyrics"
+								aria-pressed={lyricsVisible}
+								className={`hidden md:inline-flex h-7 px-2 font-mono text-[10px] font-black tracking-[0.1em] border-[2px] ${lyricsVisible ? "bg-accent text-foreground border-foreground" : "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"}`}
+								onClick={toggleLyrics}
+							>
+								LRC
+							</Button>
+
+							{/* Speed control */}
+							<Button
+								variant="ghost"
+								size="sm"
+								aria-label={`Playback speed ${formatRate(playbackRate)}`}
+								className="hidden md:flex h-7 px-2 text-[10px] font-mono font-bold text-muted-foreground hover:text-foreground tracking-[0.05em]"
+								onClick={cycleSpeed}
+							>
+								{formatRate(playbackRate)}
+							</Button>
+
+							{/* Volume — brutal bar */}
 							<div className="hidden md:flex items-center gap-1.5">
 								<svg
 									width="13"
@@ -289,49 +269,28 @@ export function Player() {
 									fill="none"
 									stroke="currentColor"
 									strokeWidth="2"
-									className="shrink-0 text-muted-foreground"
+									className="shrink-0 text-foreground"
 								>
 									<path d="M11 5L6 9H2v6h4l5 4V5z" />
 									{volume > 0 && <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
 									{volume > 50 && <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />}
 								</svg>
-								<input
-									type="range"
-									min={0}
-									max={100}
-									value={volume}
-									aria-label="Volume"
-									onChange={(e) => setVolume(parseInt(e.target.value))}
-									className="w-20 h-1 accent-foreground cursor-pointer"
-								/>
+								<div className="relative w-20 h-2 border-[2px] border-foreground bg-background">
+									<div
+										className="absolute inset-y-0 left-0 bg-foreground"
+										style={{ width: `${volume}%` }}
+									/>
+									<input
+										type="range"
+										min={0}
+										max={100}
+										value={volume}
+										aria-label="Volume"
+										onChange={(e) => setVolume(parseInt(e.target.value))}
+										className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+									/>
+								</div>
 							</div>
-
-							{/* Lyrics toggle */}
-							<Button
-								variant="ghost"
-								size="icon"
-								aria-label="Toggle lyrics"
-								aria-pressed={lyricsVisible}
-								className={`hidden md:inline-flex h-7 w-7 ${lyricsVisible ? "text-primary" : "text-muted-foreground"} hover:text-foreground`}
-								onClick={toggleLyrics}
-							>
-								<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-									<path d="M9 18V5l12-2v13" />
-									<circle cx="6" cy="18" r="3" />
-									<circle cx="18" cy="16" r="3" />
-								</svg>
-							</Button>
-
-							{/* Speed control */}
-							<Button
-								variant="ghost"
-								size="sm"
-								aria-label={`Playback speed ${formatRate(playbackRate)}`}
-								className="hidden md:flex h-7 px-1.5 text-xs font-mono text-muted-foreground hover:text-foreground"
-								onClick={cycleSpeed}
-							>
-								{formatRate(playbackRate)}
-							</Button>
 
 							{/* Sleep timer + crossfade settings */}
 							<DropdownMenu>

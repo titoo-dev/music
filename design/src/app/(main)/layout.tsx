@@ -36,8 +36,6 @@ import { AudioEngine } from "@/components/audio/AudioEngine";
 import { AudioEngineErrorBoundary } from "@/components/audio/AudioEngineErrorBoundary";
 import { Player } from "@/components/audio/Player";
 import { FullscreenPlayer } from "@/components/audio/FullscreenPlayer";
-import { LyricsPanel } from "@/components/audio/LyricsPanel";
-import { LyricsImmersive } from "@/components/audio/LyricsImmersive";
 import { TrackActionSheet } from "@/components/tracks/TrackActionSheet";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
@@ -72,16 +70,18 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
 	return (
 		<div className="flex h-dvh bg-background max-w-full overflow-hidden">
-			{/* ─── Desktop Sidebar (dark brutalist) ─── */}
-			<aside className="hidden border-r-[3px] border-foreground bg-foreground text-background md:fixed md:inset-y-0 md:z-40 md:flex md:w-60 md:flex-col">
+			{/* ─── Desktop Sidebar ─── */}
+			<aside className="hidden border-r-[3px] border-foreground bg-sidebar md:fixed md:inset-y-0 md:z-40 md:flex md:w-56 md:flex-col">
 				{/* Logo */}
 				<Link
 					href="/"
-					className="flex h-16 shrink-0 items-center gap-2.5 border-b-[2px] border-background/30 px-[18px] no-underline"
+					className="flex h-16 shrink-0 items-center gap-3 border-b-[3px] border-sidebar-border px-5 no-underline"
 				>
-					<div className="h-6 w-6 border-[2px] border-background bg-primary shrink-0" />
-					<span className="text-xl font-black tracking-[-0.03em] text-background">
-						DEEMIX
+					<div className="flex h-8 w-8 items-center justify-center border-[2px] border-foreground bg-primary text-sm font-black text-white">
+						D
+					</div>
+					<span className="text-lg font-black tracking-tight text-sidebar-foreground uppercase">
+						deemix
 					</span>
 				</Link>
 
@@ -92,51 +92,40 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
 				{/* User section */}
 				{isAuthenticated && user ? (
-					<div className="shrink-0 border-t-[2px] border-background/30 px-[18px] py-3.5">
-						<div className="flex items-center gap-2.5">
-							<div className="flex h-8 w-8 shrink-0 items-center justify-center border-[2px] border-background bg-accent text-foreground">
-								{avatarUrl ? (
-									<Avatar className="h-full w-full">
-										<AvatarImage src={avatarUrl} />
-										<AvatarFallback className="bg-accent text-xs font-black text-foreground">
-											{displayName.charAt(0).toUpperCase()}
-										</AvatarFallback>
-									</Avatar>
-								) : (
-									<span className="text-sm font-black">{displayName.charAt(0).toUpperCase()}</span>
-								)}
-							</div>
-							<div className="min-w-0 flex-1">
-								<div className="text-[11px] font-bold tracking-[0.02em] uppercase text-background truncate">
-									{displayName}
-								</div>
-								<div className="text-[9px] font-mono tracking-[0.1em] text-background/60 uppercase">
-									FLAC · ACTIVE
-								</div>
-							</div>
+					<div className="shrink-0 border-t-[3px] border-sidebar-border p-3">
+						<div className="flex items-center gap-3 px-2 py-2">
+							<Avatar className="h-8 w-8 shrink-0 border-[2px] border-foreground">
+								{avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
+								<AvatarFallback className="bg-muted text-xs font-bold text-foreground">
+									{displayName.charAt(0).toUpperCase()}
+								</AvatarFallback>
+							</Avatar>
+							<span className="flex-1 truncate text-sm font-bold text-foreground">
+								{displayName}
+							</span>
 							<Button
 								variant="ghost"
 								size="icon"
-								className="h-7 w-7 shrink-0 text-background/60 hover:text-destructive hover:bg-background/10"
+								className="h-8 w-8 shrink-0 border-transparent text-muted-foreground hover:text-destructive hover:bg-destructive/10"
 								onClick={handleLogout}
 							>
-								<LogOut className="h-3.5 w-3.5" />
+								<LogOut className="h-4 w-4" />
 							</Button>
 						</div>
 					</div>
 				) : (
-					<div className="shrink-0 border-t-[2px] border-background/30 px-[18px] py-3.5">
+					<div className="shrink-0 border-t-[3px] border-sidebar-border p-3">
 						<Link href="/login" className="no-underline">
-							<button className="w-full border-[2px] border-background bg-transparent px-3 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-background hover:bg-background hover:text-foreground transition-colors">
+							<Button variant="outline" size="sm" className="w-full">
 								Sign in
-							</button>
+							</Button>
 						</Link>
 					</div>
 				)}
 			</aside>
 
 			{/* ─── Main Area ─── */}
-			<div className="flex flex-1 flex-col min-w-0 md:pl-60">
+			<div className="flex flex-1 flex-col min-w-0 md:pl-56">
 				{/* Top bar */}
 				<header className="sticky top-0 z-30 border-b-[3px] border-foreground bg-background">
 					<div className="flex h-16 items-center gap-4 px-4 sm:px-6">
@@ -262,14 +251,16 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
 			{/* ─── Mobile Navigation Sheet ─── */}
 			<Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-				<SheetContent side="left" className="w-[280px] p-0 bg-foreground text-background border-r-[3px] border-foreground">
-					<SheetHeader className="border-b-[2px] border-background/30 px-[18px] py-4">
-						<SheetTitle className="flex items-center gap-2.5 text-xl font-black tracking-[-0.03em] text-background">
-							<div className="h-6 w-6 border-[2px] border-background bg-primary shrink-0" />
+				<SheetContent side="left" className="w-[280px] p-0 bg-sidebar">
+					<SheetHeader className="border-b-[3px] border-foreground px-6 py-4">
+						<SheetTitle className="flex items-center gap-2 text-base font-black text-foreground">
+							<div className="flex h-7 w-7 items-center justify-center border-[2px] border-foreground bg-primary text-[10px] font-black text-white">
+								D
+							</div>
 							DEEMIX
 						</SheetTitle>
-						<SheetDescription className="text-[10px] font-mono text-background/60 uppercase tracking-[0.14em] font-bold">
-							NAVIGATION
+						<SheetDescription className="text-xs text-muted-foreground uppercase tracking-wider font-bold">
+							Navigation
 						</SheetDescription>
 					</SheetHeader>
 					<Navigation onNavigate={() => setSidebarOpen(false)} />
@@ -283,8 +274,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 				<AudioEngine />
 			</AudioEngineErrorBoundary>
 			<Player />
-			<LyricsPanel />
-			<LyricsImmersive />
 			<FullscreenPlayer />
 			<TrackActionSheet />
 		</div>

@@ -8,7 +8,6 @@ import { convertDuration } from "@/utils/helpers";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { Download, Loader2, CheckCircle2 } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
@@ -105,35 +104,44 @@ function ArtistContent() {
 	const tabKeys = tabOrder.filter((k) => discography[k]?.length > 0);
 
 	return (
-		<div className="space-y-8">
-			{/* Artist Header */}
-			<div className="flex flex-col md:flex-row items-center md:items-end gap-8">
-				<CoverImage
-					src={artistPicture}
-					alt={artistName}
-					className="w-32 h-32 sm:w-48 sm:h-48 flex-shrink-0 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)]"
-				/>
-				<div className="flex flex-col gap-2 text-center md:text-left">
-					<p className="text-xs font-black text-primary uppercase tracking-[0.15em]">Artist</p>
-					<h1 className="text-brutal-lg">
-						{artistName}
-					</h1>
-					{nbFan != null && (
-						<p className="text-sm text-muted-foreground font-mono">
-							{Number(nbFan).toLocaleString()} fans
-						</p>
-					)}
+		<div className="space-y-10">
+			{/* Artist Hero */}
+			<div>
+				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+					ARTIST{nbFan != null ? ` · ${Number(nbFan).toLocaleString()} FANS` : ""}
+				</p>
+				<div className="flex flex-col md:flex-row items-center md:items-end gap-6 md:gap-8">
+					<CoverImage
+						src={artistPicture}
+						alt={artistName}
+						className="w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 flex-shrink-0 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] rounded-full overflow-hidden"
+					/>
+					<div className="flex flex-col gap-3 text-center md:text-left min-w-0 flex-1">
+						<h1 className="text-brutal-xl m-0">
+							{artistName}<span className="text-primary">.</span>
+						</h1>
+						{nbFan != null && (
+							<p className="text-sm font-mono font-bold text-muted-foreground tracking-[0.05em]">
+								{Number(nbFan).toLocaleString()} FANS · DEEZER
+							</p>
+						)}
+					</div>
 				</div>
 			</div>
 
-			<Separator />
-
 			{/* Top Tracks */}
 			{topTracks.length > 0 && (
-				<section className="space-y-4">
-					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
-						Top tracks
-					</h2>
+				<section>
+					<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
+						<div className="flex items-baseline gap-3">
+							<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
+								TOP TRACKS
+							</h2>
+							<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
+								{Math.min(10, topTracks.length)} RESULTS
+							</span>
+						</div>
+					</div>
 					<div className="border-2 sm:border-[3px] border-foreground overflow-hidden">
 						{topTracks.slice(0, 10).map((track: any, idx: number) => {
 							const trackId = track.SNG_ID || track.id;
@@ -219,10 +227,17 @@ function ArtistContent() {
 
 			{/* Discography Tabs */}
 			{tabKeys.length > 0 && (
-				<section className="space-y-4">
-					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
-						Discography
-					</h2>
+				<section>
+					<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
+						<div className="flex items-baseline gap-3">
+							<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
+								DISCOGRAPHY
+							</h2>
+							<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
+								{tabKeys.reduce((sum, k) => sum + (discography[k]?.length || 0), 0)} TOTAL
+							</span>
+						</div>
+					</div>
 					<Tabs defaultValue={tabKeys[0]}>
 						<TabsList>
 							{tabKeys.map((key) => (

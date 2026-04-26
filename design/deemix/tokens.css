@@ -1,0 +1,139 @@
+/* ─── DEEMIX BRUTALIST TOKENS ─── */
+/* Pulled from the repo's globals.css, extended for the prototype */
+
+:root {
+  --radius: 0px;
+  --bg: #F0EBE3;
+  --fg: #0D0D0D;
+  --card: #FFFFFF;
+  --primary: #FF2E00;
+  --primary-fg: #FFFFFF;
+  --accent: #C8FF00;
+  --muted: #DDD8CF;
+  --muted-fg: #6B6560;
+  --destructive: #FF0044;
+  --border: #0D0D0D;
+
+  --border-w: 2px;
+  --shadow-brutal: 3px 3px 0 #0D0D0D;
+  --shadow-brutal-sm: 2px 2px 0 #0D0D0D;
+  --shadow-brutal-hover: 5px 5px 0 #0D0D0D;
+  --shadow-brutal-active: 1px 1px 0 #0D0D0D;
+
+  --font-sans: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Menlo", monospace;
+  --font-display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --border-w: 3px;
+    --shadow-brutal: 4px 4px 0 #0D0D0D;
+    --shadow-brutal-hover: 6px 6px 0 #0D0D0D;
+  }
+}
+
+/* DENSITY tweaks */
+.density-compact {
+  --row-pad-y: 6px;
+  --row-pad-x: 10px;
+  --section-gap: 20px;
+  --card-pad: 10px;
+}
+.density-comfy {
+  --row-pad-y: 10px;
+  --row-pad-x: 14px;
+  --section-gap: 32px;
+  --card-pad: 14px;
+}
+
+/* base */
+.dmx { font-family: var(--font-sans); color: var(--fg); background: var(--bg); }
+.dmx *, .dmx *::before, .dmx *::after { box-sizing: border-box; }
+.dmx button { font-family: inherit; }
+
+.dmx a { color: inherit; text-decoration: none; }
+
+/* Type utilities */
+.dmx .t-xl { font-size: clamp(2rem, 5vw, 4rem); font-weight: 900; line-height: 0.92; letter-spacing: -0.035em; }
+.dmx .t-lg { font-size: clamp(1.5rem, 3vw, 2.5rem); font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+.dmx .t-md { font-size: clamp(1.125rem, 2vw, 1.5rem); font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; }
+.dmx .lbl { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+.dmx .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Borders and shadows */
+.dmx .b { border: var(--border-w) solid var(--border); }
+.dmx .b-b { border-bottom: var(--border-w) solid var(--border); }
+.dmx .b-t { border-top: var(--border-w) solid var(--border); }
+.dmx .b-l { border-left: var(--border-w) solid var(--border); }
+.dmx .b-r { border-right: var(--border-w) solid var(--border); }
+.dmx .sh { box-shadow: var(--shadow-brutal); }
+.dmx .sh-sm { box-shadow: var(--shadow-brutal-sm); }
+.dmx .b-half { border: 1px solid var(--border); }
+
+/* Brutal stripes — diagonal */
+.dmx .stripe {
+  background-image: repeating-linear-gradient(-45deg, transparent 0 5px, var(--border) 5px 6px);
+}
+.dmx .stripe-lg {
+  background-image: repeating-linear-gradient(-45deg, transparent 0 10px, var(--border) 10px 11px);
+}
+.dmx .stripe-primary {
+  background-image: repeating-linear-gradient(-45deg, var(--primary) 0 6px, #0d0d0d 6px 7px);
+}
+.dmx .stripe-accent {
+  background-image: repeating-linear-gradient(-45deg, var(--accent) 0 6px, #0d0d0d 6px 7px);
+}
+
+/* Card hover lift */
+.dmx .card-hover { transition: box-shadow .1s, transform .1s; }
+.dmx .card-hover:hover { box-shadow: var(--shadow-brutal-hover); transform: translate(-2px, -2px); }
+.dmx .card-hover:active { box-shadow: var(--shadow-brutal-active); transform: translate(2px, 2px); }
+
+/* Playback EQ bars */
+@keyframes eq {
+  0%, 100% { height: 3px; }
+  50% { height: 14px; }
+}
+.dmx .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+.dmx .eq span { width: 2px; background: currentColor; animation: eq 1s infinite ease-in-out; }
+.dmx .eq span:nth-child(2) { animation-delay: 0.2s; }
+.dmx .eq span:nth-child(3) { animation-delay: 0.4s; }
+.dmx .eq span:nth-child(4) { animation-delay: 0.1s; }
+
+/* Scrollbar — brutalist */
+.dmx ::-webkit-scrollbar { width: 10px; height: 10px; }
+.dmx ::-webkit-scrollbar-track { background: var(--bg); border-left: var(--border-w) solid var(--border); }
+.dmx ::-webkit-scrollbar-thumb { background: var(--fg); border: 2px solid var(--bg); }
+.dmx ::selection { background: var(--accent); color: var(--fg); }
+
+/* Hover row */
+.dmx .row-hover:hover { background: var(--accent); }
+.dmx .row-hover { transition: background .08s; }
+
+/* Utility: crisp hairline divider */
+.dmx .hair { height: 2px; background: var(--border); }
+
+/* Focus ring — same as offset shadow but primary color */
+.dmx button:focus-visible, .dmx input:focus-visible, .dmx a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Hide scrollbars where needed */
+.dmx .no-sb::-webkit-scrollbar { display: none; }
+.dmx .no-sb { scrollbar-width: none; }
+
+/* Ticker animation */
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.dmx .ticker { display: inline-flex; animation: ticker 40s linear infinite; }
+
+/* Waveform shimmer when playing */
+@keyframes wf-shimmer {
+  0% { opacity: .6; }
+  50% { opacity: 1; }
+  100% { opacity: .6; }
+}

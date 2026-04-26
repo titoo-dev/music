@@ -8,7 +8,6 @@ import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { convertDuration } from "@/utils/helpers";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
 import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { CoverImage } from "@/components/ui/cover-image";
@@ -22,12 +21,6 @@ function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
 	if (hash.startsWith("http")) return hash;
 	return `https://e-cdns-images.dzcdn.net/images/cover/${hash}/${size}x${size}-000000-80-0-0.jpg`;
-}
-
-function getArtistUrl(hash: string, size = 500) {
-	if (!hash) return "";
-	if (hash.startsWith("http")) return hash;
-	return `https://e-cdns-images.dzcdn.net/images/artist/${hash}/${size}x${size}-000000-80-0-0.jpg`;
 }
 
 function PlaylistContent() {
@@ -94,42 +87,56 @@ function PlaylistContent() {
 	const playlistTitle = playlist.title || playlist.TITLE || "Playlist";
 
 	return (
-		<div className="space-y-8">
-			{/* Playlist Header */}
-			<div className="flex flex-col md:flex-row gap-8">
-				<CoverImage
-					src={playlistCover}
-					alt={playlistTitle}
-					className="w-32 h-32 sm:w-48 sm:h-48 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] flex-shrink-0"
-				/>
-				<div className="flex flex-col justify-end gap-3">
-					<p className="text-xs font-black text-primary uppercase tracking-[0.15em]">Playlist</p>
-					<h1 className="text-brutal-lg">
-						{playlistTitle}
-					</h1>
-					<div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-						{playlist.creator && <span>By {playlist.creator?.name}</span>}
-						{(playlist.nb_tracks || tracks.length > 0) && (
-							<>
-								{playlist.creator && <span className="text-border">·</span>}
-								<span>{playlist.nb_tracks || tracks.length} tracks</span>
-							</>
-						)}
+		<div className="space-y-10">
+			{/* Playlist Hero */}
+			<div>
+				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+					PLAYLIST{playlist.creator?.name ? ` · BY ${String(playlist.creator.name).toUpperCase()}` : " · PERSONAL"}
+				</p>
+				<div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-end">
+					<CoverImage
+						src={playlistCover}
+						alt={playlistTitle}
+						className="w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] flex-shrink-0"
+					/>
+					<div className="flex flex-col justify-end gap-3 min-w-0 flex-1">
+						<h1 className="text-brutal-xl m-0">
+							{playlistTitle}<span className="text-primary">.</span>
+						</h1>
+						<div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[12px] font-mono font-bold uppercase tracking-[0.05em] text-muted-foreground">
+							{playlist.creator?.name && (
+								<>
+									<span>BY <span className="text-primary">{playlist.creator.name}</span></span>
+									<span className="text-border">·</span>
+								</>
+							)}
+							<span>{playlist.nb_tracks || tracks.length} TRACKS</span>
+						</div>
+						<Button
+							onClick={handleDownloadAll}
+							disabled={isLoading(playlistUrl)}
+							size="lg"
+							className="w-fit mt-1 gap-2 font-mono uppercase tracking-[0.1em]"
+						>
+							{isLoading(playlistUrl) && <Loader2 className="size-4 animate-spin" />}
+							{isLoading(playlistUrl) ? "Adding..." : "Download playlist"}
+						</Button>
 					</div>
-					<Button onClick={handleDownloadAll} disabled={isLoading(playlistUrl)} className="w-fit mt-1 gap-2">
-						{isLoading(playlistUrl) && <Loader2 className="size-4 animate-spin" />}
-						{isLoading(playlistUrl) ? "Adding..." : "Download playlist"}
-					</Button>
 				</div>
 			</div>
 
-			<Separator />
-
 			{/* Tracklist */}
 			<div>
-				<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em] mb-4">
-					Tracklist
-				</h2>
+				<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
+					<div className="flex items-baseline gap-3">
+						<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
+							TRACKLIST
+						</h2>
+						<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
+							{tracks.length} TRACK{tracks.length !== 1 ? "S" : ""}
+						</span>
+					</div>
+				</div>
 				{tracks.length === 0 ? (
 					<div className="flex flex-col items-center justify-center py-16 gap-2">
 						<p className="text-sm font-bold uppercase text-muted-foreground">No tracks</p>

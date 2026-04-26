@@ -2,76 +2,96 @@
 
 import { useErrorStore } from "@/stores/useErrorStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 
 export default function ErrorsPage() {
 	const { errors, downloadInfo, clearErrors } = useErrorStore();
 
 	return (
-		<div className="max-w-3xl mx-auto space-y-6">
-			{/* Header */}
-			<div className="flex items-center justify-between">
-				<h1 className="text-brutal-lg">
-					Download errors
-				</h1>
-				{errors.length > 0 && (
-					<Button variant="destructive" size="sm" onClick={clearErrors}>
-						Clear all
-					</Button>
-				)}
+		<div className="max-w-3xl mx-auto">
+			{/* Page header */}
+			<div className="mb-7">
+				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+					ERROR LOG · DOWNLOADS
+				</p>
+				<div className="flex items-end gap-5 justify-between flex-wrap">
+					<div className="min-w-0 flex-1">
+						<h1 className="text-brutal-xl m-0">
+							ERRORS<span className="text-primary">.</span>
+						</h1>
+						<p className="mt-2 text-sm font-bold text-muted-foreground uppercase tracking-[0.05em]">
+							{errors.length === 0
+								? "Nothing failed. All clean."
+								: `${errors.length} failed transaction${errors.length !== 1 ? "s" : ""} on record`}
+						</p>
+					</div>
+					{errors.length > 0 && (
+						<Button variant="destructive" size="sm" onClick={clearErrors} className="font-mono uppercase tracking-[0.1em]">
+							Clear all
+						</Button>
+					)}
+				</div>
 			</div>
 
+			{/* Source download */}
 			{downloadInfo && (
-				<Card>
-					<CardContent>
-						<p className="text-sm font-medium text-foreground">
-							{downloadInfo.title}
-						</p>
-						<p className="text-xs text-muted-foreground">
-							{downloadInfo.artist} · {downloadInfo.size} tracks
-						</p>
-					</CardContent>
-				</Card>
+				<div className="mb-6 border-[2px] sm:border-[3px] border-foreground bg-card p-4 shadow-[var(--shadow-brutal-sm)]">
+					<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1.5">
+						SOURCE
+					</p>
+					<p className="text-sm font-bold text-foreground truncate">{downloadInfo.title}</p>
+					<p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+						{downloadInfo.artist} · {downloadInfo.size} TRACKS
+					</p>
+				</div>
 			)}
 
-			<Separator />
-
+			{/* List */}
 			{errors.length === 0 ? (
-				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<p className="text-sm font-bold text-foreground uppercase tracking-wider">
-						No errors
+				<div className="border-[2px] sm:border-[3px] border-foreground bg-card flex flex-col items-center justify-center py-20 px-6 gap-2 shadow-[var(--shadow-brutal)]">
+					<div className="text-3xl mb-2 font-black tracking-[0.2em]">∅</div>
+					<p className="text-sm font-black text-foreground uppercase tracking-[0.14em]">
+						NO ERRORS
 					</p>
-					<p className="text-xs text-muted-foreground font-medium">
+					<p className="text-[11px] text-muted-foreground font-mono uppercase tracking-[0.05em]">
 						All downloads completed cleanly.
 					</p>
 				</div>
 			) : (
-				<div className="space-y-3">
+				<div className="border-[2px] sm:border-[3px] border-foreground bg-card divide-y-[2px] divide-foreground shadow-[var(--shadow-brutal)]">
+					{/* Header row */}
+					<div className="grid grid-cols-[28px_1fr_auto] gap-3 px-4 py-2 bg-foreground text-background">
+						<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em]">#</span>
+						<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em]">MESSAGE / DATA</span>
+						<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em]">CODE</span>
+					</div>
 					{errors.map((error, idx) => (
-						<Card key={idx}>
-							<CardContent>
-								<div className="flex items-start gap-3">
-									<span className="mt-0.5 h-2 w-2 bg-destructive flex-shrink-0" />
-									<div className="flex-1 min-w-0 space-y-1">
-										<p className="text-sm font-medium text-foreground">
-											{error.message}
-										</p>
-										{error.data && (
-											<p className="text-xs text-muted-foreground">
-												{error.data.artist} · {error.data.title} · ID: {error.data.id}
-											</p>
-										)}
-										{error.errid && (
-											<Badge variant="outline" className="mt-1">
-												{error.errid}
-											</Badge>
-										)}
-									</div>
-								</div>
-							</CardContent>
-						</Card>
+						<div
+							key={idx}
+							className="grid grid-cols-[28px_1fr_auto] gap-3 items-start px-4 py-3 hover:bg-destructive/5 transition-colors"
+						>
+							<span className="text-[11px] font-mono font-bold tabular-nums text-destructive mt-0.5">
+								{String(idx + 1).padStart(2, "0")}
+							</span>
+							<div className="min-w-0">
+								<p className="text-[13px] font-bold text-foreground leading-snug">
+									{error.message}
+								</p>
+								{error.data && (
+									<p className="text-[11px] text-muted-foreground font-mono mt-1 truncate">
+										{error.data.artist} · {error.data.title} · ID {error.data.id}
+									</p>
+								)}
+							</div>
+							{error.errid ? (
+								<span className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] border-[2px] border-foreground bg-destructive text-white px-2 py-1 shrink-0">
+									{error.errid}
+								</span>
+							) : (
+								<span className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground shrink-0 mt-1">
+									—
+								</span>
+							)}
+						</div>
 					))}
 				</div>
 			)}
