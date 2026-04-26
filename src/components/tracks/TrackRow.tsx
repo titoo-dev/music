@@ -34,6 +34,10 @@ export interface TrackRowProps {
 	isDownloaded?: boolean;
 	apiLoading?: boolean;
 	onDownload?: () => void;
+	/** Removal callback, surfaced in the action menu as "Remove from library". */
+	onDelete?: () => void;
+	/** When set, prepends a "#" column with the track number (album/playlist view). */
+	trackNumber?: number;
 }
 
 /**
@@ -73,6 +77,8 @@ export function TrackRow({
 	isDownloaded = false,
 	apiLoading = false,
 	onDownload,
+	onDelete,
+	trackNumber,
 }: TrackRowProps) {
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewPlaying = usePreviewStore((s) => s.isPlaying);
@@ -106,6 +112,10 @@ export function TrackRow({
 	};
 
 	const openSheet = useTrackActionStore((s) => s.openSheet);
+	const callbacks =
+		onDownload || onDelete
+			? { ...(onDownload ? { onDownload } : {}), ...(onDelete ? { onDelete } : {}) }
+			: undefined;
 	const longPress = useLongPress(() => {
 		openSheet(
 			{
@@ -119,7 +129,7 @@ export function TrackRow({
 				artistId: track.artistId ?? undefined,
 				previewUrl: track.previewUrl ?? undefined,
 			},
-			onDownload ? { onDownload } : undefined
+			callbacks
 		);
 	});
 
@@ -129,8 +139,20 @@ export function TrackRow({
 
 	// Static Tailwind class combos so the JIT picks them up. Mobile hides
 	// duration; desktop shows duration + bitrate when both enabled.
+	const hasNum = typeof trackNumber === "number";
 	let gridClass: string;
-	if (showBitrateCell && showDuration) {
+	if (hasNum) {
+		if (showBitrateCell && showDuration) {
+			gridClass =
+				"grid-cols-[28px_40px_1fr_auto_40px] sm:grid-cols-[28px_40px_1fr_auto_60px_64px]";
+		} else if (showBitrateCell) {
+			gridClass = "grid-cols-[28px_40px_1fr_auto_40px] sm:grid-cols-[28px_40px_1fr_auto_64px]";
+		} else if (showDuration) {
+			gridClass = "grid-cols-[28px_40px_1fr_40px] sm:grid-cols-[28px_40px_1fr_60px_64px]";
+		} else {
+			gridClass = "grid-cols-[28px_40px_1fr_40px] sm:grid-cols-[28px_40px_1fr_64px]";
+		}
+	} else if (showBitrateCell && showDuration) {
 		gridClass =
 			"grid-cols-[40px_1fr_auto_40px] sm:grid-cols-[40px_1fr_auto_60px_64px]";
 	} else if (showBitrateCell) {
@@ -148,26 +170,37 @@ export function TrackRow({
 				isActive || isPaused ? "bg-accent" : "hover:bg-foreground/5"
 			}`}
 		>
+			{hasNum && (
+				<span className="text-right tabular-nums flex items-center justify-end">
+					{isActive || isPaused ? (
+						<PlaybackIndicator paused={isPaused} />
+					) : (
+						<span className="text-[11px] text-muted-foreground font-mono font-bold">
+							{String(trackNumber).padStart(2, "0")}
+						</span>
+					)}
+				</span>
+			)}
 			<button
 				type="button"
 				onClick={handlePlay}
 				aria-label={isPlayerActive ? `Pause ${track.title}` : `Play ${track.title}`}
-				className="relative shrink-0 group/cover focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+				className="relative shrink-0 size-9 p-0 m-0 bg-transparent border-0 appearance-none cursor-pointer overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
 			>
 				<CoverImage
 					src={track.cover || ""}
-					className={`size-9 border-0 transition-opacity ${
-						isActive || isPaused ? "opacity-50" : "group-hover/cover:opacity-60"
+					className={`size-9 border-0 block transition-opacity ${
+						isActive || isPaused ? "opacity-50" : "group-hover:opacity-60"
 					}`}
 				/>
 				{isActive || isPaused ? (
-					<div className="absolute inset-0 flex items-center justify-center">
+					<span className="absolute inset-0 flex items-center justify-center">
 						<PlaybackIndicator paused={isPaused} />
-					</div>
+					</span>
 				) : (
-					<div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/cover:opacity-100 transition-opacity bg-black/35">
+					<span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/35">
 						<Play className="size-4 text-white fill-white" />
-					</div>
+					</span>
 				)}
 			</button>
 			<div className="min-w-0">
@@ -240,7 +273,7 @@ export function TrackRow({
 							artistId: track.artistId ?? undefined,
 							previewUrl: track.previewUrl ?? undefined,
 						}}
-						callbacks={onDownload ? { onDownload } : undefined}
+						callbacks={callbacks}
 					/>
 				</div>
 			</div>

@@ -18,12 +18,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Loader2, ArrowLeft, Disc3, Trash2, Play, Pause, ArrowDownUp } from "lucide-react";
 import Link from "next/link";
-import { PlayButton } from "@/components/audio/PlayButton";
-import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
-import { longPressHandlers } from "@/hooks/useLongPress";
-import { useTrackActionStore } from "@/stores/useTrackActionStore";
-import { TrackActionMenu } from "@/components/tracks/TrackActionMenu";
+import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
 import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { usePrefetch } from "@/hooks/usePrefetch";
@@ -91,9 +87,7 @@ export default function AlbumDetailPage() {
 	const { prefs, updatePrefs } = useUserPreferences();
 	const sortOrder = prefs.albumSortOrder ?? "asc";
 	const setSortOrder = (order: "asc" | "desc") => updatePrefs({ albumSortOrder: order });
-	const openSheet = useTrackActionStore((s) => s.openSheet);
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
-	const playerPlaying = usePlayerStore((s) => s.isPlaying);
 	const stopPlayer = usePlayerStore((s) => s.stop);
 
 	const handleDelete = async () => {
@@ -333,88 +327,25 @@ export default function AlbumDetailPage() {
 							<span />
 						</div>
 						{sortedTracks.map((track, idx) => {
-							const playerTrack: PlayerTrack = {
+							const t: TrackRowTrack = {
 								trackId: track.trackId,
 								title: track.title,
 								artist: track.artist,
+								album: album.title,
+								albumId: album.id,
 								cover: track.coverUrl,
 								duration: track.duration,
+								bitrateLabel: "LOCAL",
 							};
-							const isActive = currentPlayerTrack?.trackId === track.trackId && playerPlaying;
-							const isPaused = currentPlayerTrack?.trackId === track.trackId && !playerPlaying;
-							const lp = longPressHandlers(() => {
-								openSheet(
-									{
-										id: track.trackId,
-										title: track.title,
-										artist: track.artist,
-										cover: track.coverUrl || undefined,
-										duration: track.duration || undefined,
-									},
-									{
-										onDelete: () => handleRemoveTrack(track.trackId),
-									}
-								);
-							});
-
 							return (
-								<div
+								<TrackRow
 									key={track.id}
-									{...lp}
-									className={`group grid grid-cols-[36px_40px_1fr_auto_40px] sm:grid-cols-[36px_40px_1fr_auto_60px_28px] gap-2 sm:gap-3 items-center px-2 sm:px-3 py-2 sm:py-2.5 overflow-hidden transition-colors border-b border-foreground/15 last:border-b-0 select-none ${
-										isActive || isPaused ? "bg-accent" : "hover:bg-foreground/5"
-									}`}
-								>
-									<div className="flex items-center justify-center">
-										<PlayButton track={playerTrack} queue={playerQueue} />
-									</div>
-									<div className="relative shrink-0 size-9 bg-muted">
-										{track.coverUrl ? (
-											<CoverImage
-												src={track.coverUrl}
-												alt={track.title}
-												className={`size-9 ${isActive ? "opacity-50" : ""}`}
-											/>
-										) : (
-											<div className="size-9 flex items-center justify-center text-[10px] text-muted-foreground font-mono font-bold">
-												{String(idx + 1).padStart(2, "0")}
-											</div>
-										)}
-										{(isActive || isPaused) && (
-											<div className="absolute inset-0 flex items-center justify-center">
-												<PlaybackIndicator paused={isPaused} />
-											</div>
-										)}
-									</div>
-									<div className="min-w-0">
-										<p className="text-[13px] font-bold tracking-[-0.005em] truncate leading-tight">
-											{track.title}
-										</p>
-										<p className="text-[11px] text-muted-foreground truncate font-medium leading-tight mt-0.5">
-											{track.artist}
-										</p>
-									</div>
-									<span className="font-mono text-[10px] font-black tracking-[0.05em] uppercase border-2 border-foreground px-1.5 py-0.5 bg-accent text-foreground">
-										LOCAL
-									</span>
-									<span className="hidden sm:inline text-[11px] text-muted-foreground font-mono tabular-nums text-right">
-										{formatDuration(track.duration)}
-									</span>
-									<div className="hidden sm:block">
-										<TrackActionMenu
-											track={{
-												id: track.trackId,
-												title: track.title,
-												artist: track.artist,
-												cover: track.coverUrl || undefined,
-												duration: track.duration || undefined,
-												albumId: album.id,
-												albumTitle: album.title,
-											}}
-											callbacks={{ onDelete: () => handleRemoveTrack(track.trackId) }}
-										/>
-									</div>
-								</div>
+									track={t}
+									trackNumber={idx + 1}
+									showBitrate
+									showDuration
+									onDelete={() => handleRemoveTrack(track.trackId)}
+								/>
 							);
 						})}
 					</div>

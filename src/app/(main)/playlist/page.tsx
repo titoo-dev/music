@@ -5,19 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { useDownload } from "@/hooks/useDownload";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
-import { convertDuration } from "@/utils/helpers";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
-import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { CoverImage } from "@/components/ui/cover-image";
-import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
-import { usePreviewStore } from "@/stores/usePreviewStore";
-import { usePlayerStore } from "@/stores/usePlayerStore";
-import { longPressHandlers } from "@/hooks/useLongPress";
-import { useTrackActionStore } from "@/stores/useTrackActionStore";
-import { getBitrateBadge } from "@/utils/track-format";
-import { TrackActionMenu } from "@/components/tracks/TrackActionMenu";
+import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -51,12 +42,6 @@ function PlaylistContent() {
 		}
 		loadPlaylist();
 	}, [id]);
-
-	const openSheet = useTrackActionStore((s) => s.openSheet);
-	const previewTrack = usePreviewStore((s) => s.currentTrack);
-	const previewPlaying = usePreviewStore((s) => s.isPlaying);
-	const playerTrack = usePlayerStore((s) => s.currentTrack);
-	const playerPlaying = usePlayerStore((s) => s.isPlaying);
 
 	const playlistUrl = `https://www.deezer.com/playlist/${id}`;
 	const handleDownloadAll = () => download(playlistUrl);
@@ -156,113 +141,17 @@ function PlaylistContent() {
 						<span />
 					</div>
 					{tracks.map((track: any, idx: number) => {
-						const trackId = track.id || track.SNG_ID;
-						const trackTitle = track.title || track.SNG_TITLE;
-						const trackArtist = track.artist?.name || track.ART_NAME;
-						const trackAlbumId = track.ALB_ID || track.album?.id;
-						const trackAlbumTitle = track.ALB_TITLE || track.album?.title;
-						const trackDuration = track.duration || track.DURATION || 0;
-						const trackCover =
-							track.album?.cover_small ||
-							getCoverUrl(track.ALB_PICTURE, 56);
-						const previewUrl = (track.MEDIA?.[0]?.HREF || track.preview || "").replace("http://", "https://");
-						const isPreviewActive = previewTrack?.id === String(trackId) && previewPlaying;
-						const isPlayerActive = playerTrack?.trackId === String(trackId) && playerPlaying;
-						const isActive = isPreviewActive || isPlayerActive;
-						const isPaused = (previewTrack?.id === String(trackId) && !previewPlaying) || (playerTrack?.trackId === String(trackId) && !playerPlaying);
-						const trackArtistId = track.ART_ID || track.artist?.id;
-						const bitrate = getBitrateBadge(track);
-						const isFlac = bitrate === "FLAC";
-						const lp = longPressHandlers(() => {
-							openSheet(
-								{
-									id: String(trackId),
-									title: trackTitle,
-									artist: trackArtist,
-									cover: trackCover || undefined,
-									duration: trackDuration ? Number(trackDuration) : undefined,
-									artistId: trackArtistId ? String(trackArtistId) : undefined,
-									previewUrl: previewUrl || undefined,
-								},
-								{ onDownload: () => handleDownloadTrack(trackId) }
-							);
-						});
-
+						const normalized = trackFromDeezerRaw(track);
+						const trackId = normalized.trackId;
 						return (
-							<div
+							<TrackRow
 								key={trackId || idx}
-								{...lp}
-								className={`grid grid-cols-[28px_40px_1fr_auto_40px] sm:grid-cols-[28px_40px_1fr_auto_60px_64px] gap-2 sm:gap-3 items-center px-2 sm:px-3 py-2 sm:py-2.5 overflow-hidden border-b border-foreground/15 last:border-b-0 transition-colors select-none ${
-									isActive || isPaused ? "bg-accent" : "hover:bg-foreground/5"
-								} group`}
-							>
-								<span className="text-right tabular-nums flex items-center justify-end">
-									{isActive || isPaused ? (
-										<PlaybackIndicator paused={isPaused} />
-									) : (
-										<span className="text-[11px] font-mono font-bold text-muted-foreground">
-											{String(idx + 1).padStart(2, "0")}
-										</span>
-									)}
-								</span>
-								<CoverImage src={trackCover} className="size-9 flex-shrink-0" />
-								<div className="min-w-0">
-									<p className={`text-[13px] font-bold tracking-[-0.005em] truncate leading-tight`}>
-										{trackTitle}
-									</p>
-									<p className="text-[11px] text-muted-foreground truncate font-medium leading-tight mt-0.5">
-										{trackArtistId ? (
-											<Link href={`/artist?id=${trackArtistId}`} className="hover:underline hover:text-foreground transition-colors">
-												{trackArtist}
-											</Link>
-										) : trackArtist}
-										{trackAlbumTitle ? (
-											<>
-												{" · "}
-												{trackAlbumId ? (
-													<Link href={`/album?id=${trackAlbumId}`} className="hover:underline hover:text-foreground transition-colors">
-														{trackAlbumTitle}
-													</Link>
-												) : trackAlbumTitle}
-											</>
-										) : ""}
-									</p>
-								</div>
-								<span
-									className={`font-mono text-[10px] font-black tracking-[0.05em] uppercase border-2 border-foreground px-1.5 py-0.5 ${
-										isFlac ? "bg-accent text-foreground" : "bg-card text-muted-foreground"
-									}`}
-								>
-									{bitrate}
-								</span>
-								<span className="hidden sm:inline text-[11px] font-mono text-muted-foreground tabular-nums text-right">
-									{convertDuration(trackDuration)}
-								</span>
-								<div className="flex items-center justify-end gap-0.5">
-									<TrackDownloadStatus
-										trackId={trackId}
-										isAlreadyDownloaded={downloaded.has(String(trackId))}
-										apiLoading={isLoading(trackUrl(trackId))}
-										onDownload={() => handleDownloadTrack(trackId)}
-									/>
-									<div className="hidden md:block">
-										<TrackActionMenu
-											track={{
-												id: String(trackId),
-												title: trackTitle,
-												artist: trackArtist,
-												cover: trackCover || undefined,
-												duration: trackDuration ? Number(trackDuration) : undefined,
-												albumId: trackAlbumId ? String(trackAlbumId) : undefined,
-												albumTitle: trackAlbumTitle,
-												artistId: trackArtistId ? String(trackArtistId) : undefined,
-												previewUrl: previewUrl || undefined,
-											}}
-											callbacks={{ onDownload: () => handleDownloadTrack(trackId) }}
-										/>
-									</div>
-								</div>
-							</div>
+								track={normalized}
+								trackNumber={idx + 1}
+								isDownloaded={downloaded.has(String(trackId))}
+								apiLoading={isLoading(trackUrl(trackId))}
+								onDownload={() => handleDownloadTrack(trackId)}
+							/>
 						);
 					})}
 				</div>

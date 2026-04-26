@@ -5,13 +5,9 @@ import { fetchData } from "@/utils/api";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2, ChevronLeft, ChevronRight, Disc3 } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { PlayButton } from "@/components/audio/PlayButton";
-import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
-import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
-import { longPressHandlers } from "@/hooks/useLongPress";
-import { useTrackActionStore } from "@/stores/useTrackActionStore";
+import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
 
 interface DownloadItem {
 	id: string;
@@ -61,9 +57,6 @@ export default function DownloadHistoryPage() {
 	const [totalPages, setTotalPages] = useState(1);
 	const [total, setTotal] = useState(0);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
-	const playerPlaying = usePlayerStore((s) => s.isPlaying);
-	const openSheet = useTrackActionStore((s) => s.openSheet);
 
 	useEffect(() => {
 		if (!isAuthenticated) {
@@ -98,16 +91,6 @@ export default function DownloadHistoryPage() {
 		}
 		return Array.from(map.entries());
 	}, [items]);
-
-	const allPlayerTracks: PlayerTrack[] = items
-		.filter((i) => i.storageType === "s3")
-		.map((i) => ({
-			trackId: i.trackId,
-			title: i.title,
-			artist: i.artist,
-			cover: i.coverUrl,
-			duration: null,
-		}));
 
 	const flacCount = items.filter((i) => i.bitrate === 9).length;
 	const mp3Count = items.length - flacCount;
@@ -183,84 +166,20 @@ export default function DownloadHistoryPage() {
 								</div>
 								<div className="space-y-1">
 									{dayItems.map((item) => {
-										const playerTrack: PlayerTrack = {
+										const t: TrackRowTrack = {
 											trackId: item.trackId,
 											title: item.title,
 											artist: item.artist,
+											album: item.album,
+											albumId: item.albumId,
 											cover: item.coverUrl,
 											duration: null,
+											bitrateLabel: bitrateApprox(item.bitrate),
 										};
-										const isActive = currentPlayerTrack?.trackId === item.trackId && playerPlaying;
-										const isPaused = currentPlayerTrack?.trackId === item.trackId && !playerPlaying;
-										const lp = longPressHandlers(() => {
-											openSheet({
-												id: item.trackId,
-												title: item.title,
-												artist: item.artist,
-												cover: item.coverUrl || undefined,
-												albumId: item.albumId || undefined,
-												albumTitle: item.album || undefined,
-											});
-										});
-
 										return (
-											<div
-												key={item.id}
-												{...lp}
-												className={`group grid grid-cols-[auto_28px_1fr_auto_auto] gap-2 sm:gap-3 items-center text-[12px] py-1 px-1 transition-colors select-none ${
-													isActive || isPaused ? "bg-primary/10" : "hover:bg-foreground/5"
-												}`}
-											>
-												{/* Play button (or playing indicator) */}
-												<div className="shrink-0 w-6 flex items-center justify-center">
-													{item.storageType === "s3" ? (
-														isActive || isPaused ? (
-															<PlaybackIndicator paused={isPaused} />
-														) : (
-															<PlayButton track={playerTrack} queue={allPlayerTracks} className="!h-5 !w-5" />
-														)
-													) : (
-														<span className="text-muted-foreground/50 text-[10px]">·</span>
-													)}
-												</div>
-												{/* Cover thumbnail */}
-												<div className="shrink-0 w-7 h-7 bg-muted overflow-hidden border border-foreground/30">
-													{item.coverUrl ? (
-														<CoverImage src={item.coverUrl} alt={item.title} className="w-7 h-7" />
-													) : (
-														<div className="w-7 h-7 flex items-center justify-center">
-															<Disc3 className="size-3 text-muted-foreground/40" />
-														</div>
-													)}
-												</div>
-												{/* Title + artist */}
-												<div className="min-w-0 leading-tight">
-													<span className={`font-bold truncate ${isActive || isPaused ? "text-primary" : ""}`}>
-														{item.title}
-													</span>
-													<span className="text-muted-foreground"> · {item.artist}</span>
-													{item.album && (
-														<span className="hidden sm:inline text-muted-foreground/60">
-															{" / "}
-															{item.albumId ? (
-																<Link
-																	href={`/album?id=${item.albumId}`}
-																	className="hover:text-foreground hover:underline"
-																>
-																	{item.album}
-																</Link>
-															) : (
-																item.album
-															)}
-														</span>
-													)}
-												</div>
-												{/* Bitrate */}
-												<span className="text-[10px] font-bold text-muted-foreground tabular-nums shrink-0">
-													{bitrateApprox(item.bitrate)}
-												</span>
-												{/* Time */}
-												<span className="text-[10px] text-muted-foreground tabular-nums shrink-0 w-10 text-right">
+											<div key={item.id} className="relative">
+												<TrackRow track={t} showDuration={false} />
+												<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground pointer-events-none tabular-nums">
 													{fmtTime(item.downloadedAt)}
 												</span>
 											</div>

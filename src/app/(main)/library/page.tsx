@@ -7,9 +7,6 @@ import { fetchData } from "@/utils/api";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Loader2, Music, Disc3, Plus, ArrowDownToLine, Clock } from "lucide-react";
-import { PlayButton } from "@/components/audio/PlayButton";
-import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
-import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
 import { useDownload } from "@/hooks/useDownload";
 
@@ -122,9 +119,6 @@ function LibraryContent() {
 	);
 	const { download, isLoading: isDownloadLoading } = useDownload();
 
-	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
-	const playerPlaying = usePlayerStore((s) => s.isPlaying);
-
 	useEffect(() => {
 		if (!isAuthenticated) {
 			setLoading(false);
@@ -155,20 +149,6 @@ function LibraryContent() {
 		const fromPlaylists = playlists.reduce((s, p) => s + (p._count?.tracks || 0), 0);
 		return Math.max(tracks.length, fromAlbums, fromPlaylists);
 	}, [albums, playlists, tracks]);
-
-	const playerQueue: PlayerTrack[] = useMemo(
-		() =>
-			tracks
-				.filter((t) => t.storageType === "s3")
-				.map((t) => ({
-					trackId: t.trackId,
-					title: t.title,
-					artist: t.artist,
-					cover: t.coverUrl,
-					duration: null,
-				})),
-		[tracks]
-	);
 
 	if (!isAuthenticated) {
 		return (
@@ -387,88 +367,26 @@ function LibraryContent() {
 					/>
 				) : (
 					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
-						{/* Column header */}
-						<div className="hidden sm:grid grid-cols-[36px_40px_1fr_auto_60px] gap-3 items-center px-3 py-2 border-b-[2px] border-foreground font-mono text-[10px] font-bold tracking-[0.14em] uppercase text-muted-foreground">
-							<span className="text-right">#</span>
-							<span />
-							<span>TITLE / ARTIST</span>
-							<span>FORMAT</span>
-							<span className="text-right">DATE</span>
-						</div>
 						{tracks.map((item, idx) => {
-							const playerTrack: PlayerTrack = {
+							const t: TrackRowTrack = {
 								trackId: item.trackId,
 								title: item.title,
 								artist: item.artist,
+								album: item.album,
+								albumId: item.albumId,
 								cover: item.coverUrl,
 								duration: null,
+								bitrateLabel: bitrateToLabel(item.bitrate),
 							};
-							const isActive = currentPlayerTrack?.trackId === item.trackId && playerPlaying;
-							const isPaused = currentPlayerTrack?.trackId === item.trackId && !playerPlaying;
-							const bitrateLabel = bitrateToLabel(item.bitrate);
-							const isFlac = bitrateLabel === "FLAC";
 							return (
-								<div
-									key={item.id}
-									className={`group grid grid-cols-[36px_40px_1fr_auto_40px] sm:grid-cols-[36px_40px_1fr_auto_60px] gap-2 sm:gap-3 items-center px-2 sm:px-3 py-2 sm:py-2.5 overflow-hidden transition-colors border-b border-foreground/15 last:border-b-0 select-none ${
-										isActive || isPaused ? "bg-accent" : "hover:bg-foreground/5"
-									}`}
-								>
-									<div className="flex items-center justify-center">
-										{item.storageType === "s3" ? (
-											<PlayButton track={playerTrack} queue={playerQueue} />
-										) : (
-											<span className="text-[10px] font-mono font-bold text-muted-foreground tabular-nums">
-												{String(idx + 1).padStart(2, "0")}
-											</span>
-										)}
-									</div>
-									<div className="relative shrink-0 size-9 bg-muted">
-										{item.coverUrl ? (
-											<CoverImage
-												src={item.coverUrl}
-												alt={item.title}
-												className={`size-9 ${isActive ? "opacity-50" : ""}`}
-											/>
-										) : (
-											<div className="size-9 flex items-center justify-center">
-												<Disc3 className="size-4 text-muted-foreground/40" />
-											</div>
-										)}
-										{(isActive || isPaused) && (
-											<div className="absolute inset-0 flex items-center justify-center">
-												<PlaybackIndicator paused={isPaused} />
-											</div>
-										)}
-									</div>
-									<div className="min-w-0">
-										<p className="text-[13px] font-bold tracking-[-0.005em] truncate leading-tight">
-											{item.title}
-										</p>
-										<p className="text-[11px] text-muted-foreground truncate font-medium leading-tight mt-0.5">
-											{item.artist}
-											{item.album && (
-												<span className="text-muted-foreground/60">
-													{" / "}
-													{item.albumId ? (
-														<Link href={`/album?id=${item.albumId}`} className="hover:text-foreground hover:underline">
-															{item.album}
-														</Link>
-													) : (
-														item.album
-													)}
-												</span>
-											)}
-										</p>
-									</div>
-									<span
-										className={`font-mono text-[10px] font-black tracking-[0.05em] uppercase border-2 border-foreground px-1.5 py-0.5 ${
-											isFlac ? "bg-accent text-foreground" : "bg-card text-muted-foreground"
-										}`}
-									>
-										{bitrateLabel}
-									</span>
-									<span className="hidden sm:inline text-[11px] font-mono text-muted-foreground tabular-nums text-right">
+								<div key={item.id} className="relative">
+									<TrackRow
+										track={t}
+										trackNumber={idx + 1}
+										showBitrate
+										showDuration={false}
+									/>
+									<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground pointer-events-none tabular-nums">
 										{new Date(item.downloadedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()}
 									</span>
 								</div>

@@ -4,22 +4,14 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { useDownload } from "@/hooks/useDownload";
-import { convertDuration } from "@/utils/helpers";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Download, Loader2, CheckCircle2 } from "lucide-react";
-import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { CoverImage } from "@/components/ui/cover-image";
-import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
-import { usePreviewStore } from "@/stores/usePreviewStore";
-import { usePlayerStore } from "@/stores/usePlayerStore";
-import { longPressHandlers } from "@/hooks/useLongPress";
-import { useTrackActionStore } from "@/stores/useTrackActionStore";
-import { getBitrateBadge } from "@/utils/track-format";
-import { TrackActionMenu } from "@/components/tracks/TrackActionMenu";
+import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -60,12 +52,6 @@ function ArtistContent() {
 		}
 		loadArtist();
 	}, [id]);
-
-	const openSheet = useTrackActionStore((s) => s.openSheet);
-	const previewTrack = usePreviewStore((s) => s.currentTrack);
-	const previewPlaying = usePreviewStore((s) => s.isPlaying);
-	const playerTrack = usePlayerStore((s) => s.currentTrack);
-	const playerPlaying = usePlayerStore((s) => s.isPlaying);
 
 	const deezerUrl = (itemId: string, type: string) => `https://www.deezer.com/${type}/${itemId}`;
 	const handleDownload = (itemId: string, type: string) => download(deezerUrl(itemId, type));
@@ -155,112 +141,17 @@ function ArtistContent() {
 							<span />
 						</div>
 						{topTracks.slice(0, 10).map((track: any, idx: number) => {
-							const trackId = track.SNG_ID || track.id;
-							const trackTitle = track.SNG_TITLE || track.title;
-							const trackArtist = track.ART_NAME || track.artist?.name;
-							const trackDuration = track.DURATION || track.duration || 0;
-							const trackCover =
-								track.album?.cover_small ||
-								getCoverUrl(track.ALB_PICTURE, 56);
-							const albumId = track.ALB_ID || track.album?.id;
-							const albumTitle = track.ALB_TITLE || track.album?.title;
-							const previewUrl = (track.MEDIA?.[0]?.HREF || track.preview || "").replace("http://", "https://");
-							const isPreviewActive = previewTrack?.id === String(trackId) && previewPlaying;
-							const isPlayerActive = playerTrack?.trackId === String(trackId) && playerPlaying;
-							const isActive = isPreviewActive || isPlayerActive;
-							const isPaused = (previewTrack?.id === String(trackId) && !previewPlaying) || (playerTrack?.trackId === String(trackId) && !playerPlaying);
-							const bitrate = getBitrateBadge(track);
-							const isFlac = bitrate === "FLAC";
-
-							const trackUrl = deezerUrl(trackId, "track");
-							const lp = longPressHandlers(() => {
-								openSheet(
-									{
-										id: String(trackId),
-										title: trackTitle,
-										artist: trackArtist,
-										cover: trackCover || undefined,
-										duration: trackDuration ? Number(trackDuration) : undefined,
-										albumId: albumId ? String(albumId) : undefined,
-										albumTitle,
-										artistId: id ? String(id) : undefined,
-										previewUrl: previewUrl || undefined,
-									},
-									{ onDownload: () => handleDownload(trackId, "track") }
-								);
-							});
-
+							const normalized = trackFromDeezerRaw(track);
+							const trackId = normalized.trackId;
 							return (
-								<div
+								<TrackRow
 									key={trackId || idx}
-									{...lp}
-									className={`grid grid-cols-[28px_40px_1fr_auto_40px] sm:grid-cols-[28px_40px_1fr_auto_60px_64px] gap-2 sm:gap-3 items-center px-2 sm:px-3 py-2 sm:py-2.5 overflow-hidden border-b border-foreground/15 last:border-b-0 transition-colors select-none ${
-										isActive || isPaused ? "bg-accent" : "hover:bg-foreground/5"
-									} group`}
-								>
-									<span className="text-right tabular-nums flex items-center justify-end">
-										{isActive || isPaused ? (
-											<PlaybackIndicator paused={isPaused} />
-										) : (
-											<span className="text-[11px] text-muted-foreground font-mono font-bold">
-												{String(idx + 1).padStart(2, "0")}
-											</span>
-										)}
-									</span>
-									<CoverImage src={trackCover} className="size-9 flex-shrink-0" />
-									<div className="min-w-0">
-										<p className="text-[13px] font-bold tracking-[-0.005em] truncate leading-tight">
-											{trackTitle}
-										</p>
-										<p className="text-[11px] text-muted-foreground truncate font-medium leading-tight mt-0.5">
-											{trackArtist}
-											{albumTitle ? (
-												<>
-													{" · "}
-													{albumId ? (
-														<Link href={`/album?id=${albumId}`} className="hover:underline hover:text-foreground transition-colors">
-															{albumTitle}
-														</Link>
-													) : albumTitle}
-												</>
-											) : ""}
-										</p>
-									</div>
-									<span
-										className={`font-mono text-[10px] font-black tracking-[0.05em] uppercase border-2 border-foreground px-1.5 py-0.5 ${
-											isFlac ? "bg-accent text-foreground" : "bg-card text-muted-foreground"
-										}`}
-									>
-										{bitrate}
-									</span>
-									<span className="hidden sm:inline text-[11px] text-muted-foreground tabular-nums font-mono text-right">
-										{convertDuration(trackDuration)}
-									</span>
-									<div className="flex items-center justify-end gap-0.5">
-										<TrackDownloadStatus
-											trackId={trackId}
-											isAlreadyDownloaded={downloaded.has(String(trackId))}
-											apiLoading={isLoading(trackUrl)}
-											onDownload={() => handleDownload(trackId, "track")}
-										/>
-										<div className="hidden md:block">
-											<TrackActionMenu
-												track={{
-													id: String(trackId),
-													title: trackTitle,
-													artist: trackArtist,
-													cover: trackCover || undefined,
-													duration: trackDuration ? Number(trackDuration) : undefined,
-													albumId: albumId ? String(albumId) : undefined,
-													albumTitle,
-													artistId: id ? String(id) : undefined,
-													previewUrl: previewUrl || undefined,
-												}}
-												callbacks={{ onDownload: () => handleDownload(trackId, "track") }}
-											/>
-										</div>
-									</div>
-								</div>
+									track={normalized}
+									trackNumber={idx + 1}
+									isDownloaded={downloaded.has(String(trackId))}
+									apiLoading={isLoading(deezerUrl(trackId, "track"))}
+									onDownload={() => handleDownload(trackId, "track")}
+								/>
 							);
 						})}
 					</div>
