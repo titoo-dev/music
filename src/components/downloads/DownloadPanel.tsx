@@ -7,17 +7,9 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { QueueItem } from "./QueueItem";
 import { postToServer, fetchData } from "@/utils/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
 import Link from "next/link";
-import {
-	ArrowDownToLine,
-	X,
-	Trash2,
-	XCircle,
-	ChevronRight,
-	History,
-} from "lucide-react";
+import { ArrowDownToLine, X, History } from "lucide-react";
 
 interface HistoryItem {
 	id: string;
@@ -29,12 +21,22 @@ interface HistoryItem {
 	downloadedAt: string;
 }
 
+type Tab = "all" | "active" | "done" | "failed";
+
+const TABS: { key: Tab; label: string }[] = [
+	{ key: "all", label: "ALL" },
+	{ key: "active", label: "ACTIVE" },
+	{ key: "done", label: "DONE" },
+	{ key: "failed", label: "FAILED" },
+];
+
 export function DownloadPanel() {
 	const { queue, clearCompleted } = useQueueStore();
 	const downloadsOpen = useAppStore((s) => s.downloadsOpen);
 	const setDownloadsOpen = useAppStore((s) => s.setDownloadsOpen);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const [history, setHistory] = useState<HistoryItem[]>([]);
+	const [tab, setTab] = useState<Tab>("all");
 
 	useEffect(() => {
 		if (!downloadsOpen || !isAuthenticated) return;
@@ -53,9 +55,22 @@ export function DownloadPanel() {
 	const activeItems = allItems.filter((i) =>
 		["downloading", "inQueue", "cancelling"].includes(i.status)
 	);
-	const completedItems = allItems.filter((i) =>
-		["completed", "withErrors", "failed"].includes(i.status)
+	const completedItems = allItems.filter((i) => i.status === "completed");
+	const failedItems = allItems.filter((i) =>
+		["failed", "withErrors"].includes(i.status)
 	);
+
+	const filteredItems =
+		tab === "all"
+			? allItems
+			: tab === "active"
+				? activeItems
+				: tab === "done"
+					? completedItems
+					: failedItems;
+
+	const downloadingCount = allItems.filter((i) => i.status === "downloading").length;
+	const totalSpeed = "—"; // Speed not tracked client-side; placeholder
 
 	const handleCancelAll = () => postToServer("downloads/cancel-all");
 	const handleClearCompleted = async () => {
@@ -67,186 +82,165 @@ export function DownloadPanel() {
 		<aside
 			className={`
 				fixed right-0 top-[calc(7.5rem+5px)] md:top-[calc(4rem+3px)] z-20 flex h-[calc(100%-7.5rem-5px)] md:h-[calc(100%-4rem-3px)] flex-col overflow-hidden
-				bg-background transition-all duration-300 ease-in-out
-				${downloadsOpen ? "w-full sm:w-[340px] translate-x-0 border-l-[3px] border-foreground" : "w-0 translate-x-full border-l-0"}
+				bg-card transition-all duration-300 ease-in-out
+				${downloadsOpen ? "w-full sm:w-[440px] translate-x-0 border-l-[3px] border-foreground shadow-[var(--shadow-brutal)]" : "w-0 translate-x-full border-l-0"}
 			`}
 		>
-			{/* Collapse button */}
-			{downloadsOpen && (
-				<button
-					onClick={() => setDownloadsOpen(false)}
-					className="absolute -left-4 top-6 z-10 hidden sm:flex h-7 w-4 items-center justify-center border-[2px] border-r-0 border-foreground bg-background text-foreground transition-colors hover:bg-accent"
-				>
-					<ChevronRight className="h-3 w-3" />
-				</button>
-			)}
-
 			<div className="flex min-w-0 w-full flex-col h-full">
-				{/* Header */}
-				<div className="flex items-center justify-between border-b-[3px] border-foreground px-4 py-4">
-					<div className="flex items-center gap-2.5">
-						<div className="flex h-7 w-7 items-center justify-center border-[2px] border-foreground bg-accent">
-							<ArrowDownToLine className="h-3.5 w-3.5 text-foreground" />
+				{/* Header — dark brutalist */}
+				<div className="flex items-center justify-between border-b-[2px] border-foreground bg-foreground text-background px-[18px] py-3.5">
+					<div className="min-w-0">
+						<div className="text-[14px] font-black tracking-[0.08em] uppercase">
+							DOWNLOAD QUEUE
 						</div>
-						<div>
-							<h2 className="text-sm font-black text-foreground leading-tight uppercase tracking-wider">
-								Downloads
-							</h2>
-							<p className="text-[11px] text-muted-foreground leading-tight font-mono font-bold">
-								{allItems.length === 0
-									? "No items"
-									: `${activeItems.length} active \u00b7 ${completedItems.length} done`}
-							</p>
+						<div className="font-mono text-[10px] opacity-70 mt-0.5 tracking-[0.05em]">
+							{downloadingCount}× CONCURRENT · {totalSpeed}
 						</div>
 					</div>
-					<Button
-						variant="ghost"
-						size="icon-xs"
+					<button
 						onClick={() => setDownloadsOpen(false)}
+						aria-label="Close downloads"
+						className="text-background hover:text-accent transition-colors"
 					>
-						<X className="h-4 w-4" />
-					</Button>
+						<X className="h-4 w-4" strokeWidth={2.5} />
+					</button>
 				</div>
 
-				{/* Action bar */}
-				{(activeItems.length > 0 || completedItems.length > 0) && (
-					<div className="flex items-center gap-1 border-b-[2px] border-foreground px-3 py-1.5">
-						{activeItems.length > 0 && (
-							<Button
-								variant="ghost"
-								size="xs"
-								onClick={handleCancelAll}
-								className="gap-1.5 text-[11px] text-destructive hover:bg-destructive/10"
+				{/* Tabs */}
+				<div className="flex border-b-[2px] border-foreground">
+					{TABS.map((t, i) => {
+						const active = tab === t.key;
+						const count =
+							t.key === "all"
+								? allItems.length
+								: t.key === "active"
+									? activeItems.length
+									: t.key === "done"
+										? completedItems.length
+										: failedItems.length;
+						return (
+							<button
+								key={t.key}
+								onClick={() => setTab(t.key)}
+								className={`flex-1 py-2.5 px-2 font-mono text-[10px] font-bold tracking-[0.12em] uppercase cursor-pointer transition-colors ${
+									i < TABS.length - 1 ? "border-r-[2px] border-foreground" : ""
+								} ${active ? "bg-accent text-foreground" : "bg-card text-foreground hover:bg-foreground/5"}`}
 							>
-								<XCircle className="h-3 w-3" />
-								Cancel all
-							</Button>
-						)}
-						<div className="flex-1" />
-						{completedItems.length > 0 && (
-							<Button
-								variant="ghost"
-								size="xs"
-								onClick={handleClearCompleted}
-								className="gap-1.5 text-[11px]"
-							>
-								<Trash2 className="h-3 w-3" />
-								Clear done
-							</Button>
-						)}
-					</div>
-				)}
+								{t.label}
+								{count > 0 && (
+									<span className="ml-1 opacity-70">({count})</span>
+								)}
+							</button>
+						);
+					})}
+				</div>
 
 				{/* Content */}
-				<ScrollArea className="flex-1 min-h-0">
-					{allItems.length === 0 && (
-						<div className="flex flex-col items-center justify-center py-24 px-6 text-center">
-							<div className="mb-4 flex h-14 w-14 items-center justify-center border-2 sm:border-[3px] border-foreground bg-muted">
-								<ArrowDownToLine className="h-6 w-6 text-muted-foreground" />
-							</div>
-							<p className="text-sm font-bold text-foreground uppercase tracking-wider">
-								No downloads yet
-							</p>
-							<p className="mt-2 text-xs text-muted-foreground leading-relaxed max-w-[200px]">
-								Search for music or paste a Deezer link to start downloading
+				<ScrollArea className="flex-1 min-h-0 bg-card">
+					{filteredItems.length === 0 && tab !== "all" && (
+						<div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+							<p className="text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
+								NO {tab.toUpperCase()} ITEMS
 							</p>
 						</div>
 					)}
 
-					{activeItems.length > 0 && (
-						<div>
-							<div className="px-4 pb-1 pt-3">
-								<p className="text-[11px] font-black uppercase tracking-[0.15em] text-foreground">
-									Active
-									<span className="ml-1.5 inline-flex items-center justify-center border-[2px] border-foreground bg-accent px-1.5 py-0 text-[10px] font-black text-foreground">
-										{activeItems.length}
-									</span>
-								</p>
+					{allItems.length === 0 && tab === "all" && (
+						<div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+							<div className="mb-4 flex h-14 w-14 items-center justify-center border-[3px] border-foreground bg-muted">
+								<ArrowDownToLine className="h-6 w-6 text-foreground" />
 							</div>
-							<div className="space-y-0.5 px-1.5">
-								{activeItems.map((item) => (
-									<QueueItem key={item.uuid} item={item} />
-								))}
-							</div>
+							<p className="text-[12px] font-black uppercase tracking-[0.14em] text-foreground">
+								QUEUE EMPTY
+							</p>
+							<p className="mt-2 text-[11px] text-muted-foreground font-mono uppercase tracking-[0.05em] max-w-[220px]">
+								Search or paste a Deezer link to start downloading.
+							</p>
 						</div>
 					)}
 
-					{completedItems.length > 0 && (
+					{filteredItems.length > 0 && (
 						<div>
-							{activeItems.length > 0 && (
-								<div className="mx-4 my-2 h-[2px] bg-foreground" />
-							)}
-							<div className="px-4 pb-1 pt-3">
-								<p className="text-[11px] font-black uppercase tracking-[0.15em] text-foreground">
-									Completed
-									<span className="ml-1.5 inline-flex items-center justify-center border-[2px] border-foreground bg-accent px-1.5 py-0 text-[10px] font-black text-foreground">
-										{completedItems.length}
-									</span>
-								</p>
-							</div>
-							<div className="space-y-0.5 px-1.5">
-								{completedItems.map((item) => (
-									<QueueItem key={item.uuid} item={item} />
-								))}
-							</div>
+							{filteredItems.map((item) => (
+								<QueueItem key={item.uuid} item={item} />
+							))}
 						</div>
 					)}
 
-					{/* Download History */}
-					{history.length > 0 && (
+					{/* History (only on ALL tab) */}
+					{tab === "all" && history.length > 0 && (
 						<div>
-							{(activeItems.length > 0 || completedItems.length > 0) && (
-								<div className="mx-4 my-2 h-[2px] bg-foreground" />
-							)}
-							<div className="flex items-center justify-between px-4 pb-1 pt-3">
-								<p className="text-[11px] font-black uppercase tracking-[0.15em] text-foreground">
-									<History className="inline h-3 w-3 mr-1 -mt-0.5" />
-									History
-									<span className="ml-1.5 inline-flex items-center justify-center border-[2px] border-foreground bg-muted px-1.5 py-0 text-[10px] font-black text-foreground">
-										{history.length}
-									</span>
+							<div className="flex items-center justify-between px-[18px] pb-1.5 pt-4 border-t-[2px] border-foreground bg-muted">
+								<p className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-1.5">
+									<History className="h-3 w-3" />
+									HISTORY · LAST {history.length}
 								</p>
-								<Link href="/download-history" className="text-[10px] font-bold text-primary hover:underline no-underline uppercase tracking-wider">
-									View all
+								<Link
+									href="/download-history"
+									className="text-[10px] font-mono font-bold text-primary hover:underline no-underline uppercase tracking-[0.1em]"
+								>
+									VIEW ALL ↗
 								</Link>
 							</div>
-							<div className="space-y-0.5 px-1.5">
+							<div>
 								{history.map((item) => (
 									<div
 										key={item.id}
-										className="flex items-center gap-3 px-2.5 py-2 hover:bg-muted transition-colors border-b border-foreground/10 last:border-b-0"
+										className="flex items-center gap-3 px-[18px] py-2.5 hover:bg-foreground/5 transition-colors border-b border-foreground/15 last:border-b-0"
 									>
 										<div className="shrink-0">
 											{item.coverUrl ? (
-												<CoverImage
-													src={item.coverUrl}
-													className="h-10 w-10"
-												/>
+												<CoverImage src={item.coverUrl} className="h-9 w-9 border border-foreground/30" />
 											) : (
-												<div className="h-10 w-10 border-[2px] border-foreground bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+												<div className="h-9 w-9 border border-foreground/30 bg-muted flex items-center justify-center text-[10px] font-mono font-bold text-muted-foreground">
 													?
 												</div>
 											)}
 										</div>
 										<div className="min-w-0 flex-1">
-											<p className="truncate text-[13px] font-bold leading-tight text-foreground">
+											<p className="truncate text-[12px] font-bold leading-tight text-foreground">
 												{item.title}
 											</p>
-											<p className="truncate text-[11px] leading-tight text-muted-foreground mt-0.5">
+											<p className="truncate text-[10px] font-mono leading-tight text-muted-foreground mt-0.5">
 												{item.artist}
 											</p>
-											<p className="text-[10px] text-muted-foreground/50 mt-0.5 font-mono">
-												{new Date(item.downloadedAt).toLocaleDateString()}
-											</p>
 										</div>
+										<span className="shrink-0 text-[10px] font-mono text-muted-foreground tabular-nums">
+											{new Date(item.downloadedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()}
+										</span>
 									</div>
 								))}
 							</div>
 						</div>
 					)}
 
-					<div className="h-4" />
+					<div className="h-2" />
 				</ScrollArea>
+
+				{/* Footer */}
+				<div className="flex items-center justify-between border-t-[2px] border-foreground bg-background px-[18px] py-2.5">
+					<span className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+						{activeItems.length} PENDING
+					</span>
+					<div className="flex gap-1.5">
+						{activeItems.length > 0 && (
+							<button
+								onClick={handleCancelAll}
+								className="px-3 py-1.5 font-mono text-[10px] font-bold tracking-[0.1em] uppercase text-foreground hover:bg-destructive hover:text-white hover:border-destructive border-2 border-transparent transition-colors"
+							>
+								PAUSE ALL
+							</button>
+						)}
+						{completedItems.length > 0 && (
+							<button
+								onClick={handleClearCompleted}
+								className="px-3 py-1.5 border-2 border-foreground bg-card text-foreground font-mono text-[10px] font-bold tracking-[0.1em] uppercase shadow-[var(--shadow-brutal-sm)] hover:bg-accent active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] transition-colors"
+							>
+								CLEAR DONE
+							</button>
+						)}
+					</div>
+				</div>
 			</div>
 		</aside>
 	);

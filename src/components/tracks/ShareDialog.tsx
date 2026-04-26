@@ -160,7 +160,7 @@ export function ShareDialog({
 
 				{state === "done" ? (
 					<div className="flex flex-col items-center gap-3 py-4">
-						<LinkIcon className="size-8 text-emerald-500" />
+						<LinkIcon className="size-8 text-foreground bg-accent border-2 border-foreground p-1" />
 						<p className="text-sm font-bold">Link copied!</p>
 					</div>
 				) : state === "revoked" ? (
@@ -170,7 +170,7 @@ export function ShareDialog({
 					</div>
 				) : state === "error" ? (
 					<div className="flex flex-col items-center gap-3 py-4">
-						<p className="text-sm font-bold text-red-500">{errorMsg}</p>
+						<p className="text-sm font-bold text-destructive">{errorMsg}</p>
 						<Button
 							variant="outline"
 							size="sm"
@@ -192,7 +192,7 @@ export function ShareDialog({
 						<button
 							onClick={handleRevoke}
 							disabled={state === "revoking"}
-							className="flex items-center gap-3 px-3 py-3 text-left border-2 border-red-500 text-red-500 bg-background hover:bg-red-50 active:shadow-[var(--shadow-brutal-active)] active:translate-x-[1px] active:translate-y-[1px] shadow-[2px_2px_0px_theme(colors.red.500)] transition-all disabled:opacity-50"
+							className="flex items-center gap-3 px-3 py-3 text-left border-2 border-destructive text-destructive bg-background hover:bg-destructive/10 active:shadow-[var(--shadow-brutal-active)] active:translate-x-[1px] active:translate-y-[1px] shadow-[2px_2px_0px_var(--destructive)] transition-all disabled:opacity-50"
 						>
 							{state === "revoking" ? (
 								<Loader2 className="size-4 shrink-0 animate-spin" />

@@ -158,7 +158,7 @@ export function AddToPlaylist({
 							>
 								<span className="truncate">{p.title}</span>
 								{addedTo.has(p.id) && (
-									<Check className="size-3.5 text-emerald-500 shrink-0" />
+									<Check className="size-3.5 text-foreground shrink-0" />
 								)}
 							</DropdownMenuItem>
 						))

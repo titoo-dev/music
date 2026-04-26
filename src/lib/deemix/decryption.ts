@@ -1,5 +1,7 @@
 import got, { ReadError, TimeoutError } from "got";
 import fs from "fs";
+import { Readable } from "stream";
+import { TrackFormats } from "@/lib/deezer";
 import {
 	_md5,
 	_ecbCrypt,
@@ -239,4 +241,145 @@ export async function streamTrack(writepath, track, downloadObject, listener, st
 	} else {
 		fs.renameSync(partPath, writepath);
 	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Progressive streaming: open a Deezer audio stream, decrypt+depad chunks on
+// the fly, and expose them as a Node Readable so callers can both forward
+// bytes to a client and persist them in parallel (stream-while-download).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ProgressiveStream {
+	readable: Readable;
+	contentType: string;
+	contentLengthPromise: Promise<number>;
+	abort: () => void;
+}
+
+export function inferContentTypeFromBitrate(bitrate: number): string {
+	if (bitrate === TrackFormats.FLAC) return "audio/flac";
+	if (
+		bitrate === TrackFormats.MP4_RA1 ||
+		bitrate === TrackFormats.MP4_RA2 ||
+		bitrate === TrackFormats.MP4_RA3
+	) {
+		return "audio/mp4";
+	}
+	return "audio/mpeg";
+}
+
+export function streamTrackToReadable(track: any): ProgressiveStream {
+	const isCryptedStream =
+		track.downloadURL.includes("/mobile/") ||
+		track.downloadURL.includes("/media/");
+	const blowfishKey = isCryptedStream
+		? generateBlowfishKey(String(track.id))
+		: null;
+	const headers = { "User-Agent": USER_AGENT_HEADER };
+
+	let resolveLen: (n: number) => void = () => {};
+	const contentLengthPromise = new Promise<number>((resolve) => {
+		resolveLen = resolve;
+	});
+
+	const request = got
+		.stream(track.downloadURL, { headers, https: { rejectUnauthorized: false } })
+		.on("response", (response) => {
+			const raw = response.headers["content-length"];
+			const len = parseInt(Array.isArray(raw) ? raw[0] : (raw ?? "0"), 10);
+			resolveLen(isNaN(len) ? 0 : len);
+		})
+		.on("error", () => {
+			// Resolve with 0 so callers don't hang forever
+			resolveLen(0);
+		});
+
+	async function* decrypter(source: AsyncIterable<Buffer>) {
+		let modifiedStream = Buffer.alloc(0);
+		for await (const chunk of source) {
+			if (!isCryptedStream) {
+				yield chunk as Buffer;
+			} else {
+				modifiedStream = Buffer.concat([modifiedStream, chunk as Buffer]);
+				while (modifiedStream.length >= 2048 * 3) {
+					let decryptedChunks = Buffer.alloc(0);
+					const decryptingChunks = modifiedStream.slice(0, 2048 * 3);
+					modifiedStream = modifiedStream.slice(2048 * 3);
+					if (decryptingChunks.length >= 2048) {
+						decryptedChunks = decryptChunk(
+							decryptingChunks.slice(0, 2048),
+							blowfishKey
+						);
+						decryptedChunks = Buffer.concat([
+							decryptedChunks,
+							decryptingChunks.slice(2048),
+						]);
+					}
+					yield decryptedChunks;
+				}
+			}
+		}
+		if (isCryptedStream) {
+			let decryptedChunks = Buffer.alloc(0);
+			if (modifiedStream.length >= 2048) {
+				decryptedChunks = decryptChunk(
+					modifiedStream.slice(0, 2048),
+					blowfishKey
+				);
+				decryptedChunks = Buffer.concat([
+					decryptedChunks,
+					modifiedStream.slice(2048),
+				]);
+				yield decryptedChunks;
+			} else {
+				yield modifiedStream;
+			}
+		}
+	}
+
+	async function* depadder(source: AsyncIterable<Buffer>) {
+		let isStart = true;
+		for await (let chunk of source) {
+			if (
+				isStart &&
+				chunk[0] === 0 &&
+				chunk.slice(4, 8).toString() !== "ftyp"
+			) {
+				let i;
+				for (i = 0; i < chunk.length; i++) {
+					if (chunk[i] !== 0) break;
+				}
+				chunk = chunk.slice(i);
+			}
+			isStart = false;
+			yield chunk;
+		}
+	}
+
+	async function* combined() {
+		try {
+			yield* depadder(decrypter(request as unknown as AsyncIterable<Buffer>));
+		} catch (e) {
+			try {
+				request.destroy();
+			} catch {}
+			throw e;
+		}
+	}
+
+	const readable = Readable.from(combined());
+
+	return {
+		readable,
+		contentType: inferContentTypeFromBitrate(Number(track.bitrate)),
+		contentLengthPromise,
+		abort: () => {
+			try {
+				request.destroy();
+			} catch {}
+			try {
+				readable.destroy();
+			} catch {}
+		},
+	};
 }

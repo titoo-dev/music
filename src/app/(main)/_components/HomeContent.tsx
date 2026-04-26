@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Music, Disc3, Search } from "lucide-react";
+import { ArrowRight, Music, Disc3, Search, Clock } from "lucide-react";
 import { CoverImage } from "@/components/ui/cover-image";
+import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
 
 interface UserPlaylist {
 	id: string;
@@ -61,9 +62,22 @@ function PlaylistCover({ covers, title }: { covers?: string[]; title: string }) 
 	);
 }
 
+interface RecentPlayItem {
+	id: string;
+	trackId: string;
+	title: string;
+	artist: string;
+	album: string | null;
+	albumId: string | null;
+	coverUrl: string | null;
+	duration: number | null;
+	playedAt: string;
+}
+
 interface HomeContentProps {
 	playlists: UserPlaylist[];
 	albums: UserAlbum[];
+	recentPlays: RecentPlayItem[];
 	user: { name: string } | null;
 }
 
@@ -75,7 +89,7 @@ function todayLabel() {
 	return `${time} · ${day} · ${date}`.toUpperCase();
 }
 
-export function HomeContent({ playlists, albums, user }: HomeContentProps) {
+export function HomeContent({ playlists, albums, recentPlays, user }: HomeContentProps) {
 	if (!user) {
 		return (
 			<div className="max-w-3xl mx-auto py-10">
@@ -154,6 +168,52 @@ export function HomeContent({ playlists, albums, user }: HomeContentProps) {
 						)}
 					</div>
 				</div>
+			)}
+
+			{/* Recently Played */}
+			{recentPlays.length > 0 && (
+				<section className="mb-11">
+					<div className="flex items-baseline justify-between gap-3 pb-2 mb-5 border-b-[2px] border-foreground">
+						<div className="flex items-baseline gap-3">
+							<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0 flex items-center gap-2">
+								<Clock className="size-4 -mt-0.5" strokeWidth={2.5} />
+								RECENTLY PLAYED
+							</h2>
+							<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
+								{recentPlays.length} TRACK{recentPlays.length !== 1 ? "S" : ""}
+							</span>
+						</div>
+						<Link
+							href="/library?tab=recent"
+							className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-primary hover:underline flex items-center gap-1"
+						>
+							VIEW ALL
+							<ArrowRight className="size-3" />
+						</Link>
+					</div>
+					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
+						{recentPlays.slice(0, 8).map((item) => {
+							const t: TrackRowTrack = {
+								trackId: item.trackId,
+								title: item.title,
+								artist: item.artist,
+								album: item.album,
+								albumId: item.albumId,
+								cover: item.coverUrl,
+								duration: item.duration,
+								bitrateLabel: null,
+							};
+							return (
+								<TrackRow
+									key={item.id}
+									track={t}
+									showBitrate={false}
+									showDuration={true}
+								/>
+							);
+						})}
+					</div>
+				</section>
 			)}
 
 			{/* User Playlists */}

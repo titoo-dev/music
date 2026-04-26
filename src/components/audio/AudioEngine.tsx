@@ -68,8 +68,8 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 /**
  * Resolve audio URL for a track. Priority:
  * 1. IndexedDB blob URL (instant, zero network)
- * 2. Presigned S3 URL (direct browser streaming)
- * 3. Proxied stream API (fallback)
+ * 2. Presigned S3 URL (direct browser streaming for downloaded tracks)
+ * 3. Progressive endpoint (live decrypts from Deezer; auto-redirects to /stream once cached)
  */
 async function getTrackUrl(trackId: string): Promise<string> {
 	// 1. Check IndexedDB cache — instant blob URL
@@ -80,7 +80,7 @@ async function getTrackUrl(trackId: string): Promise<string> {
 		// Cache miss — continue to network
 	}
 
-	// 2. Presigned URL
+	// 2. Presigned URL — only succeeds for tracks already in user's DownloadHistory
 	if (usePresigned) {
 		const url = await fetchPresignedUrl(trackId);
 		if (url) {
@@ -88,14 +88,16 @@ async function getTrackUrl(trackId: string): Promise<string> {
 			if (window.location.protocol === "https:" && url.startsWith("http://")) {
 				usePresigned = false;
 				urlCache.clear();
-				return `/api/v1/stream/${trackId}`;
+				return `/api/v1/stream-progressive/${trackId}`;
 			}
 			return url;
 		}
 	}
 
-	// 3. Proxied stream (Service Worker will cache the response)
-	return `/api/v1/stream/${trackId}`;
+	// 3. Progressive stream — server decides:
+	//    • Already downloaded → 302 redirect to /api/v1/stream/[trackId]
+	//    • Not downloaded → live stream from Deezer with parallel persistence
+	return `/api/v1/stream-progressive/${trackId}`;
 }
 
 // --- Audio Preload Cache (in-memory HTMLAudioElement pool) ---
@@ -163,13 +165,79 @@ function smartPrefetchQueue() {
 }
 
 /**
+ * Log a "real" play (≥30s of continuous playback) so the track joins the
+ * user's recently-played history. Cap-aware on the server side.
+ */
+async function logRecentPlay(track: {
+	trackId: string;
+	title: string;
+	artist: string;
+	cover: string | null;
+	duration: number | null;
+}) {
+	try {
+		await fetch("/api/v1/recent-plays", {
+			method: "POST",
+			credentials: "include",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				trackId: track.trackId,
+				title: track.title,
+				artist: track.artist,
+				coverUrl: track.cover,
+				duration: track.duration,
+			}),
+		});
+	} catch {
+		// Non-fatal — just a missed history entry
+	}
+}
+
+/**
+ * Notify the server that the user skipped a track before reaching the 30s
+ * threshold so its S3 file can be evicted (if no other user listened to it).
+ * The DownloadHistory metadata stays for re-streaming on a future replay.
+ */
+function notifyTrackSkipped(trackId: string) {
+	try {
+		// sendBeacon survives page unload (closing tab during a play <30s)
+		const url = `/api/v1/recent-plays/${trackId}/skip`;
+		if (typeof navigator !== "undefined" && "sendBeacon" in navigator) {
+			navigator.sendBeacon(url);
+			return;
+		}
+		fetch(url, { method: "POST", credentials: "include", keepalive: true }).catch(() => {});
+	} catch {
+		// Non-fatal
+	}
+}
+
+/**
  * Cache current track after it starts playing (if not already cached).
  * This ensures every played track gets persisted to IndexedDB.
+ *
+ * Only runs when the track is actually downloaded (DownloadHistory exists).
+ * If we hit /api/v1/stream/[id] for a non-downloaded track, it 404s. Worse,
+ * it would race the in-progress /stream-progressive download. So we gate on
+ * the presigned-URL endpoint first — if it returns null, the track isn't
+ * cacheable yet (the progressive flow will create the DB row on completion,
+ * and a future play will populate the cache).
  */
 async function cacheCurrentTrackInBackground(trackId: string) {
 	if (await isCached(trackId)) return;
 
 	try {
+		// Quick existence check — returns { url: null } when not yet downloaded
+		const cached = urlCache.get(trackId);
+		const probe =
+			cached && Date.now() - cached.fetchedAt < URL_CACHE_TTL
+				? { ok: true }
+				: await fetch(`/api/v1/stream-url/${trackId}`, { credentials: "include" })
+						.then((r) => (r.ok ? r.json() : null))
+						.catch(() => null);
+		const isReady = !!(cached || probe?.data?.url);
+		if (!isReady) return;
+
 		const res = await fetch(`/api/v1/stream/${trackId}`, {
 			credentials: "include",
 		});
@@ -219,6 +287,13 @@ export function AudioEngine() {
 	// Error retry counter
 	const retryCountRef = useRef(0);
 	const MAX_RETRIES = 2;
+
+	// Play tracking — Spotify-like 30s rule.
+	// playLoggedRef: did we already POST /recent-plays for the *current* track?
+	// playLoggedTrackIdRef: which trackId that flag refers to (avoids stale state).
+	const playLoggedRef = useRef(false);
+	const playLoggedTrackIdRef = useRef<string | null>(null);
+	const PLAY_THRESHOLD_SECONDS = 30;
 
 	// Crossfade state
 	const crossfadeActiveRef = useRef(false);
@@ -344,6 +419,17 @@ export function AudioEngine() {
 		if (!audio) return;
 
 		if (!currentTrack) {
+			// Stopping playback (queue cleared / explicit stop). If the last
+			// track wasn't counted, it's a skip.
+			if (
+				prevTrackIdRef.current &&
+				playLoggedTrackIdRef.current === prevTrackIdRef.current &&
+				!playLoggedRef.current
+			) {
+				notifyTrackSkipped(prevTrackIdRef.current);
+			}
+			playLoggedRef.current = false;
+			playLoggedTrackIdRef.current = null;
 			audio.pause();
 			audio.src = "";
 			prevTrackIdRef.current = null;
@@ -351,6 +437,19 @@ export function AudioEngine() {
 		}
 
 		if (currentTrack.trackId !== prevTrackIdRef.current) {
+			// If the *previous* track never reached the 30s threshold, treat it
+			// as a skip → ask the server to evict its file (metadata stays).
+			if (
+				prevTrackIdRef.current &&
+				playLoggedTrackIdRef.current === prevTrackIdRef.current &&
+				!playLoggedRef.current
+			) {
+				notifyTrackSkipped(prevTrackIdRef.current);
+			}
+			// Reset play-tracking state for the incoming track
+			playLoggedRef.current = false;
+			playLoggedTrackIdRef.current = currentTrack.trackId;
+
 			// Cancel any in-progress crossfade on manual track change
 			if (crossfadeActiveRef.current) {
 				crossfadeActiveRef.current = false;
@@ -535,6 +634,26 @@ export function AudioEngine() {
 		}
 		onPositionUpdate();
 
+		// Spotify rule: count a real play once playback crosses 30s.
+		// This is the moment the track "joins" the user's recently-played
+		// history and its S3 file is locked from eviction-on-skip.
+		const track = usePlayerStore.getState().currentTrack;
+		if (
+			track &&
+			!playLoggedRef.current &&
+			playLoggedTrackIdRef.current === track.trackId &&
+			audio.currentTime >= PLAY_THRESHOLD_SECONDS
+		) {
+			playLoggedRef.current = true;
+			void logRecentPlay({
+				trackId: track.trackId,
+				title: track.title,
+				artist: track.artist,
+				cover: track.cover,
+				duration: track.duration,
+			});
+		}
+
 		// Connect to Web Audio API on first timeUpdate after playback starts.
 		// This provides audio data for the visualizer and normalization.
 		// Idempotent — skipped once connected or if connection fails (CORS etc.).
@@ -651,7 +770,7 @@ export function AudioEngine() {
 		const src = audio.src;
 
 		// First: try falling back from presigned URL to proxy stream
-		if (usePresigned && src && !src.includes("/api/v1/stream/")) {
+		if (usePresigned && src && !src.includes("/api/v1/stream-progressive/") && !src.includes("/api/v1/stream/")) {
 			usePresigned = false;
 			urlCache.clear();
 			for (const [, a] of preloadCache) {
@@ -659,7 +778,7 @@ export function AudioEngine() {
 				a.src = "";
 			}
 			preloadCache.clear();
-			audio.src = `/api/v1/stream/${currentTrack.trackId}`;
+			audio.src = `/api/v1/stream-progressive/${currentTrack.trackId}`;
 			audio.load();
 			return;
 		}
@@ -669,7 +788,7 @@ export function AudioEngine() {
 		if (retryCountRef.current <= MAX_RETRIES) {
 			setTimeout(() => {
 				if (audioRef.current && currentTrack) {
-					audioRef.current.src = `/api/v1/stream/${currentTrack.trackId}`;
+					audioRef.current.src = `/api/v1/stream-progressive/${currentTrack.trackId}`;
 					audioRef.current.load();
 				}
 			}, 1000 * retryCountRef.current);

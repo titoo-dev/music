@@ -1,7 +1,6 @@
 "use client";
 
 import { useAppStore } from "@/stores/useAppStore";
-import { AudioCacheManager } from "@/components/audio/AudioCacheManager";
 
 export default function AboutPage() {
 	const { currentVersion, latestVersion, updateAvailable } = useAppStore();
@@ -61,16 +60,6 @@ export default function AboutPage() {
 							<span className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] border-[2px] border-destructive bg-destructive text-white px-2 py-1">NEW</span>
 						</div>
 					)}
-				</div>
-			</section>
-
-			{/* Cache */}
-			<section className="mb-9">
-				<div className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] pb-2 border-b-[2px] border-foreground mb-0">
-					CACHE
-				</div>
-				<div className="border-l-[2px] border-r-[2px] border-b-[2px] border-foreground bg-card">
-					<AudioCacheManager />
 				</div>
 			</section>
 

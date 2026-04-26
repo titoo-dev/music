@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchData } from "@/utils/api";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2, Download, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Disc3 } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Disc3 } from "lucide-react";
 import Link from "next/link";
 import { PlayButton } from "@/components/audio/PlayButton";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
@@ -26,80 +26,32 @@ interface DownloadItem {
 	downloadedAt: string;
 }
 
-interface AlbumGroup {
-	type: "album";
-	albumId: string;
-	albumName: string;
-	artist: string;
-	coverUrl: string | null;
-	bitrate: number;
-	downloadedAt: string;
-	tracks: DownloadItem[];
-}
-
-interface SingleTrack {
-	type: "single";
-	item: DownloadItem;
-}
-
-type HistoryEntry = AlbumGroup | SingleTrack;
-
 const bitrateLabels: Record<number, string> = {
-	1: "MP3 128",
-	3: "MP3 320",
+	1: "MP3-128",
+	3: "MP3-320",
 	9: "FLAC",
-	15: "360 HQ",
-	14: "360 MQ",
-	13: "360 LQ",
+	15: "360-HQ",
+	14: "360-MQ",
+	13: "360-LQ",
 };
 
-function groupItems(items: DownloadItem[]): HistoryEntry[] {
-	const albumMap = new Map<string, DownloadItem[]>();
-	const singles: DownloadItem[] = [];
+function fmtDay(dateStr: string) {
+	const d = new Date(dateStr);
+	return d
+		.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+		.toUpperCase();
+}
 
-	for (const item of items) {
-		if (item.albumId && item.album) {
-			const existing = albumMap.get(item.albumId);
-			if (existing) {
-				existing.push(item);
-			} else {
-				albumMap.set(item.albumId, [item]);
-			}
-		} else {
-			singles.push(item);
-		}
-	}
+function fmtTime(dateStr: string) {
+	return new Date(dateStr).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+}
 
-	const entries: HistoryEntry[] = [];
-	// Track which albumIds we've already added so we preserve download order
-	const addedAlbums = new Set<string>();
-
-	for (const item of items) {
-		if (item.albumId && item.album && albumMap.has(item.albumId)) {
-			if (addedAlbums.has(item.albumId)) continue;
-			addedAlbums.add(item.albumId);
-			const tracks = albumMap.get(item.albumId)!;
-			if (tracks.length === 1) {
-				// Single track from an album — show flat
-				entries.push({ type: "single", item: tracks[0] });
-			} else {
-				entries.push({
-					type: "album",
-					albumId: item.albumId,
-					albumName: item.album,
-					artist: tracks[0].artist,
-					coverUrl: tracks[0].coverUrl,
-					bitrate: tracks[0].bitrate,
-					downloadedAt: tracks[0].downloadedAt,
-					tracks,
-				});
-			}
-		} else if (!item.albumId || !item.album) {
-			entries.push({ type: "single", item });
-		}
-	}
-
-	return entries;
+function bitrateApprox(bitrate: number) {
+	// Rough average size in MB per minute for label
+	if (bitrate === 9) return "FLAC";
+	if (bitrate === 3) return "320KB";
+	if (bitrate === 1) return "128KB";
+	return bitrateLabels[bitrate] || `${bitrate}`;
 }
 
 export default function DownloadHistoryPage() {
@@ -108,27 +60,16 @@ export default function DownloadHistoryPage() {
 	const [page, setPage] = useState(1);
 	const [totalPages, setTotalPages] = useState(1);
 	const [total, setTotal] = useState(0);
-	const [expandedAlbums, setExpandedAlbums] = useState<Set<string>>(new Set());
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
 	const playerPlaying = usePlayerStore((s) => s.isPlaying);
 	const openSheet = useTrackActionStore((s) => s.openSheet);
-
-	const toggleAlbum = (albumId: string) => {
-		setExpandedAlbums((prev) => {
-			const next = new Set(prev);
-			if (next.has(albumId)) next.delete(albumId);
-			else next.add(albumId);
-			return next;
-		});
-	};
 
 	useEffect(() => {
 		if (!isAuthenticated) {
 			setLoading(false);
 			return;
 		}
-
 		async function load() {
 			setLoading(true);
 			try {
@@ -147,10 +88,36 @@ export default function DownloadHistoryPage() {
 		load();
 	}, [page, isAuthenticated]);
 
+	const grouped = useMemo(() => {
+		const map = new Map<string, DownloadItem[]>();
+		for (const item of items) {
+			const day = fmtDay(item.downloadedAt);
+			const list = map.get(day);
+			if (list) list.push(item);
+			else map.set(day, [item]);
+		}
+		return Array.from(map.entries());
+	}, [items]);
+
+	const allPlayerTracks: PlayerTrack[] = items
+		.filter((i) => i.storageType === "s3")
+		.map((i) => ({
+			trackId: i.trackId,
+			title: i.title,
+			artist: i.artist,
+			cover: i.coverUrl,
+			duration: null,
+		}));
+
+	const flacCount = items.filter((i) => i.bitrate === 9).length;
+	const mp3Count = items.length - flacCount;
+
 	if (!isAuthenticated) {
 		return (
 			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-				<p className="text-sm text-muted-foreground">Sign in to view your download history.</p>
+				<p className="text-sm text-muted-foreground font-bold uppercase tracking-[0.05em]">
+					Sign in to view your download history.
+				</p>
 				<Link href="/login">
 					<Button>Sign in</Button>
 				</Link>
@@ -166,237 +133,211 @@ export default function DownloadHistoryPage() {
 		);
 	}
 
-	const entries = groupItems(items);
-
-	// Build full player queue from all playable tracks
-	const allPlayerTracks: PlayerTrack[] = items
-		.filter((i) => i.storageType === "s3")
-		.map((i) => ({
-			trackId: i.trackId,
-			title: i.title,
-			artist: i.artist,
-			cover: i.coverUrl,
-			duration: null,
-		}));
-
 	return (
-		<div className="space-y-6">
-			<div>
-				<h1 className="text-brutal-lg">Download History</h1>
-				<p className="text-sm text-muted-foreground mt-1 uppercase tracking-wider font-bold font-mono">
-					{total} track{total !== 1 ? "s" : ""} downloaded
+		<div className="max-w-2xl mx-auto">
+			{/* Page header */}
+			<div className="mb-7">
+				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+					DOWNLOAD HISTORY · LEDGER
 				</p>
+				<div className="flex items-end justify-between gap-6 flex-wrap">
+					<div className="min-w-0 flex-1">
+						<h1 className="text-brutal-xl m-0">
+							THE <span className="text-primary">RECEIPTS.</span>
+						</h1>
+						<p className="mt-2 text-sm font-bold uppercase tracking-[0.04em] text-muted-foreground">
+							{total} TRANSACTION{total !== 1 ? "S" : ""} · {flacCount} FLAC · {mp3Count} MP3 · ALL TIME
+						</p>
+					</div>
+				</div>
 			</div>
 
 			{items.length === 0 ? (
-				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<Download className="size-8 text-muted-foreground/50" />
-					<p className="text-sm text-muted-foreground font-bold uppercase">No downloads yet</p>
-					<p className="text-xs text-muted-foreground font-bold uppercase">
-						Downloaded tracks will appear here.
+				<div className="border-[2px] sm:border-[3px] border-foreground bg-card flex flex-col items-center justify-center py-20 px-6 gap-3 shadow-[var(--shadow-brutal)]">
+					<div className="text-3xl font-black tracking-[0.2em]">∅</div>
+					<p className="text-sm font-black uppercase tracking-[0.14em]">EMPTY LEDGER</p>
+					<p className="text-[11px] text-muted-foreground font-mono uppercase tracking-[0.05em] text-center">
+						Downloaded tracks will appear on this receipt.
 					</p>
 				</div>
 			) : (
 				<>
-					<div className="space-y-1">
-						{entries.map((entry) => {
-							if (entry.type === "single") {
-								return (
-									<TrackRow
-										key={entry.item.id}
-										item={entry.item}
-										playerQueue={allPlayerTracks}
-										currentPlayerTrack={currentPlayerTrack}
-										playerPlaying={playerPlaying}
-										openSheet={openSheet}
-									/>
-								);
-							}
+					{/* Receipt card */}
+					<div
+						className="border-[2px] sm:border-[3px] border-foreground bg-[#fffdf6] shadow-[var(--shadow-brutal)] px-5 sm:px-7 py-6 font-mono"
+					>
+						{/* Receipt header */}
+						<div className="text-center border-b-[2px] border-dashed border-foreground pb-4 mb-4">
+							<div className="font-black text-base sm:text-lg tracking-[0.2em]">DEEMIX</div>
+							<div className="text-[10px] mt-1 tracking-[0.1em]">── DOWNLOAD RECEIPT ──</div>
+							<div className="text-[10px] mt-1 text-muted-foreground tracking-[0.05em]">
+								PAGE {page} / {totalPages} · {items.length} ITEM{items.length !== 1 ? "S" : ""}
+							</div>
+						</div>
 
-							const isExpanded = expandedAlbums.has(entry.albumId);
-							return (
-								<div key={`album-${entry.albumId}`}>
-									{/* Album header row */}
-									<button
-										onClick={() => toggleAlbum(entry.albumId)}
-										className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2.5 overflow-hidden transition-colors border-b-[2px] border-foreground hover:bg-accent/20 select-none text-left"
-									>
-										<div className="relative shrink-0 size-9 sm:size-10 overflow-hidden bg-muted">
-											{entry.coverUrl ? (
-												<CoverImage
-													src={entry.coverUrl}
-													alt={entry.albumName}
-													className="size-9 sm:size-10"
-												/>
-											) : (
-												<div className="size-9 sm:size-10 flex items-center justify-center">
-													<Disc3 className="size-4 text-muted-foreground" />
-												</div>
-											)}
-										</div>
-										<div className="flex-1 min-w-0">
-											<p className="text-sm font-bold truncate">{entry.albumName}</p>
-											<p className="text-xs text-muted-foreground truncate">
-												{entry.artist} · {entry.tracks.length} tracks
-											</p>
-										</div>
-										<div className="shrink-0 text-right mr-1">
-											<p className="text-xs text-muted-foreground font-mono font-bold">
-												{bitrateLabels[entry.bitrate] || `${entry.bitrate}`}
-											</p>
-											<p className="text-xs text-muted-foreground font-mono">
-												{new Date(entry.downloadedAt).toLocaleDateString()}
-											</p>
-										</div>
-										{isExpanded ? (
-											<ChevronUp className="size-4 text-muted-foreground shrink-0" />
-										) : (
-											<ChevronDown className="size-4 text-muted-foreground shrink-0" />
-										)}
-									</button>
-
-									{/* Expanded tracks */}
-									{isExpanded && (
-										<div className="border-b-[2px] border-foreground">
-											{entry.tracks.map((item) => (
-												<TrackRow
-													key={item.id}
-													item={item}
-													playerQueue={allPlayerTracks}
-													currentPlayerTrack={currentPlayerTrack}
-													playerPlaying={playerPlaying}
-													openSheet={openSheet}
-													indent
-												/>
-											))}
-										</div>
-									)}
+						{/* Items grouped by day */}
+						{grouped.map(([day, dayItems]) => (
+							<div key={day} className="mb-5">
+								<div className="text-[10px] font-bold tracking-[0.12em] mb-2 pb-1 border-b border-foreground/20">
+									{day}
 								</div>
-							);
-						})}
+								<div className="space-y-1">
+									{dayItems.map((item) => {
+										const playerTrack: PlayerTrack = {
+											trackId: item.trackId,
+											title: item.title,
+											artist: item.artist,
+											cover: item.coverUrl,
+											duration: null,
+										};
+										const isActive = currentPlayerTrack?.trackId === item.trackId && playerPlaying;
+										const isPaused = currentPlayerTrack?.trackId === item.trackId && !playerPlaying;
+										const lp = longPressHandlers(() => {
+											openSheet({
+												id: item.trackId,
+												title: item.title,
+												artist: item.artist,
+												cover: item.coverUrl || undefined,
+												albumId: item.albumId || undefined,
+												albumTitle: item.album || undefined,
+											});
+										});
+
+										return (
+											<div
+												key={item.id}
+												{...lp}
+												className={`group grid grid-cols-[auto_28px_1fr_auto_auto] gap-2 sm:gap-3 items-center text-[12px] py-1 px-1 transition-colors select-none ${
+													isActive || isPaused ? "bg-primary/10" : "hover:bg-foreground/5"
+												}`}
+											>
+												{/* Play button (or playing indicator) */}
+												<div className="shrink-0 w-6 flex items-center justify-center">
+													{item.storageType === "s3" ? (
+														isActive || isPaused ? (
+															<PlaybackIndicator paused={isPaused} />
+														) : (
+															<PlayButton track={playerTrack} queue={allPlayerTracks} className="!h-5 !w-5" />
+														)
+													) : (
+														<span className="text-muted-foreground/50 text-[10px]">·</span>
+													)}
+												</div>
+												{/* Cover thumbnail */}
+												<div className="shrink-0 w-7 h-7 bg-muted overflow-hidden border border-foreground/30">
+													{item.coverUrl ? (
+														<CoverImage src={item.coverUrl} alt={item.title} className="w-7 h-7" />
+													) : (
+														<div className="w-7 h-7 flex items-center justify-center">
+															<Disc3 className="size-3 text-muted-foreground/40" />
+														</div>
+													)}
+												</div>
+												{/* Title + artist */}
+												<div className="min-w-0 leading-tight">
+													<span className={`font-bold truncate ${isActive || isPaused ? "text-primary" : ""}`}>
+														{item.title}
+													</span>
+													<span className="text-muted-foreground"> · {item.artist}</span>
+													{item.album && (
+														<span className="hidden sm:inline text-muted-foreground/60">
+															{" / "}
+															{item.albumId ? (
+																<Link
+																	href={`/album?id=${item.albumId}`}
+																	className="hover:text-foreground hover:underline"
+																>
+																	{item.album}
+																</Link>
+															) : (
+																item.album
+															)}
+														</span>
+													)}
+												</div>
+												{/* Bitrate */}
+												<span className="text-[10px] font-bold text-muted-foreground tabular-nums shrink-0">
+													{bitrateApprox(item.bitrate)}
+												</span>
+												{/* Time */}
+												<span className="text-[10px] text-muted-foreground tabular-nums shrink-0 w-10 text-right">
+													{fmtTime(item.downloadedAt)}
+												</span>
+											</div>
+										);
+									})}
+								</div>
+							</div>
+						))}
+
+						{/* Total */}
+						<div className="border-t-[2px] border-dashed border-foreground pt-3 mt-2">
+							<div className="flex justify-between items-baseline font-black text-[13px] tracking-[0.05em]">
+								<span>SUBTOTAL · PAGE</span>
+								<span>{items.length} TR</span>
+							</div>
+							<div className="flex justify-between text-[10px] text-muted-foreground mt-1 tracking-[0.05em]">
+								<span>{flacCount} FLAC · {mp3Count} MP3</span>
+								<span>PAID IN BANDWIDTH</span>
+							</div>
+							<div className="flex justify-between font-black text-[15px] tracking-[0.05em] border-t border-foreground/30 pt-2 mt-2">
+								<span>TOTAL · ALL TIME</span>
+								<span>{total} TR</span>
+							</div>
+						</div>
+
+						{/* Receipt footer */}
+						<div className="text-center border-t-[2px] border-dashed border-foreground pt-4 mt-4 text-[10px] text-muted-foreground tracking-[0.1em]">
+							*** THANK YOU ***
+							<br />
+							KEEP THIS RECEIPT FOR YOUR RECORDS
+						</div>
+
+						{/* Barcode-ish strip */}
+						<div className="mt-4 flex justify-center gap-[1px]" aria-hidden>
+							{Array.from({ length: 40 }).map((_, i) => (
+								<div
+									key={i}
+									className="bg-foreground"
+									style={{
+										width: i % 3 === 0 ? 3 : i % 4 === 0 ? 2 : 1,
+										height: 24,
+										opacity: i % 5 === 0 ? 0.4 : 1,
+									}}
+								/>
+							))}
+						</div>
 					</div>
 
 					{/* Pagination */}
 					{totalPages > 1 && (
-						<div className="flex items-center justify-center gap-2 pt-4">
+						<div className="flex items-center justify-center gap-2 pt-6">
 							<Button
 								variant="outline"
 								size="sm"
 								disabled={page <= 1}
 								onClick={() => setPage((p) => p - 1)}
+								className="font-mono uppercase tracking-[0.1em]"
 							>
 								<ChevronLeft className="size-4" />
+								PREV
 							</Button>
-							<span className="text-sm text-muted-foreground font-mono font-bold">
-								Page {page} of {totalPages}
+							<span className="text-[11px] text-muted-foreground font-mono font-bold tracking-[0.1em] uppercase px-2">
+								PAGE {page} / {totalPages}
 							</span>
 							<Button
 								variant="outline"
 								size="sm"
 								disabled={page >= totalPages}
 								onClick={() => setPage((p) => p + 1)}
+								className="font-mono uppercase tracking-[0.1em]"
 							>
+								NEXT
 								<ChevronRight className="size-4" />
 							</Button>
 						</div>
 					)}
 				</>
-			)}
-		</div>
-	);
-}
-
-function TrackRow({
-	item,
-	playerQueue,
-	currentPlayerTrack,
-	playerPlaying,
-	openSheet,
-	indent,
-}: {
-	item: DownloadItem;
-	playerQueue: PlayerTrack[];
-	currentPlayerTrack: PlayerTrack | null;
-	playerPlaying: boolean;
-	openSheet: (track: any, callbacks?: any) => void;
-	indent?: boolean;
-}) {
-	const playerTrack: PlayerTrack = {
-		trackId: item.trackId,
-		title: item.title,
-		artist: item.artist,
-		cover: item.coverUrl,
-		duration: null,
-	};
-	const isActive = currentPlayerTrack?.trackId === item.trackId && playerPlaying;
-	const isPaused = currentPlayerTrack?.trackId === item.trackId && !playerPlaying;
-
-	const lp = longPressHandlers(() => {
-		openSheet({
-			id: item.trackId,
-			title: item.title,
-			artist: item.artist,
-			cover: item.coverUrl || undefined,
-			albumId: item.albumId || undefined,
-			albumTitle: item.album || undefined,
-		});
-	});
-
-	return (
-		<div
-			{...lp}
-			className={`group flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 overflow-hidden transition-colors border-b-[2px] border-foreground last:border-b-0 select-none ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"} ${indent ? "pl-5 sm:pl-7" : ""}`}
-		>
-			{item.storageType === "s3" && (
-				<PlayButton
-					track={playerTrack}
-					queue={playerQueue}
-					className=""
-				/>
-			)}
-			<div className="relative shrink-0 size-9 sm:size-10 overflow-hidden bg-muted">
-				{item.coverUrl ? (
-					<CoverImage
-						src={item.coverUrl}
-						alt={item.title}
-						className="size-9 sm:size-10"
-					/>
-				) : (
-					<div className="size-9 sm:size-10 flex items-center justify-center text-xs text-muted-foreground">
-						?
-					</div>
-				)}
-				{(isActive || isPaused) && (
-					<div className="absolute inset-0 flex items-center justify-center">
-						<PlaybackIndicator paused={isPaused} />
-					</div>
-				)}
-			</div>
-			<div className="flex-1 min-w-0">
-				<p className={`text-sm font-medium truncate ${isActive || isPaused ? "text-primary" : ""}`}>{item.title}</p>
-				<p className="text-xs text-muted-foreground truncate">
-					{item.artist}
-					{!indent && item.album ? (
-						<>
-							{" · "}
-							{item.albumId ? (
-								<Link href={`/album?id=${item.albumId}`} className="hover:underline hover:text-foreground transition-colors">
-									{item.album}
-								</Link>
-							) : item.album}
-						</>
-					) : ""}
-				</p>
-			</div>
-			{!indent && (
-				<div className="shrink-0 text-right">
-					<p className="text-xs text-muted-foreground font-mono font-bold">
-						{bitrateLabels[item.bitrate] || `${item.bitrate}`}
-					</p>
-					<p className="text-xs text-muted-foreground font-mono">
-						{new Date(item.downloadedAt).toLocaleDateString()}
-					</p>
-				</div>
 			)}
 		</div>
 	);

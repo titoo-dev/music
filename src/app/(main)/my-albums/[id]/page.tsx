@@ -23,6 +23,7 @@ import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { longPressHandlers } from "@/hooks/useLongPress";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
+import { TrackActionMenu } from "@/components/tracks/TrackActionMenu";
 import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { usePrefetch } from "@/hooks/usePrefetch";
@@ -256,7 +257,7 @@ export default function AlbumDetailPage() {
 									<Button
 										variant="outline"
 										size="sm"
-										className="gap-1.5 text-muted-foreground hover:text-red-500 hover:border-red-500"
+										className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive"
 									/>
 								}
 							>
@@ -276,7 +277,7 @@ export default function AlbumDetailPage() {
 									<AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
 									<AlertDialogAction
 										onClick={handleDelete}
-										className="bg-red-600 hover:bg-red-700"
+										className="bg-destructive hover:bg-destructive/90 text-white"
 										disabled={deleting}
 									>
 										{deleting && <Loader2 className="size-3.5 animate-spin mr-1.5" />}
@@ -321,7 +322,16 @@ export default function AlbumDetailPage() {
 						</p>
 					</div>
 				) : (
-					<div className="space-y-1">
+					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
+						{/* Column header */}
+						<div className="hidden sm:grid grid-cols-[36px_40px_1fr_auto_60px_28px] gap-3 items-center px-3 py-2 border-b-[2px] border-foreground font-mono text-[10px] font-bold tracking-[0.14em] uppercase text-muted-foreground">
+							<span className="text-right">#</span>
+							<span />
+							<span>TITLE / ARTIST</span>
+							<span>FORMAT</span>
+							<span className="text-right">TIME</span>
+							<span />
+						</div>
 						{sortedTracks.map((track, idx) => {
 							const playerTrack: PlayerTrack = {
 								trackId: track.trackId,
@@ -351,22 +361,23 @@ export default function AlbumDetailPage() {
 								<div
 									key={track.id}
 									{...lp}
-									className={`group flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 overflow-hidden transition-colors border-b-[2px] border-foreground last:border-b-0 select-none ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}
+									className={`group grid grid-cols-[36px_40px_1fr_auto_40px] sm:grid-cols-[36px_40px_1fr_auto_60px_28px] gap-2 sm:gap-3 items-center px-2 sm:px-3 py-2 sm:py-2.5 overflow-hidden transition-colors border-b border-foreground/15 last:border-b-0 select-none ${
+										isActive || isPaused ? "bg-accent" : "hover:bg-foreground/5"
+									}`}
 								>
-									<PlayButton
-										track={playerTrack}
-										queue={playerQueue}
-									/>
-									<div className="relative shrink-0 size-9 sm:size-10 bg-muted">
+									<div className="flex items-center justify-center">
+										<PlayButton track={playerTrack} queue={playerQueue} />
+									</div>
+									<div className="relative shrink-0 size-9 bg-muted">
 										{track.coverUrl ? (
 											<CoverImage
 												src={track.coverUrl}
 												alt={track.title}
-												className={`size-10 ${isActive ? "opacity-50" : ""}`}
+												className={`size-9 ${isActive ? "opacity-50" : ""}`}
 											/>
 										) : (
-											<div className="size-10 flex items-center justify-center text-xs text-muted-foreground">
-												{idx + 1}
+											<div className="size-9 flex items-center justify-center text-[10px] text-muted-foreground font-mono font-bold">
+												{String(idx + 1).padStart(2, "0")}
 											</div>
 										)}
 										{(isActive || isPaused) && (
@@ -375,17 +386,34 @@ export default function AlbumDetailPage() {
 											</div>
 										)}
 									</div>
-									<div className="flex-1 min-w-0">
-										<p className={`text-sm font-bold truncate ${isActive || isPaused ? "text-primary" : ""}`}>
+									<div className="min-w-0">
+										<p className="text-[13px] font-bold tracking-[-0.005em] truncate leading-tight">
 											{track.title}
 										</p>
-										<p className="text-xs text-muted-foreground truncate">
+										<p className="text-[11px] text-muted-foreground truncate font-medium leading-tight mt-0.5">
 											{track.artist}
 										</p>
 									</div>
-									<span className="hidden sm:inline text-xs text-muted-foreground font-mono shrink-0">
+									<span className="font-mono text-[10px] font-black tracking-[0.05em] uppercase border-2 border-foreground px-1.5 py-0.5 bg-accent text-foreground">
+										LOCAL
+									</span>
+									<span className="hidden sm:inline text-[11px] text-muted-foreground font-mono tabular-nums text-right">
 										{formatDuration(track.duration)}
 									</span>
+									<div className="hidden sm:block">
+										<TrackActionMenu
+											track={{
+												id: track.trackId,
+												title: track.title,
+												artist: track.artist,
+												cover: track.coverUrl || undefined,
+												duration: track.duration || undefined,
+												albumId: album.id,
+												albumTitle: album.title,
+											}}
+											callbacks={{ onDelete: () => handleRemoveTrack(track.trackId) }}
+										/>
+									</div>
 								</div>
 							);
 						})}

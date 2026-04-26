@@ -123,7 +123,7 @@ export function AudioCacheManager() {
 						<Button
 							variant="outline"
 							size="sm"
-							className="gap-1.5 text-muted-foreground hover:text-red-500 hover:border-red-500"
+							className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive"
 							onClick={handleClear}
 							disabled={clearing || stats.trackCount === 0}
 						>

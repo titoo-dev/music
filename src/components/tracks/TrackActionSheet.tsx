@@ -56,7 +56,7 @@ function DownloadStatusIcon({ trackId }: { trackId: string }) {
 	const progress = queueItem?.progress ?? 0;
 
 	if (status === "completed")
-		return <CheckCircle2 className="size-4 text-emerald-500" />;
+		return <CheckCircle2 className="size-4 text-foreground" />;
 	if (status === "downloading")
 		return (
 			<span className="text-xs font-mono font-bold text-primary">
@@ -66,9 +66,9 @@ function DownloadStatusIcon({ trackId }: { trackId: string }) {
 	if (status === "inQueue")
 		return <Clock className="size-4 text-muted-foreground animate-pulse" />;
 	if (status === "failed")
-		return <AlertTriangle className="size-4 text-red-500" />;
+		return <AlertTriangle className="size-4 text-destructive" />;
 	if (status === "withErrors")
-		return <AlertTriangle className="size-4 text-amber-500" />;
+		return <AlertTriangle className="size-4 text-primary" />;
 	if (status === "cancelling")
 		return <Loader2 className="size-4 animate-spin text-muted-foreground" />;
 	return <Download className="size-4" />;
@@ -225,7 +225,7 @@ function PlaylistPicker({
 									)}
 								</div>
 								{addedTo.has(p.id) && (
-									<Check className="size-4 text-emerald-500 shrink-0" />
+									<Check className="size-4 text-foreground shrink-0" />
 								)}
 							</button>
 						))}
@@ -363,7 +363,7 @@ export function TrackActionSheet() {
 			<SheetContent
 				side="bottom"
 				showCloseButton={false}
-				className="pb-[env(safe-area-inset-bottom)] max-h-[85vh]"
+				className="pb-[env(safe-area-inset-bottom)] max-h-[85vh] md:hidden"
 			>
 				{/* Track Header */}
 				<SheetHeader className="border-b-[2px] border-foreground">
@@ -484,7 +484,7 @@ export function TrackActionSheet() {
 						{/* Delete */}
 						{callbacks.onDelete && (
 							<ActionRow
-								icon={<Trash2 className="size-4 text-red-500" />}
+								icon={<Trash2 className="size-4 text-destructive" />}
 								label="Remove from playlist"
 								onClick={handleDelete}
 								destructive
@@ -533,7 +533,7 @@ function ActionRow({
 		<button
 			onClick={onClick}
 			className={`flex items-center gap-3 px-4 py-3.5 w-full text-left active:bg-accent/20 transition-colors ${
-				destructive ? "text-red-500" : "text-foreground"
+				destructive ? "text-destructive" : "text-foreground"
 			}`}
 		>
 			<span className="shrink-0">{icon}</span>

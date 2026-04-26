@@ -23,12 +23,15 @@ export async function GET(
 		const storagePath = download?.storedTrack?.storagePath ?? download?.storagePath;
 		const storageType = download?.storedTrack?.storageType ?? download?.storageType;
 
+		// Track isn't (yet) in user's downloads → return 200 with url:null so the
+		// client can fall through to /stream-progressive without a 404 in the
+		// Network tab.
 		if (!storagePath) {
-			return fail("NOT_FOUND", "Track not found in your downloads.", 404);
+			return ok({ url: null, status: "not_downloaded" });
 		}
 
 		if (storageType !== "s3") {
-			return fail("UNSUPPORTED_STORAGE", "Only S3 storage is supported.", 400);
+			return ok({ url: null, status: "unsupported_storage" });
 		}
 
 		const { url, contentType } = await getPresignedUrl(storagePath, 900);

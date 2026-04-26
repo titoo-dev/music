@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { useDownload } from "@/hooks/useDownload";
-import { convertDuration } from "@/utils/helpers";
+import { isValidURL } from "@/utils/helpers";
+import { useAuthStore } from "@/stores/useAuthStore";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,16 +13,88 @@ import {
 	TabsContent,
 } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Download, Loader2, CheckCircle2 } from "lucide-react";
-import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
-import { useLongPress } from "@/hooks/useLongPress";
-import { useTrackActionStore } from "@/stores/useTrackActionStore";
-import { CoverImage } from "@/components/ui/cover-image";
+import { Search, X, Download, Loader2, CheckCircle2 } from "lucide-react";
 import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
-import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
-import { usePreviewStore } from "@/stores/usePreviewStore";
-import { usePlayerStore } from "@/stores/usePlayerStore";
+import { CoverImage } from "@/components/ui/cover-image";
+import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
+
+function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
+	const router = useRouter();
+	const inputRef = useRef<HTMLInputElement>(null);
+	const [q, setQ] = useState(initialTerm);
+	const loggedIn = useAuthStore((s) => s.isDeezerConnected);
+	const { download } = useDownload();
+
+	useEffect(() => {
+		setQ(initialTerm);
+	}, [initialTerm]);
+
+	const submit = useCallback(
+		(e?: React.FormEvent) => {
+			e?.preventDefault();
+			const v = q.trim();
+			if (!v) return;
+			if (isValidURL(v)) {
+				if (loggedIn) {
+					download(v);
+					setQ("");
+				}
+				return;
+			}
+			router.push(`/search?term=${encodeURIComponent(v)}`);
+		},
+		[q, router, loggedIn, download]
+	);
+
+	return (
+		<div>
+			<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+				SEARCH / DEEZER
+			</p>
+			<form onSubmit={submit} className="flex items-stretch">
+				{/* Input box */}
+				<div className="flex-1 flex items-center px-4 sm:px-5 border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] min-w-0">
+					<Search className="size-5 shrink-0 text-foreground" />
+					<input
+						ref={inputRef}
+						value={q}
+						onChange={(e) => setQ(e.target.value)}
+						placeholder="ARTIST, TRACK, ALBUM, OR DEEZER LINK…"
+						autoComplete="off"
+						autoCorrect="off"
+						autoCapitalize="off"
+						spellCheck={false}
+						className="flex-1 min-w-0 bg-transparent border-0 outline-none px-3 py-3.5 sm:py-4 text-base sm:text-lg font-bold tracking-[-0.01em] text-foreground placeholder:text-muted-foreground/60 placeholder:tracking-[0.05em] placeholder:text-sm placeholder:font-bold placeholder:uppercase"
+					/>
+					{q && (
+						<button
+							type="button"
+							aria-label="Clear search"
+							onClick={() => {
+								setQ("");
+								inputRef.current?.focus();
+							}}
+							className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+						>
+							<X className="size-4" />
+						</button>
+					)}
+				</div>
+				{/* GO button */}
+				<button
+					type="submit"
+					className="shrink-0 px-5 sm:px-7 border-2 sm:border-[3px] border-l-0 sm:border-l-0 border-foreground bg-primary text-white font-mono text-sm sm:text-base font-black tracking-[0.14em] uppercase shadow-[var(--shadow-brutal)] hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)]"
+				>
+					GO
+				</button>
+			</form>
+			<p className="mt-2 text-[10px] font-mono font-bold uppercase tracking-[0.05em] text-muted-foreground">
+				TIP — PASTE A DEEZER URL TO QUEUE AN ENTIRE ALBUM OR PLAYLIST.
+			</p>
+		</div>
+	);
+}
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -142,18 +215,32 @@ function SearchContent() {
 
 	if (!term) {
 		return (
-			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
-				<p className="text-sm font-medium text-muted-foreground">No search query</p>
-				<p className="text-xs text-muted-foreground">Type something in the search bar to get started.</p>
+			<div className="space-y-8">
+				<BrutalSearchBar initialTerm="" />
+				<div>
+					<h1 className="text-brutal-xl m-0">
+						FIND<br />
+						<span className="text-primary">SOMETHING.</span>
+					</h1>
+					<p className="mt-4 text-[12px] font-mono font-bold uppercase tracking-[0.05em] text-muted-foreground max-w-md">
+						TYPE AN ARTIST, ALBUM OR TRACK ABOVE — OR PASTE A DEEZER URL.
+					</p>
+				</div>
 			</div>
 		);
 	}
 
 	return (
 		<div className="space-y-6">
+			<BrutalSearchBar initialTerm={term} />
+
+			{/* Result label */}
 			<div>
-				<h1 className="text-brutal-lg">
-					Search results for &ldquo;{term}&rdquo;
+				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
+					RESULTS FOR
+				</p>
+				<h1 className="text-brutal-lg m-0 break-words">
+					&ldquo;{term}&rdquo;<span className="text-primary">.</span>
 				</h1>
 			</div>
 
@@ -161,21 +248,22 @@ function SearchContent() {
 				value={tab}
 				onValueChange={(value) => setTab(value as SearchTab)}
 			>
-				<div className="flex flex-wrap gap-1.5">
+				{/* Connected tabs with border-bottom under all */}
+				<div className="flex border-b-[2px] border-foreground -mx-1 sm:mx-0 overflow-x-auto scrollbar-hide">
 					{([
-						["all", "All"],
-						["track", "Tracks"],
-						["album", "Albums"],
-						["artist", "Artists"],
-						["playlist", "Playlists"],
+						["all", "ALL"],
+						["track", "TRACKS"],
+						["album", "ALBUMS"],
+						["artist", "ARTISTS"],
+						["playlist", "PLAYLISTS"],
 					] as const).map(([value, label]) => (
 						<button
 							key={value}
 							onClick={() => setTab(value)}
-							className={`px-3 py-1.5 text-xs font-black uppercase tracking-wider border-2 border-foreground transition-colors ${
+							className={`shrink-0 px-4 py-2.5 border-r-[2px] border-foreground last:border-r-0 font-mono text-[11px] font-bold tracking-[0.14em] cursor-pointer transition-colors ${
 								tab === value
 									? "bg-foreground text-background"
-									: "bg-muted text-foreground hover:bg-accent"
+									: "bg-transparent text-foreground hover:bg-accent/40"
 							}`}
 						>
 							{label}
@@ -238,9 +326,12 @@ function SearchContent() {
 				)}
 
 				{!loading && !results && term && (
-					<div className="flex flex-col items-center justify-center py-24 gap-2">
-						<p className="text-sm font-medium text-muted-foreground">No results found</p>
-						<p className="text-xs text-muted-foreground">Try a different search term.</p>
+					<div className="border-2 sm:border-[3px] border-foreground bg-card flex flex-col items-center justify-center py-20 px-6 gap-3 mt-6 shadow-[var(--shadow-brutal)]">
+						<div className="text-3xl font-black tracking-[0.2em]">∅</div>
+						<p className="text-sm font-black uppercase tracking-[0.14em]">NO RESULTS</p>
+						<p className="text-[11px] text-muted-foreground font-mono uppercase tracking-[0.05em]">
+							Try a different search term.
+						</p>
 					</div>
 				)}
 			</Tabs>
@@ -295,27 +386,38 @@ function AllResults({
 	}
 
 	return (
-		<div className="space-y-8 mt-4">
+		<div className="space-y-10 mt-6">
 			{tracks.length > 0 && (
-				<section className="space-y-3">
-					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
-						Tracks
-					</h2>
-					<div className="border-2 sm:border-[3px] border-foreground overflow-hidden">
-						{tracks.map((track: any, idx: number) => (
-							<div key={track.SNG_ID || track.id}>
-								<TrackRow track={track} onDownload={onDownload} isLoading={isLoading} deezerUrl={deezerUrl} downloaded={downloaded} />
-								{idx < tracks.length - 1 && <Separator />}
-							</div>
+				<section>
+					<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
+						<div className="flex items-baseline gap-3">
+							<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
+								TRACKS
+							</h2>
+							<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
+								{results?.TRACK?.total || tracks.length} RESULTS
+							</span>
+						</div>
+					</div>
+					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
+						{tracks.map((track: any) => (
+							<SearchTrackRow key={track.SNG_ID || track.id} track={track} onDownload={onDownload} isLoading={isLoading} deezerUrl={deezerUrl} downloaded={downloaded} />
 						))}
 					</div>
 				</section>
 			)}
 			{albums.length > 0 && (
-				<section className="space-y-3">
-					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
-						Albums
-					</h2>
+				<section>
+					<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
+						<div className="flex items-baseline gap-3">
+							<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
+								ALBUMS
+							</h2>
+							<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
+								{results?.ALBUM?.total || albums.length} RESULTS
+							</span>
+						</div>
+					</div>
 					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
 						{albums.map((album: any) => {
 							const deezerAlbumId = String(album.ALB_ID || album.id);
@@ -334,10 +436,17 @@ function AllResults({
 				</section>
 			)}
 			{artists.length > 0 && (
-				<section className="space-y-3">
-					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
-						Artists
-					</h2>
+				<section>
+					<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
+						<div className="flex items-baseline gap-3">
+							<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
+								ARTISTS
+							</h2>
+							<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
+								{results?.ARTIST?.total || artists.length} RESULTS
+							</span>
+						</div>
+					</div>
 					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
 						{artists.map((artist: any) => (
 							<ArtistCard
@@ -349,10 +458,17 @@ function AllResults({
 				</section>
 			)}
 			{playlists.length > 0 && (
-				<section className="space-y-3">
-					<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em]">
-						Playlists
-					</h2>
+				<section>
+					<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
+						<div className="flex items-baseline gap-3">
+							<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
+								PLAYLISTS
+							</h2>
+							<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
+								{results?.PLAYLIST?.total || playlists.length} RESULTS
+							</span>
+						</div>
+					</div>
 					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
 						{playlists.map((pl: any) => (
 							<PlaylistCard
@@ -370,7 +486,7 @@ function AllResults({
 	);
 }
 
-function TrackRow({
+function SearchTrackRow({
 	track,
 	onDownload,
 	isLoading,
@@ -383,85 +499,15 @@ function TrackRow({
 	deezerUrl: (id: string | number, type: string) => string;
 	downloaded?: Set<string>;
 }) {
-	const id = track.SNG_ID || track.id;
-	const title = track.SNG_TITLE || track.title;
-	const artistName = track.ART_NAME || track.artist?.name;
-	const artistId = track.ART_ID || track.artist?.id;
-	const albumTitle = track.ALB_TITLE || track.album?.title;
-	const albumId = track.ALB_ID || track.album?.id;
-	const duration = track.DURATION || track.duration;
-	const cover =
-		track.album?.cover_small ||
-		getCoverUrl(track.ALB_PICTURE, 56);
-	const previewUrl = (track.MEDIA?.[0]?.HREF || track.preview || "").replace("http://", "https://");
-
-	const previewTrack = usePreviewStore((s) => s.currentTrack);
-	const previewPlaying = usePreviewStore((s) => s.isPlaying);
-	const playerTrack = usePlayerStore((s) => s.currentTrack);
-	const playerPlaying = usePlayerStore((s) => s.isPlaying);
-	const isPreviewActive = previewTrack?.id === String(id) && previewPlaying;
-	const isPlayerActive = playerTrack?.trackId === String(id) && playerPlaying;
-	const isActive = isPreviewActive || isPlayerActive;
-	const isPaused = (previewTrack?.id === String(id) && !previewPlaying) || (playerTrack?.trackId === String(id) && !playerPlaying);
-
-	const openSheet = useTrackActionStore((s) => s.openSheet);
-	const longPress = useLongPress(() => {
-		openSheet(
-			{
-				id: String(id),
-				title,
-				artist: artistName,
-				cover: cover || undefined,
-				duration: duration ? Number(duration) : undefined,
-				albumId: albumId ? String(albumId) : undefined,
-				albumTitle,
-				artistId: artistId ? String(artistId) : undefined,
-				previewUrl: previewUrl || undefined,
-			},
-			{ onDownload: () => onDownload(id, "track") }
-		);
-	});
-
+	const normalized = trackFromDeezerRaw(track);
+	const id = normalized.trackId;
 	return (
-		<div {...longPress} className={`flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-2 overflow-hidden group transition-colors select-none ${isActive || isPaused ? "bg-accent/20" : "hover:bg-accent/20"}`}>
-			<div className="relative">
-				<CoverImage src={cover} className={`size-9 sm:size-10 border-0 transition-opacity ${isActive ? "opacity-50" : ""}`} />
-				{(isActive || isPaused) && (
-					<div className="absolute inset-0 flex items-center justify-center">
-						<PlaybackIndicator paused={isPaused} />
-					</div>
-				)}
-			</div>
-			<div className="flex-1 min-w-0">
-				<p className={`text-sm font-bold truncate ${isActive || isPaused ? "text-primary" : ""}`}>{title}</p>
-				<p className="text-xs text-muted-foreground truncate">
-					{artistId ? (
-						<Link href={`/artist?id=${artistId}`} className="hover:underline hover:text-foreground transition-colors">
-							{artistName}
-						</Link>
-					) : artistName}
-					{albumTitle ? (
-						<>
-							{" · "}
-							{albumId ? (
-								<Link href={`/album?id=${albumId}`} className="hover:underline hover:text-foreground transition-colors">
-									{albumTitle}
-								</Link>
-							) : albumTitle}
-						</>
-					) : ""}
-				</p>
-			</div>
-			<span className="hidden sm:inline text-xs text-muted-foreground font-mono tabular-nums">
-				{duration ? convertDuration(duration) : ""}
-			</span>
-			<TrackDownloadStatus
-				trackId={id}
-				isAlreadyDownloaded={downloaded?.has(String(id)) ?? false}
-				apiLoading={isLoading(deezerUrl(id, "track"))}
-				onDownload={() => onDownload(id, "track")}
-			/>
-		</div>
+		<TrackRow
+			track={normalized}
+			isDownloaded={downloaded?.has(id) ?? false}
+			apiLoading={isLoading(deezerUrl(id, "track"))}
+			onDownload={() => onDownload(id, "track")}
+		/>
 	);
 }
 
@@ -501,7 +547,7 @@ function AlbumCard({
 					/>
 				</Link>
 				{myAlbumId && (
-					<span className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-emerald-600 text-white text-[10px] font-bold uppercase px-1.5 py-0.5 border border-emerald-700">
+					<span className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-accent text-foreground text-[10px] font-bold uppercase px-1.5 py-0.5 border-2 border-foreground">
 						<CheckCircle2 className="size-3" />
 						Downloaded
 					</span>
@@ -588,12 +634,9 @@ function TrackResults({
 	const tracks = data?.data || [];
 	if (tracks.length === 0) return <EmptyTabState />;
 	return (
-		<div className="mt-4 border-2 sm:border-[3px] border-foreground overflow-hidden">
-			{tracks.map((track: any, idx: number) => (
-				<div key={track.SNG_ID || track.id}>
-					<TrackRow track={track} onDownload={onDownload} isLoading={isLoading} deezerUrl={deezerUrl} />
-					{idx < tracks.length - 1 && <Separator />}
-				</div>
+		<div className="mt-4 border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
+			{tracks.map((track: any) => (
+				<SearchTrackRow key={track.SNG_ID || track.id} track={track} onDownload={onDownload} isLoading={isLoading} deezerUrl={deezerUrl} downloaded={downloaded} />
 			))}
 		</div>
 	);

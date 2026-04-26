@@ -7,7 +7,7 @@ import {
 	Home,
 	Search,
 	Info,
-	Music,
+	Library,
 	History,
 	Settings,
 } from "lucide-react";
@@ -18,7 +18,7 @@ const navItems = [
 ];
 
 const authItems = [
-	{ path: "/my-playlists", label: "PLAYLISTS", icon: Music },
+	{ path: "/library", label: "LIBRARY", icon: Library },
 	{ path: "/download-history", label: "HISTORY", icon: History },
 ];
 
@@ -61,7 +61,6 @@ export function Navigation({ onNavigate }: NavigationProps) {
 
 	return (
 		<nav className="flex h-full flex-col bg-foreground text-background">
-			{/* Top nav block */}
 			<div className="flex flex-col gap-0.5 py-3">
 				{navItems.map(renderItem)}
 				{isAuthenticated && (
@@ -70,14 +69,11 @@ export function Navigation({ onNavigate }: NavigationProps) {
 						{authItems.map(renderItem)}
 					</>
 				)}
+				<div className="my-2 mx-[18px] h-[2px] bg-background/30" />
+				{secondaryItems.map(renderItem)}
 			</div>
 
 			<div className="flex-1" />
-
-			{/* Bottom secondary block */}
-			<div className="flex flex-col gap-0.5 pb-3 pt-3 border-t-[2px] border-background/30">
-				{secondaryItems.map(renderItem)}
-			</div>
 		</nav>
 	);
 }

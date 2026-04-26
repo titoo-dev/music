@@ -210,7 +210,7 @@ export default function MyPlaylistsPage() {
 								<Button
 									variant="ghost"
 									size="icon-xs"
-									className="absolute top-1.5 right-1.5 bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+									className="absolute top-1.5 right-1.5 bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
 									onClick={(e) => {
 										e.preventDefault();
 										setDeleteTarget(pl);

@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { Navigation } from "@/components/layout/Sidebar";
 import { SearchBar } from "@/components/layout/SearchBar";
+import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { DownloadTrigger } from "@/components/downloads/DownloadTrigger";
 import { DownloadPanel } from "@/components/downloads/DownloadPanel";
 import { useSocket } from "@/hooks/useSocket";
@@ -163,15 +164,15 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 							</span>
 						</Link>
 
-						{/* Spacer */}
-						<div className="flex-1" />
-
-						{/* Search bar (desktop) */}
-						<div className="hidden md:block">
+						{/* Breadcrumb (desktop) */}
+						<div className="hidden md:flex flex-1 min-w-0 items-center">
 							<Suspense>
-								<SearchBar />
+								<Breadcrumb />
 							</Suspense>
 						</div>
+
+						{/* Spacer (mobile only) */}
+						<div className="flex-1 md:hidden" />
 
 						{/* Downloads panel trigger */}
 						<DownloadTrigger />

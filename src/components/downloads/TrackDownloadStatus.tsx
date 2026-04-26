@@ -71,7 +71,7 @@ export function TrackDownloadStatus({
 	if (dlStatus === "completed" || (!dlStatus && isAlreadyDownloaded)) {
 		return (
 			<span
-				className="flex items-center justify-center size-7 text-emerald-500"
+				className="flex items-center justify-center size-7 text-foreground"
 				title="Downloaded"
 			>
 				<CheckCircle2 className="size-3.5" />
@@ -116,7 +116,7 @@ export function TrackDownloadStatus({
 				onClick={onDownload}
 				title="Retry download"
 			>
-				<AlertTriangle className="size-3.5 text-red-500" />
+				<AlertTriangle className="size-3.5 text-destructive" />
 			</Button>
 		);
 	}
@@ -125,7 +125,7 @@ export function TrackDownloadStatus({
 	if (dlStatus === "withErrors") {
 		return (
 			<span
-				className="flex items-center justify-center size-7 text-amber-500"
+				className="flex items-center justify-center size-7 text-primary"
 				title="Completed with errors"
 			>
 				<AlertTriangle className="size-3.5" />
