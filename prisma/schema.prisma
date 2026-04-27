@@ -24,8 +24,8 @@ model User {
   preferences   UserPreferences?
   deezerCred    DeezerCredential?
   playlists     Playlist[]
-  downloads     DownloadHistory[]
-  albums        Album[]
+  savedTracks   SavedTrack[]
+  savedAlbums   Album[]
   sharedTracks  SharedTrack[]
   recentPlays   RecentPlay[]
 
@@ -134,6 +134,17 @@ model UserPreferences {
   @@map("user_preferences")
 }
 
+// ─── User Library ───
+//
+// Spotify-like model:
+//   • SavedTrack = explicitly liked tracks (≈ "Liked Songs")
+//   • Album      = saved albums + their tracklist (Spotify "Your Library > Albums")
+//   • Playlist   = user-created playlists (or saved public ones)
+//
+// File persistence is orthogonal — see StoredTrack. A saved track may or may
+// not have a backing audio file; playback is always served via the progressive
+// streaming engine which fetches/persists/evicts files transparently.
+
 model Playlist {
   id          String   @id @default(cuid())
   userId      String
@@ -157,6 +168,7 @@ model PlaylistTrack {
   title      String
   artist     String
   album      String?
+  albumId    String?
   coverUrl   String?
   duration   Int?
   position   Int
@@ -168,22 +180,73 @@ model PlaylistTrack {
   @@map("playlist_track")
 }
 
-model Album {
-  id             String   @id @default(cuid())
-  userId         String
-  deezerAlbumId  String
-  title          String
-  artist         String
-  coverUrl       String?
-  trackCount     Int      @default(0)
-  downloadedAt   DateTime @default(now())
+model SavedTrack {
+  id        String   @id @default(cuid())
+  userId    String
+  trackId   String
+  title     String
+  artist    String
+  album     String?
+  albumId   String?
+  coverUrl  String?
+  duration  Int?
+  savedAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, trackId])
+  @@index([userId, savedAt(sort: Desc)])
+  @@index([trackId])
+  @@map("saved_track")
+}
+
+model Album {
+  id            String   @id @default(cuid())
+  userId        String
+  deezerAlbumId String
+  title         String
+  artist        String
+  coverUrl      String?
+  trackCount    Int      @default(0)
+  savedAt       DateTime @default(now())
+
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tracks AlbumTrack[]
+
   @@unique([userId, deezerAlbumId])
-  @@index([userId])
+  @@index([userId, savedAt(sort: Desc)])
   @@map("album")
 }
+
+model AlbumTrack {
+  id          String  @id @default(cuid())
+  albumId     String
+  trackId     String
+  title       String
+  artist      String
+  coverUrl    String?
+  duration    Int?
+  trackNumber Int?
+
+  album Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  @@unique([albumId, trackId])
+  @@index([trackId])
+  @@map("album_track")
+}
+
+// ─── File Cache (server-side, transparent to user) ───
+//
+// Global cache of audio files persisted to S3/local. Keyed by trackId+bitrate
+// so the same file can serve multiple users (dedup). Lifecycle is automatic:
+//   • populated on first play via /api/v1/stream-progressive
+//   • evicted when a play is skipped <30s OR when the user's recent-plays
+//     cap (100) pushes it out
+//   • re-fetched on demand when an evicted track is replayed
+//
+// Ref-counted via SavedTrack[trackId], AlbumTrack[trackId], SharedTrack[trackId],
+// RecentPlay[trackId]. When all refs drop, the file becomes orphan and is
+// safe to delete (handled by the eviction helper).
 
 model StoredTrack {
   id          String   @id @default(cuid())
@@ -194,7 +257,6 @@ model StoredTrack {
   fileSize    Int?
   createdAt   DateTime @default(now())
 
-  downloads    DownloadHistory[]
   sharedTracks SharedTrack[]
 
   @@unique([trackId, bitrate])
@@ -202,33 +264,7 @@ model StoredTrack {
   @@map("stored_track")
 }
 
-model DownloadHistory {
-  id             String   @id @default(cuid())
-  userId         String
-  trackId        String
-  title          String
-  artist         String
-  album          String?
-  albumId        String?
-  coverUrl       String?
-  bitrate        Int
-  fileSize       Int?
-  storagePath    String?
-  storageType    String
-  storedTrackId  String?
-  downloadedAt   DateTime @default(now())
-
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  storedTrack StoredTrack? @relation(fields: [storedTrackId], references: [id])
-
-  @@unique([userId, trackId])
-  @@index([userId])
-  @@index([trackId])
-  @@index([storedTrackId])
-  @@map("download_history")
-}
-
-// ─── Recent Plays (Spotify-like history; tracks counted only after ≥30s playback) ───
+// ─── Recent Plays (Spotify-like history; counted at 30s of playback) ───
 
 model RecentPlay {
   id        String   @id @default(cuid())
@@ -250,6 +286,10 @@ model RecentPlay {
 }
 
 // ─── Track Sharing ───
+//
+// Public share links for individual tracks. The file may be evicted from S3
+// after the share is created — playback falls back to re-streaming via the
+// progressive engine using the share creator's stored Deezer credentials.
 
 model SharedTrack {
   id            String    @id @default(cuid())
@@ -261,14 +301,15 @@ model SharedTrack {
   album         String?
   coverUrl      String?
   duration      Int?
-  storedTrackId String
+  storedTrackId String?
   expiresAt     DateTime?
   plays         Int       @default(0)
   createdAt     DateTime  @default(now())
 
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  storedTrack StoredTrack @relation(fields: [storedTrackId], references: [id])
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storedTrack StoredTrack? @relation(fields: [storedTrackId], references: [id])
 
   @@index([userId])
+  @@index([trackId])
   @@map("shared_track")
 }

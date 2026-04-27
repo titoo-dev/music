@@ -3,6 +3,7 @@
 import { AudioCacheManager } from "@/components/audio/AudioCacheManager";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
 
 const PLAYBACK_RATES = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 const CROSSFADE_OPTIONS = [0, 2, 4, 6, 8, 10];
@@ -107,6 +108,8 @@ export default function SettingsPage() {
 	const user = useAuthStore((s) => s.user);
 	const deezerUser = useAuthStore((s) => s.deezerUser);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const { prefs, updatePrefs } = useUserPreferences();
+	const preCacheSaved = !!prefs.preCacheSaved;
 
 	return (
 		<div className="mx-auto max-w-2xl">
@@ -127,6 +130,18 @@ export default function SettingsPage() {
 				>
 					<BrutalToggle on={normalizationEnabled} onChange={toggleNormalization} />
 				</SettingRow>
+
+				{isAuthenticated && (
+					<SettingRow
+						label="PRE-CACHE SAVED TRACKS"
+						hint="Saving a track or album also fetches the audio file in the background so the first play is instant. Off by default — files are fetched on demand."
+					>
+						<BrutalToggle
+							on={preCacheSaved}
+							onChange={() => updatePrefs({ preCacheSaved: !preCacheSaved })}
+						/>
+					</SettingRow>
+				)}
 
 				<SettingRow
 					label="PLAYBACK SPEED"

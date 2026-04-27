@@ -59,9 +59,7 @@ export function AddToPlaylist({
 			const res = await fetch("/api/v1/playlists", { credentials: "include" });
 			const json = await res.json();
 			if (json.success) {
-				setPlaylists(
-					(json.data as Playlist[]).filter((p) => p.title !== "Downloads")
-				);
+				setPlaylists(json.data as Playlist[]);
 			}
 		} catch {
 			// ignore

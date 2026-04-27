@@ -3,12 +3,9 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
-import { useDownload } from "@/hooks/useDownload";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, Loader2, CheckCircle2 } from "lucide-react";
-import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
+import { Loader2, CheckCircle2 } from "lucide-react";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { CoverImage } from "@/components/ui/cover-image";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
@@ -32,9 +29,6 @@ function ArtistContent() {
 	const [topTracks, setTopTracks] = useState<any[]>([]);
 	const [discography, setDiscography] = useState<any>({});
 	const [loading, setLoading] = useState(true);
-	const { download, isLoading } = useDownload();
-	const allTrackIds = topTracks.map((t: any) => String(t.SNG_ID || t.id)).filter(Boolean);
-	const { downloaded } = useDownloadedTracks(allTrackIds);
 	const { albumMap } = useDownloadedAlbums();
 
 	useEffect(() => {
@@ -52,9 +46,6 @@ function ArtistContent() {
 		}
 		loadArtist();
 	}, [id]);
-
-	const deezerUrl = (itemId: string, type: string) => `https://www.deezer.com/${type}/${itemId}`;
-	const handleDownload = (itemId: string, type: string) => download(deezerUrl(itemId, type));
 
 	if (loading)
 		return (
@@ -148,9 +139,6 @@ function ArtistContent() {
 									key={trackId || idx}
 									track={normalized}
 									trackNumber={idx + 1}
-									isDownloaded={downloaded.has(String(trackId))}
-									apiLoading={isLoading(deezerUrl(trackId, "track"))}
-									onDownload={() => handleDownload(trackId, "track")}
 								/>
 							);
 						})}
@@ -191,9 +179,8 @@ function ArtistContent() {
 											album.cover_big ||
 											getCoverUrl(album.ALB_PICTURE || album.md5_image, 250) ||
 											"/placeholder.jpg";
-										const albumDeezerUrl = deezerUrl(albumId, "album");
 										const myAlbumId = albumMap.get(String(albumId));
-										const albumHref = myAlbumId ? `/my-albums/${myAlbumId}` : `/album?id=${albumId}`;
+										const albumHref = `/album?id=${albumId}`;
 
 										return (
 											<div key={albumId} className="group space-y-2">
@@ -209,21 +196,8 @@ function ArtistContent() {
 													{myAlbumId && (
 														<span className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-accent text-foreground text-[10px] font-bold uppercase px-1.5 py-0.5 border-2 border-foreground">
 															<CheckCircle2 className="size-3" />
-															Downloaded
+															Saved
 														</span>
-													)}
-													{!myAlbumId && (
-														<div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center pointer-events-none transition-opacity">
-															<Button
-																size="sm"
-																onClick={() => handleDownload(albumId, "album")}
-																disabled={isLoading(albumDeezerUrl)}
-																className="gap-1.5 pointer-events-auto"
-															>
-																{isLoading(albumDeezerUrl) ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-																{isLoading(albumDeezerUrl) ? "Adding..." : "Download"}
-															</Button>
-														</div>
 													)}
 												</div>
 												<div>

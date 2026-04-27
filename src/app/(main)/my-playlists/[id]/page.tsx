@@ -3,11 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { useDownload } from "@/hooks/useDownload";
-import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
 import { Button } from "@/components/ui/button";
-import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2, ArrowLeft, Download, ArrowDownUp } from "lucide-react";
+import { Loader2, ArrowLeft, ArrowDownUp } from "lucide-react";
 import Link from "next/link";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
@@ -42,20 +39,12 @@ export default function PlaylistDetailPage() {
 	const { prefs, updatePrefs } = useUserPreferences();
 	const sortOrder = prefs.playlistSortOrder ?? "asc";
 	const setSortOrder = (order: "asc" | "desc") => updatePrefs({ playlistSortOrder: order });
-	const { download, isLoading } = useDownload();
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
 	const stopPlayer = usePlayerStore((s) => s.stop);
 
-	const isDownloadsPlaylist = playlist?.title === "Downloads";
-
+	// Background prefetch: warm IndexedDB for the first tracks so playback starts instantly
 	const allTrackIds = playlist?.tracks.map((t) => t.trackId) || [];
-	const { downloaded } = useDownloadedTracks(allTrackIds);
-
-	// Background prefetch: cache all downloaded tracks into IndexedDB for instant playback
-	const downloadedTrackIds = playlist?.tracks
-		.filter((t) => isDownloadsPlaylist || downloaded.has(t.trackId))
-		.map((t) => t.trackId) || [];
-	usePrefetch(downloadedTrackIds);
+	usePrefetch(allTrackIds);
 
 	useEffect(() => {
 		if (!isAuthenticated || !params.id) {
@@ -75,16 +64,13 @@ export default function PlaylistDetailPage() {
 		load();
 	}, [params.id, isAuthenticated]);
 
-	// Preload first playable tracks so playback starts instantly
+	// Preload first tracks so playback starts instantly
 	useEffect(() => {
 		if (!playlist || playlist.tracks.length === 0) return;
-		const playable = playlist.tracks
-			.filter((t) => isDownloadsPlaylist || downloaded.has(t.trackId))
-			.slice(0, 3);
-		for (const track of playable) {
+		for (const track of playlist.tracks.slice(0, 3)) {
 			preloadTrack(track.trackId);
 		}
-	}, [playlist, downloaded, isDownloadsPlaylist]);
+	}, [playlist]);
 
 	const handleRemoveTrack = async (trackId: string) => {
 		if (!playlist) return;
@@ -105,17 +91,6 @@ export default function PlaylistDetailPage() {
 			);
 		} catch {
 			// ignore
-		}
-	};
-
-	const handleDownloadTrack = (trackId: string) => {
-		download(`https://www.deezer.com/track/${trackId}`);
-	};
-
-	const handleDownloadAll = () => {
-		if (!playlist) return;
-		for (const track of playlist.tracks) {
-			download(`https://www.deezer.com/track/${track.trackId}`);
 		}
 	};
 
@@ -172,12 +147,6 @@ export default function PlaylistDetailPage() {
 					</p>
 				</div>
 				<div className="flex items-center gap-2 shrink-0">
-					{!isDownloadsPlaylist && playlist.tracks.length > 0 && !playlist.tracks.every((t) => downloaded.has(t.trackId)) && (
-						<Button size="sm" className="gap-1.5" onClick={handleDownloadAll}>
-							<Download className="size-4" />
-							Download All
-						</Button>
-					)}
 					{playlist.tracks.length > 1 && (
 						<Button
 							variant="outline"
@@ -202,8 +171,6 @@ export default function PlaylistDetailPage() {
 			) : (
 				<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
 					{sortedTracks.map((track, idx) => {
-						const trackUrl = `https://www.deezer.com/track/${track.trackId}`;
-						const isTrackDownloaded = isDownloadsPlaylist || downloaded.has(track.trackId);
 						const t: TrackRowTrack = {
 							trackId: track.trackId,
 							title: track.title,
@@ -220,9 +187,6 @@ export default function PlaylistDetailPage() {
 								trackNumber={idx + 1}
 								showBitrate={false}
 								showDuration
-								isDownloaded={isTrackDownloaded}
-								apiLoading={isLoading(trackUrl)}
-								onDownload={() => handleDownloadTrack(track.trackId)}
 								onDelete={() => handleRemoveTrack(track.trackId)}
 							/>
 						);

@@ -206,19 +206,17 @@ export default function MyPlaylistsPage() {
 									</p>
 								</div>
 							</Link>
-							{pl.title !== "Downloads" && (
-								<Button
-									variant="ghost"
-									size="icon-xs"
-									className="absolute top-1.5 right-1.5 bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-									onClick={(e) => {
-										e.preventDefault();
-										setDeleteTarget(pl);
-									}}
-								>
-									<Trash2 className="size-3" />
-								</Button>
-							)}
+							<Button
+								variant="ghost"
+								size="icon-xs"
+								className="absolute top-1.5 right-1.5 bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+								onClick={(e) => {
+									e.preventDefault();
+									setDeleteTarget(pl);
+								}}
+							>
+								<Trash2 className="size-3" />
+							</Button>
 						</div>
 					))}
 				</div>

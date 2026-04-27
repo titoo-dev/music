@@ -9,8 +9,6 @@ const ROOT = "~/DEEMIX";
 const SEGMENT_LABELS: Record<string, string> = {
 	library: "LIBRARY",
 	"my-playlists": "PLAYLISTS",
-	"my-albums": "ALBUMS",
-	"download-history": "HISTORY",
 	settings: "SETTINGS",
 	about: "ABOUT",
 	search: "SEARCH",

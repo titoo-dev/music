@@ -3,9 +3,6 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
-import { useDownload } from "@/hooks/useDownload";
-import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
-import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { CoverImage } from "@/components/ui/cover-image";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
@@ -22,10 +19,6 @@ function PlaylistContent() {
 	const [playlist, setPlaylist] = useState<any>(null);
 	const [tracks, setTracks] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
-	const { download, isLoading } = useDownload();
-
-	const allTrackIds = tracks.map((t: any) => String(t.id || t.SNG_ID)).filter(Boolean);
-	const { downloaded } = useDownloadedTracks(allTrackIds);
 
 	useEffect(() => {
 		if (!id) return;
@@ -43,12 +36,6 @@ function PlaylistContent() {
 		loadPlaylist();
 	}, [id]);
 
-	const playlistUrl = `https://www.deezer.com/playlist/${id}`;
-	const handleDownloadAll = () => download(playlistUrl);
-	const trackUrl = (trackId: string) => `https://www.deezer.com/track/${trackId}`;
-	const handleDownloadTrack = (trackId: string) => {
-		download(trackUrl(trackId));
-	};
 
 	if (loading)
 		return (
@@ -99,15 +86,6 @@ function PlaylistContent() {
 							)}
 							<span>{playlist.nb_tracks || tracks.length} TRACKS</span>
 						</div>
-						<Button
-							onClick={handleDownloadAll}
-							disabled={isLoading(playlistUrl)}
-							size="lg"
-							className="w-fit mt-1 gap-2 font-mono uppercase tracking-[0.1em]"
-						>
-							{isLoading(playlistUrl) && <Loader2 className="size-4 animate-spin" />}
-							{isLoading(playlistUrl) ? "Adding..." : "Download playlist"}
-						</Button>
 					</div>
 				</div>
 			</div>
@@ -148,9 +126,6 @@ function PlaylistContent() {
 								key={trackId || idx}
 								track={normalized}
 								trackNumber={idx + 1}
-								isDownloaded={downloaded.has(String(trackId))}
-								apiLoading={isLoading(trackUrl(trackId))}
-								onDownload={() => handleDownloadTrack(trackId)}
 							/>
 						);
 					})}

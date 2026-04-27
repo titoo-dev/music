@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Play } from "lucide-react";
 import { CoverImage } from "@/components/ui/cover-image";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
-import { TrackDownloadStatus } from "@/components/downloads/TrackDownloadStatus";
+import { SaveButton } from "@/components/tracks/SaveButton";
 import { TrackActionMenu } from "@/components/tracks/TrackActionMenu";
 import { useLongPress } from "@/hooks/useLongPress";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
@@ -31,10 +31,9 @@ export interface TrackRowProps {
 	track: TrackRowTrack;
 	showBitrate?: boolean;
 	showDuration?: boolean;
-	isDownloaded?: boolean;
-	apiLoading?: boolean;
-	onDownload?: () => void;
-	/** Removal callback, surfaced in the action menu as "Remove from library". */
+	/** Show the Save (heart) button. Default true. */
+	showSave?: boolean;
+	/** Context-specific delete callback (e.g. remove from a playlist). */
 	onDelete?: () => void;
 	/** When set, prepends a "#" column with the track number (album/playlist view). */
 	trackNumber?: number;
@@ -74,9 +73,7 @@ export function TrackRow({
 	track,
 	showBitrate = true,
 	showDuration = true,
-	isDownloaded = false,
-	apiLoading = false,
-	onDownload,
+	showSave = true,
 	onDelete,
 	trackNumber,
 }: TrackRowProps) {
@@ -112,10 +109,7 @@ export function TrackRow({
 	};
 
 	const openSheet = useTrackActionStore((s) => s.openSheet);
-	const callbacks =
-		onDownload || onDelete
-			? { ...(onDownload ? { onDownload } : {}), ...(onDelete ? { onDelete } : {}) }
-			: undefined;
+	const callbacks = onDelete ? { onDelete } : undefined;
 	const longPress = useLongPress(() => {
 		openSheet(
 			{
@@ -252,12 +246,17 @@ export function TrackRow({
 				</span>
 			)}
 			<div className="flex items-center justify-end gap-0.5">
-				{onDownload && (
-					<TrackDownloadStatus
-						trackId={track.trackId}
-						isAlreadyDownloaded={isDownloaded}
-						apiLoading={apiLoading}
-						onDownload={onDownload}
+				{showSave && (
+					<SaveButton
+						track={{
+							trackId: track.trackId,
+							title: track.title,
+							artist: track.artist,
+							album: track.album ?? null,
+							albumId: track.albumId ?? null,
+							coverUrl: track.cover,
+							duration: track.duration ?? null,
+						}}
 					/>
 				)}
 				<div className="hidden md:block">

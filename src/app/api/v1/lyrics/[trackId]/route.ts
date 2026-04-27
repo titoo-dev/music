@@ -24,16 +24,47 @@ export async function GET(
 
 		const { trackId } = await params;
 
-		// Get track metadata from download history
-		const download = await prisma.downloadHistory.findUnique({
-			where: { userId_trackId: { userId: userResult.userId, trackId } },
-		});
+		// Try multiple sources for the title/artist metadata needed by LRCLIB:
+		//   1. SavedTrack (user's library)
+		//   2. RecentPlay (recently played)
+		//   3. Query params (passed by the client when requesting)
+		// The route stays usable for any track the user might be playing,
+		// even one that isn't yet saved.
+		const sp = request.nextUrl.searchParams;
+		const queryTitle = sp.get("title");
+		const queryArtist = sp.get("artist");
+		const queryAlbum = sp.get("album");
 
-		if (!download) {
-			return fail("NOT_FOUND", "Track not found in your downloads.", 404);
+		let title = queryTitle ?? "";
+		let artist = queryArtist ?? "";
+		let album: string | null = queryAlbum ?? null;
+
+		if (!title || !artist) {
+			const saved = await prisma.savedTrack.findUnique({
+				where: { userId_trackId: { userId: userResult.userId, trackId } },
+				select: { title: true, artist: true, album: true },
+			});
+			if (saved) {
+				title = title || saved.title;
+				artist = artist || saved.artist;
+				album = album ?? saved.album;
+			}
+		}
+		if (!title || !artist) {
+			const recent = await prisma.recentPlay.findUnique({
+				where: { userId_trackId: { userId: userResult.userId, trackId } },
+				select: { title: true, artist: true, album: true },
+			});
+			if (recent) {
+				title = title || recent.title;
+				artist = artist || recent.artist;
+				album = album ?? recent.album;
+			}
 		}
 
-		const { title, artist, album } = download;
+		if (!title || !artist) {
+			return fail("MISSING_METADATA", "Track title/artist required for lyrics lookup.", 400);
+		}
 		// Duration from query param (seconds) — optional, improves LRCLIB matching
 		const durationParam = request.nextUrl.searchParams.get("duration");
 		const duration = durationParam ? parseInt(durationParam) : null;

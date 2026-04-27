@@ -13,7 +13,7 @@ export interface TrackActionInfo {
 }
 
 export interface TrackActionCallbacks {
-	onDownload?: () => void;
+	/** Context-specific delete (e.g. remove from a playlist). */
 	onDelete?: () => void;
 }
 

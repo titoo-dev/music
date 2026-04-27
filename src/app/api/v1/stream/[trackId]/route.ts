@@ -3,7 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { requireUser, fail, handleError } from "../../_lib/helpers";
 import { streamObject } from "@/lib/s3-stream";
 
-// GET /api/v1/stream/[trackId] — Stream a downloaded track from S3
+// GET /api/v1/stream/[trackId] — stream a track from the global file cache.
+// Auth-gated but NOT user-scoped: any authenticated user can stream any
+// cached track (since playback is allowed for any track via the progressive
+// engine anyway, gating per-user makes no sense).
 export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ trackId: string }> }
@@ -14,33 +17,23 @@ export async function GET(
 
 		const { trackId } = await params;
 
-		const download = await prisma.downloadHistory.findUnique({
-			where: { userId_trackId: { userId: userResult.userId, trackId } },
-			include: { storedTrack: true },
+		// Pick the highest-quality cached version
+		const stored = await prisma.storedTrack.findFirst({
+			where: { trackId },
+			orderBy: { bitrate: "desc" },
 		});
-
-		if (!download) {
-			return fail("NOT_FOUND", "Track not found in your downloads.", 404);
+		if (!stored) {
+			return fail("NOT_CACHED", "Track is not in the file cache.", 404);
 		}
 
-		// Resolve storage path: prefer StoredTrack (global dedup), fallback to direct storagePath
-		const storagePath = download.storedTrack?.storagePath ?? download.storagePath;
-		const storageType = download.storedTrack?.storageType ?? download.storageType;
-
-		if (!storagePath) {
-			return fail("NO_FILE", "No file path recorded for this track.", 404);
-		}
-
-		if (storageType !== "s3") {
+		if (stored.storageType !== "s3") {
 			return fail("UNSUPPORTED_STORAGE", "Only S3 storage is supported for streaming.", 400);
 		}
 
 		const rangeHeader = request.headers.get("range");
 
-		// If no range requested, stream the whole file
 		if (!rangeHeader) {
-			const { body, contentLength, contentType } = await streamObject(storagePath);
-
+			const { body, contentLength, contentType } = await streamObject(stored.storagePath);
 			return new Response(body, {
 				status: 200,
 				headers: {
@@ -52,9 +45,8 @@ export async function GET(
 			});
 		}
 
-		// Range request for seeking
 		const { body, contentLength, contentRange, contentType, statusCode } =
-			await streamObject(storagePath, rangeHeader);
+			await streamObject(stored.storagePath, rangeHeader);
 
 		const headers: Record<string, string> = {
 			"Content-Type": contentType,
@@ -62,15 +54,9 @@ export async function GET(
 			"Accept-Ranges": "bytes",
 			"Cache-Control": "private, max-age=86400",
 		};
+		if (contentRange) headers["Content-Range"] = contentRange;
 
-		if (contentRange) {
-			headers["Content-Range"] = contentRange;
-		}
-
-		return new Response(body, {
-			status: statusCode,
-			headers,
-		});
+		return new Response(body, { status: statusCode, headers });
 	} catch (e: any) {
 		if (e?.name === "NotFound" || e?.$metadata?.httpStatusCode === 404) {
 			return fail("FILE_NOT_FOUND", "Audio file not found in storage.", 404);

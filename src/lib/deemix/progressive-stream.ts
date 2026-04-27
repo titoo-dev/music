@@ -238,10 +238,12 @@ export async function startProgressiveStream(
 			// Upload to S3 (no-op for LocalStorageProvider)
 			await storageProvider.finalizeStream(writepath);
 
-			// Record in DB so the next play hits /api/v1/stream/[trackId]
+			// Record the global StoredTrack so future plays hit the cached file.
+			// Per-user state (SavedTrack / RecentPlay) is set independently by the
+			// user's actions (save) or playback rules (30s threshold).
 			const { prisma } = await import("@/lib/prisma");
 			const storageType = settings.storageType || "local";
-			const stored = await prisma.storedTrack.upsert({
+			await prisma.storedTrack.upsert({
 				where: { trackId_bitrate: { trackId, bitrate: resolvedBitrate } },
 				update: { storagePath: writepath, storageType },
 				create: {
@@ -249,31 +251,6 @@ export async function startProgressiveStream(
 					bitrate: resolvedBitrate,
 					storagePath: writepath,
 					storageType,
-				},
-			});
-
-			const cover = track.album?.pic
-				? track.album.pic.getURL(500, "jpg-90")
-				: null;
-
-			await prisma.downloadHistory.upsert({
-				where: { userId_trackId: { userId, trackId } },
-				update: {
-					downloadedAt: new Date(),
-					storagePath: writepath,
-					storedTrackId: stored.id,
-				},
-				create: {
-					userId,
-					trackId,
-					title: track.title,
-					artist: track.mainArtist?.name || "",
-					album: track.album?.title || null,
-					coverUrl: cover,
-					bitrate: resolvedBitrate,
-					storageType,
-					storagePath: writepath,
-					storedTrackId: stored.id,
 				},
 			});
 		} catch (e) {

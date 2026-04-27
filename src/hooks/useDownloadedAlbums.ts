@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchData } from "@/utils/api";
 import { useAuthStore } from "@/stores/useAuthStore";
 
+interface SavedAlbum {
+	id: string;
+	deezerAlbumId: string;
+}
+
 /**
- * Hook that fetches the user's downloaded albums.
- * Returns a Map of deezerAlbumId → internal album id for lookup and routing.
+ * Returns a Map of `deezerAlbumId → internal Album.id` for the user's
+ * saved albums. Used to route "Saved" badges + "Open library album" links.
  */
 export function useDownloadedAlbums() {
 	const [albumMap, setAlbumMap] = useState<Map<string, string>>(new Map());
@@ -14,9 +18,12 @@ export function useDownloadedAlbums() {
 
 	const refresh = useCallback(async () => {
 		try {
-			const albums = await fetchData("albums");
+			const res = await fetch("/api/v1/library/albums", { credentials: "include" });
+			if (!res.ok) return;
+			const json = await res.json();
+			const items = (json?.data?.items as SavedAlbum[] | undefined) || [];
 			const map = new Map<string, string>();
-			for (const a of albums || []) {
+			for (const a of items) {
 				map.set(String(a.deezerAlbumId), String(a.id));
 			}
 			setAlbumMap(map);

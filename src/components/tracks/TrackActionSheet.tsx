@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
-import { useQueueStore } from "@/stores/useQueueStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { useShareStore } from "@/stores/useShareStore";
+import { useSavedTracks } from "@/hooks/useLibrary";
 import { ShareDialog } from "./ShareDialog";
 import {
 	Sheet,
@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CoverImage } from "@/components/ui/cover-image";
 import {
-	Download,
+	Heart,
 	ListEnd,
 	ListPlus,
 	ListStart,
@@ -29,9 +29,7 @@ import {
 	Disc3,
 	User,
 	CheckCircle2,
-	Clock,
 	Loader2,
-	AlertTriangle,
 	ArrowLeft,
 	Plus,
 	Check,
@@ -47,47 +45,48 @@ function formatDuration(seconds?: number | null) {
 	return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function DownloadStatusIcon({ trackId }: { trackId: string }) {
-	const queueItem = useQueueStore((s) => {
-		const items = Object.values(s.queue);
-		return items.find((item) => String(item.id) === trackId) || null;
-	});
-	const status = queueItem?.status;
-	const progress = queueItem?.progress ?? 0;
+function SaveActionRow({
+	track,
+	onDone,
+}: {
+	track: import("@/stores/useTrackActionStore").TrackActionInfo;
+	onDone: () => void;
+}) {
+	const { isSaved, save, unsave } = useSavedTracks([track.id]);
+	const saved = isSaved(track.id);
 
-	if (status === "completed")
-		return <CheckCircle2 className="size-4 text-foreground" />;
-	if (status === "downloading")
-		return (
-			<span className="text-xs font-mono font-bold text-primary">
-				{Math.round(progress)}%
-			</span>
-		);
-	if (status === "inQueue")
-		return <Clock className="size-4 text-muted-foreground animate-pulse" />;
-	if (status === "failed")
-		return <AlertTriangle className="size-4 text-destructive" />;
-	if (status === "withErrors")
-		return <AlertTriangle className="size-4 text-primary" />;
-	if (status === "cancelling")
-		return <Loader2 className="size-4 animate-spin text-muted-foreground" />;
-	return <Download className="size-4" />;
-}
+	const handle = async () => {
+		try {
+			if (saved) {
+				await unsave(track.id);
+			} else {
+				await save({
+					trackId: track.id,
+					title: track.title,
+					artist: track.artist,
+					album: track.albumTitle ?? null,
+					albumId: track.albumId ?? null,
+					coverUrl: track.cover ?? null,
+					duration: track.duration ?? null,
+				});
+			}
+		} catch {
+			// optimistic update reverts
+		}
+		onDone();
+	};
 
-function DownloadStatusLabel({ trackId }: { trackId: string }) {
-	const queueItem = useQueueStore((s) => {
-		const items = Object.values(s.queue);
-		return items.find((item) => String(item.id) === trackId) || null;
-	});
-	const status = queueItem?.status;
-
-	if (status === "completed") return "Downloaded";
-	if (status === "downloading") return "Downloading...";
-	if (status === "inQueue") return "In queue";
-	if (status === "failed") return "Failed — tap to retry";
-	if (status === "withErrors") return "Done with errors";
-	if (status === "cancelling") return "Cancelling...";
-	return "Download";
+	return (
+		<ActionRow
+			icon={
+				<Heart
+					className={`size-4 ${saved ? "fill-primary text-primary" : ""}`}
+				/>
+			}
+			label={saved ? "Remove from library" : "Save to library"}
+			onClick={handle}
+		/>
+	);
 }
 
 interface Playlist {
@@ -121,9 +120,7 @@ function PlaylistPicker({
 				});
 				const json = await res.json();
 				if (json.success) {
-					setPlaylists(
-						(json.data as Playlist[]).filter((p) => p.title !== "Downloads")
-					);
+					setPlaylists(json.data as Playlist[]);
 				}
 			} catch {
 				// ignore
@@ -336,11 +333,6 @@ export function TrackActionSheet() {
 		closeSheet();
 	}, [toPlayerTrack, closeSheet]);
 
-	const handleDownload = useCallback(() => {
-		callbacks.onDownload?.();
-		closeSheet();
-	}, [callbacks, closeSheet]);
-
 	const handleDelete = useCallback(() => {
 		callbacks.onDelete?.();
 		closeSheet();
@@ -419,12 +411,10 @@ export function TrackActionSheet() {
 							/>
 						)}
 
-						{/* Download */}
-						<ActionRow
-							icon={<DownloadStatusIcon trackId={track.id} />}
-							label={<DownloadStatusLabel trackId={track.id} />}
-							onClick={handleDownload}
-						/>
+						{/* Save / unsave */}
+						{isAuthenticated && (
+							<SaveActionRow track={track} onDone={closeSheet} />
+						)}
 
 						{/* Add to Playlist */}
 						{isAuthenticated && (

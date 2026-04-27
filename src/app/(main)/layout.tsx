@@ -5,11 +5,7 @@ import Link from "next/link";
 import { Navigation } from "@/components/layout/Sidebar";
 import { SearchBar } from "@/components/layout/SearchBar";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
-import { DownloadTrigger } from "@/components/downloads/DownloadTrigger";
-import { DownloadPanel } from "@/components/downloads/DownloadPanel";
-import { useSocket } from "@/hooks/useSocket";
 import { useInitApp } from "@/hooks/useInitApp";
-import { useQueuePolling } from "@/hooks/useQueuePolling";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -30,7 +26,7 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Menu, Info, LogOut, Music, History } from "lucide-react";
+import { Menu, Info, LogOut, Music } from "lucide-react";
 import { AudioPreview } from "@/components/audio/AudioPreview";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
 import { AudioEngine } from "@/components/audio/AudioEngine";
@@ -42,14 +38,11 @@ import { LyricsImmersive } from "@/components/audio/LyricsImmersive";
 import { TrackActionSheet } from "@/components/tracks/TrackActionSheet";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
-	useSocket();
 	useInitApp();
-	useQueuePolling();
 	useKeyboardShortcuts();
 
 	const sidebarOpen = useAppStore((s) => s.sidebarOpen);
 	const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
-	const downloadsOpen = useAppStore((s) => s.downloadsOpen);
 
 	const user = useAuthStore((s) => s.user);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -174,9 +167,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 						{/* Spacer (mobile only) */}
 						<div className="flex-1 md:hidden" />
 
-						{/* Downloads panel trigger */}
-						<DownloadTrigger />
-
 						{/* User avatar / menu (mobile only) */}
 						<div className="md:hidden">
 							{isAuthenticated && user ? (
@@ -203,12 +193,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 											<DropdownMenuItem className="gap-2 text-sm font-bold">
 												<Music className="h-3.5 w-3.5" />
 												My Playlists
-											</DropdownMenuItem>
-										</Link>
-										<Link href="/download-history" className="no-underline">
-											<DropdownMenuItem className="gap-2 text-sm font-bold">
-												<History className="h-3.5 w-3.5" />
-												Download History
 											</DropdownMenuItem>
 										</Link>
 										<Link href="/about" className="no-underline">
@@ -244,20 +228,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 					</div>
 				</header>
 
-				{/* ─── Main Content + Downloads Panel ─── */}
+				{/* ─── Main Content ─── */}
 				<div className="flex flex-1 overflow-hidden min-w-0">
-					<ScrollArea
-						className={`flex-1 min-w-0 transition-all duration-300 ${
-							downloadsOpen ? "hidden sm:block sm:mr-[340px]" : ""
-						}`}
-					>
+					<ScrollArea className="flex-1 min-w-0">
 						<main className="mx-auto w-full max-w-6xl px-3 pt-6 pb-24 sm:px-6 lg:px-8 min-w-0">
 							{children}
 						</main>
 					</ScrollArea>
-
-					{/* ─── Downloads Side Panel ─── */}
-					<DownloadPanel />
 				</div>
 			</div>
 

@@ -2,7 +2,6 @@
 // This module is only imported in API routes (server-side)
 
 import type { Listener } from "@/lib/deemix/types/listener";
-import { broadcast } from "@/lib/broadcast";
 
 // ── Per-user Deezer session with TTL eviction ──
 
@@ -47,6 +46,35 @@ export function setUserDz(userId: string, dz: any): void {
 /** Remove a Deezer session for a specific user */
 export function removeUserDz(userId: string): void {
 	getSessionDZ().delete(userId);
+}
+
+/**
+ * Resolve a Deezer session for a specific user — uses the in-memory cache
+ * if available, otherwise logs in fresh with the user's stored ARL.
+ * Used by routes that act on behalf of a user (e.g. public share playback
+ * falling back to progressive re-stream with the share creator's ARL).
+ */
+export async function getOrLoginUserDz(userId: string): Promise<any | null> {
+	const cached = getUserDz(userId);
+	if (cached?.loggedIn) return cached;
+
+	try {
+		const { prisma } = await import("@/lib/prisma");
+		const cred = await prisma.deezerCredential.findUnique({
+			where: { userId },
+		});
+		if (!cred) return null;
+
+		const { Deezer } = await import("@/lib/deezer");
+		const dz = new Deezer();
+		const loggedIn = await dz.loginViaArl(cred.arl);
+		if (!loggedIn) return null;
+
+		setUserDz(userId, dz);
+		return dz;
+	} catch {
+		return null;
+	}
 }
 
 /** Get or create a shared guest Deezer session (for browsing without auth) */
@@ -117,9 +145,11 @@ async function initializeDeemixApp() {
 }
 
 function createListener(): Listener {
+	// No-op listener: the WS broadcast server is gone. Progressive streaming
+	// engine + library helpers don't need to broadcast anything; the legacy
+	// queue path (still alive in deemix-app.ts during the transition) just
+	// drops its events on the floor here.
 	return {
-		send(key: string, data: any) {
-			broadcast(key, data);
-		},
+		send() {},
 	};
 }

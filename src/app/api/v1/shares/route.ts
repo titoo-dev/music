@@ -1,107 +1,53 @@
 import { NextRequest } from "next/server";
-import { nanoid } from "nanoid";
 import { prisma } from "@/lib/prisma";
 import { requireUser, ok, fail, handleError } from "../_lib/helpers";
+import { shareTrack } from "@/lib/library";
 
-// POST /api/v1/shares — Create a share link for a track
+// POST /api/v1/shares — create a public share link for a track.
+// No download requirement: the share creates with storedTrackId=null when
+// the file isn't yet persisted. The public stream route lazily re-fetches
+// via the progressive engine using the share creator's stored ARL.
 export async function POST(request: NextRequest) {
 	try {
 		const userResult = await requireUser(request);
 		if (userResult.error) return userResult.error;
 
-		const body = await request.json();
-		const { trackId, duration, expiresIn } = body as {
-			trackId?: string;
-			duration?: number;
-			expiresIn?: number | null; // hours, null = never
-		};
-
+		const body = await request.json().catch(() => null);
+		const trackId = body?.trackId ? String(body.trackId) : "";
 		if (!trackId) {
 			return fail("MISSING_TRACK_ID", "trackId is required.", 400);
 		}
 
-		// Verify the user has downloaded this track
-		const download = await prisma.downloadHistory.findUnique({
-			where: { userId_trackId: { userId: userResult.userId, trackId } },
-			include: { storedTrack: true },
+		// Reuse an existing share by this user for the same track if any
+		const existing = await prisma.sharedTrack.findFirst({
+			where: { userId: userResult.userId, trackId },
 		});
+		if (existing) return ok(existing);
 
-		if (!download) {
-			return fail("NOT_DOWNLOADED", "You need to download this track before sharing.", 404);
-		}
-
-		// Resolve or create StoredTrack
-		let storedTrackId = download.storedTrackId;
-
-		if (!storedTrackId) {
-			// Legacy download without StoredTrack — backfill from storagePath
-			const storagePath = download.storagePath;
-			if (!storagePath) {
-				return fail("NO_FILE", "No file path recorded for this track.", 404);
-			}
-
-			// Check if a StoredTrack already exists for this trackId+bitrate
-			const existing = await prisma.storedTrack.findUnique({
-				where: { trackId_bitrate: { trackId, bitrate: download.bitrate } },
-			});
-
-			if (existing) {
-				storedTrackId = existing.id;
-			} else {
-				const created = await prisma.storedTrack.create({
-					data: {
-						trackId,
-						bitrate: download.bitrate,
-						storagePath,
-						storageType: download.storageType,
-						fileSize: download.fileSize,
-					},
-				});
-				storedTrackId = created.id;
-			}
-
-			// Link the DownloadHistory to the StoredTrack
-			await prisma.downloadHistory.update({
-				where: { id: download.id },
-				data: { storedTrackId },
-			});
-		}
-
-		// Check if user already shared this track — return existing link
-		const existingShare = await prisma.sharedTrack.findFirst({
-			where: { userId: userResult.userId, trackId, storedTrackId },
-		});
-
-		if (existingShare) {
-			return ok(existingShare);
-		}
-
-		const expiresAt = expiresIn
-			? new Date(Date.now() + expiresIn * 60 * 60 * 1000)
+		const expiresAt = body?.expiresIn
+			? new Date(Date.now() + Number(body.expiresIn) * 60 * 60 * 1000)
 			: null;
 
-		const shared = await prisma.sharedTrack.create({
-			data: {
-				shareId: nanoid(12),
+		const shared = await shareTrack(
+			userResult.userId,
+			{
 				trackId,
-				userId: userResult.userId,
-				title: download.title,
-				artist: download.artist,
-				album: download.album,
-				coverUrl: download.coverUrl,
-				duration: duration ?? null,
-				storedTrackId,
-				expiresAt,
+				title: String(body?.title || ""),
+				artist: String(body?.artist || ""),
+				album: body?.album ?? null,
+				coverUrl: body?.coverUrl ?? null,
+				duration: body?.duration ?? null,
 			},
-		});
+			{ expiresAt }
+		);
 
 		return ok(shared, 201);
-	} catch (e: unknown) {
+	} catch (e) {
 		return handleError(e);
 	}
 }
 
-// GET /api/v1/shares — List user's shared links
+// GET /api/v1/shares — list user's share links
 export async function GET(request: NextRequest) {
 	try {
 		const userResult = await requireUser(request);
@@ -111,9 +57,8 @@ export async function GET(request: NextRequest) {
 			where: { userId: userResult.userId },
 			orderBy: { createdAt: "desc" },
 		});
-
 		return ok(shares);
-	} catch (e: unknown) {
+	} catch (e) {
 		return handleError(e);
 	}
 }

@@ -7,8 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "server": "npx tsx server/index.ts",
-    "dev:all": "npm run dev & npm run server",
     "studio": "prisma studio"
   },
   "dependencies": {

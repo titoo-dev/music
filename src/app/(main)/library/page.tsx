@@ -6,9 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2, Music, Disc3, Plus, ArrowDownToLine, Clock } from "lucide-react";
+import { Loader2, Music, Disc3, Plus, Heart, Clock } from "lucide-react";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
-import { useDownload } from "@/hooks/useDownload";
 
 interface UserPlaylist {
 	id: string;
@@ -26,10 +25,10 @@ interface UserAlbum {
 	artist: string;
 	coverUrl: string | null;
 	trackCount: number;
-	downloadedAt: string;
+	savedAt: string;
 }
 
-interface DownloadItem {
+interface SavedTrackItem {
 	id: string;
 	trackId: string;
 	title: string;
@@ -37,9 +36,8 @@ interface DownloadItem {
 	album: string | null;
 	albumId: string | null;
 	coverUrl: string | null;
-	bitrate: number;
-	storageType: string;
-	downloadedAt: string;
+	duration: number | null;
+	savedAt: string;
 }
 
 interface RecentPlayItem {
@@ -110,14 +108,13 @@ function LibraryContent() {
 	const searchParams = useSearchParams();
 	const [playlists, setPlaylists] = useState<UserPlaylist[]>([]);
 	const [albums, setAlbums] = useState<UserAlbum[]>([]);
-	const [tracks, setTracks] = useState<DownloadItem[]>([]);
+	const [tracks, setTracks] = useState<SavedTrackItem[]>([]);
 	const [recentPlays, setRecentPlays] = useState<RecentPlayItem[]>([]);
 	const [loading, setLoading] = useState(true);
 	const initialTab = (searchParams.get("tab") as Tab) || "recent";
 	const [tab, setTab] = useState<Tab>(
 		["recent", "tracks", "albums", "playlists"].includes(initialTab) ? initialTab : "recent"
 	);
-	const { download, isLoading: isDownloadLoading } = useDownload();
 
 	useEffect(() => {
 		if (!isAuthenticated) {
@@ -129,13 +126,13 @@ function LibraryContent() {
 			try {
 				const [pls, als, tks, rps] = await Promise.all([
 					fetchData("playlists").catch(() => []),
-					fetchData("albums").catch(() => []),
-					fetchData("downloads/history", { limit: "100" }).catch(() => ({ items: [] })),
+					fetchData("library/albums").catch(() => ({ items: [] })),
+					fetchData("library/tracks", { limit: "200" }).catch(() => ({ items: [] })),
 					fetchData("recent-plays", { limit: "100" }).catch(() => ({ items: [] })),
 				]);
 				setPlaylists(Array.isArray(pls) ? pls : []);
-				setAlbums(Array.isArray(als) ? als : []);
-				setTracks((tks as { items?: DownloadItem[] }).items || []);
+				setAlbums((als as { items?: UserAlbum[] }).items || []);
+				setTracks((tks as { items?: SavedTrackItem[] }).items || []);
 				setRecentPlays((rps as { items?: RecentPlayItem[] }).items || []);
 			} catch {
 				// ignore
@@ -261,8 +258,6 @@ function LibraryContent() {
 										track={t}
 										showBitrate={false}
 										showDuration={true}
-										apiLoading={isDownloadLoading(deezerUrl)}
-										onDownload={() => download(deezerUrl)}
 									/>
 									<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground pointer-events-none">
 										{fmtRelative(item.playedAt)}
@@ -315,8 +310,8 @@ function LibraryContent() {
 				albums.length === 0 ? (
 					<EmptyState
 						icon={<Disc3 className="size-7" />}
-						title="NO ALBUMS"
-						hint="Download an album to start your collection."
+						title="NO SAVED ALBUMS"
+						hint="Save an album from search to start your collection."
 						actionHref="/search"
 						actionLabel="OPEN SEARCH"
 					/>
@@ -325,7 +320,7 @@ function LibraryContent() {
 						{albums.map((album) => (
 							<Link
 								key={album.id}
-								href={`/my-albums/${album.id}`}
+								href={`/album?id=${album.deezerAlbumId}`}
 								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[2px] hover:-translate-y-[2px] transition-all"
 							>
 								<div className="w-full aspect-square bg-muted flex items-center justify-center">
@@ -355,13 +350,13 @@ function LibraryContent() {
 				)
 			)}
 
-			{/* Tracks list */}
+			{/* Saved tracks list ("Liked Songs") */}
 			{tab === "tracks" && (
 				tracks.length === 0 ? (
 					<EmptyState
-						icon={<ArrowDownToLine className="size-7" />}
-						title="NO TRACKS"
-						hint="Tracks you download will appear here."
+						icon={<Heart className="size-7" />}
+						title="NO SAVED TRACKS"
+						hint="Tap the heart icon on any track to save it to your library."
 						actionHref="/search"
 						actionLabel="OPEN SEARCH"
 					/>
@@ -375,19 +370,19 @@ function LibraryContent() {
 								album: item.album,
 								albumId: item.albumId,
 								cover: item.coverUrl,
-								duration: null,
-								bitrateLabel: bitrateToLabel(item.bitrate),
+								duration: item.duration,
+								bitrateLabel: null,
 							};
 							return (
 								<div key={item.id} className="relative">
 									<TrackRow
 										track={t}
 										trackNumber={idx + 1}
-										showBitrate
-										showDuration={false}
+										showBitrate={false}
+										showDuration
 									/>
 									<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground pointer-events-none tabular-nums">
-										{new Date(item.downloadedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()}
+										{fmtRelative(item.savedAt)}
 									</span>
 								</div>
 							);
@@ -411,16 +406,6 @@ export default function LibraryPage() {
 			<LibraryContent />
 		</Suspense>
 	);
-}
-
-function bitrateToLabel(b: number): string {
-	if (b === 9) return "FLAC";
-	if (b === 3) return "320";
-	if (b === 1) return "128";
-	if (b === 15) return "360HQ";
-	if (b === 14) return "360MQ";
-	if (b === 13) return "360LQ";
-	return "—";
 }
 
 function EmptyState({

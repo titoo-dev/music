@@ -1,17 +1,14 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
-import { useDownload } from "@/hooks/useDownload";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2, CheckCircle2, Clock, Download } from "lucide-react";
-import { useDownloadedTracks } from "@/hooks/useDownloadedTracks";
-import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
-import { useQueueStore } from "@/stores/useQueueStore";
+import { Heart, Loader2 } from "lucide-react";
+import { useSavedAlbums } from "@/hooks/useLibrary";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
 
 function getCoverUrl(picture: string, size = 500) {
@@ -20,88 +17,48 @@ function getCoverUrl(picture: string, size = 500) {
 	return `https://e-cdns-images.dzcdn.net/images/cover/${picture}/${size}x${size}-000000-80-0-0.jpg`;
 }
 
-function AlbumDownloadButton({
-	queueItem,
-	allDownloaded,
-	apiLoading,
-	onDownload,
+function AlbumSaveButton({
+	saved,
+	saving,
+	onClick,
 }: {
-	queueItem: import("@/stores/useQueueStore").QueueItem | null;
-	allDownloaded: boolean;
-	apiLoading: boolean;
-	onDownload: () => void;
+	saved: boolean;
+	saving: boolean;
+	onClick: () => void;
 }) {
-	const status = queueItem?.status;
-
-	if (status === "completed" || allDownloaded) {
-		return (
-			<Button disabled className="w-fit mt-1 gap-2 bg-accent hover:bg-accent text-foreground border-foreground">
-				<CheckCircle2 className="size-4" />
-				Downloaded
-			</Button>
-		);
-	}
-
-	if (status === "downloading") {
-		return (
-			<Button disabled className="w-fit mt-1 gap-2">
-				<Loader2 className="size-4 animate-spin" />
-				Downloading {queueItem.downloaded}/{queueItem.size}
-			</Button>
-		);
-	}
-
-	if (status === "inQueue") {
-		return (
-			<Button disabled className="w-fit mt-1 gap-2">
-				<Clock className="size-4" />
-				In queue...
-			</Button>
-		);
-	}
-
-	if (status === "failed") {
-		return (
-			<Button onClick={onDownload} variant="destructive" className="w-fit mt-1 gap-2">
-				<Download className="size-4" />
-				Retry download
-			</Button>
-		);
-	}
-
 	return (
-		<Button onClick={onDownload} disabled={apiLoading} className="w-fit mt-1 gap-2">
-			{apiLoading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-			{apiLoading ? "Adding..." : "Download album"}
+		<Button
+			onClick={onClick}
+			disabled={saving}
+			variant={saved ? "outline" : "default"}
+			className="w-fit mt-1 gap-2"
+		>
+			{saving ? (
+				<Loader2 className="size-4 animate-spin" />
+			) : (
+				<Heart className={`size-4 ${saved ? "fill-primary text-primary" : ""}`} />
+			)}
+			{saved ? "Saved" : "Save album"}
 		</Button>
 	);
 }
 
 function AlbumContent() {
 	const searchParams = useSearchParams();
-	const router = useRouter();
 	const id = searchParams.get("id");
 	const [album, setAlbum] = useState<any>(null);
 	const [tracks, setTracks] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
-	const { download, isLoading } = useDownload();
-	const allTrackIds = tracks.map((t: any) => String(t.SNG_ID || t.id)).filter(Boolean);
-	const { downloaded } = useDownloadedTracks(allTrackIds);
-	const { albumMap } = useDownloadedAlbums();
+	const [saving, setSaving] = useState(false);
 
-	// Redirect to my-albums if this album is already downloaded
-	useEffect(() => {
-		if (id && albumMap.has(String(id))) {
-			router.replace(`/my-albums/${albumMap.get(String(id))}`);
-		}
-	}, [id, albumMap, router]);
+	const { isSaved, save, unsave } = useSavedAlbums(id ? [id] : []);
+	const albumSaved = id ? isSaved(id) : false;
 
 	useEffect(() => {
 		if (!id) return;
 		async function loadAlbum() {
 			try {
 				const data = await fetchData("content/tracklist", { id, type: "album" });
-				// GW API returns data in DATA/SONGS structure
 				const albumData = data?.DATA || data;
 				const trackList = data?.tracks || data?.SONGS?.data || [];
 				setAlbum(albumData);
@@ -114,17 +71,47 @@ function AlbumContent() {
 		loadAlbum();
 	}, [id]);
 
-	// Album download queue tracking
-	const albumQueueItem = useQueueStore((s) => {
-		const items = Object.values(s.queue);
-		return items.find((item) => String(item.id) === String(id)) || null;
-	});
-	const allTracksDownloaded = allTrackIds.length > 0 && allTrackIds.every((tid) => downloaded.has(tid));
-
-	const albumUrl = `https://www.deezer.com/album/${id}`;
-	const handleDownloadAll = () => download(albumUrl);
-	const trackUrl = (trackId: string) => `https://www.deezer.com/track/${trackId}`;
-	const handleDownloadTrack = (trackId: string) => download(trackUrl(trackId));
+	const handleToggleSave = async () => {
+		if (!id || !album) return;
+		setSaving(true);
+		try {
+			if (albumSaved) {
+				// We need the internal Album.id to unsave; fetch the saved albums
+				const res = await fetch("/api/v1/library/albums", { credentials: "include" });
+				const json = await res.json();
+				const items = (json?.data?.items as any[]) || [];
+				const match = items.find((a) => String(a.deezerAlbumId) === String(id));
+				if (match) {
+					await unsave(String(match.id), String(id));
+				}
+			} else {
+				const albumTitle = album.ALB_TITLE || album.title || "";
+				const artistName = album.ART_NAME || album.artist?.name || "";
+				const albumCover = album.cover_xl || album.cover_big || getCoverUrl(album.ALB_PICTURE, 500);
+				await save({
+					deezerAlbumId: String(id),
+					title: albumTitle,
+					artist: artistName,
+					coverUrl: albumCover,
+					tracks: tracks.map((t: any, idx: number) => ({
+						trackId: String(t.SNG_ID || t.id),
+						title: t.SNG_TITLE || t.title || "",
+						artist: t.ART_NAME || t.artist?.name || "",
+						coverUrl:
+							t.album?.cover_small ||
+							(t.ALB_PICTURE
+								? `https://e-cdns-images.dzcdn.net/images/cover/${t.ALB_PICTURE}/56x56-000000-80-0-0.jpg`
+								: null),
+						duration: t.DURATION ? Number(t.DURATION) : t.duration ?? null,
+						trackNumber: Number(t.TRACK_NUMBER || t.track_position || idx + 1),
+					})),
+				});
+			}
+		} catch (e) {
+			console.error("[album save] failed:", e);
+		}
+		setSaving(false);
+	};
 
 	if (loading)
 		return (
@@ -179,11 +166,10 @@ function AlbumContent() {
 							</>
 						)}
 					</div>
-					<AlbumDownloadButton
-						queueItem={albumQueueItem}
-						allDownloaded={allTracksDownloaded}
-						apiLoading={isLoading(albumUrl)}
-						onDownload={handleDownloadAll}
+					<AlbumSaveButton
+						saved={albumSaved}
+						saving={saving}
+						onClick={handleToggleSave}
 					/>
 				</div>
 			</div>
@@ -220,9 +206,6 @@ function AlbumContent() {
 								key={trackId || idx}
 								track={normalized}
 								trackNumber={Number(trackNum)}
-								isDownloaded={downloaded.has(String(trackId))}
-								apiLoading={isLoading(trackUrl(trackId))}
-								onDownload={() => handleDownloadTrack(trackId)}
 							/>
 						);
 					})}

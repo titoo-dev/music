@@ -8,7 +8,6 @@ import {
 	Search,
 	Info,
 	Library,
-	History,
 	Settings,
 } from "lucide-react";
 
@@ -19,7 +18,6 @@ const navItems = [
 
 const authItems = [
 	{ path: "/library", label: "LIBRARY", icon: Library },
-	{ path: "/download-history", label: "HISTORY", icon: History },
 ];
 
 const secondaryItems = [

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, ok, fail, handleError } from "../_lib/helpers";
-import { evictTrackStorage } from "@/lib/track-eviction";
+import { maybeEvictFile } from "@/lib/library";
 
 const RECENT_PLAYS_CAP = 100;
 
@@ -79,9 +79,10 @@ export async function POST(request: NextRequest) {
 			},
 		});
 
-		// Cap the user's history at RECENT_PLAYS_CAP entries. Evict the oldest
-		// ones beyond that; their storage gets freed but the DownloadHistory
-		// metadata stays so the user can replay them (which will re-stream).
+		// Cap the user's history at RECENT_PLAYS_CAP entries. The maybeEvictFile
+		// helper checks all anchors (SavedTrack / AlbumTrack / SharedTrack /
+		// RecentPlay) before deleting — it only frees the file when nothing
+		// references it anymore. Replay later just re-streams via progressive.
 		const total = await prisma.recentPlay.count({ where: { userId } });
 		if (total > RECENT_PLAYS_CAP) {
 			const toEvict = await prisma.recentPlay.findMany({
@@ -95,18 +96,10 @@ export async function POST(request: NextRequest) {
 				where: { id: { in: toEvict.map((r) => r.id) } },
 			});
 
-			// Free storage for evicted tracks — only when no other user has them
-			// in their RecentPlay (otherwise we'd kill someone else's library).
 			for (const row of toEvict) {
-				const stillUsed = await prisma.recentPlay.findFirst({
-					where: { trackId: row.trackId },
-					select: { id: true },
-				});
-				if (!stillUsed) {
-					await evictTrackStorage(row.trackId).catch((e) =>
-						console.error("[recent-plays] eviction failed:", e)
-					);
-				}
+				await maybeEvictFile(row.trackId).catch((e) =>
+					console.error("[recent-plays] eviction failed:", e)
+				);
 			}
 		}
 

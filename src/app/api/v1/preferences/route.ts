@@ -5,6 +5,9 @@ import { ok, fail, handleError, requireUser } from "../_lib/helpers";
 export interface UserPrefsData {
 	playlistSortOrder?: "asc" | "desc";
 	albumSortOrder?: "asc" | "desc";
+	/** When true, saving a track/album triggers a background fetch to warm
+	 *  the S3 cache so the first play is instant. Off by default. */
+	preCacheSaved?: boolean;
 }
 
 // GET /api/v1/preferences
@@ -31,7 +34,11 @@ export async function PATCH(request: NextRequest) {
 
 		const updates: Partial<UserPrefsData> = await request.json();
 
-		const allowed: (keyof UserPrefsData)[] = ["playlistSortOrder", "albumSortOrder"];
+		const allowed: (keyof UserPrefsData)[] = [
+			"playlistSortOrder",
+			"albumSortOrder",
+			"preCacheSaved",
+		];
 		for (const key of Object.keys(updates) as (keyof UserPrefsData)[]) {
 			if (!allowed.includes(key)) return fail("INVALID_KEY", `Unknown preference key: ${key}`);
 		}

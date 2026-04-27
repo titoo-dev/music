@@ -2,11 +2,20 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { isValidURL } from "@/utils/helpers";
-import { useDownload } from "@/hooks/useDownload";
-import { useAuthStore } from "@/stores/useAuthStore";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+
+function parseDeezerLink(url: string): { type: string; id: string } | null {
+	const trackMatch = url.match(/\/track\/(\d+)/);
+	if (trackMatch) return { type: "track", id: trackMatch[1] };
+	const albumMatch = url.match(/\/album\/(\d+)/);
+	if (albumMatch) return { type: "album", id: albumMatch[1] };
+	const playlistMatch = url.match(/\/playlist\/(\d+)/);
+	if (playlistMatch) return { type: "playlist", id: playlistMatch[1] };
+	const artistMatch = url.match(/\/artist\/(\d+)/);
+	if (artistMatch) return { type: "artist", id: artistMatch[1] };
+	return null;
+}
 
 export function SearchBar() {
 	const searchParams = useSearchParams();
@@ -17,25 +26,22 @@ export function SearchBar() {
 		setTerm(searchParams.get("term") ?? "");
 	}, [searchParams]);
 	const inputRef = useRef<HTMLInputElement>(null);
-	const loggedIn = useAuthStore((s) => s.isDeezerConnected);
-	const { download } = useDownload();
 
 	const handleSubmit = useCallback(
 		(e: React.FormEvent) => {
 			e.preventDefault();
-			if (!term.trim()) return;
+			const v = term.trim();
+			if (!v) return;
 
-			if (isValidURL(term)) {
-				if (loggedIn) {
-					download(term);
-					setTerm("");
-				}
+			const link = parseDeezerLink(v);
+			if (link) {
+				router.push(`/${link.type}?id=${link.id}`);
+				setTerm("");
 				return;
 			}
-
-			router.push(`/search?term=${encodeURIComponent(term.trim())}`);
+			router.push(`/search?term=${encodeURIComponent(v)}`);
 		},
-		[term, router, loggedIn, download]
+		[term, router]
 	);
 
 	useEffect(() => {

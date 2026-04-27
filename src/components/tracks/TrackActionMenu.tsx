@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useQueueStore } from "@/stores/useQueueStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { useShareStore } from "@/stores/useShareStore";
+import { useSavedTracks } from "@/hooks/useLibrary";
 import { ShareDialog } from "./ShareDialog";
 import {
 	DropdownMenu,
@@ -15,7 +15,7 @@ import {
 	DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
-	Download,
+	Heart,
 	ListEnd,
 	ListPlus,
 	ListStart,
@@ -25,9 +25,7 @@ import {
 	Disc3,
 	User,
 	CheckCircle2,
-	Clock,
 	Loader2,
-	AlertTriangle,
 	Share2,
 	Link as LinkIcon,
 	MoreHorizontal,
@@ -48,50 +46,8 @@ export interface TrackActionTrack {
 }
 
 export interface TrackActionCallbacks {
-	onDownload?: () => void;
+	/** Removal callback for context-specific deletes (e.g. remove from a playlist). */
 	onDelete?: () => void;
-}
-
-function DownloadStatusIcon({ trackId }: { trackId: string }) {
-	const queueItem = useQueueStore((s) => {
-		const items = Object.values(s.queue);
-		return items.find((item) => String(item.id) === trackId) || null;
-	});
-	const status = queueItem?.status;
-	const progress = queueItem?.progress ?? 0;
-
-	if (status === "completed")
-		return <CheckCircle2 className="size-4" />;
-	if (status === "downloading")
-		return (
-			<span className="text-[10px] font-mono font-bold text-primary tabular-nums">
-				{Math.round(progress)}%
-			</span>
-		);
-	if (status === "inQueue")
-		return <Clock className="size-4 animate-pulse" />;
-	if (status === "failed")
-		return <AlertTriangle className="size-4 text-destructive" />;
-	if (status === "withErrors")
-		return <AlertTriangle className="size-4 text-primary" />;
-	if (status === "cancelling")
-		return <Loader2 className="size-4 animate-spin" />;
-	return <Download className="size-4" />;
-}
-
-function DownloadStatusLabel({ trackId }: { trackId: string }) {
-	const queueItem = useQueueStore((s) => {
-		const items = Object.values(s.queue);
-		return items.find((item) => String(item.id) === trackId) || null;
-	});
-	const status = queueItem?.status;
-	if (status === "completed") return "Downloaded";
-	if (status === "downloading") return "Downloading…";
-	if (status === "inQueue") return "In queue";
-	if (status === "failed") return "Retry download";
-	if (status === "withErrors") return "Done with errors";
-	if (status === "cancelling") return "Cancelling…";
-	return "Download";
 }
 
 interface Playlist {
@@ -100,7 +56,13 @@ interface Playlist {
 	_count?: { tracks: number };
 }
 
-function AddToPlaylistSubmenu({ track, onClose }: { track: TrackActionTrack; onClose: () => void }) {
+function AddToPlaylistSubmenu({
+	track,
+	onClose,
+}: {
+	track: TrackActionTrack;
+	onClose: () => void;
+}) {
 	const [playlists, setPlaylists] = useState<Playlist[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [addedTo, setAddedTo] = useState<Set<string>>(new Set());
@@ -110,9 +72,7 @@ function AddToPlaylistSubmenu({ track, onClose }: { track: TrackActionTrack; onC
 			try {
 				const res = await fetch("/api/v1/playlists", { credentials: "include" });
 				const json = await res.json();
-				if (json.success) {
-					setPlaylists((json.data as Playlist[]).filter((p) => p.title !== "Downloads"));
-				}
+				if (json.success) setPlaylists(json.data as Playlist[]);
 			} catch {
 				// ignore
 			}
@@ -134,6 +94,7 @@ function AddToPlaylistSubmenu({ track, onClose }: { track: TrackActionTrack; onC
 							title: track.title,
 							artist: track.artist,
 							album: track.albumTitle || null,
+							albumId: track.albumId || null,
 							coverUrl: track.cover || null,
 							duration: track.duration || null,
 						},
@@ -210,6 +171,11 @@ export function TrackActionMenu({
 	const sharedMap = useShareStore((s) => s.shared);
 	const isShared = sharedMap.has(track.id);
 
+	const { isSaved, save, unsave } = useSavedTracks(
+		isAuthenticated ? [track.id] : []
+	);
+	const saved = isSaved(track.id);
+
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewPlaying = usePreviewStore((s) => s.isPlaying);
 	const togglePreview = usePreviewStore((s) => s.toggle);
@@ -257,8 +223,24 @@ export function TrackActionMenu({
 		close();
 	};
 
-	const handleDownload = () => {
-		callbacks.onDownload?.();
+	const handleSave = async () => {
+		try {
+			if (saved) {
+				await unsave(track.id);
+			} else {
+				await save({
+					trackId: track.id,
+					title: track.title,
+					artist: track.artist,
+					album: track.albumTitle ?? null,
+					albumId: track.albumId ?? null,
+					coverUrl: track.cover ?? null,
+					duration: track.duration ?? null,
+				});
+			}
+		} catch {
+			// optimistic update will revert on its own
+		}
 		close();
 	};
 
@@ -296,7 +278,7 @@ export function TrackActionMenu({
 				>
 					{view === "main" ? (
 						<div>
-							{/* Track header — dark brutalist */}
+							{/* Track header */}
 							<div className="px-3 py-3 bg-foreground text-background border-b-2 border-foreground">
 								<p className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-background/55 mb-1.5">
 									TRACK ACTIONS
@@ -329,10 +311,12 @@ export function TrackActionMenu({
 								</>
 							)}
 
-							{callbacks.onDownload && (
-								<DropdownMenuItem onClick={handleDownload} className="gap-2.5">
-									<DownloadStatusIcon trackId={track.id} />
-									<DownloadStatusLabel trackId={track.id} />
+							{isAuthenticated && (
+								<DropdownMenuItem onClick={handleSave} className="gap-2.5">
+									<Heart
+										className={`size-4 ${saved ? "fill-primary text-primary" : ""}`}
+									/>
+									{saved ? "Remove from library" : "Save to library"}
 								</DropdownMenuItem>
 							)}
 
