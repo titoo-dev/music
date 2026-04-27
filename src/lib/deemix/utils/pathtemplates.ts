@@ -1,4 +1,3 @@
-import type { DownloadObject } from "../download-objects/DownloadObject";
 import { CustomDate } from "../types/CustomDate";
 import { type Settings } from "../types/Settings";
 import Track from "../types/Track";
@@ -128,7 +127,7 @@ const shouldCreateCDFolder = (
 
 export function generatePath(
 	track: DeezerTrack,
-	downloadObjectType: DownloadObject["type"],
+	downloadObjectType: "track" | "album" | "playlist",
 	settings: Settings
 ) {
 	let filenameTemplate = "%artist% - %title%";
