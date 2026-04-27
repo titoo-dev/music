@@ -16,10 +16,36 @@ import {
 	DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { motion, AnimatePresence } from "motion/react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Moon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { formatTime } from "@/utils/format-time";
 
 const SPEED_STEPS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+/** Tiny chip that ticks down the remaining time on the active sleep timer. */
+function SleepCountdown({ endTs }: { endTs: number }) {
+	// Tick `now` every second; `remaining` is derived so endTs updates apply
+	// instantly on the next render without setState-in-effect.
+	const [now, setNow] = useState(() => Date.now());
+	useEffect(() => {
+		const id = setInterval(() => setNow(Date.now()), 1000);
+		return () => clearInterval(id);
+	}, []);
+	const remaining = Math.max(0, endTs - now);
+	if (remaining <= 0) return null;
+	const totalSec = Math.ceil(remaining / 1000);
+	const m = Math.floor(totalSec / 60);
+	const s = totalSec % 60;
+	return (
+		<span
+			className="hidden sm:inline-flex items-center gap-1 border-2 border-foreground bg-accent px-1.5 py-0.5 text-[9px] font-mono font-black uppercase tracking-wider text-foreground"
+			aria-label={`Sleep timer: ${m} minutes ${s} seconds remaining`}
+		>
+			<Moon className="h-2.5 w-2.5" />
+			{m > 0 ? `${m}:${s.toString().padStart(2, "0")}` : `${s}s`}
+		</span>
+	);
+}
 
 function formatRate(rate: number): string {
 	return rate === 1 ? "1×" : `${rate}×`;
@@ -36,6 +62,7 @@ export function Player() {
 	const volume = usePlayerStore((s) => s.volume);
 	const currentTime = usePlayerStore((s) => s.currentTime);
 	const duration = usePlayerStore((s) => s.duration);
+	const buffered = usePlayerStore((s) => s.buffered);
 	const shuffle = usePlayerStore((s) => s.shuffle);
 	const repeat = usePlayerStore((s) => s.repeat);
 	const queue = usePlayerStore((s) => s.queue);
@@ -45,6 +72,7 @@ export function Player() {
 	const next = usePlayerStore((s) => s.next);
 	const prev = usePlayerStore((s) => s.prev);
 	const setVolume = usePlayerStore((s) => s.setVolume);
+	const toggleMute = usePlayerStore((s) => s.toggleMute);
 	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 	const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
 	const playbackRate = usePlayerStore((s) => s.playbackRate);
@@ -57,6 +85,8 @@ export function Player() {
 	const toggleNormalization = usePlayerStore((s) => s.toggleNormalization);
 
 	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
+	const queuePanelOpen = usePlayerStore((s) => s.queuePanelOpen);
+	const setQueuePanelOpen = usePlayerStore((s) => s.setQueuePanelOpen);
 	const openSheet = useTrackActionStore((s) => s.openSheet);
 
 	const lyricsVisible = useLyricsStore((s) => s.visible);
@@ -110,6 +140,7 @@ export function Player() {
 						<SeekBar
 							currentTime={currentTime}
 							duration={duration}
+							buffered={buffered}
 							onSeek={seek}
 							variant="thin"
 						/>
@@ -237,6 +268,29 @@ export function Player() {
 								{formatTime(currentTime)}<span className="hidden sm:inline"> / {formatTime(duration)}</span>
 							</span>
 
+							{sleepActive && sleepTimerEnd && <SleepCountdown endTs={sleepTimerEnd} />}
+
+							{/* Queue panel toggle */}
+							{hasQueue && (
+								<Button
+									variant="ghost"
+									size="icon"
+									aria-label="Open queue"
+									aria-pressed={queuePanelOpen}
+									className={`h-7 w-7 sm:h-8 sm:w-8 border-[2px] ${queuePanelOpen ? "bg-accent text-foreground border-foreground" : "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"}`}
+									onClick={() => setQueuePanelOpen(!queuePanelOpen)}
+								>
+									<svg width="13" height="13" className="sm:w-[14px] sm:h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+										<line x1="8" y1="6" x2="21" y2="6" />
+										<line x1="8" y1="12" x2="21" y2="12" />
+										<line x1="8" y1="18" x2="21" y2="18" />
+										<circle cx="3.5" cy="6" r="1.2" fill="currentColor" />
+										<circle cx="3.5" cy="12" r="1.2" fill="currentColor" />
+										<circle cx="3.5" cy="18" r="1.2" fill="currentColor" />
+									</svg>
+								</Button>
+							)}
+
 							{/* Lyrics toggle (LRC label like prototype) */}
 							<Button
 								variant="ghost"
@@ -262,19 +316,35 @@ export function Player() {
 
 							{/* Volume — brutal bar */}
 							<div className="hidden md:flex items-center gap-1.5">
-								<svg
-									width="13"
-									height="13"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									strokeWidth="2"
-									className="shrink-0 text-foreground"
+								<button
+									type="button"
+									onClick={toggleMute}
+									aria-label={volume === 0 ? "Unmute" : "Mute"}
+									aria-pressed={volume === 0}
+									className="shrink-0 text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm p-0.5"
 								>
-									<path d="M11 5L6 9H2v6h4l5 4V5z" />
-									{volume > 0 && <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
-									{volume > 50 && <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />}
-								</svg>
+									<svg
+										width="13"
+										height="13"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										strokeWidth="2"
+									>
+										<path d="M11 5L6 9H2v6h4l5 4V5z" />
+										{volume === 0 ? (
+											<>
+												<line x1="23" y1="9" x2="17" y2="15" />
+												<line x1="17" y1="9" x2="23" y2="15" />
+											</>
+										) : (
+											<>
+												{volume > 0 && <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
+												{volume > 50 && <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />}
+											</>
+										)}
+									</svg>
+								</button>
 								<div className="relative w-20 h-2 border-[2px] border-foreground bg-background">
 									<div
 										className="absolute inset-y-0 left-0 bg-foreground"

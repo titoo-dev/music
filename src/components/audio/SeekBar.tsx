@@ -7,6 +7,8 @@ interface SeekBarProps {
 	currentTime: number;
 	duration: number;
 	onSeek: (time: number) => void;
+	/** Buffered end position in seconds (from audio.buffered). */
+	buffered?: number;
 	variant?: "thin" | "large";
 }
 
@@ -14,6 +16,7 @@ export function SeekBar({
 	currentTime,
 	duration,
 	onSeek,
+	buffered = 0,
 	variant = "thin",
 }: SeekBarProps) {
 	const barRef = useRef<HTMLDivElement>(null);
@@ -24,6 +27,8 @@ export function SeekBar({
 	durationRef.current = duration;
 	const onSeekRef = useRef(onSeek);
 	onSeekRef.current = onSeek;
+
+	const disabled = duration <= 0;
 
 	const computeProgress = useCallback(
 		(clientX: number) => {
@@ -36,11 +41,13 @@ export function SeekBar({
 
 	const commitSeek = useCallback(
 		(pct: number) => {
-			setDragProgress(null);
 			const d = durationRef.current;
 			if (d > 0) {
+				// Update store first so the new currentTime is in place when we
+				// release the drag overlay — prevents a one-frame visual snap-back.
 				onSeekRef.current(pct * d);
 			}
+			setDragProgress(null);
 		},
 		[],
 	);
@@ -48,11 +55,12 @@ export function SeekBar({
 	// Touch handlers
 	const handleTouchStart = useCallback(
 		(e: React.TouchEvent) => {
+			if (disabled) return;
 			isDragging.current = true;
 			const pct = computeProgress(e.touches[0].clientX);
 			setDragProgress(pct);
 		},
-		[computeProgress]
+		[computeProgress, disabled]
 	);
 
 	const handleTouchMove = useCallback(
@@ -68,7 +76,6 @@ export function SeekBar({
 		(e: React.TouchEvent) => {
 			if (!isDragging.current) return;
 			isDragging.current = false;
-			// Use last known touch position from touchmove/touchstart
 			const lastTouch = e.changedTouches[0];
 			const pct = computeProgress(lastTouch.clientX);
 			commitSeek(pct);
@@ -79,10 +86,10 @@ export function SeekBar({
 	// Mouse handlers
 	const handleMouseDown = useCallback(
 		(e: React.MouseEvent) => {
+			if (disabled) return;
 			isDragging.current = true;
 			const pct = computeProgress(e.clientX);
 			setDragProgress(pct);
-			// Track the last known position for mouseup
 			let lastPct = pct;
 
 			const handleMouseMove = (ev: MouseEvent) => {
@@ -100,11 +107,12 @@ export function SeekBar({
 			window.addEventListener("mousemove", handleMouseMove);
 			window.addEventListener("mouseup", handleMouseUp);
 		},
-		[computeProgress, commitSeek]
+		[computeProgress, commitSeek, disabled]
 	);
 
 	const baseProgress = duration > 0 ? currentTime / duration : 0;
 	const displayProgress = dragProgress ?? baseProgress;
+	const bufferProgress = duration > 0 ? Math.min(1, buffered / duration) : 0;
 	const isThin = variant === "thin";
 
 	const ariaValueText = duration > 0
@@ -116,21 +124,23 @@ export function SeekBar({
 			ref={barRef}
 			role="slider"
 			aria-label="Track progress"
+			aria-orientation="horizontal"
 			aria-valuenow={Math.round(dragProgress !== null ? dragProgress * duration : currentTime)}
 			aria-valuemin={0}
 			aria-valuemax={Math.round(duration)}
 			aria-valuetext={ariaValueText}
-			tabIndex={0}
-			className={`relative flex items-center w-full cursor-pointer select-none ${
+			aria-disabled={disabled}
+			tabIndex={disabled ? -1 : 0}
+			className={`relative flex items-center w-full select-none ${
 				isThin ? "h-8" : "h-10"
-			}`}
+			} ${disabled ? "cursor-default opacity-50 pointer-events-none" : "cursor-pointer"}`}
 			style={{ touchAction: "none" }}
 			onTouchStart={handleTouchStart}
 			onTouchMove={handleTouchMove}
 			onTouchEnd={handleTouchEnd}
 			onMouseDown={handleMouseDown}
 			onKeyDown={(e) => {
-				if (duration <= 0) return;
+				if (disabled) return;
 				if (e.key === "ArrowRight") {
 					e.stopPropagation();
 					onSeekRef.current(Math.min(duration, currentTime + 5));
@@ -158,6 +168,14 @@ export function SeekBar({
 						: "h-2.5 border-2 border-foreground"
 				} transition-all`}
 			>
+				{/* Buffered (behind progress) */}
+				{bufferProgress > baseProgress && (
+					<div
+						className="absolute inset-y-0 left-0 bg-foreground/25"
+						style={{ width: `${bufferProgress * 100}%` }}
+					/>
+				)}
+				{/* Progress */}
 				<div
 					className={`absolute inset-y-0 left-0 bg-foreground transition-[width] ${
 						!isThin && dragProgress !== null ? "bg-primary" : ""
@@ -170,14 +188,16 @@ export function SeekBar({
 			</div>
 
 			{/* Thumb */}
-			<div
-				className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 bg-foreground border-2 border-foreground transition-opacity ${
-					isThin
-						? "h-3.5 w-3.5 opacity-0 group-hover/seekbar:opacity-100"
-						: "h-5 w-5 shadow-[var(--shadow-brutal-sm)]"
-				} ${dragProgress !== null ? "!opacity-100 scale-110 !bg-primary" : ""}`}
-				style={{ left: `${displayProgress * 100}%` }}
-			/>
+			{!disabled && (
+				<div
+					className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 bg-foreground border-2 border-foreground transition-opacity ${
+						isThin
+							? "h-3.5 w-3.5 opacity-0 group-hover/seekbar:opacity-100"
+							: "h-5 w-5 shadow-[var(--shadow-brutal-sm)]"
+					} ${dragProgress !== null ? "!opacity-100 scale-110 !bg-primary" : ""}`}
+					style={{ left: `${displayProgress * 100}%` }}
+				/>
+			)}
 		</div>
 	);
 }

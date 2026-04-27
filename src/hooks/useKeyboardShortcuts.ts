@@ -16,15 +16,31 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
  */
 export function useKeyboardShortcuts() {
 	useEffect(() => {
-		let savedVolume = 0;
-
 		function handleKeyDown(e: KeyboardEvent) {
+			const target = e.target as HTMLElement | null;
 			// Skip if user is typing in an input/textarea/contenteditable
-			const tag = (e.target as HTMLElement)?.tagName;
+			const tag = target?.tagName;
 			if (
 				tag === "INPUT" ||
 				tag === "TEXTAREA" ||
-				(e.target as HTMLElement)?.isContentEditable
+				target?.isContentEditable
+			) {
+				return;
+			}
+			// Skip if focus is on a Radix/ARIA interactive control that handles
+			// Space/Arrow itself (slider thumbs, switches, comboboxes, etc.).
+			// Space on a focused button still hits us — that's intentional.
+			const role = target?.getAttribute("role");
+			if (
+				role === "slider" ||
+				role === "switch" ||
+				role === "combobox" ||
+				role === "menuitem" ||
+				role === "menuitemcheckbox" ||
+				role === "menuitemradio" ||
+				role === "option" ||
+				role === "tab" ||
+				role === "spinbutton"
 			) {
 				return;
 			}
@@ -84,12 +100,7 @@ export function useKeyboardShortcuts() {
 				}
 				case "m":
 				case "M": {
-					if (state.volume > 0) {
-						savedVolume = state.volume;
-						state.setVolume(0);
-					} else {
-						state.setVolume(savedVolume || 80);
-					}
+					state.toggleMute();
 					break;
 				}
 			}

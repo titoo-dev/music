@@ -1,10 +1,13 @@
 "use client";
 
+import { useRef } from "react";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { warmTrack } from "@/components/audio/AudioEngine";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
+
+const HOVER_WARM_DELAY_MS = 150;
 
 interface PlayButtonProps {
 	track: PlayerTrack;
@@ -14,6 +17,7 @@ interface PlayButtonProps {
 }
 
 export function PlayButton({ track, queue, size = "sm", className }: PlayButtonProps) {
+	const warmTimerRef = useRef<number | null>(null);
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
 	const isBuffering = usePlayerStore((s) => s.isBuffering);
@@ -38,7 +42,18 @@ export function PlayButton({ track, queue, size = "sm", className }: PlayButtonP
 				className
 			)}
 			onMouseEnter={() => {
-				if (!isThisTrack) warmTrack(track.trackId, { audio: "full" });
+				if (isThisTrack) return;
+				if (warmTimerRef.current) clearTimeout(warmTimerRef.current);
+				warmTimerRef.current = window.setTimeout(() => {
+					warmTrack(track.trackId, { audio: "full" });
+					warmTimerRef.current = null;
+				}, HOVER_WARM_DELAY_MS);
+			}}
+			onMouseLeave={() => {
+				if (warmTimerRef.current) {
+					clearTimeout(warmTimerRef.current);
+					warmTimerRef.current = null;
+				}
 			}}
 			onFocus={() => {
 				if (!isThisTrack) warmTrack(track.trackId, { audio: "full" });

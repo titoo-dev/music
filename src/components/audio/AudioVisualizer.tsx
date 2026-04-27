@@ -1,12 +1,25 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAnalyser } from "@/utils/audio-context";
 
 interface Props {
 	/** Number of frequency bars to draw. */
 	barCount?: number;
 	className?: string;
+}
+
+function usePrefersReducedMotion(): boolean {
+	const [reduced, setReduced] = useState(false);
+	useEffect(() => {
+		if (typeof window === "undefined" || !window.matchMedia) return;
+		const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+		setReduced(mq.matches);
+		const listener = (e: MediaQueryListEvent) => setReduced(e.matches);
+		mq.addEventListener("change", listener);
+		return () => mq.removeEventListener("change", listener);
+	}, []);
+	return reduced;
 }
 
 /**
@@ -18,8 +31,10 @@ interface Props {
  */
 export function AudioVisualizer({ barCount = 40, className = "" }: Props) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const reducedMotion = usePrefersReducedMotion();
 
 	useEffect(() => {
+		if (reducedMotion) return;
 		const canvas = canvasRef.current;
 		if (!canvas) return;
 		const ctx2d = canvas.getContext("2d");
@@ -78,7 +93,7 @@ export function AudioVisualizer({ barCount = 40, className = "" }: Props) {
 			active = false;
 			cancelAnimationFrame(rafId);
 		};
-	}, [barCount]);
+	}, [barCount, reducedMotion]);
 
-	return <canvas ref={canvasRef} className={`block w-full ${className}`} />;
+	return <canvas ref={canvasRef} className={`block w-full ${className}`} aria-hidden />;
 }

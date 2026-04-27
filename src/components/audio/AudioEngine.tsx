@@ -41,6 +41,10 @@ let usePresigned = true;
 // Dedup in-flight presigned URL requests so prefetch + on-demand calls share one fetch
 const inflightPresigned = new Map<string, Promise<string | null>>();
 
+// Tracks whose presigned URL failed (mixed-content, S3 denial, etc.) — we go
+// straight to progressive for these without burning a sign roundtrip.
+const presignedDenied = new Set<string>();
+
 function pruneUrlCache() {
 	const now = Date.now();
 	for (const [key, val] of urlCache) {
@@ -108,7 +112,7 @@ async function getTrackUrl(trackId: string): Promise<string> {
 	}
 
 	// 2. Presigned URL — only succeeds for tracks already in user's DownloadHistory
-	if (usePresigned) {
+	if (usePresigned && !presignedDenied.has(trackId)) {
 		const url = await fetchPresignedUrl(trackId);
 		if (url) {
 			// Skip presigned URL if it would cause mixed content (HTTPS page → HTTP audio)
@@ -440,6 +444,9 @@ async function cacheCurrentTrackInBackground(trackId: string) {
  * Pre-buffers adjacent tracks in the queue for instant playback.
  * Also manages the Media Session API for OS-level media controls.
  */
+const RESUME_KEY = "deemix-resume";
+const RESUME_TTL_MS = 24 * 60 * 60 * 1000;
+
 export function AudioEngine() {
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const prevTrackIdRef = useRef<string | null>(null);
@@ -447,6 +454,9 @@ export function AudioEngine() {
 	const skipPlayEffectRef = useRef(false);
 	// Generation counter to cancel stale track loads on rapid switching
 	const loadGenRef = useRef(0);
+	// Position to seek to after the first track-load completes (refresh/HMR
+	// session restore). Cleared after use or on a different track-change.
+	const resumePositionRef = useRef<number | null>(null);
 
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -460,6 +470,7 @@ export function AudioEngine() {
 	const resume = usePlayerStore((s) => s.resume);
 
 	const setBuffering = usePlayerStore((s) => s.setBuffering);
+	const setBuffered = usePlayerStore((s) => s.setBuffered);
 	const setError = usePlayerStore((s) => s.setError);
 	const playbackRate = usePlayerStore((s) => s.playbackRate);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
@@ -472,6 +483,11 @@ export function AudioEngine() {
 	// Error retry counter
 	const retryCountRef = useRef(0);
 	const MAX_RETRIES = 2;
+	// Consecutive track failures across the queue. If too many tracks fail
+	// back-to-back, stop auto-skipping and show a clearer error so we don't
+	// silently burn through the whole queue.
+	const consecutiveFailuresRef = useRef(0);
+	const MAX_CONSECUTIVE_FAILURES = 3;
 
 	// Play tracking — Spotify-like 30s rule.
 	// playLoggedRef: did we already POST /recent-plays for the *current* track?
@@ -496,6 +512,7 @@ export function AudioEngine() {
 		onLoadedMetadata: () => {},
 		onWaiting: () => {},
 		onPlaying: () => {},
+		onProgress: () => {},
 	});
 
 	const attachEvents = useCallback((audio: HTMLAudioElement) => {
@@ -506,6 +523,7 @@ export function AudioEngine() {
 		audio.onloadedmetadata = () => handlersRef.current.onLoadedMetadata();
 		audio.onwaiting = () => handlersRef.current.onWaiting();
 		audio.onplaying = () => handlersRef.current.onPlaying();
+		audio.onprogress = () => handlersRef.current.onProgress();
 	}, []);
 
 	const detachEvents = useCallback((audio: HTMLAudioElement) => {
@@ -516,6 +534,7 @@ export function AudioEngine() {
 		audio.onloadedmetadata = null;
 		audio.onwaiting = null;
 		audio.onplaying = null;
+		audio.onprogress = null;
 	}, []);
 
 	// Hand off from a head-prefetched audio element (~3s buffered) to the
@@ -584,6 +603,94 @@ export function AudioEngine() {
 			headAudio.addEventListener("ended", onEnded);
 		},
 		[attachEvents, detachEvents]
+	);
+
+	// --- Restore playback position from previous session ---
+	// Two paths:
+	//  1. HMR / fast-refresh: the Zustand store is module-level and survives
+	//     module reloads, so currentTime stays >0 if it was set.
+	//  2. Full page refresh / tab close+reopen: the store rehydrates from
+	//     localStorage but currentTime is not in `partialize`, so we use a
+	//     dedicated localStorage entry written on pagehide.
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+
+		const track = usePlayerStore.getState().currentTrack;
+		if (!track) return;
+
+		const storeTime = usePlayerStore.getState().currentTime;
+		if (storeTime > 1) {
+			resumePositionRef.current = storeTime;
+			return;
+		}
+
+		try {
+			const raw = localStorage.getItem(RESUME_KEY);
+			if (!raw) return;
+			localStorage.removeItem(RESUME_KEY);
+			const data = JSON.parse(raw) as { trackId?: string; time?: number; ts?: number };
+			if (
+				data?.trackId === track.trackId &&
+				typeof data.time === "number" &&
+				data.time > 1 &&
+				Date.now() - (data.ts ?? 0) < RESUME_TTL_MS
+			) {
+				resumePositionRef.current = data.time;
+				// Reflect in the store so SeekBar shows the right position before
+				// the audio element actually loads + seeks.
+				usePlayerStore.getState().setCurrentTime(data.time);
+			}
+		} catch {
+			// Corrupt entry — ignore
+		}
+	}, []);
+
+	// Save current position on pagehide / tab hide so we can resume on refresh.
+	// pagehide fires reliably on close + bfcache; visibilitychange catches
+	// mobile background → kill scenarios where pagehide may not run.
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const save = () => {
+			const audio = audioRef.current;
+			const track = usePlayerStore.getState().currentTrack;
+			if (!audio || !track) return;
+			const time = audio.currentTime;
+			if (!isFinite(time) || time < 1) return;
+			try {
+				localStorage.setItem(
+					RESUME_KEY,
+					JSON.stringify({ trackId: track.trackId, time, ts: Date.now() })
+				);
+			} catch {
+				// Quota or disabled storage — non-fatal
+			}
+		};
+		const onVisibility = () => {
+			if (document.visibilityState === "hidden") save();
+		};
+		window.addEventListener("pagehide", save);
+		document.addEventListener("visibilitychange", onVisibility);
+		return () => {
+			window.removeEventListener("pagehide", save);
+			document.removeEventListener("visibilitychange", onVisibility);
+		};
+	}, []);
+
+	const applyResumePosition = useCallback(
+		(audio: HTMLAudioElement) => {
+			const resume = resumePositionRef.current;
+			if (resume === null) return;
+			resumePositionRef.current = null;
+			const dur = audio.duration;
+			if (!isFinite(dur) || dur <= 0 || resume >= dur - 1) return;
+			try {
+				audio.currentTime = resume;
+				setCurrentTime(resume);
+			} catch {
+				// Buffer might not cover seek target yet — browser will catch up
+			}
+		},
+		[setCurrentTime]
 	);
 
 	// --- Initialize audio element (client-only) ---
@@ -739,8 +846,12 @@ export function AudioEngine() {
 			const gen = ++loadGenRef.current;
 			retryCountRef.current = 0;
 			setError(null);
-			// Prevent the play/pause effect from re-starting the old audio
-			skipPlayEffectRef.current = true;
+
+			// Drop any pending resume position when the user navigates to a
+			// different track before the first one finishes loading.
+			if (prevTrackIdRef.current !== null) {
+				resumePositionRef.current = null;
+			}
 
 			// Immediately kill the old audio — hard stop, no fade
 			detachEvents(audio);
@@ -782,6 +893,7 @@ export function AudioEngine() {
 					setBuffering(false);
 					setDuration(preloaded.duration || 0);
 					preloaded.playbackRate = usePlayerStore.getState().playbackRate;
+					applyResumePosition(preloaded);
 					if (usePlayerStore.getState().isPlaying) {
 						skipPlayEffectRef.current = true;
 						preloaded.volume = 0;
@@ -806,7 +918,7 @@ export function AudioEngine() {
 				});
 			}
 		}
-	}, [currentTrack, attachEvents, detachEvents, setDuration]);
+	}, [currentTrack, attachEvents, detachEvents, setDuration, applyResumePosition]);
 
 	// --- Play / pause with fade effects ---
 	useEffect(() => {
@@ -873,7 +985,18 @@ export function AudioEngine() {
 		if (seekTo === null) return;
 		const audio = audioRef.current;
 		if (audio) {
-			audio.currentTime = seekTo;
+			if (audio.readyState >= 1 && isFinite(audio.duration) && audio.duration > 0) {
+				try {
+					audio.currentTime = seekTo;
+				} catch {
+					// Buffer not yet covering the seek target — fall through to
+					// queue it for after canplay/loadedmetadata.
+					resumePositionRef.current = seekTo;
+				}
+			} else {
+				// Audio metadata isn't loaded yet — defer the seek to canplay.
+				resumePositionRef.current = seekTo;
+			}
 		}
 		// Clear the signal so it doesn't re-fire
 		usePlayerStore.setState({ _seekTo: null });
@@ -902,6 +1025,7 @@ export function AudioEngine() {
 		setBuffering(false);
 		setDuration(audio.duration || 0);
 		audio.playbackRate = usePlayerStore.getState().playbackRate;
+		applyResumePosition(audio);
 		onPositionUpdate();
 		if (usePlayerStore.getState().isPlaying) {
 			const targetVolume = usePlayerStore.getState().volume / 100;
@@ -918,6 +1042,13 @@ export function AudioEngine() {
 	handlersRef.current.onTimeUpdate = () => {
 		const audio = audioRef.current;
 		if (!audio) return;
+		// Don't write timeUpdates back to the store while a seek is pending —
+		// audio.currentTime may briefly be the pre-seek value, which would
+		// rubber-band the SeekBar visually after the user releases.
+		if (usePlayerStore.getState()._seekTo !== null) {
+			onPositionUpdate();
+			return;
+		}
 		// Throttle store writes to ~4Hz to avoid excessive re-renders
 		const now = audio.currentTime;
 		const last = usePlayerStore.getState().currentTime;
@@ -1091,14 +1222,11 @@ export function AudioEngine() {
 		});
 
 		// First: try falling back from presigned URL to proxy stream
-		if (usePresigned && src && !src.includes("/api/v1/stream-progressive/") && !src.includes("/api/v1/stream/")) {
-			usePresigned = false;
-			urlCache.clear();
-			for (const [, a] of preloadCache) {
-				evictedAudio.add(a);
-				a.src = "";
-			}
-			preloadCache.clear();
+		// Only this trackId is marked — keep presigned enabled globally so
+		// other tracks still benefit from direct S3 streaming.
+		if (src && !src.includes("/api/v1/stream-progressive/") && !src.includes("/api/v1/stream/")) {
+			presignedDenied.add(currentTrack.trackId);
+			urlCache.delete(currentTrack.trackId);
 			audio.src = `/api/v1/stream-progressive/${currentTrack.trackId}`;
 			audio.load();
 			return;
@@ -1138,7 +1266,20 @@ export function AudioEngine() {
 				console.error("[AudioEngine] giving up — fetch failed", e)
 			);
 
-		// All retries exhausted — set error and auto-skip
+		// All retries exhausted — count this as a queue-wide failure
+		consecutiveFailuresRef.current++;
+
+		if (consecutiveFailuresRef.current >= MAX_CONSECUTIVE_FAILURES) {
+			// Multiple tracks failing back-to-back almost always means a
+			// network/auth problem, not isolated bad files. Stop auto-skipping
+			// so we don't silently chew through the queue.
+			setError(
+				`Multiple tracks failed to load. Check your connection and try again.`
+			);
+			pause();
+			return;
+		}
+
 		setError(`Can't play "${currentTrack.title}"`);
 		const { queue, queueIndex } = usePlayerStore.getState();
 		if (queueIndex + 1 < queue.length) {
@@ -1159,6 +1300,21 @@ export function AudioEngine() {
 
 	handlersRef.current.onPlaying = () => {
 		setBuffering(false);
+		// Successful playback resets the consecutive-failure streak.
+		consecutiveFailuresRef.current = 0;
+	};
+
+	handlersRef.current.onProgress = () => {
+		const audio = audioRef.current;
+		if (!audio) return;
+		const ranges = audio.buffered;
+		if (ranges.length === 0) {
+			setBuffered(0);
+			return;
+		}
+		// Use the end of the last range — for HLS-like progressive streams this
+		// reflects how much the browser has buffered ahead of currentTime.
+		setBuffered(ranges.end(ranges.length - 1));
 	};
 
 	// --- Media Session API ---

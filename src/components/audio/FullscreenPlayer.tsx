@@ -156,11 +156,13 @@ function TrackInfo() {
 function SeekSection() {
 	const currentTime = usePlayerStore((s) => s.currentTime);
 	const duration = usePlayerStore((s) => s.duration);
+	const buffered = usePlayerStore((s) => s.buffered);
 	return (
 		<div className="shrink-0 px-8 group/seekbar">
 			<SeekBar
 				currentTime={currentTime}
 				duration={duration}
+				buffered={buffered}
 				onSeek={seek}
 				variant="large"
 			/>
@@ -264,6 +266,57 @@ function Controls() {
 	);
 }
 
+/* ─── Volume Section (with mute toggle) ─── */
+function VolumeSection() {
+	const volume = usePlayerStore((s) => s.volume);
+	const setVolume = usePlayerStore((s) => s.setVolume);
+	const toggleMute = usePlayerStore((s) => s.toggleMute);
+	return (
+		<div className="shrink-0 flex items-center gap-3 px-8 pb-3">
+			<button
+				type="button"
+				onClick={toggleMute}
+				aria-label={volume === 0 ? "Unmute" : "Mute"}
+				aria-pressed={volume === 0}
+				className="shrink-0 text-foreground hover:text-primary p-1 -ml-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+			>
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+					<path d="M11 5L6 9H2v6h4l5 4V5z" />
+					{volume === 0 ? (
+						<>
+							<line x1="23" y1="9" x2="17" y2="15" />
+							<line x1="17" y1="9" x2="23" y2="15" />
+						</>
+					) : (
+						<>
+							{volume > 0 && <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
+							{volume > 50 && <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />}
+						</>
+					)}
+				</svg>
+			</button>
+			<div className="relative flex-1 h-2.5 border-2 border-foreground bg-background">
+				<div
+					className="absolute inset-y-0 left-0 bg-foreground"
+					style={{ width: `${volume}%` }}
+				/>
+				<input
+					type="range"
+					min={0}
+					max={100}
+					value={volume}
+					aria-label="Volume"
+					onChange={(e) => setVolume(parseInt(e.target.value))}
+					className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+				/>
+			</div>
+			<span className="text-[10px] font-mono font-bold tabular-nums text-muted-foreground tracking-wider w-7 text-right">
+				{volume}
+			</span>
+		</div>
+	);
+}
+
 /* ─── Extra Controls (speed + sleep timer + crossfade) ─── */
 function ExtraControls() {
 	const playbackRate = usePlayerStore((s) => s.playbackRate);
@@ -347,12 +400,15 @@ function ExtraControls() {
 export function FullscreenPlayer() {
 	const fullscreenOpen = usePlayerStore((s) => s.fullscreenOpen);
 	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
+	const setQueuePanelOpen = usePlayerStore((s) => s.setQueuePanelOpen);
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const queue = usePlayerStore((s) => s.queue);
 	const dragControls = useDragControls();
 	const lyricsVisible = useLyricsStore((s) => s.visible);
 	const toggleLyrics = useLyricsStore((s) => s.toggleVisible);
 	const fetchLyrics = useLyricsStore((s) => s.fetchLyrics);
+
+	const hasQueue = queue.length > 1;
 
 	useEffect(() => {
 		if (fullscreenOpen) {
@@ -408,8 +464,19 @@ export function FullscreenPlayer() {
 					<div
 						className="flex shrink-0 items-center justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing"
 						onPointerDown={(e) => dragControls.start(e)}
+						role="button"
+						aria-label="Drag down to close"
 					>
-						<div className="h-1.5 w-12 bg-foreground" />
+						<motion.div
+							className="h-1.5 w-12 bg-foreground rounded-sm"
+							animate={{ scaleX: [1, 1.15, 1] }}
+							transition={{
+								duration: 1.6,
+								repeat: Infinity,
+								repeatDelay: 1.4,
+								ease: "easeInOut",
+							}}
+						/>
 					</div>
 
 					{/* Header */}
@@ -428,20 +495,43 @@ export function FullscreenPlayer() {
 						<span className="brutal-label flex-1 text-center text-muted-foreground">
 							{lyricsVisible ? "Lyrics" : "Now Playing"}
 						</span>
-						<Button
-							variant="ghost"
-							size="icon"
-							aria-label="Toggle lyrics"
-							aria-pressed={lyricsVisible}
-							className={`h-9 w-9 ${lyricsVisible ? "text-primary" : "text-muted-foreground"}`}
-							onClick={toggleLyrics}
-						>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-								<path d="M9 18V5l12-2v13" />
-								<circle cx="6" cy="18" r="3" />
-								<circle cx="18" cy="16" r="3" />
-							</svg>
-						</Button>
+						<div className="flex items-center gap-1">
+							{hasQueue && (
+								<Button
+									variant="ghost"
+									size="icon"
+									aria-label="Open queue"
+									className="h-9 w-9 text-muted-foreground"
+									onClick={() => {
+										setFullscreenOpen(false);
+										setQueuePanelOpen(true);
+									}}
+								>
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+										<line x1="8" y1="6" x2="21" y2="6" />
+										<line x1="8" y1="12" x2="21" y2="12" />
+										<line x1="8" y1="18" x2="21" y2="18" />
+										<circle cx="3.5" cy="6" r="1.2" fill="currentColor" />
+										<circle cx="3.5" cy="12" r="1.2" fill="currentColor" />
+										<circle cx="3.5" cy="18" r="1.2" fill="currentColor" />
+									</svg>
+								</Button>
+							)}
+							<Button
+								variant="ghost"
+								size="icon"
+								aria-label="Toggle lyrics"
+								aria-pressed={lyricsVisible}
+								className={`h-9 w-9 ${lyricsVisible ? "text-primary" : "text-muted-foreground"}`}
+								onClick={toggleLyrics}
+							>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+									<path d="M9 18V5l12-2v13" />
+									<circle cx="6" cy="18" r="3" />
+									<circle cx="18" cy="16" r="3" />
+								</svg>
+							</Button>
+						</div>
 					</div>
 
 					{lyricsVisible ? (
@@ -459,6 +549,7 @@ export function FullscreenPlayer() {
 						</>
 					)}
 					<SeekSection />
+					<VolumeSection />
 					<ExtraControls />
 					<Controls />
 				</motion.div>

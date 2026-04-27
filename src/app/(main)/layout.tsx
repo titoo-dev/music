@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 import Link from "next/link";
+import { MotionConfig } from "motion/react";
 import { Navigation } from "@/components/layout/Sidebar";
 import { SearchBar } from "@/components/layout/SearchBar";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
@@ -33,6 +34,8 @@ import { AudioEngine } from "@/components/audio/AudioEngine";
 import { AudioEngineErrorBoundary } from "@/components/audio/AudioEngineErrorBoundary";
 import { Player } from "@/components/audio/Player";
 import { FullscreenPlayer } from "@/components/audio/FullscreenPlayer";
+import { QueuePanel } from "@/components/audio/QueuePanel";
+import { TrackAnnouncer } from "@/components/audio/TrackAnnouncer";
 import { LyricsPanel } from "@/components/audio/LyricsPanel";
 import { LyricsImmersive } from "@/components/audio/LyricsImmersive";
 import { TrackActionSheet } from "@/components/tracks/TrackActionSheet";
@@ -65,6 +68,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 	const displayName = user?.name || deezerUser?.name || "User";
 
 	return (
+		<MotionConfig reducedMotion="user">
 		<div className="flex h-dvh bg-background max-w-full overflow-hidden">
 			{/* ─── Desktop Sidebar (dark brutalist) ─── */}
 			<aside className="hidden border-r-[3px] border-foreground bg-foreground text-background md:fixed md:inset-y-0 md:z-40 md:flex md:w-60 md:flex-col">
@@ -264,7 +268,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 			<LyricsPanel />
 			<LyricsImmersive />
 			<FullscreenPlayer />
+			<QueuePanel />
+			<TrackAnnouncer />
 			<TrackActionSheet />
 		</div>
+		</MotionConfig>
 	);
 }

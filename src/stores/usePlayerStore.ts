@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { haptic } from "@/utils/haptic";
 
 export interface PlayerTrack {
 	trackId: string;
@@ -31,8 +32,12 @@ interface PlayerState {
 	isPlaying: boolean;
 	isBuffering: boolean;
 	volume: number;
+	/** Last volume > 0, used by toggleMute to restore. */
+	_lastNonZeroVolume: number;
 	currentTime: number;
 	duration: number;
+	/** Last buffered end position (seconds) reported by the audio element. */
+	buffered: number;
 	shuffle: boolean;
 	repeat: RepeatMode;
 	/** Set by prev()/seek() to signal AudioEngine to seek; AudioEngine clears it after seeking. */
@@ -40,6 +45,8 @@ interface PlayerState {
 	/** Playback error message, null when no error. */
 	error: string | null;
 	fullscreenOpen: boolean;
+	/** Whether the "Up Next" queue panel is open. */
+	queuePanelOpen: boolean;
 
 	// P2 features
 	sleepTimerEnd: number | null;
@@ -66,12 +73,18 @@ interface PlayerState {
 	seek: (time: number) => void;
 	setError: (error: string | null) => void;
 	setVolume: (v: number) => void;
+	/** Toggle mute: 0 → last non-zero volume, anything else → 0. */
+	toggleMute: () => void;
 	setCurrentTime: (t: number) => void;
 	setDuration: (d: number) => void;
+	setBuffered: (b: number) => void;
 	setBuffering: (b: boolean) => void;
 	toggleShuffle: () => void;
 	toggleRepeat: () => void;
 	setFullscreenOpen: (v: boolean) => void;
+	setQueuePanelOpen: (v: boolean) => void;
+	/** Jump directly to a queue index (used by Queue panel click-to-play). */
+	jumpToIndex: (index: number) => void;
 	playQueue: (queue: PlayerTrack[], startIndex?: number) => void;
 	setSleepTimer: (minutes: number | null) => void;
 	setPlaybackRate: (rate: number) => void;
@@ -99,6 +112,7 @@ function goToIndex(queueIndex: number, queue: PlayerTrack[]): Partial<PlayerStat
 		isPlaying: true,
 		isBuffering: true,
 		currentTime: 0,
+		buffered: 0,
 		error: null,
 	};
 }
@@ -112,13 +126,16 @@ export const usePlayerStore = create<PlayerState>()(
 			isPlaying: false,
 			isBuffering: false,
 			volume: 80,
+			_lastNonZeroVolume: 80,
 			currentTime: 0,
 			duration: 0,
+			buffered: 0,
 			shuffle: false,
 			repeat: "off" as RepeatMode,
 			_seekTo: null,
 			error: null,
 			fullscreenOpen: false,
+			queuePanelOpen: false,
 			sleepTimerEnd: null,
 			playbackRate: 1.0,
 			crossfadeDuration: 0,
@@ -163,11 +180,15 @@ export const usePlayerStore = create<PlayerState>()(
 
 			pause: () => set({ isPlaying: false }),
 			resume: () => set({ isPlaying: true }),
-			toggle: () => set((s) => ({ isPlaying: !s.isPlaying })),
+			toggle: () => {
+				haptic(8);
+				set((s) => ({ isPlaying: !s.isPlaying }));
+			},
 			stop: () => set({
 				currentTrack: null, queue: [], queueIndex: -1,
 				isPlaying: false, isBuffering: false,
-				currentTime: 0, duration: 0, error: null, fullscreenOpen: false,
+				currentTime: 0, duration: 0, buffered: 0, error: null,
+				fullscreenOpen: false, queuePanelOpen: false,
 				_shuffleOrder: [], _shufflePos: 0,
 				sleepTimerEnd: null,
 			}),
@@ -188,7 +209,8 @@ export const usePlayerStore = create<PlayerState>()(
 							set({ _shuffleOrder: newOrder, _shufflePos: 0, ...goToIndex(nextQueueIndex, queue) });
 							return;
 						} else {
-							set({ isPlaying: false });
+							// Queue exhausted — close the player.
+							get().stop();
 							return;
 						}
 					}
@@ -203,7 +225,8 @@ export const usePlayerStore = create<PlayerState>()(
 					if (repeat === "all") {
 						nextQueueIndex = 0;
 					} else {
-						set({ isPlaying: false });
+						// Queue exhausted — close the player.
+						get().stop();
 						return;
 					}
 				}
@@ -287,9 +310,26 @@ export const usePlayerStore = create<PlayerState>()(
 				set({ currentTime: clamped, _seekTo: clamped });
 			},
 			setError: (error) => set({ error }),
-			setVolume: (volume) => set({ volume }),
+			setVolume: (volume) => {
+				// Remember last non-zero volume so mute toggle can restore it
+				if (volume > 0) {
+					set({ volume, _lastNonZeroVolume: volume });
+				} else {
+					set({ volume });
+				}
+			},
+			toggleMute: () => {
+				haptic(6);
+				const { volume, _lastNonZeroVolume } = get();
+				if (volume > 0) {
+					set({ volume: 0, _lastNonZeroVolume: volume });
+				} else {
+					set({ volume: _lastNonZeroVolume > 0 ? _lastNonZeroVolume : 80 });
+				}
+			},
 			setCurrentTime: (currentTime) => set({ currentTime }),
 			setDuration: (duration) => set({ duration }),
+			setBuffered: (buffered) => set({ buffered }),
 			setBuffering: (isBuffering) => set({ isBuffering }),
 
 			toggleShuffle: () => {
@@ -309,6 +349,21 @@ export const usePlayerStore = create<PlayerState>()(
 			},
 
 			setFullscreenOpen: (fullscreenOpen) => set({ fullscreenOpen }),
+			setQueuePanelOpen: (queuePanelOpen) => set({ queuePanelOpen }),
+
+			jumpToIndex: (index) => {
+				const { queue, shuffle, _shuffleOrder } = get();
+				if (index < 0 || index >= queue.length) return;
+				const update: Partial<PlayerState> = goToIndex(index, queue);
+				// Keep shuffle progression coherent: if the target index is in
+				// the shuffle order, snap _shufflePos to its position.
+				if (shuffle && _shuffleOrder.length > 0) {
+					const pos = _shuffleOrder.indexOf(index);
+					if (pos >= 0) update._shufflePos = pos;
+				}
+				set(update);
+			},
+
 			setSleepTimer: (minutes) => {
 				set({ sleepTimerEnd: minutes === null ? null : Date.now() + minutes * 60 * 1000 });
 			},
@@ -492,6 +547,7 @@ export const usePlayerStore = create<PlayerState>()(
 			name: "deemix-player",
 			partialize: (state) => ({
 				volume: state.volume,
+				_lastNonZeroVolume: state._lastNonZeroVolume,
 				shuffle: state.shuffle,
 				repeat: state.repeat,
 				// Persist playback context so the player bar is restored on refresh.
