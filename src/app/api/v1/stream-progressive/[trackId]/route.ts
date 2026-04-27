@@ -29,17 +29,41 @@ export async function GET(
 		const head = preview && request.nextUrl.searchParams.get("head") === "1";
 		const headBytes = head ? 64 * 1024 : 0;
 
-		// Already cached → fast path through /stream
+		// Already cached → fast path through /stream. Verify the file actually
+		// exists on S3 first; stale rows (file deleted, lifecycle policy,
+		// migration) would otherwise cause a redirect-then-404 loop and burn
+		// the audio element's retry budget.
 		const stored = await prisma.storedTrack.findFirst({
 			where: { trackId },
-			select: { id: true },
 			orderBy: { bitrate: "desc" },
 		});
 		if (stored) {
-			return NextResponse.redirect(
-				new URL(`/api/v1/stream/${trackId}`, request.url),
-				302
-			);
+			let missing = false;
+			if (stored.storageType === "s3") {
+				try {
+					const { headObject } = await import("@/lib/s3-stream");
+					await headObject(stored.storagePath);
+				} catch (e: any) {
+					// Only treat actual NotFound as missing. For any other error
+					// (network, permissions) keep the redirect path so /stream
+					// can produce its own actionable error.
+					if (
+						e?.name === "NotFound" ||
+						e?.$metadata?.httpStatusCode === 404
+					) {
+						missing = true;
+					}
+				}
+			}
+			if (!missing) {
+				return NextResponse.redirect(
+					new URL(`/api/v1/stream/${trackId}`, request.url),
+					302
+				);
+			}
+			// Drop every stale row for this track so we don't keep redirecting
+			// to a missing file. Then fall through to the live stream below.
+			await prisma.storedTrack.deleteMany({ where: { trackId } });
 		}
 
 		// Not cached — open a progressive stream
@@ -100,6 +124,7 @@ export async function GET(
 
 		return new Response(body, { status: 200, headers });
 	} catch (e) {
+		console.error("[stream-progressive] failed:", e);
 		return handleError(e);
 	}
 }
