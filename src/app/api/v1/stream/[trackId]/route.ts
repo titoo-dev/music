@@ -11,11 +11,10 @@ export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ trackId: string }> }
 ) {
+	const { trackId } = await params;
 	try {
 		const userResult = await requireUser(request);
 		if (userResult.error) return userResult.error;
-
-		const { trackId } = await params;
 
 		// Pick the highest-quality cached version
 		const stored = await prisma.storedTrack.findFirst({
@@ -59,6 +58,13 @@ export async function GET(
 		return new Response(body, { status: statusCode, headers });
 	} catch (e: any) {
 		if (e?.name === "NotFound" || e?.$metadata?.httpStatusCode === 404) {
+			// Stale StoredTrack: DB row points to a file that no longer exists
+			// in S3 (manual cleanup, lifecycle policy, migration). Drop every
+			// row for this trackId so the next call to /stream-progressive
+			// re-fetches from Deezer instead of redirecting back here.
+			try {
+				await prisma.storedTrack.deleteMany({ where: { trackId } });
+			} catch {}
 			return fail("FILE_NOT_FOUND", "Audio file not found in storage.", 404);
 		}
 		return handleError(e);
