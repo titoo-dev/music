@@ -17,7 +17,7 @@ interface UserAlbum {
 	artist: string;
 	coverUrl: string | null;
 	trackCount: number;
-	downloadedAt: string;
+	savedAt: string;
 }
 
 interface RecentPlayItem {
@@ -41,14 +41,14 @@ export default async function HomePage() {
 
 	const [playlists, albums, recent] = await Promise.all([
 		serverFetch<UserPlaylist[]>("playlists").catch(() => null),
-		serverFetch<UserAlbum[]>("albums").catch(() => null),
+		serverFetch<{ items: UserAlbum[] }>("library/albums").catch(() => null),
 		serverFetch<{ items: RecentPlayItem[] }>("recent-plays?limit=12").catch(() => null),
 	]);
 
 	return (
 		<HomeContent
 			playlists={playlists || []}
-			albums={albums || []}
+			albums={albums?.items || []}
 			recentPlays={recent?.items || []}
 			user={{ name: session.user.name }}
 		/>

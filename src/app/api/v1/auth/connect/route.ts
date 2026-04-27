@@ -13,10 +13,6 @@ export async function GET(request: NextRequest) {
 			: "no-network";
 
 		const settings = deemixApp ? deemixApp.getSettings() : {};
-		const spotifyEnabled = !!deemixApp?.plugins?.spotify?.enabled;
-		const queue = deemixApp
-			? deemixApp.getQueue()
-			: { queue: {}, queueOrder: [] };
 
 		// Check better-auth session
 		let betterAuthUser = null;
@@ -91,9 +87,7 @@ export async function GET(request: NextRequest) {
 			deezerUser,
 			// App status
 			deezerAvailable,
-			spotifyEnabled,
 			settings,
-			queue,
 		});
 	} catch (e) {
 		return handleError(e);

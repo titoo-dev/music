@@ -22,7 +22,7 @@ interface UserAlbum {
 	artist: string;
 	coverUrl: string | null;
 	trackCount: number;
-	downloadedAt: string;
+	savedAt: string;
 }
 
 function PlaylistCover({ covers, title }: { covers?: string[]; title: string }) {
@@ -124,7 +124,7 @@ export function HomeContent({ playlists, albums, recentPlays, user }: HomeConten
 	const totalTracks = albums.reduce((s, a) => s + (a.trackCount || 0), 0)
 		+ playlists.reduce((s, p) => s + (p._count?.tracks || 0), 0);
 	const recentAlbums = [...albums]
-		.sort((a, b) => new Date(b.downloadedAt).getTime() - new Date(a.downloadedAt).getTime())
+		.sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
 		.slice(0, 8);
 
 	return (

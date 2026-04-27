@@ -17,6 +17,13 @@ export const auth = betterAuth({
 	session: {
 		expiresIn: 60 * 60 * 24 * 30, // 30 days
 		updateAge: 60 * 60 * 24, // refresh every 24h
+		// Sign the session into a short-lived cookie so getSession() can
+		// skip the DB roundtrip on every API call. Critical for hot paths
+		// like /library/status which fire dozens of times per page render.
+		cookieCache: {
+			enabled: true,
+			maxAge: 5 * 60, // 5 minutes
+		},
 	},
 });
 

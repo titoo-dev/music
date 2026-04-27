@@ -33,8 +33,13 @@ if (typeof window !== "undefined") {
 
 // --- URL Cache (for presigned URLs only) ---
 const urlCache = new Map<string, { url: string; fetchedAt: number }>();
-const URL_CACHE_TTL = 12 * 60 * 1000; // 12 minutes (presigned URLs valid for 15)
+// Presigned URLs are signed for 900s (15min). We allow 14min of client reuse
+// so we never hand the audio element a URL with <60s of validity left.
+const URL_CACHE_TTL = 14 * 60 * 1000;
 let usePresigned = true;
+
+// Dedup in-flight presigned URL requests so prefetch + on-demand calls share one fetch
+const inflightPresigned = new Map<string, Promise<string | null>>();
 
 function pruneUrlCache() {
 	const now = Date.now();
@@ -49,19 +54,41 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 		return cached.url;
 	}
 
+	const existing = inflightPresigned.get(trackId);
+	if (existing) return existing;
+
 	pruneUrlCache();
 
-	try {
-		const res = await fetch(`/api/v1/stream-url/${trackId}`);
-		if (!res.ok) return null;
-		const json = await res.json();
-		const url = json.data?.url;
-		if (url) {
-			urlCache.set(trackId, { url, fetchedAt: Date.now() });
+	const promise = (async () => {
+		try {
+			const res = await fetch(`/api/v1/stream-url/${trackId}`);
+			if (!res.ok) return null;
+			const json = await res.json();
+			const url = json.data?.url;
+			if (url) {
+				urlCache.set(trackId, { url, fetchedAt: Date.now() });
+			}
+			return url || null;
+		} catch {
+			return null;
+		} finally {
+			inflightPresigned.delete(trackId);
 		}
-		return url || null;
-	} catch {
-		return null;
+	})();
+
+	inflightPresigned.set(trackId, promise);
+	return promise;
+}
+
+// Warm the URL cache for upcoming tracks. Cheap (one DB query + S3 sign per
+// track) and turns the next click-to-play into a cache hit on the URL fetch.
+function prefetchPresignedUrls(trackIds: string[]) {
+	if (!usePresigned) return;
+	for (const trackId of trackIds) {
+		const cached = urlCache.get(trackId);
+		if (cached && Date.now() - cached.fetchedAt < URL_CACHE_TTL) continue;
+		if (inflightPresigned.has(trackId)) continue;
+		void fetchPresignedUrl(trackId);
 	}
 }
 
@@ -98,6 +125,164 @@ async function getTrackUrl(trackId: string): Promise<string> {
 	//    • Already downloaded → 302 redirect to /api/v1/stream/[trackId]
 	//    • Not downloaded → live stream from Deezer with parallel persistence
 	return `/api/v1/stream-progressive/${trackId}`;
+}
+
+// --- Prefetch caches ---
+// Three intensity levels, all funneled through warmTrack({ audio }):
+//
+//   "none"    metadata-only via /api/v1/stream-warm (~200 byte response).
+//             Used when bandwidth is constrained (saveData / 2G) or the
+//             caller doesn't want any audio bytes to flow.
+//
+//   "head"    /stream-progressive?preview=1&head=1 — server caps the response
+//             at ~64 KB (~2-3s of audio). Light enough to apply to every
+//             visible item in a list without burning megabytes; the audio
+//             element reaches readyState >= 2 (canplay) so a click can play
+//             instantly while we transparently swap to the full stream.
+//
+//   "full"    /stream-progressive?preview=1 — browser-managed full buffer
+//             (~30s with preload="auto"). Used on hover, where intent is
+//             stronger. Click-to-play is sub-200ms.
+const warmedAt = new Map<string, "none" | "head" | "full">();
+const warmInflight = new Set<string>();
+
+const hoverPreloadCache = new Map<string, HTMLAudioElement>();
+const MAX_HOVER_PRELOADED = 3;
+// Larger window for visibility-driven head prefetch — bytes per slot are tiny
+const headPreloadCache = new Map<string, HTMLAudioElement>();
+const MAX_HEAD_PRELOADED = 8;
+// Tracks whose prefetched audio element is head-capped (ends after ~64 KB).
+// On swap-to-play, AudioEngine seamlessly switches to the full stream so
+// playback continues past the head segment.
+const headPrefetchedTracks = new Set<string>();
+
+function shouldPrefetchAudio(): boolean {
+	if (typeof navigator === "undefined") return false;
+	const conn = (navigator as Navigator & {
+		connection?: { saveData?: boolean; effectiveType?: string };
+	}).connection;
+	if (conn) {
+		if (conn.saveData) return false;
+		const eff = conn.effectiveType;
+		if (eff && (eff.includes("2g") || eff === "slow-2g")) return false;
+	}
+	return true;
+}
+
+function evictFrom(
+	cache: Map<string, HTMLAudioElement>,
+	max: number
+) {
+	if (cache.size < max) return;
+	const oldest = cache.keys().next().value!;
+	const oldAudio = cache.get(oldest)!;
+	evictedAudio.add(oldAudio);
+	oldAudio.src = "";
+	cache.delete(oldest);
+	headPrefetchedTracks.delete(oldest);
+}
+
+function preloadAudio(trackId: string, mode: "head" | "full") {
+	const cache = mode === "head" ? headPreloadCache : hoverPreloadCache;
+	const max = mode === "head" ? MAX_HEAD_PRELOADED : MAX_HOVER_PRELOADED;
+
+	if (cache.has(trackId)) return;
+	// If already prefetched at a stronger level, keep that one
+	if (mode === "head" && hoverPreloadCache.has(trackId)) return;
+	if (preloadCache.has(trackId)) return;
+
+	// Upgrade from head → full: discard the lighter head element so we don't
+	// leak bytes / browser memory holding two prefetched streams.
+	if (mode === "full") {
+		const headElem = headPreloadCache.get(trackId);
+		if (headElem) {
+			evictedAudio.add(headElem);
+			headElem.src = "";
+			headPreloadCache.delete(trackId);
+			headPrefetchedTracks.delete(trackId);
+		}
+	}
+
+	evictFrom(cache, max);
+
+	const audio = new Audio();
+	audio.preload = "auto";
+	audio.crossOrigin = "anonymous";
+	cache.set(trackId, audio);
+	if (mode === "head") headPrefetchedTracks.add(trackId);
+
+	(async () => {
+		try {
+			const blobUrl = await getCachedBlobUrl(trackId).catch(() => null);
+			if (blobUrl) {
+				if (evictedAudio.has(audio)) return;
+				audio.src = blobUrl;
+				audio.load();
+				headPrefetchedTracks.delete(trackId);
+				return;
+			}
+
+			const presigned = await fetchPresignedUrl(trackId);
+			if (presigned) {
+				if (evictedAudio.has(audio)) return;
+				audio.src = presigned;
+				audio.load();
+				headPrefetchedTracks.delete(trackId);
+				return;
+			}
+
+			if (evictedAudio.has(audio)) return;
+			audio.src =
+				mode === "head"
+					? `/api/v1/stream-progressive/${trackId}?preview=1&head=1`
+					: `/api/v1/stream-progressive/${trackId}?preview=1`;
+			audio.load();
+		} catch {
+			// Best-effort
+		}
+	})();
+}
+
+export interface WarmOptions {
+	/** "none" = metadata only, "head" = first ~3s, "full" = browser-managed buffer */
+	audio?: "none" | "head" | "full";
+}
+
+export function warmTrack(trackId: string, opts: WarmOptions = {}) {
+	if (typeof window === "undefined") return;
+	const audio = opts.audio ?? "full";
+	const desired = shouldPrefetchAudio() ? audio : "none";
+
+	const prevLevel = warmedAt.get(trackId);
+	const rank = { none: 0, head: 1, full: 2 } as const;
+	// Skip if we already prefetched at the same or stronger level
+	if (prevLevel && rank[prevLevel] >= rank[desired]) return;
+
+	// Metadata warm — only the first time we touch this track
+	if (!prevLevel && !warmInflight.has(trackId)) {
+		warmInflight.add(trackId);
+		fetch(`/api/v1/stream-warm/${trackId}`, { credentials: "include" })
+			.catch(() => {})
+			.finally(() => {
+				warmInflight.delete(trackId);
+			});
+	}
+
+	warmedAt.set(trackId, desired);
+	if (desired === "head" || desired === "full") {
+		preloadAudio(trackId, desired);
+	}
+}
+
+/** True if AudioEngine should transparently switch to a full stream after
+ *  the prefetched head segment runs out. Cleared after the swap so future
+ *  plays of the same track use whichever path is freshest. */
+export function isHeadPrefetched(trackId: string): boolean {
+	return headPrefetchedTracks.has(trackId);
+}
+
+export function clearHeadFlag(trackId: string) {
+	headPrefetchedTracks.delete(trackId);
 }
 
 // --- Audio Preload Cache (in-memory HTMLAudioElement pool) ---
@@ -333,6 +518,74 @@ export function AudioEngine() {
 		audio.onplaying = null;
 	}, []);
 
+	// Hand off from a head-prefetched audio element (~3s buffered) to the
+	// full progressive stream so playback continues seamlessly past the head.
+	// We open the full stream right after the swap and ride out the head
+	// segment; once the head approaches its end we copy state, swap refs,
+	// and seek the full element to the head's position.
+	const handoffFullStream = useCallback(
+		(headAudio: HTMLAudioElement, trackId: string, gen: number) => {
+			const fullAudio = new Audio();
+			fullAudio.preload = "auto";
+			fullAudio.crossOrigin = "anonymous";
+			fullAudio.src = `/api/v1/stream-progressive/${trackId}`;
+			fullAudio.load();
+
+			let swapped = false;
+			const cleanup = () => {
+				headAudio.removeEventListener("timeupdate", onTimeUpdate);
+				headAudio.removeEventListener("ended", onEnded);
+			};
+
+			const swap = () => {
+				if (swapped) return;
+				swapped = true;
+				cleanup();
+				if (loadGenRef.current !== gen || audioRef.current !== headAudio) {
+					evictedAudio.add(fullAudio);
+					fullAudio.src = "";
+					return;
+				}
+				const seekTo = headAudio.currentTime || 0;
+				const userVol = usePlayerStore.getState().volume / 100;
+				const wasPlaying = !headAudio.paused;
+
+				detachEvents(headAudio);
+				evictedAudio.add(headAudio);
+				headAudio.pause();
+				headAudio.src = "";
+
+				audioRef.current = fullAudio;
+				attachEvents(fullAudio);
+				try {
+					fullAudio.currentTime = seekTo;
+				} catch {
+					// Seek may throw if not enough buffered; the audio element
+					// will handle it by re-buffering and seeking when ready.
+				}
+				fullAudio.volume = userVol;
+				fullAudio.playbackRate = usePlayerStore.getState().playbackRate;
+				if (wasPlaying || usePlayerStore.getState().isPlaying) {
+					fullAudio.play().catch(() => {});
+				}
+			};
+
+			// Swap 300ms before head ends for smoother transition; fall back
+			// to the ended event in case timeupdate granularity misses it.
+			const onTimeUpdate = () => {
+				if (swapped) return;
+				const dur = headAudio.duration;
+				if (!isFinite(dur) || dur <= 0) return;
+				if (headAudio.currentTime > dur - 0.3) swap();
+			};
+			const onEnded = () => swap();
+
+			headAudio.addEventListener("timeupdate", onTimeUpdate);
+			headAudio.addEventListener("ended", onEnded);
+		},
+		[attachEvents, detachEvents]
+	);
+
 	// --- Initialize audio element (client-only) ---
 	useEffect(() => {
 		if (!audioRef.current) {
@@ -350,12 +603,23 @@ export function AudioEngine() {
 				audio.src = "";
 				evictedAudio.add(audio);
 			}
-			// Clean up preload cache
+			// Clean up preload caches
 			for (const [, a] of preloadCache) {
 				evictedAudio.add(a);
 				a.src = "";
 			}
 			preloadCache.clear();
+			for (const [, a] of hoverPreloadCache) {
+				evictedAudio.add(a);
+				a.src = "";
+			}
+			hoverPreloadCache.clear();
+			for (const [, a] of headPreloadCache) {
+				evictedAudio.add(a);
+				a.src = "";
+			}
+			headPreloadCache.clear();
+			headPrefetchedTracks.clear();
 			// Cancel background prefetch
 			prefetchAbort?.abort();
 		};
@@ -405,6 +669,15 @@ export function AudioEngine() {
 		if (queueIndex - 1 >= 0) {
 			preloadTrack(queue[queueIndex - 1].trackId);
 		}
+
+		// Warm presigned URL cache for the next 3 tracks so click-to-play
+		// skips the /api/v1/stream-url roundtrip.
+		const upcoming: string[] = [];
+		for (let i = 1; i <= 3 && queueIndex + i < queue.length; i++) {
+			upcoming.push(queue[queueIndex + i].trackId);
+		}
+		if (queueIndex - 1 >= 0) upcoming.push(queue[queueIndex - 1].trackId);
+		prefetchPresignedUrls(upcoming);
 
 		// Background IndexedDB prefetch: next 5 + prev 2 tracks
 		smartPrefetchQueue();
@@ -477,13 +750,32 @@ export function AudioEngine() {
 
 			prevTrackIdRef.current = currentTrack.trackId;
 
-			const preloaded = preloadCache.get(currentTrack.trackId);
+			// Pick the best prefetched element, in order of buffer richness:
+			//   1. queue preload (next/prev — persisting full stream)
+			//   2. hover preload  (preview-mode full stream, ~30s buffered)
+			//   3. head preload   (preview-mode head — ~3s buffered, must
+			//                      transition to full stream when it ends)
+			const preloaded =
+				preloadCache.get(currentTrack.trackId) ||
+				hoverPreloadCache.get(currentTrack.trackId) ||
+				headPreloadCache.get(currentTrack.trackId);
 
 			if (preloaded) {
-				// Swap to the preloaded element (its buffer has the audio data)
 				audioRef.current = preloaded;
 				preloadCache.delete(currentTrack.trackId);
+				hoverPreloadCache.delete(currentTrack.trackId);
+				headPreloadCache.delete(currentTrack.trackId);
 				attachEvents(preloaded);
+
+				// If we swapped onto a head-prefetched element, kick off the
+				// full stream now so it can take over before the head runs
+				// out. The full stream goes through normal /stream-progressive
+				// (no preview, persisting) — first listen, server downloads
+				// from Deezer once and persists; subsequent plays hit S3.
+				if (headPrefetchedTracks.has(currentTrack.trackId)) {
+					handoffFullStream(preloaded, currentTrack.trackId, gen);
+					headPrefetchedTracks.delete(currentTrack.trackId);
+				}
 
 				if (preloaded.readyState >= 2) {
 					// Already buffered — play immediately
@@ -495,7 +787,7 @@ export function AudioEngine() {
 						preloaded.volume = 0;
 						preloaded.play().catch(() => {});
 						const targetVol = usePlayerStore.getState().volume / 100;
-						adjustVolume(preloaded, targetVol, { duration: 800 });
+						adjustVolume(preloaded, targetVol, { duration: 200 });
 					}
 				}
 				// If not ready yet, onCanPlay will fire and handle playback
@@ -531,7 +823,7 @@ export function AudioEngine() {
 				audio.volume = 0;
 				audio.play().catch(() => {});
 				const targetVolume = usePlayerStore.getState().volume / 100;
-				adjustVolume(audio, targetVolume, { duration: 600 });
+				adjustVolume(audio, targetVolume, { duration: 200 });
 			}
 		} else {
 			adjustVolume(audio, 0, { duration: 500 }).then(() => {
@@ -619,7 +911,7 @@ export function AudioEngine() {
 				audio.volume = 0;
 				audio.play().catch(() => {});
 			}
-			adjustVolume(audio, targetVolume, { duration: 800 });
+			adjustVolume(audio, targetVolume, { duration: 200 });
 		}
 	};
 
@@ -652,6 +944,22 @@ export function AudioEngine() {
 				cover: track.cover,
 				duration: track.duration,
 			});
+
+			// If this track is playing from a preview-mode prefetch, the server
+			// didn't persist it. Trigger a real (persisting) progressive stream
+			// in the background so the next play hits the cached S3 file. The
+			// server's persist branch runs to completion even after we cancel
+			// the response body — we just want the upload to start.
+			const src = audio.src || "";
+			if (src.includes("/stream-progressive/") && src.includes("preview=1")) {
+				fetch(`/api/v1/stream-progressive/${track.trackId}`, {
+					credentials: "include",
+				})
+					.then((res) => {
+						res.body?.cancel().catch(() => {});
+					})
+					.catch(() => {});
+			}
 		}
 
 		// Connect to Web Audio API on first timeUpdate after playback starts.

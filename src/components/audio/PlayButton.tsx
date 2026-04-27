@@ -1,6 +1,7 @@
 "use client";
 
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
+import { warmTrack } from "@/components/audio/AudioEngine";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
@@ -36,6 +37,12 @@ export function PlayButton({ track, queue, size = "sm", className }: PlayButtonP
 					: "hover:bg-muted",
 				className
 			)}
+			onMouseEnter={() => {
+				if (!isThisTrack) warmTrack(track.trackId, { audio: "full" });
+			}}
+			onFocus={() => {
+				if (!isThisTrack) warmTrack(track.trackId, { audio: "full" });
+			}}
 			onClick={(e) => {
 				e.stopPropagation();
 				if (isThisPlaying) {

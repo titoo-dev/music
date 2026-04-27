@@ -295,45 +295,42 @@ export function streamTrackToReadable(track: any): ProgressiveStream {
 		});
 
 	async function* decrypter(source: AsyncIterable<Buffer>) {
-		let modifiedStream = Buffer.alloc(0);
+		// Deezer's BF_CBC_STRIPE format encrypts every 3rd 2048-byte stripe:
+		//   stripe 0: encrypted    (decrypt with Blowfish)
+		//   stripe 1: plaintext    (yield as-is)
+		//   stripe 2: plaintext    (yield as-is)
+		//   ...repeats...
+		// Yielding per-stripe (2048 bytes) instead of per-3-stripe-block (6144)
+		// gets the first audio byte to the client ~3x sooner — the consumer
+		// only needs Deezer to send 2048 bytes (not 6144) before playback can begin.
+		if (!isCryptedStream) {
+			for await (const chunk of source) yield chunk as Buffer;
+			return;
+		}
+
+		let buf = Buffer.alloc(0);
+		let stripeIndex = 0;
+
 		for await (const chunk of source) {
-			if (!isCryptedStream) {
-				yield chunk as Buffer;
-			} else {
-				modifiedStream = Buffer.concat([modifiedStream, chunk as Buffer]);
-				while (modifiedStream.length >= 2048 * 3) {
-					let decryptedChunks = Buffer.alloc(0);
-					const decryptingChunks = modifiedStream.slice(0, 2048 * 3);
-					modifiedStream = modifiedStream.slice(2048 * 3);
-					if (decryptingChunks.length >= 2048) {
-						decryptedChunks = decryptChunk(
-							decryptingChunks.slice(0, 2048),
-							blowfishKey
-						);
-						decryptedChunks = Buffer.concat([
-							decryptedChunks,
-							decryptingChunks.slice(2048),
-						]);
-					}
-					yield decryptedChunks;
+			buf = Buffer.concat([buf, chunk as Buffer]);
+			while (buf.length >= 2048) {
+				const stripe = buf.slice(0, 2048);
+				buf = buf.slice(2048);
+				if (stripeIndex === 0) {
+					yield decryptChunk(stripe, blowfishKey);
+				} else {
+					yield stripe;
 				}
+				stripeIndex = (stripeIndex + 1) % 3;
 			}
 		}
-		if (isCryptedStream) {
-			let decryptedChunks = Buffer.alloc(0);
-			if (modifiedStream.length >= 2048) {
-				decryptedChunks = decryptChunk(
-					modifiedStream.slice(0, 2048),
-					blowfishKey
-				);
-				decryptedChunks = Buffer.concat([
-					decryptedChunks,
-					modifiedStream.slice(2048),
-				]);
-				yield decryptedChunks;
-			} else {
-				yield modifiedStream;
-			}
+		// Tail — partial final stripe. If we're at an encrypted stripe with a
+		// full 2048 bytes, decrypt; otherwise yield raw (matches original behavior
+		// where short partial encrypted tails were emitted unchanged).
+		if (buf.length === 2048 && stripeIndex === 0) {
+			yield decryptChunk(buf, blowfishKey);
+		} else if (buf.length > 0) {
+			yield buf;
 		}
 	}
 

@@ -12,6 +12,11 @@ import { useEffect, useMemo } from "react";
 interface LibraryState {
 	savedTracks: Set<string>;
 	savedAlbums: Set<string>;
+	// Negative cache — trackIds/albumIds we've already checked and know are
+	// NOT saved. Without this we'd re-query the server every time a row for
+	// an unsaved track scrolls into view.
+	checkedTracks: Set<string>;
+	checkedAlbums: Set<string>;
 	hydrated: boolean;
 	pendingTracks: string[];
 	pendingAlbums: string[];
@@ -21,6 +26,7 @@ interface LibraryState {
 	addAlbum: (albumId: string) => void;
 	removeAlbum: (albumId: string) => void;
 	requestStatus: (trackIds: string[], albumIds: string[]) => void;
+	markChecked: (trackIds: string[], albumIds: string[]) => void;
 	setHydrated: (
 		tracks: Iterable<string>,
 		albums: Iterable<string>
@@ -31,33 +37,52 @@ interface LibraryState {
 const useLibraryState = create<LibraryState>((set, get) => ({
 	savedTracks: new Set(),
 	savedAlbums: new Set(),
+	checkedTracks: new Set(),
+	checkedAlbums: new Set(),
 	hydrated: false,
 	pendingTracks: [],
 	pendingAlbums: [],
 
 	addTrack: (trackId) =>
-		set((s) => ({ savedTracks: new Set(s.savedTracks).add(trackId) })),
+		set((s) => {
+			const tracks = new Set(s.savedTracks).add(trackId);
+			const checked = new Set(s.checkedTracks).add(trackId);
+			return { savedTracks: tracks, checkedTracks: checked };
+		}),
 	removeTrack: (trackId) =>
 		set((s) => {
 			const next = new Set(s.savedTracks);
 			next.delete(trackId);
-			return { savedTracks: next };
+			// Track is now known-not-saved (still "checked")
+			const checked = new Set(s.checkedTracks).add(trackId);
+			return { savedTracks: next, checkedTracks: checked };
 		}),
 	addAlbum: (albumId) =>
-		set((s) => ({ savedAlbums: new Set(s.savedAlbums).add(albumId) })),
+		set((s) => {
+			const albums = new Set(s.savedAlbums).add(albumId);
+			const checked = new Set(s.checkedAlbums).add(albumId);
+			return { savedAlbums: albums, checkedAlbums: checked };
+		}),
 	removeAlbum: (albumId) =>
 		set((s) => {
 			const next = new Set(s.savedAlbums);
 			next.delete(albumId);
-			return { savedAlbums: next };
+			const checked = new Set(s.checkedAlbums).add(albumId);
+			return { savedAlbums: next, checkedAlbums: checked };
 		}),
 	requestStatus: (trackIds, albumIds) => {
 		const s = get();
 		const newTracks = trackIds.filter(
-			(id) => !s.savedTracks.has(id) && !s.pendingTracks.includes(id)
+			(id) =>
+				!s.checkedTracks.has(id) &&
+				!s.savedTracks.has(id) &&
+				!s.pendingTracks.includes(id)
 		);
 		const newAlbums = albumIds.filter(
-			(id) => !s.savedAlbums.has(id) && !s.pendingAlbums.includes(id)
+			(id) =>
+				!s.checkedAlbums.has(id) &&
+				!s.savedAlbums.has(id) &&
+				!s.pendingAlbums.includes(id)
 		);
 		if (newTracks.length === 0 && newAlbums.length === 0) return;
 		set({
@@ -66,6 +91,11 @@ const useLibraryState = create<LibraryState>((set, get) => ({
 		});
 		void flushBatch();
 	},
+	markChecked: (trackIds, albumIds) =>
+		set((s) => ({
+			checkedTracks: new Set([...s.checkedTracks, ...trackIds]),
+			checkedAlbums: new Set([...s.checkedAlbums, ...albumIds]),
+		})),
 	setHydrated: (tracks, albums) =>
 		set({
 			savedTracks: new Set(tracks),
@@ -76,6 +106,8 @@ const useLibraryState = create<LibraryState>((set, get) => ({
 		set({
 			savedTracks: new Set(),
 			savedAlbums: new Set(),
+			checkedTracks: new Set(),
+			checkedAlbums: new Set(),
 			hydrated: false,
 			pendingTracks: [],
 			pendingAlbums: [],
@@ -115,12 +147,23 @@ async function flushBatch() {
 				for (const id of data.tracks) nextT.add(id);
 				const nextA = new Set(s.savedAlbums);
 				for (const id of data.albums) nextA.add(id);
-				return { savedTracks: nextT, savedAlbums: nextA };
+				// Mark every queried id as checked — positive AND negative —
+				// so subsequent renders of the same row don't re-query.
+				const checkedT = new Set(s.checkedTracks);
+				for (const id of trackIds) checkedT.add(id);
+				const checkedA = new Set(s.checkedAlbums);
+				for (const id of albumIds) checkedA.add(id);
+				return {
+					savedTracks: nextT,
+					savedAlbums: nextA,
+					checkedTracks: checkedT,
+					checkedAlbums: checkedA,
+				};
 			});
 		} catch {
 			// Non-fatal — UI stays in unknown state
 		}
-	}, 60);
+	}, 150);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

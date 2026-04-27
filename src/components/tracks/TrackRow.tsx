@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
 import { CoverImage } from "@/components/ui/cover-image";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
+import { warmTrack } from "@/components/audio/AudioEngine";
 import { SaveButton } from "@/components/tracks/SaveButton";
 import { TrackActionMenu } from "@/components/tracks/TrackActionMenu";
 import { useLongPress } from "@/hooks/useLongPress";
@@ -157,9 +159,42 @@ export function TrackRow({
 		gridClass = "grid-cols-[40px_1fr_40px] sm:grid-cols-[40px_1fr_64px]";
 	}
 
+	const handleHoverWarm = () => {
+		if (isPlayerLoaded) return;
+		// Hover signals strong intent — full audio buffer prefetch (~30s).
+		warmTrack(track.trackId, { audio: "full" });
+	};
+
+	// Sliding-window prefetch: when this row scrolls into view, kick off a
+	// light "head" prefetch (~3s of audio + server cache warm). Cheap enough
+	// to apply to every visible item; the LRU caps total bandwidth.
+	const rowRef = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (isPlayerLoaded) return;
+		const el = rowRef.current;
+		if (!el || typeof IntersectionObserver === "undefined") return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				for (const entry of entries) {
+					if (entry.isIntersecting) {
+						warmTrack(track.trackId, { audio: "head" });
+						observer.disconnect();
+						break;
+					}
+				}
+			},
+			{ rootMargin: "200px" }
+		);
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [track.trackId, isPlayerLoaded]);
+
 	return (
 		<div
 			{...longPress}
+			ref={rowRef}
+			onMouseEnter={handleHoverWarm}
+			onFocus={handleHoverWarm}
 			className={`grid ${gridClass} gap-2 sm:gap-3 items-center px-2 sm:px-3 py-2 sm:py-2.5 overflow-hidden group transition-colors select-none border-b border-foreground/15 last:border-b-0 ${
 				isActive || isPaused ? "bg-accent" : "hover:bg-foreground/5"
 			}`}

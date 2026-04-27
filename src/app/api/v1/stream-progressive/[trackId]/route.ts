@@ -17,6 +17,17 @@ export async function GET(
 		const { userId, dz, app } = auth;
 
 		const { trackId } = await params;
+		// Preview mode: hover-prefetch from the client. Streams audio bytes
+		// to the browser without persisting to S3 / DB and without taking
+		// the per-track download lock — so it never blocks a real play.
+		const preview = request.nextUrl.searchParams.get("preview") === "1";
+		// Head mode (only valid with preview=1): cap the response at ~64 KB
+		// so a sliding-window prefetch over a search-results list doesn't
+		// burn megabytes per track. ~64 KB is enough for an MP3 320 / FLAC
+		// header + a couple of seconds of audio — the browser's audio element
+		// gets to readyState >= 2 (canplay) and fires duration metadata.
+		const head = preview && request.nextUrl.searchParams.get("head") === "1";
+		const headBytes = head ? 64 * 1024 : 0;
 
 		// Already cached → fast path through /stream
 		const stored = await prisma.storedTrack.findFirst({
@@ -35,23 +46,32 @@ export async function GET(
 		const settings = app.settings;
 		const preferredBitrate = settings.maxBitrate;
 
-		// Dedup lock: if another request is already streaming the same track,
-		// wait for it to finish (it will create the StoredTrack) and redirect.
-		const lock = app.acquireDownloadLock(
-			String(trackId),
-			Number(preferredBitrate)
-		);
-		if (lock.alreadyInProgress) {
-			await lock.waitForExisting();
-			return NextResponse.redirect(
-				new URL(`/api/v1/stream/${trackId}`, request.url),
-				302
+		// Dedup lock: only used for real (persisting) plays. Preview streams
+		// run lock-free so a hover never delays a click that wants the same
+		// track, and the persisting branch always wins the StoredTrack row.
+		let lockRelease: (() => void) | undefined;
+		if (!preview) {
+			const lock = app.acquireDownloadLock(
+				String(trackId),
+				Number(preferredBitrate)
 			);
-		}
+			if (lock.alreadyInProgress) {
+				await lock.waitForExisting();
+				return NextResponse.redirect(
+					new URL(`/api/v1/stream/${trackId}`, request.url),
+					302
+				);
+			}
+			lockRelease = lock.release;
 
-		if (!app.storageProvider) {
-			lock.release();
-			return fail("STORAGE_UNAVAILABLE", "Storage provider not initialized.", 500);
+			if (!app.storageProvider) {
+				lock.release();
+				return fail(
+					"STORAGE_UNAVAILABLE",
+					"Storage provider not initialized.",
+					500
+				);
+			}
 		}
 
 		const { body, contentType, contentLength } = await startProgressiveStream({
@@ -61,9 +81,11 @@ export async function GET(
 			settings,
 			storageProvider: app.storageProvider,
 			userId,
-			lock: { release: lock.release },
+			lock: lockRelease ? { release: lockRelease } : undefined,
+			persist: !preview,
+			maxBytes: headBytes || undefined,
 		}).catch((e) => {
-			lock.release();
+			lockRelease?.();
 			throw e;
 		});
 

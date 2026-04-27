@@ -11,6 +11,7 @@ import { generateCryptedStreamURL } from "../decryption";
 import { PreferredBitrateNotFound, TrackNot360 } from "../errors";
 import Track from "../types/Track";
 import { USER_AGENT_HEADER } from "../utils/core";
+import { trackUrlCache, trackUrlKey } from "../cache/deezer-track-cache";
 
 const { WrongLicense, WrongGeolocation } = _errors;
 const { mapGwTrackToDeezer: map_track } = utils;
@@ -40,7 +41,8 @@ export async function getPreferredBitrate(
 	let isGeolocked = false;
 	let wrongLicense = false;
 
-	const MAX_TEST_URL_RETRIES = 3;
+	const MAX_TEST_URL_RETRIES = 1;
+	const TEST_URL_TIMEOUT_MS = 3000;
 
 	async function testURL(track: Track, url: string, formatName: string, _retryCount = 0) {
 		if (!url) return false;
@@ -50,6 +52,7 @@ export async function getPreferredBitrate(
 				.get(url, {
 					headers: { "User-Agent": USER_AGENT_HEADER },
 					https: { rejectUnauthorized: false },
+					timeout: { request: TEST_URL_TIMEOUT_MS },
 				})
 				.on("response", (response) => {
 					track.filesizes[`${formatName.toLowerCase()}`] =
@@ -91,11 +94,21 @@ export async function getPreferredBitrate(
 			track.filesizes[`${formatName.toLowerCase()}`] &&
 			track.filesizes[`${formatName.toLowerCase()}`] !== "0"
 		) {
-			try {
-				url = await dz.get_track_url(track.trackToken, formatName);
-			} catch (e) {
-				wrongLicense = e.name === "WrongLicense";
-				isGeolocked = e.name === "WrongGeolocation";
+			// In-memory TTL cache keyed by trackToken+format. Same token is
+			// reused across users (each gets their own from gw.get_track_*),
+			// so trackToken-keyed lookups don't leak between accounts.
+			const cacheKey = trackUrlKey(track.trackToken, formatName);
+			const cached = trackUrlCache.get(cacheKey);
+			if (cached) {
+				url = cached;
+			} else {
+				try {
+					url = await dz.get_track_url(track.trackToken, formatName);
+					if (url) trackUrlCache.set(cacheKey, url);
+				} catch (e) {
+					wrongLicense = e.name === "WrongLicense";
+					isGeolocked = e.name === "WrongGeolocation";
+				}
 			}
 		}
 		// Fallback to old method
@@ -137,63 +150,101 @@ export async function getPreferredBitrate(
 
 	// Check and renew trackToken before starting the check
 	await track.checkAndRenewTrackToken(dz);
-	for (let i = 0; i < Object.keys(formats).length; i++) {
-		// Check bitrates
-		const formatNumber = parseInt(Object.keys(formats).reverse()[i]);
-		const formatName = formats[formatNumber];
 
-		// Current bitrate is higher than preferred bitrate; skip
-		if (formatNumber > preferredBitrate) {
-			continue;
-		}
+	// Build the ordered list of candidate formats (highest preferred bitrate first)
+	const candidateFormats: { formatNumber: number; formatName: string }[] = [];
+	for (const k of Object.keys(formats).reverse()) {
+		const formatNumber = parseInt(k);
+		if (formatNumber > preferredBitrate) continue;
+		candidateFormats.push({ formatNumber, formatName: formats[formatNumber] });
+	}
 
-		let currentTrack = track;
-		let url = await getCorrectURL(
-			currentTrack,
-			formatName,
-			formatNumber,
-			feelingLucky
+	// Fast path — when bitrate fallback is allowed AND there's no alternative
+	// track, race all candidate formats in parallel on the main track and pick
+	// the highest-bitrate success in preference order. This eliminates the
+	// sequential per-format Deezer API roundtrip.
+	if (shouldFallback && !hasAlternative && candidateFormats.length > 1) {
+		const parallelResults = await Promise.all(
+			candidateFormats.map(({ formatNumber, formatName }) =>
+				getCorrectURL(track, formatName, formatNumber, feelingLucky)
+					.then((url) => ({ formatNumber, formatName, url }))
+					.catch(() => ({ formatNumber, formatName, url: undefined as string | undefined }))
+			)
 		);
-		let newTrack;
-		do {
-			if (!url && hasAlternative) {
-				newTrack = await dz.gw.get_track_with_fallback(currentTrack.fallbackID);
-				newTrack = map_track(newTrack);
-				currentTrack = new Track();
-				currentTrack.parseEssentialData(newTrack);
-				hasAlternative = currentTrack.fallbackID !== 0;
+		for (const r of parallelResults) {
+			if (r.url) {
+				track.urls[r.formatName] = r.url;
+				return r.formatNumber;
 			}
-			if (!url)
-				url = await getCorrectURL(
-					currentTrack,
-					formatName,
-					formatNumber,
-					feelingLucky
-				);
-		} while (!url && hasAlternative);
-
-		if (url) {
-			if (newTrack) track.parseEssentialData(newTrack);
-			track.urls[formatName] = url;
-			return formatNumber;
 		}
-
-		if (!shouldFallback) {
-			if (wrongLicense) throw new WrongLicense(formatName);
-			if (isGeolocked) throw new WrongGeolocation(dz.currentUser.country);
-			throw new PreferredBitrateNotFound();
-		} else if (!falledBack) {
+		// All formats failed — emit a single fallback notification before
+		// falling through to MP3_MISC.
+		if (!falledBack && listener && uuid) {
 			falledBack = true;
-			if (listener && uuid) {
-				listener.send("downloadInfo", {
-					uuid,
-					state: "bitrateFallback",
-					data: {
-						id: track.id,
-						title: track.title,
-						artist: track.mainArtist.name,
-					},
-				});
+			listener.send("downloadInfo", {
+				uuid,
+				state: "bitrateFallback",
+				data: {
+					id: track.id,
+					title: track.title,
+					artist: track.mainArtist.name,
+				},
+			});
+		}
+	} else {
+		// Slow path — sequential with alternative-track fallback. Preserves
+		// original semantics: !shouldFallback throws on the first format miss,
+		// and shouldFallback emits a fallback event then continues to lower bitrates.
+		for (const { formatNumber, formatName } of candidateFormats) {
+			let currentTrack = track;
+			let url = await getCorrectURL(
+				currentTrack,
+				formatName,
+				formatNumber,
+				feelingLucky
+			);
+			let newTrack;
+			do {
+				if (!url && hasAlternative) {
+					newTrack = await dz.gw.get_track_with_fallback(currentTrack.fallbackID);
+					newTrack = map_track(newTrack);
+					currentTrack = new Track();
+					currentTrack.parseEssentialData(newTrack);
+					hasAlternative = currentTrack.fallbackID !== 0;
+				}
+				if (!url) {
+					url = await getCorrectURL(
+						currentTrack,
+						formatName,
+						formatNumber,
+						feelingLucky
+					);
+				}
+			} while (!url && hasAlternative);
+
+			if (url) {
+				if (newTrack) track.parseEssentialData(newTrack);
+				track.urls[formatName] = url;
+				return formatNumber;
+			}
+
+			if (!shouldFallback) {
+				if (wrongLicense) throw new WrongLicense(formatName);
+				if (isGeolocked) throw new WrongGeolocation(dz.currentUser.country);
+				throw new PreferredBitrateNotFound();
+			} else if (!falledBack) {
+				falledBack = true;
+				if (listener && uuid) {
+					listener.send("downloadInfo", {
+						uuid,
+						state: "bitrateFallback",
+						data: {
+							id: track.id,
+							title: track.title,
+							artist: track.mainArtist.name,
+						},
+					});
+				}
 			}
 		}
 	}

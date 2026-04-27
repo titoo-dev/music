@@ -9,7 +9,6 @@ import { useShareStore } from "@/stores/useShareStore";
 export function useInitApp() {
 	const [initialized, setInitialized] = useState(false);
 	const setDeezerAvailable = useAppStore((s) => s.setDeezerAvailable);
-	const setSpotifyEnabled = useAppStore((s) => s.setSpotifyEnabled);
 	const { setUser, setDeezerUser, setChilds, setLoading } = useAuthStore();
 
 	useEffect(() => {
@@ -21,9 +20,6 @@ export function useInitApp() {
 
 				if (data.deezerAvailable) {
 					setDeezerAvailable(data.deezerAvailable);
-				}
-				if (data.spotifyEnabled !== undefined) {
-					setSpotifyEnabled(data.spotifyEnabled);
 				}
 
 				// Better-auth user (Google identity)
