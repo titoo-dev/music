@@ -8,7 +8,6 @@ on:
 env:
   REGISTRY: ghcr.io
   WEB_IMAGE: titoo-dev/deemix-web
-  WS_IMAGE: titoo-dev/deemix-ws
 
 jobs:
   build-and-push:
@@ -27,11 +26,6 @@ jobs:
             context: .
             build_args: |
               NEXT_PUBLIC_WS_URL=${{ vars.NEXT_PUBLIC_WS_URL }}
-          - name: ws
-            image: titoo-dev/deemix-ws
-            dockerfile: server/Dockerfile
-            context: .
-            build_args: ""
 
     steps:
       - name: Checkout
