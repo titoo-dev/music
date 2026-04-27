@@ -42,6 +42,8 @@ interface PlayerState {
 	repeat: RepeatMode;
 	/** Set by prev()/seek() to signal AudioEngine to seek; AudioEngine clears it after seeking. */
 	_seekTo: number | null;
+	/** Counter bumped by retryTrack() — AudioEngine watches it to force a reload. */
+	_retryLoadCount: number;
 	/** Playback error message, null when no error. */
 	error: string | null;
 	fullscreenOpen: boolean;
@@ -71,6 +73,8 @@ interface PlayerState {
 	prevTrack: () => void;
 	/** Seek to a specific time (seconds). Updates currentTime immediately and signals AudioEngine. */
 	seek: (time: number) => void;
+	/** Force a reload of the current track (after a playback failure). */
+	retryTrack: () => void;
 	setError: (error: string | null) => void;
 	setVolume: (v: number) => void;
 	/** Toggle mute: 0 → last non-zero volume, anything else → 0. */
@@ -133,6 +137,7 @@ export const usePlayerStore = create<PlayerState>()(
 			shuffle: false,
 			repeat: "off" as RepeatMode,
 			_seekTo: null,
+			_retryLoadCount: 0,
 			error: null,
 			fullscreenOpen: false,
 			queuePanelOpen: false,
@@ -308,6 +313,14 @@ export const usePlayerStore = create<PlayerState>()(
 				const { duration } = get();
 				const clamped = Math.max(0, duration > 0 ? Math.min(time, duration) : time);
 				set({ currentTime: clamped, _seekTo: clamped });
+			},
+			retryTrack: () => {
+				set((s) => ({
+					_retryLoadCount: s._retryLoadCount + 1,
+					error: null,
+					isPlaying: true,
+					isBuffering: true,
+				}));
 			},
 			setError: (error) => set({ error }),
 			setVolume: (volume) => {

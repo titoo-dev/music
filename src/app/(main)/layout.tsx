@@ -36,6 +36,7 @@ import { Player } from "@/components/audio/Player";
 import { FullscreenPlayer } from "@/components/audio/FullscreenPlayer";
 import { QueuePanel } from "@/components/audio/QueuePanel";
 import { TrackAnnouncer } from "@/components/audio/TrackAnnouncer";
+import { Toaster } from "@/components/ui/sonner";
 import { LyricsPanel } from "@/components/audio/LyricsPanel";
 import { LyricsImmersive } from "@/components/audio/LyricsImmersive";
 import { TrackActionSheet } from "@/components/tracks/TrackActionSheet";
@@ -271,6 +272,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 			<QueuePanel />
 			<TrackAnnouncer />
 			<TrackActionSheet />
+			<Toaster />
 		</div>
 		</MotionConfig>
 	);

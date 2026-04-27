@@ -9,6 +9,7 @@ import { Reorder } from "motion/react";
 import { GripVertical, X, Trash2, ListMusic } from "lucide-react";
 import { PlaybackIndicator } from "./PlaybackIndicator";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export function QueuePanel() {
 	const open = usePlayerStore((s) => s.queuePanelOpen);
@@ -75,7 +76,14 @@ export function QueuePanel() {
 							<Button
 								variant="ghost"
 								size="sm"
-								onClick={clearQueue}
+								onClick={() => {
+									const removed = queue.length - 1;
+									clearQueue();
+									toast.success(
+										`Cleared ${removed} ${removed === 1 ? "track" : "tracks"} from queue`,
+										{ duration: 3000 }
+									);
+								}}
 								className="h-7 px-2 text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive"
 								aria-label="Clear queue"
 							>

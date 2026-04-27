@@ -19,6 +19,7 @@ import {
 	cacheTrack,
 	setCacheLimit,
 } from "@/lib/audio-cache";
+import { toast } from "sonner";
 
 // Restore cache limit from localStorage
 if (typeof window !== "undefined") {
@@ -979,6 +980,36 @@ export function AudioEngine() {
 		return () => clearInterval(interval);
 	}, [sleepTimerEnd]);
 
+	// Retry: bumped by retryTrack() — reload the current track from scratch.
+	const retryLoadCount = usePlayerStore((s) => s._retryLoadCount);
+	const prevRetryRef = useRef(retryLoadCount);
+	useEffect(() => {
+		if (retryLoadCount === prevRetryRef.current) return;
+		prevRetryRef.current = retryLoadCount;
+		const track = currentTrack;
+		const audio = audioRef.current;
+		if (!track || !audio) return;
+		retryCountRef.current = 0;
+		setError(null);
+		setBuffering(true);
+		// Force a clean reload — new audio element to drop any error state.
+		const gen = ++loadGenRef.current;
+		detachEvents(audio);
+		audio.pause();
+		audio.src = "";
+		evictedAudio.add(audio);
+		const newAudio = new Audio();
+		newAudio.preload = "auto";
+		newAudio.crossOrigin = "anonymous";
+		audioRef.current = newAudio;
+		attachEvents(newAudio);
+		getTrackUrl(track.trackId).then((url) => {
+			if (loadGenRef.current !== gen) return;
+			newAudio.src = url;
+			newAudio.load();
+		});
+	}, [retryLoadCount, currentTrack, attachEvents, detachEvents, setBuffering, setError]);
+
 	// Seek: respond to _seekTo signal from prev() restart or seek()
 	const seekTo = usePlayerStore((s) => s._seekTo);
 	useEffect(() => {
@@ -1269,20 +1300,48 @@ export function AudioEngine() {
 		// All retries exhausted — count this as a queue-wide failure
 		consecutiveFailuresRef.current++;
 
+		const failingTrack = currentTrack;
+
 		if (consecutiveFailuresRef.current >= MAX_CONSECUTIVE_FAILURES) {
 			// Multiple tracks failing back-to-back almost always means a
 			// network/auth problem, not isolated bad files. Stop auto-skipping
 			// so we don't silently chew through the queue.
-			setError(
-				`Multiple tracks failed to load. Check your connection and try again.`
-			);
+			setError(`Multiple tracks failed to load. Check your connection.`);
 			pause();
+			toast.error("Multiple tracks failed to load", {
+				description: "Check your connection and try again.",
+				duration: 8000,
+				action: {
+					label: "Retry",
+					onClick: () => {
+						consecutiveFailuresRef.current = 0;
+						usePlayerStore.getState().retryTrack();
+					},
+				},
+			});
 			return;
 		}
 
-		setError(`Can't play "${currentTrack.title}"`);
+		setError(`Can't play "${failingTrack.title}"`);
 		const { queue, queueIndex } = usePlayerStore.getState();
-		if (queueIndex + 1 < queue.length) {
+		const hasNext = queueIndex + 1 < queue.length;
+
+		toast.error(`Can't play "${failingTrack.title}"`, {
+			description: failingTrack.artist,
+			duration: hasNext ? 5000 : 8000,
+			action: {
+				label: "Retry",
+				onClick: () => usePlayerStore.getState().retryTrack(),
+			},
+			cancel: hasNext
+				? {
+						label: "Skip",
+						onClick: () => next(),
+					}
+				: undefined,
+		});
+
+		if (hasNext) {
 			setTimeout(() => next(), 1500);
 		} else {
 			pause();

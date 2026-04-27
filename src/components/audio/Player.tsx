@@ -92,8 +92,6 @@ export function Player() {
 	const lyricsVisible = useLyricsStore((s) => s.visible);
 	const toggleLyrics = useLyricsStore((s) => s.toggleVisible);
 
-	const error = usePlayerStore((s) => s.error);
-
 	const hasQueue = queue.length > 1;
 	const sleepActive = sleepTimerEnd !== null;
 
@@ -128,12 +126,6 @@ export function Player() {
 					transition={{ type: "spring", damping: 25, stiffness: 300 }}
 					className="fixed bottom-0 left-0 right-0 z-50 border-t-[3px] border-foreground bg-card md:left-60 pb-[env(safe-area-inset-bottom)]"
 				>
-					{/* Error banner */}
-					{error && (
-						<div className="bg-destructive text-white text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-center py-1 px-4 border-b-[2px] border-foreground" role="alert">
-							{error}
-						</div>
-					)}
 
 					{/* Progress bar (touch-friendly) — flush with top border */}
 					<div className="group/seekbar absolute -top-4 left-0 right-0">
