@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireDeezerAndApp, fail, handleError } from "../../_lib/helpers";
 import { startProgressiveStream } from "@/lib/deemix/progressive-stream";
@@ -56,10 +56,10 @@ export async function GET(
 				}
 			}
 			if (!missing) {
-				return NextResponse.redirect(
-					new URL(`/api/v1/stream/${trackId}`, request.url),
-					302
-				);
+				return new Response(null, {
+					status: 302,
+					headers: { Location: `/api/v1/stream/${trackId}` },
+				});
 			}
 			// Drop every stale row for this track so we don't keep redirecting
 			// to a missing file. Then fall through to the live stream below.
@@ -81,10 +81,10 @@ export async function GET(
 			);
 			if (lock.alreadyInProgress) {
 				await lock.waitForExisting();
-				return NextResponse.redirect(
-					new URL(`/api/v1/stream/${trackId}`, request.url),
-					302
-				);
+				return new Response(null, {
+					status: 302,
+					headers: { Location: `/api/v1/stream/${trackId}` },
+				});
 			}
 			lockRelease = lock.release;
 
