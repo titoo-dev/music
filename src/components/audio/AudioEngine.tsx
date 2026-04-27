@@ -1076,6 +1076,19 @@ export function AudioEngine() {
 		const audio = audioRef.current;
 		if (!audio || !currentTrack) return;
 		const src = audio.src;
+		const mediaErr = audio.error;
+		console.warn("[AudioEngine] playback error", {
+			trackId: currentTrack.trackId,
+			title: currentTrack.title,
+			src,
+			currentSrc: audio.currentSrc,
+			retryCount: retryCountRef.current,
+			usePresigned,
+			mediaErrorCode: mediaErr?.code,
+			mediaErrorMessage: mediaErr?.message,
+			networkState: audio.networkState,
+			readyState: audio.readyState,
+		});
 
 		// First: try falling back from presigned URL to proxy stream
 		if (usePresigned && src && !src.includes("/api/v1/stream-progressive/") && !src.includes("/api/v1/stream/")) {
@@ -1102,6 +1115,28 @@ export function AudioEngine() {
 			}, 1000 * retryCountRef.current);
 			return;
 		}
+
+		// All retries exhausted — fetch the route once with credentials so we
+		// can surface the server's actual error code/message in the console.
+		// Useful in prod where server-side logs aren't accessible.
+		void fetch(`/api/v1/stream-progressive/${currentTrack.trackId}`, {
+			credentials: "include",
+		})
+			.then(async (res) => {
+				if (res.ok) {
+					// Don't drain a successful audio stream
+					res.body?.cancel().catch(() => {});
+					return;
+				}
+				const body = await res.text().catch(() => "");
+				console.error(
+					`[AudioEngine] giving up — server says ${res.status}`,
+					{ trackId: currentTrack.trackId, body: body.slice(0, 500) }
+				);
+			})
+			.catch((e) =>
+				console.error("[AudioEngine] giving up — fetch failed", e)
+			);
 
 		// All retries exhausted — set error and auto-skip
 		setError(`Can't play "${currentTrack.title}"`);
