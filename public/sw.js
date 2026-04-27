@@ -1,9 +1,9 @@
-const CACHE_NAME = "deemix-v2";
+const CACHE_NAME = "deemix-v3";
 const AUDIO_DB_NAME = "deemix-audio-cache";
 const AUDIO_DB_VERSION = 1;
 const AUDIO_STORE = "tracks";
 
-const APP_SHELL = ["/", "/offline"];
+const APP_SHELL = ["/"];
 
 // --- IndexedDB helpers (Service Worker context) ---
 
@@ -75,8 +75,19 @@ function extractTrackId(pathname) {
 // --- Service Worker Lifecycle ---
 
 self.addEventListener("install", (event) => {
+	// addAll rejects atomically if any URL fails — don't let a single broken
+	// shell entry abort the whole SW install. Fall back to a per-URL put so
+	// missing pages just get skipped instead of breaking caching.
 	event.waitUntil(
-		caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
+		caches.open(CACHE_NAME).then((cache) =>
+			Promise.all(
+				APP_SHELL.map((url) =>
+					fetch(url, { cache: "reload" })
+						.then((res) => (res.ok ? cache.put(url, res) : null))
+						.catch(() => null)
+				)
+			)
+		)
 	);
 	self.skipWaiting();
 });

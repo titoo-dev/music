@@ -280,7 +280,7 @@ export function HomeContent({ playlists, albums, recentPlays, user }: HomeConten
 						{recentAlbums.slice(0, 10).map((album) => (
 							<Link
 								key={album.id}
-								href={`/my-albums/${album.id}`}
+								href={`/album?id=${album.deezerAlbumId}`}
 								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[2px] hover:-translate-y-[2px] transition-all"
 							>
 								<div className="w-full aspect-square bg-muted flex items-center justify-center">
