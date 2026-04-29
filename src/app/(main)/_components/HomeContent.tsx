@@ -134,25 +134,15 @@ export function HomeContent({ playlists, albums, recentPlays, user }: HomeConten
 				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
 					{todayLabel()}
 				</p>
-				<div className="flex items-end justify-between gap-6 flex-wrap">
-					<div className="min-w-0 flex-1">
-						<h1 className="text-brutal-xl m-0 max-w-[15ch]">
-							WELCOME BACK,{" "}
-							<span className="text-primary">
-								{(user.name || "USER").toUpperCase()}.
-							</span>
-						</h1>
-						<p className="mt-3 text-sm font-bold uppercase tracking-[0.04em] text-muted-foreground">
-							{albums.length} ALBUM{albums.length !== 1 ? "S" : ""} · {playlists.length} PLAYLIST{playlists.length !== 1 ? "S" : ""} · {totalTracks} TRACKS
-						</p>
-					</div>
-					<Link href="/search" className="no-underline">
-						<Button size="lg" className="gap-2 bg-accent text-foreground border-foreground hover:bg-accent/80 font-mono uppercase tracking-[0.1em]">
-							<Search className="size-4" />
-							Paste link
-						</Button>
-					</Link>
-				</div>
+				<h1 className="text-brutal-xl m-0 max-w-[15ch]">
+					WELCOME BACK,{" "}
+					<span className="text-primary">
+						{(user.name || "USER").toUpperCase()}.
+					</span>
+				</h1>
+				<p className="mt-3 text-sm font-bold uppercase tracking-[0.04em] text-muted-foreground">
+					{albums.length} ALBUM{albums.length !== 1 ? "S" : ""} · {playlists.length} PLAYLIST{playlists.length !== 1 ? "S" : ""} · {totalTracks} TRACKS
+				</p>
 			</div>
 
 			{/* Receipt ticker — recent additions */}
@@ -192,8 +182,9 @@ export function HomeContent({ playlists, albums, recentPlays, user }: HomeConten
 						</Link>
 					</div>
 					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
-						{recentPlays.slice(0, 8).map((item) => {
-							const t: TrackRowTrack = {
+						{(() => {
+							const slice = recentPlays.slice(0, 8);
+							const normalized: TrackRowTrack[] = slice.map((item) => ({
 								trackId: item.trackId,
 								title: item.title,
 								artist: item.artist,
@@ -202,16 +193,17 @@ export function HomeContent({ playlists, albums, recentPlays, user }: HomeConten
 								cover: item.coverUrl,
 								duration: item.duration,
 								bitrateLabel: null,
-							};
-							return (
+							}));
+							return slice.map((item, idx) => (
 								<TrackRow
 									key={item.id}
-									track={t}
+									track={normalized[idx]}
 									showBitrate={false}
 									showDuration={true}
+									queue={normalized}
 								/>
-							);
-						})}
+							));
+						})()}
 					</div>
 				</section>
 			)}

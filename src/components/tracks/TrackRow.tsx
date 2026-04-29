@@ -11,7 +11,7 @@ import { TrackActionMenu } from "@/components/tracks/TrackActionMenu";
 import { useLongPress } from "@/hooks/useLongPress";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
-import { usePlayerStore } from "@/stores/usePlayerStore";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { convertDuration } from "@/utils/helpers";
 import { getBitrateBadge } from "@/utils/track-format";
 
@@ -39,6 +39,12 @@ export interface TrackRowProps {
 	onDelete?: () => void;
 	/** When set, prepends a "#" column with the track number (album/playlist view). */
 	trackNumber?: number;
+	/**
+	 * Surrounding tracks to enqueue when this row is played. Pass the full
+	 * displayed list (in display order) so playback chains through. When
+	 * omitted, only this track plays.
+	 */
+	queue?: TrackRowTrack[];
 }
 
 /**
@@ -78,6 +84,7 @@ export function TrackRow({
 	showSave = true,
 	onDelete,
 	trackNumber,
+	queue,
 }: TrackRowProps) {
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewPlaying = usePreviewStore((s) => s.isPlaying);
@@ -101,13 +108,28 @@ export function TrackRow({
 			playerToggle();
 			return;
 		}
-		playerPlay({
+		const tapped: PlayerTrack = {
 			trackId: track.trackId,
 			title: track.title,
 			artist: track.artist,
 			cover: track.cover,
 			duration: track.duration ?? null,
-		});
+		};
+		if (queue && queue.length > 0) {
+			const mapped: PlayerTrack[] = queue.map((t) => ({
+				trackId: t.trackId,
+				title: t.title,
+				artist: t.artist,
+				cover: t.cover,
+				duration: t.duration ?? null,
+			}));
+			// Ensure the tapped track is in the queue. If callers passed a list
+			// that excludes the tapped track for some reason, fall back gracefully.
+			const inQueue = mapped.some((t) => t.trackId === tapped.trackId);
+			playerPlay(tapped, inQueue ? mapped : [tapped, ...mapped]);
+			return;
+		}
+		playerPlay(tapped);
 	};
 
 	const openSheet = useTrackActionStore((s) => s.openSheet);

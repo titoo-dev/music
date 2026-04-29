@@ -93,6 +93,7 @@ interface Playlist {
 	id: string;
 	title: string;
 	_count?: { tracks: number };
+	containsTrack?: boolean;
 }
 
 function PlaylistPicker({
@@ -115,12 +116,17 @@ function PlaylistPicker({
 	useEffect(() => {
 		async function load() {
 			try {
-				const res = await fetch("/api/v1/playlists", {
-					credentials: "include",
-				});
+				const res = await fetch(
+					`/api/v1/playlists?trackId=${encodeURIComponent(trackId)}`,
+					{ credentials: "include" },
+				);
 				const json = await res.json();
 				if (json.success) {
-					setPlaylists(json.data as Playlist[]);
+					const data = json.data as Playlist[];
+					setPlaylists(data);
+					setAddedTo(
+						new Set(data.filter((p) => p.containsTrack).map((p) => p.id)),
+					);
 				}
 			} catch {
 				// ignore
@@ -128,7 +134,7 @@ function PlaylistPicker({
 			setLoading(false);
 		}
 		load();
-	}, []);
+	}, [trackId]);
 
 	const handleAdd = async (playlistId: string) => {
 		if (!track || addedTo.has(playlistId)) return;
@@ -222,7 +228,7 @@ function PlaylistPicker({
 									)}
 								</div>
 								{addedTo.has(p.id) && (
-									<Check className="size-4 text-foreground shrink-0" />
+									<Check className="size-4 text-green-600 shrink-0" />
 								)}
 							</button>
 						))}

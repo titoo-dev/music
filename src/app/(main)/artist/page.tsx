@@ -131,17 +131,22 @@ function ArtistContent() {
 							<span className="text-right">TIME</span>
 							<span />
 						</div>
-						{topTracks.slice(0, 10).map((track: any, idx: number) => {
-							const normalized = trackFromDeezerRaw(track);
-							const trackId = normalized.trackId;
-							return (
-								<TrackRow
-									key={trackId || idx}
-									track={normalized}
-									trackNumber={idx + 1}
-								/>
-							);
-						})}
+						{(() => {
+							const top = topTracks.slice(0, 10);
+							const normalizedTop = top.map((t: any) => trackFromDeezerRaw(t));
+							return top.map((track: any, idx: number) => {
+								const normalized = normalizedTop[idx];
+								const trackId = normalized.trackId;
+								return (
+									<TrackRow
+										key={trackId || idx}
+										track={normalized}
+										trackNumber={idx + 1}
+										queue={normalizedTop}
+									/>
+								);
+							});
+						})()}
 					</div>
 				</section>
 			)}

@@ -1164,18 +1164,14 @@ export function AudioEngine() {
 			timeLeft <= crossfadeDuration &&
 			repeat !== "one"
 		) {
-			const { queue, queueIndex, shuffle, _shuffleOrder, _shufflePos, repeat: rep } = usePlayerStore.getState();
+			const { queue, queueIndex, repeat: rep } = usePlayerStore.getState();
 
-			// Determine next queue index (mirrors next() logic)
+			// Determine next queue index (mirrors next() logic). The queue is
+			// already in physical play order — shuffle just reorders it ahead
+			// of time — so plain queueIndex+1 covers both modes.
 			let nextQueueIndex = -1;
-			if (shuffle && _shuffleOrder.length > 0) {
-				const nextPos = _shufflePos + 1;
-				if (nextPos < _shuffleOrder.length) nextQueueIndex = _shuffleOrder[nextPos];
-				// skip crossfade on last shuffle track (re-shuffle would happen)
-			} else {
-				if (queueIndex + 1 < queue.length) nextQueueIndex = queueIndex + 1;
-				else if (rep === "all") nextQueueIndex = 0;
-			}
+			if (queueIndex + 1 < queue.length) nextQueueIndex = queueIndex + 1;
+			else if (rep === "all") nextQueueIndex = 0;
 
 			if (nextQueueIndex >= 0) {
 				const nextTrack = queue[nextQueueIndex];

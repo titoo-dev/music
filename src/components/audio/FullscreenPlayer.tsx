@@ -406,6 +406,7 @@ export function FullscreenPlayer() {
 	const dragControls = useDragControls();
 	const lyricsVisible = useLyricsStore((s) => s.visible);
 	const toggleLyrics = useLyricsStore((s) => s.toggleVisible);
+	const setLyricsVisible = useLyricsStore((s) => s.setVisible);
 	const fetchLyrics = useLyricsStore((s) => s.fetchLyrics);
 
 	const hasQueue = queue.length > 1;
@@ -504,6 +505,7 @@ export function FullscreenPlayer() {
 									className="h-9 w-9 text-muted-foreground"
 									onClick={() => {
 										setFullscreenOpen(false);
+										if (lyricsVisible) setLyricsVisible(false);
 										setQueuePanelOpen(true);
 									}}
 								>

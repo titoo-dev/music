@@ -8,6 +8,7 @@ import {
 	Search,
 	Info,
 	Library,
+	ListMusic,
 	Settings,
 } from "lucide-react";
 
@@ -18,6 +19,7 @@ const navItems = [
 
 const authItems = [
 	{ path: "/library", label: "LIBRARY", icon: Library },
+	{ path: "/my-playlists", label: "PLAYLISTS", icon: ListMusic },
 ];
 
 const secondaryItems = [

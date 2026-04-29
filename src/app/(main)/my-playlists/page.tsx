@@ -15,10 +15,11 @@ import {
 	DialogFooter,
 	DialogClose,
 } from "@/components/ui/dialog";
-import { Loader2, Plus, Music, Trash2 } from "lucide-react";
+import { Loader2, Plus, Music, Trash2, Download } from "lucide-react";
 import Link from "next/link";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { CoverImage } from "@/components/ui/cover-image";
+import { ImportSpotifyDialog } from "@/components/playlists/ImportSpotifyDialog";
 
 interface PlaylistItem {
 	id: string;
@@ -150,36 +151,48 @@ export default function MyPlaylistsPage() {
 					</p>
 				</div>
 
-				<Dialog>
-					<DialogTrigger
-						render={
-							<Button size="sm" className="gap-1.5">
-								<Plus className="size-4" />
-								New Playlist
+				<div className="flex items-center gap-2">
+					<ImportSpotifyDialog
+						trigger={
+							<Button size="sm" variant="outline" className="gap-1.5">
+								<Download className="size-4" />
+								Import from Spotify
 							</Button>
 						}
+						onImported={loadPlaylists}
 					/>
-					<DialogContent>
-						<DialogHeader>
-							<DialogTitle>Create Playlist</DialogTitle>
-							<DialogDescription>
-								Give your playlist a name to get started.
-							</DialogDescription>
-						</DialogHeader>
-						<Input
-							value={newTitle}
-							onChange={(e) => setNewTitle(e.target.value)}
-							placeholder="Playlist name..."
-							onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+
+					<Dialog>
+						<DialogTrigger
+							render={
+								<Button size="sm" className="gap-1.5">
+									<Plus className="size-4" />
+									New Playlist
+								</Button>
+							}
 						/>
-						<DialogFooter>
-							<DialogClose render={<Button variant="outline">Cancel</Button>} />
-							<Button onClick={handleCreate} disabled={creating || !newTitle.trim()}>
-								{creating ? <Loader2 className="size-4 animate-spin" /> : "Create"}
-							</Button>
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
+						<DialogContent>
+							<DialogHeader>
+								<DialogTitle>Create Playlist</DialogTitle>
+								<DialogDescription>
+									Give your playlist a name to get started.
+								</DialogDescription>
+							</DialogHeader>
+							<Input
+								value={newTitle}
+								onChange={(e) => setNewTitle(e.target.value)}
+								placeholder="Playlist name..."
+								onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+							/>
+							<DialogFooter>
+								<DialogClose render={<Button variant="outline">Cancel</Button>} />
+								<Button onClick={handleCreate} disabled={creating || !newTitle.trim()}>
+									{creating ? <Loader2 className="size-4 animate-spin" /> : "Create"}
+								</Button>
+							</DialogFooter>
+						</DialogContent>
+					</Dialog>
+				</div>
 			</div>
 
 			{playlists.length === 0 ? (

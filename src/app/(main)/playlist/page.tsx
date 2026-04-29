@@ -118,17 +118,21 @@ function PlaylistContent() {
 						<span className="text-right">TIME</span>
 						<span />
 					</div>
-					{tracks.map((track: any, idx: number) => {
-						const normalized = trackFromDeezerRaw(track);
-						const trackId = normalized.trackId;
-						return (
-							<TrackRow
-								key={trackId || idx}
-								track={normalized}
-								trackNumber={idx + 1}
-							/>
-						);
-					})}
+					{(() => {
+						const normalizedTracks = tracks.map((t: any) => trackFromDeezerRaw(t));
+						return tracks.map((track: any, idx: number) => {
+							const normalized = normalizedTracks[idx];
+							const trackId = normalized.trackId;
+							return (
+								<TrackRow
+									key={trackId || idx}
+									track={normalized}
+									trackNumber={idx + 1}
+									queue={normalizedTracks}
+								/>
+							);
+						});
+					})()}
 				</div>
 				)}
 			</div>

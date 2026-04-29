@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2, Music, Disc3, Plus, Heart, Clock } from "lucide-react";
+import { Loader2, Music, Disc3, Heart, Clock } from "lucide-react";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
 
 interface UserPlaylist {
@@ -181,21 +181,13 @@ function LibraryContent() {
 				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
 					LIBRARY
 				</p>
-				<div className="flex items-end justify-between gap-6 flex-wrap">
-					<div className="min-w-0 flex-1">
-						<h1 className="text-brutal-xl m-0">
-							MY <span className="text-primary">COLLECTION.</span>
-						</h1>
-						<p className="mt-3 text-sm font-bold uppercase tracking-[0.04em] text-muted-foreground">
-							{playlists.length} PLAYLIST{playlists.length !== 1 ? "S" : ""} · {albums.length} ALBUM{albums.length !== 1 ? "S" : ""} · {totalTracks} TRACKS
-						</p>
-					</div>
-					<Link href="/my-playlists" className="no-underline">
-						<button className="inline-flex items-center gap-2 px-5 py-3 border-2 sm:border-[3px] border-foreground bg-primary text-white font-mono text-sm font-black tracking-[0.12em] uppercase shadow-[var(--shadow-brutal)] hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] transition-all">
-							<Plus className="size-4" strokeWidth={3} />
-							NEW PLAYLIST
-						</button>
-					</Link>
+				<div className="min-w-0">
+					<h1 className="text-brutal-xl m-0">
+						MY <span className="text-primary">COLLECTION.</span>
+					</h1>
+					<p className="mt-3 text-sm font-bold uppercase tracking-[0.04em] text-muted-foreground">
+						{playlists.length} PLAYLIST{playlists.length !== 1 ? "S" : ""} · {albums.length} ALBUM{albums.length !== 1 ? "S" : ""} · {totalTracks} TRACKS
+					</p>
 				</div>
 			</div>
 
@@ -240,8 +232,8 @@ function LibraryContent() {
 					/>
 				) : (
 					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
-						{recentPlays.map((item) => {
-							const t: TrackRowTrack = {
+						{(() => {
+							const normalized: TrackRowTrack[] = recentPlays.map((item) => ({
 								trackId: item.trackId,
 								title: item.title,
 								artist: item.artist,
@@ -250,21 +242,21 @@ function LibraryContent() {
 								cover: item.coverUrl,
 								duration: item.duration,
 								bitrateLabel: null,
-							};
-							const deezerUrl = `https://www.deezer.com/track/${item.trackId}`;
-							return (
+							}));
+							return recentPlays.map((item, idx) => (
 								<div key={item.id} className="relative">
 									<TrackRow
-										track={t}
+										track={normalized[idx]}
 										showBitrate={false}
-										showDuration={true}
+										showDuration={false}
+										queue={normalized}
 									/>
-									<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground pointer-events-none">
+									<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground pointer-events-none tabular-nums">
 										{fmtRelative(item.playedAt)}
 									</span>
 								</div>
-							);
-						})}
+							));
+						})()}
 					</div>
 				)
 			)}
@@ -362,8 +354,8 @@ function LibraryContent() {
 					/>
 				) : (
 					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
-						{tracks.map((item, idx) => {
-							const t: TrackRowTrack = {
+						{(() => {
+							const normalized: TrackRowTrack[] = tracks.map((item) => ({
 								trackId: item.trackId,
 								title: item.title,
 								artist: item.artist,
@@ -372,21 +364,22 @@ function LibraryContent() {
 								cover: item.coverUrl,
 								duration: item.duration,
 								bitrateLabel: null,
-							};
-							return (
+							}));
+							return tracks.map((item, idx) => (
 								<div key={item.id} className="relative">
 									<TrackRow
-										track={t}
+										track={normalized[idx]}
 										trackNumber={idx + 1}
 										showBitrate={false}
-										showDuration
+										showDuration={false}
+										queue={normalized}
 									/>
 									<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground pointer-events-none tabular-nums">
 										{fmtRelative(item.savedAt)}
 									</span>
 								</div>
-							);
-						})}
+							));
+						})()}
 					</div>
 				)
 			)}

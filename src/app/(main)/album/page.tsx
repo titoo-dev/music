@@ -197,18 +197,22 @@ function AlbumContent() {
 						<span className="text-right">TIME</span>
 						<span />
 					</div>
-					{tracks.map((track: any, idx: number) => {
-						const normalized = trackFromDeezerRaw(track);
-						const trackNum = track.TRACK_NUMBER || track.track_position || idx + 1;
-						const trackId = normalized.trackId;
-						return (
-							<TrackRow
-								key={trackId || idx}
-								track={normalized}
-								trackNumber={Number(trackNum)}
-							/>
-						);
-					})}
+					{(() => {
+						const normalizedTracks = tracks.map((t: any) => trackFromDeezerRaw(t));
+						return tracks.map((track: any, idx: number) => {
+							const normalized = normalizedTracks[idx];
+							const trackNum = track.TRACK_NUMBER || track.track_position || idx + 1;
+							const trackId = normalized.trackId;
+							return (
+								<TrackRow
+									key={trackId || idx}
+									track={normalized}
+									trackNumber={Number(trackNum)}
+									queue={normalizedTracks}
+								/>
+							);
+						});
+					})()}
 				</div>
 				)}
 			</div>

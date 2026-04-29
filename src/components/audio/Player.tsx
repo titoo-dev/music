@@ -91,8 +91,21 @@ export function Player() {
 
 	const lyricsVisible = useLyricsStore((s) => s.visible);
 	const toggleLyrics = useLyricsStore((s) => s.toggleVisible);
+	const setLyricsVisible = useLyricsStore((s) => s.setVisible);
 
 	const hasQueue = queue.length > 1;
+
+	// Queue and lyrics share the same floating slot on the right — keep them
+	// mutually exclusive so they don't overlap.
+	const handleToggleQueue = () => {
+		const next = !queuePanelOpen;
+		setQueuePanelOpen(next);
+		if (next && lyricsVisible) setLyricsVisible(false);
+	};
+	const handleToggleLyrics = () => {
+		if (!lyricsVisible && queuePanelOpen) setQueuePanelOpen(false);
+		toggleLyrics();
+	};
 	const sleepActive = sleepTimerEnd !== null;
 
 	function cycleSpeed() {
@@ -263,25 +276,31 @@ export function Player() {
 							{sleepActive && sleepTimerEnd && <SleepCountdown endTs={sleepTimerEnd} />}
 
 							{/* Queue panel toggle */}
-							{hasQueue && (
-								<Button
-									variant="ghost"
-									size="icon"
-									aria-label="Open queue"
-									aria-pressed={queuePanelOpen}
-									className={`h-7 w-7 sm:h-8 sm:w-8 border-[2px] ${queuePanelOpen ? "bg-accent text-foreground border-foreground" : "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"}`}
-									onClick={() => setQueuePanelOpen(!queuePanelOpen)}
-								>
-									<svg width="13" height="13" className="sm:w-[14px] sm:h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-										<line x1="8" y1="6" x2="21" y2="6" />
-										<line x1="8" y1="12" x2="21" y2="12" />
-										<line x1="8" y1="18" x2="21" y2="18" />
-										<circle cx="3.5" cy="6" r="1.2" fill="currentColor" />
-										<circle cx="3.5" cy="12" r="1.2" fill="currentColor" />
-										<circle cx="3.5" cy="18" r="1.2" fill="currentColor" />
-									</svg>
-								</Button>
-							)}
+							<Button
+								variant="ghost"
+								size="icon"
+								aria-label={queuePanelOpen ? "Close queue" : "Open queue"}
+								aria-pressed={queuePanelOpen}
+								className={`relative h-7 w-7 sm:h-8 sm:w-8 border-[2px] ${queuePanelOpen ? "bg-accent text-foreground border-foreground" : "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"}`}
+								onClick={handleToggleQueue}
+							>
+								<svg width="13" height="13" className="sm:w-[14px] sm:h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+									<line x1="8" y1="6" x2="21" y2="6" />
+									<line x1="8" y1="12" x2="21" y2="12" />
+									<line x1="8" y1="18" x2="21" y2="18" />
+									<circle cx="3.5" cy="6" r="1.2" fill="currentColor" />
+									<circle cx="3.5" cy="12" r="1.2" fill="currentColor" />
+									<circle cx="3.5" cy="18" r="1.2" fill="currentColor" />
+								</svg>
+								{queue.length > 1 && (
+									<span
+										aria-hidden
+										className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-[3px] flex items-center justify-center border-[1.5px] border-foreground bg-primary text-[8px] font-black leading-none text-white tabular-nums"
+									>
+										{queue.length > 99 ? "99+" : queue.length}
+									</span>
+								)}
+							</Button>
 
 							{/* Lyrics toggle (LRC label like prototype) */}
 							<Button
@@ -290,7 +309,7 @@ export function Player() {
 								aria-label="Toggle lyrics"
 								aria-pressed={lyricsVisible}
 								className={`hidden md:inline-flex h-7 px-2 font-mono text-[10px] font-black tracking-[0.1em] border-[2px] ${lyricsVisible ? "bg-accent text-foreground border-foreground" : "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"}`}
-								onClick={toggleLyrics}
+								onClick={handleToggleLyrics}
 							>
 								LRC
 							</Button>

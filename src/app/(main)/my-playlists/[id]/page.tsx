@@ -170,8 +170,8 @@ export default function PlaylistDetailPage() {
 				</div>
 			) : (
 				<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
-					{sortedTracks.map((track, idx) => {
-						const t: TrackRowTrack = {
+					{(() => {
+						const normalized: TrackRowTrack[] = sortedTracks.map((track) => ({
 							trackId: track.trackId,
 							title: track.title,
 							artist: track.artist,
@@ -179,18 +179,19 @@ export default function PlaylistDetailPage() {
 							cover: track.coverUrl,
 							duration: track.duration,
 							bitrateLabel: null,
-						};
-						return (
+						}));
+						return sortedTracks.map((track, idx) => (
 							<TrackRow
 								key={track.id}
-								track={t}
+								track={normalized[idx]}
 								trackNumber={idx + 1}
 								showBitrate={false}
 								showDuration
 								onDelete={() => handleRemoveTrack(track.trackId)}
+								queue={normalized}
 							/>
-						);
-					})}
+						));
+					})()}
 				</div>
 			)}
 		</div>

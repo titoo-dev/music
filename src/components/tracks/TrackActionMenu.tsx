@@ -30,8 +30,11 @@ import {
 	Link as LinkIcon,
 	MoreHorizontal,
 	ChevronRight,
+	Plus,
 } from "lucide-react";
 import Link from "next/link";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export interface TrackActionTrack {
 	id: string;
@@ -54,6 +57,7 @@ interface Playlist {
 	id: string;
 	title: string;
 	_count?: { tracks: number };
+	containsTrack?: boolean;
 }
 
 function AddToPlaylistSubmenu({
@@ -66,42 +70,58 @@ function AddToPlaylistSubmenu({
 	const [playlists, setPlaylists] = useState<Playlist[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [addedTo, setAddedTo] = useState<Set<string>>(new Set());
+	const [creating, setCreating] = useState(false);
+	const [newName, setNewName] = useState("");
+	const [submitting, setSubmitting] = useState(false);
 
 	useEffect(() => {
 		(async () => {
 			try {
-				const res = await fetch("/api/v1/playlists", { credentials: "include" });
+				const res = await fetch(
+					`/api/v1/playlists?trackId=${encodeURIComponent(track.id)}`,
+					{ credentials: "include" },
+				);
 				const json = await res.json();
-				if (json.success) setPlaylists(json.data as Playlist[]);
+				if (json.success) {
+					const data = json.data as Playlist[];
+					setPlaylists(data);
+					setAddedTo(
+						new Set(data.filter((p) => p.containsTrack).map((p) => p.id)),
+					);
+				}
 			} catch {
 				// ignore
 			}
 			setLoading(false);
 		})();
-	}, []);
+	}, [track.id]);
+
+	const addTrackToPlaylist = async (playlistId: string) => {
+		const res = await fetch(`/api/v1/playlists/${playlistId}/tracks`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			credentials: "include",
+			body: JSON.stringify({
+				tracks: [
+					{
+						trackId: track.id,
+						title: track.title,
+						artist: track.artist,
+						album: track.albumTitle || null,
+						albumId: track.albumId || null,
+						coverUrl: track.cover || null,
+						duration: track.duration || null,
+					},
+				],
+			}),
+		});
+		return res.ok;
+	};
 
 	const handleAdd = async (playlistId: string) => {
 		if (addedTo.has(playlistId)) return;
 		try {
-			const res = await fetch(`/api/v1/playlists/${playlistId}/tracks`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				credentials: "include",
-				body: JSON.stringify({
-					tracks: [
-						{
-							trackId: track.id,
-							title: track.title,
-							artist: track.artist,
-							album: track.albumTitle || null,
-							albumId: track.albumId || null,
-							coverUrl: track.cover || null,
-							duration: track.duration || null,
-						},
-					],
-				}),
-			});
-			if (res.ok) {
+			if (await addTrackToPlaylist(playlistId)) {
 				setAddedTo((prev) => new Set(prev).add(playlistId));
 				setTimeout(onClose, 600);
 			}
@@ -110,40 +130,114 @@ function AddToPlaylistSubmenu({
 		}
 	};
 
-	if (loading) {
-		return (
-			<div className="px-3 py-3 flex items-center justify-center">
-				<Loader2 className="size-4 animate-spin text-muted-foreground" />
-			</div>
-		);
-	}
-
-	if (playlists.length === 0) {
-		return (
-			<div className="px-3 py-2 text-[11px] font-mono text-muted-foreground uppercase tracking-[0.05em]">
-				No playlists yet
-			</div>
-		);
-	}
+	const handleCreate = async () => {
+		const name = newName.trim();
+		if (!name || submitting) return;
+		setSubmitting(true);
+		try {
+			const res = await fetch("/api/v1/playlists", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				credentials: "include",
+				body: JSON.stringify({ title: name }),
+			});
+			const json = await res.json();
+			if (json.success) {
+				const created = json.data as Playlist;
+				setPlaylists((prev) => [created, ...prev]);
+				if (await addTrackToPlaylist(created.id)) {
+					setAddedTo((prev) => new Set(prev).add(created.id));
+					setTimeout(onClose, 600);
+				}
+				setNewName("");
+				setCreating(false);
+			}
+		} catch {
+			// ignore
+		}
+		setSubmitting(false);
+	};
 
 	return (
-		<div className="max-h-[40vh] overflow-y-auto">
-			{playlists.map((p) => (
-				<DropdownMenuItem
-					key={p.id}
-					onClick={() => handleAdd(p.id)}
-					className="flex items-center justify-between gap-3"
+		<div className="flex flex-col">
+			{loading ? (
+				<div className="px-3 py-3 flex items-center justify-center">
+					<Loader2 className="size-4 animate-spin text-muted-foreground" />
+				</div>
+			) : playlists.length === 0 && !creating ? (
+				<div className="px-3 py-2 text-[11px] font-mono text-muted-foreground uppercase tracking-[0.05em]">
+					No playlists yet
+				</div>
+			) : (
+				<div className="max-h-[40vh] overflow-y-auto">
+					{playlists.map((p) => {
+						const inPlaylist = addedTo.has(p.id);
+						return (
+							<DropdownMenuItem
+								key={p.id}
+								closeOnClick={false}
+								onClick={() => handleAdd(p.id)}
+								className="flex items-center justify-between gap-3"
+							>
+								<span className="truncate text-[13px] font-bold">{p.title}</span>
+								{inPlaylist ? (
+									<CheckCircle2 className="size-3.5 text-green-600 shrink-0" />
+								) : (
+									<span className="font-mono text-[10px] text-muted-foreground shrink-0">
+										{p._count?.tracks ?? 0}
+									</span>
+								)}
+							</DropdownMenuItem>
+						);
+					})}
+				</div>
+			)}
+
+			{creating ? (
+				<form
+					onSubmit={(e) => {
+						e.preventDefault();
+						handleCreate();
+					}}
+					onClick={(e) => e.stopPropagation()}
+					onKeyDown={(e) => e.stopPropagation()}
+					onKeyDownCapture={(e) => e.stopPropagation()}
+					className="flex items-center gap-2 px-2 py-2 border-t-2 border-foreground"
 				>
-					<span className="truncate text-[13px] font-bold">{p.title}</span>
-					{addedTo.has(p.id) ? (
-						<CheckCircle2 className="size-3.5 text-foreground shrink-0" />
-					) : (
-						<span className="font-mono text-[10px] text-muted-foreground shrink-0">
-							{p._count?.tracks ?? 0}
-						</span>
-					)}
+					<Input
+						autoFocus
+						placeholder="Playlist name"
+						value={newName}
+						onChange={(e) => setNewName(e.target.value)}
+						onKeyDown={(e) => {
+							e.stopPropagation();
+							if (e.key === "Escape") {
+								e.preventDefault();
+								setCreating(false);
+								setNewName("");
+							}
+						}}
+						className="flex-1 h-8 text-[13px]"
+					/>
+					<Button
+						type="submit"
+						size="sm"
+						disabled={!newName.trim() || submitting}
+						className="h-8"
+					>
+						{submitting ? <Loader2 className="size-3.5 animate-spin" /> : "Create"}
+					</Button>
+				</form>
+			) : (
+				<DropdownMenuItem
+					closeOnClick={false}
+					onClick={() => setCreating(true)}
+					className="gap-2.5 border-t-2 border-foreground rounded-none"
+				>
+					<Plus className="size-4" />
+					<span className="font-bold">New playlist</span>
 				</DropdownMenuItem>
-			))}
+			)}
 		</div>
 	);
 }
@@ -323,10 +417,8 @@ export function TrackActionMenu({
 							{isAuthenticated && (
 								<DropdownMenuItem
 									className="gap-2.5"
-									onClick={(e) => {
-										e.preventDefault();
-										setView("playlists");
-									}}
+									closeOnClick={false}
+									onClick={() => setView("playlists")}
 								>
 									<ListPlus className="size-4" />
 									<span className="flex-1">Add to playlist</span>

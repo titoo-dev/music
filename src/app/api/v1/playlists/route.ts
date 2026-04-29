@@ -2,11 +2,15 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail, handleError, requireUser } from "../_lib/helpers";
 
-// GET /api/v1/playlists — List all playlists for current user
+// GET /api/v1/playlists — List all playlists for current user.
+// Optional ?trackId=... annotates each playlist with `containsTrack: boolean`,
+// used by the "Add to playlist" menu to mark playlists already holding the track.
 export async function GET(request: NextRequest) {
 	try {
 		const { userId, error } = await requireUser(request);
 		if (error) return error;
+
+		const trackId = request.nextUrl.searchParams.get("trackId");
 
 		const playlists = await prisma.playlist.findMany({
 			where: { userId },
@@ -21,6 +25,18 @@ export async function GET(request: NextRequest) {
 			},
 		});
 
+		let containsSet: Set<string> | null = null;
+		if (trackId && playlists.length > 0) {
+			const matches = await prisma.playlistTrack.findMany({
+				where: {
+					trackId,
+					playlistId: { in: playlists.map((p) => p.id) },
+				},
+				select: { playlistId: true },
+			});
+			containsSet = new Set(matches.map((m) => m.playlistId));
+		}
+
 		// Flatten covers for the frontend
 		const result = playlists.map((pl) => ({
 			...pl,
@@ -28,6 +44,7 @@ export async function GET(request: NextRequest) {
 				.map((t) => t.coverUrl)
 				.filter(Boolean) as string[],
 			tracks: undefined,
+			...(containsSet ? { containsTrack: containsSet.has(pl.id) } : {}),
 		}));
 
 		return ok(result);

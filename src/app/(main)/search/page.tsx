@@ -367,9 +367,16 @@ function AllResults({
 						</div>
 					</div>
 					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
-						{tracks.map((track: any) => (
-							<SearchTrackRow key={track.SNG_ID || track.id} track={track} />
-						))}
+						{(() => {
+							const normalizedQueue = tracks.map((t: any) => trackFromDeezerRaw(t));
+							return tracks.map((track: any) => (
+								<SearchTrackRow
+									key={track.SNG_ID || track.id}
+									track={track}
+									queue={normalizedQueue}
+								/>
+							));
+						})()}
 					</div>
 				</section>
 			)}
@@ -444,9 +451,15 @@ function AllResults({
 	);
 }
 
-function SearchTrackRow({ track }: { track: any }) {
+function SearchTrackRow({
+	track,
+	queue,
+}: {
+	track: any;
+	queue?: ReturnType<typeof trackFromDeezerRaw>[];
+}) {
 	const normalized = trackFromDeezerRaw(track);
-	return <TrackRow track={normalized} />;
+	return <TrackRow track={normalized} queue={queue} />;
 }
 
 function AlbumCard({
@@ -544,10 +557,15 @@ function TrackResults({
 }) {
 	const tracks = data?.data || [];
 	if (tracks.length === 0) return <EmptyTabState />;
+	const normalizedQueue = tracks.map((t: any) => trackFromDeezerRaw(t));
 	return (
 		<div className="mt-4 border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
 			{tracks.map((track: any) => (
-				<SearchTrackRow key={track.SNG_ID || track.id} track={track} />
+				<SearchTrackRow
+					key={track.SNG_ID || track.id}
+					track={track}
+					queue={normalizedQueue}
+				/>
 			))}
 		</div>
 	);

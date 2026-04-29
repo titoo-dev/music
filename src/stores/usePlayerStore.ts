@@ -12,17 +12,16 @@ export interface PlayerTrack {
 
 type RepeatMode = "off" | "all" | "one";
 
-/** Fisher-Yates shuffle, returns a new array of indices with `startIdx` placed first. */
-function buildShuffleOrder(length: number, startIdx: number): number[] {
-	const indices = Array.from({ length }, (_, i) => i);
-	// Place current track at position 0
-	[indices[0], indices[startIdx]] = [indices[startIdx], indices[0]];
-	// Shuffle the rest (indices 1..n-1)
-	for (let i = length - 1; i > 1; i--) {
-		const j = 1 + Math.floor(Math.random() * i); // 1..i inclusive
-		[indices[i], indices[j]] = [indices[j], indices[i]];
+/**
+ * Fisher-Yates shuffle, returns a new array. Pure helper — does not mutate.
+ */
+function shuffleArray<T>(arr: T[]): T[] {
+	const out = arr.slice();
+	for (let i = out.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[out[i], out[j]] = [out[j], out[i]];
 	}
-	return indices;
+	return out;
 }
 
 interface PlayerState {
@@ -55,12 +54,6 @@ interface PlayerState {
 	playbackRate: number;
 	crossfadeDuration: number;
 	normalizationEnabled: boolean;
-
-	// Shuffle history (P1)
-	/** Pre-computed shuffled order of queue indices. Empty when shuffle is off. */
-	_shuffleOrder: number[];
-	/** Current position within _shuffleOrder. */
-	_shufflePos: number;
 
 	play: (track: PlayerTrack, queue?: PlayerTrack[]) => void;
 	pause: () => void;
@@ -121,6 +114,18 @@ function goToIndex(queueIndex: number, queue: PlayerTrack[]): Partial<PlayerStat
 	};
 }
 
+/**
+ * Build a queue with `start` placed at index 0 and the rest shuffled.
+ * Used when starting playback with shuffle ON — the tapped track plays first,
+ * then everything else plays in randomised order.
+ */
+function shuffleAround(queue: PlayerTrack[], startIndex: number): PlayerTrack[] {
+	if (queue.length <= 1) return queue.slice();
+	const start = queue[startIndex];
+	const rest = queue.filter((_, i) => i !== startIndex);
+	return [start, ...shuffleArray(rest)];
+}
+
 export const usePlayerStore = create<PlayerState>()(
 	persist(
 		(set, get) => ({
@@ -145,27 +150,34 @@ export const usePlayerStore = create<PlayerState>()(
 			playbackRate: 1.0,
 			crossfadeDuration: 0,
 			normalizationEnabled: false,
-			_shuffleOrder: [],
-			_shufflePos: 0,
 
 			play: (track, queue) => {
 				const state = get();
 				if (queue) {
 					const idx = queue.findIndex((t) => t.trackId === track.trackId);
-					const qi = idx >= 0 ? idx : 0;
-					const shuffleUpdate = state.shuffle
-						? { _shuffleOrder: buildShuffleOrder(queue.length, qi), _shufflePos: 0 }
-						: { _shuffleOrder: [], _shufflePos: 0 };
-					set({
-						currentTrack: track,
-						queue,
-						queueIndex: qi,
-						isPlaying: true,
-						isBuffering: true,
-						currentTime: 0,
-						error: null,
-						...shuffleUpdate,
-					});
+					const startIdx = idx >= 0 ? idx : 0;
+					if (state.shuffle && queue.length > 1) {
+						const shuffled = shuffleAround(queue, startIdx);
+						set({
+							currentTrack: shuffled[0],
+							queue: shuffled,
+							queueIndex: 0,
+							isPlaying: true,
+							isBuffering: true,
+							currentTime: 0,
+							error: null,
+						});
+					} else {
+						set({
+							currentTrack: track,
+							queue,
+							queueIndex: startIdx,
+							isPlaying: true,
+							isBuffering: true,
+							currentTime: 0,
+							error: null,
+						});
+					}
 				} else if (state.currentTrack?.trackId === track.trackId) {
 					set({ isPlaying: true, error: null });
 				} else {
@@ -177,8 +189,6 @@ export const usePlayerStore = create<PlayerState>()(
 						isBuffering: true,
 						currentTime: 0,
 						error: null,
-						_shuffleOrder: [],
-						_shufflePos: 0,
 					});
 				}
 			},
@@ -194,53 +204,38 @@ export const usePlayerStore = create<PlayerState>()(
 				isPlaying: false, isBuffering: false,
 				currentTime: 0, duration: 0, buffered: 0, error: null,
 				fullscreenOpen: false, queuePanelOpen: false,
-				_shuffleOrder: [], _shufflePos: 0,
 				sleepTimerEnd: null,
 			}),
 
 			next: () => {
-				const { queue, queueIndex, shuffle, repeat, _shuffleOrder, _shufflePos } = get();
+				const { queue, queueIndex, shuffle, repeat } = get();
 				if (queue.length === 0) return;
 
-				let nextQueueIndex: number;
-
-				if (shuffle && _shuffleOrder.length > 0) {
-					const nextShufflePos = _shufflePos + 1;
-					if (nextShufflePos >= _shuffleOrder.length) {
-						if (repeat === "all") {
-							// Re-shuffle for the next cycle
-							const newOrder = buildShuffleOrder(queue.length, queueIndex);
-							nextQueueIndex = newOrder[0];
-							set({ _shuffleOrder: newOrder, _shufflePos: 0, ...goToIndex(nextQueueIndex, queue) });
-							return;
-						} else {
-							// Queue exhausted — close the player.
-							get().stop();
-							return;
-						}
-					}
-					nextQueueIndex = _shuffleOrder[nextShufflePos];
-					set({ _shufflePos: nextShufflePos, ...goToIndex(nextQueueIndex, queue) });
-					return;
-				}
-
-				// Sequential mode
-				nextQueueIndex = queueIndex + 1;
+				const nextQueueIndex = queueIndex + 1;
 				if (nextQueueIndex >= queue.length) {
 					if (repeat === "all") {
-						nextQueueIndex = 0;
-					} else {
-						// Queue exhausted — close the player.
-						get().stop();
+						if (shuffle && queue.length > 1) {
+							// Re-shuffle for the next cycle. Place the just-finished
+							// track at index 0 to avoid replaying it back-to-back.
+							const reshuffled = shuffleAround(queue, queue.length - 1);
+							// Now queueIndex moves to 1 (skip the just-played one at 0).
+							// But if the user explicitly hit next we should advance: jump to index 1.
+							set({ queue: reshuffled, ...goToIndex(1, reshuffled) });
+							return;
+						}
+						set(goToIndex(0, queue));
 						return;
 					}
+					// Queue exhausted — close the player.
+					get().stop();
+					return;
 				}
 
 				set(goToIndex(nextQueueIndex, queue));
 			},
 
 			prev: () => {
-				const { queue, queueIndex, currentTime, repeat, shuffle, _shuffleOrder, _shufflePos } = get();
+				const { queue, queueIndex, currentTime, repeat } = get();
 				if (queue.length === 0) return;
 
 				// If more than 3 seconds in, restart current track
@@ -249,23 +244,6 @@ export const usePlayerStore = create<PlayerState>()(
 					return;
 				}
 
-				if (shuffle && _shuffleOrder.length > 0) {
-					const prevShufflePos = _shufflePos - 1;
-					if (prevShufflePos < 0) {
-						if (repeat === "all") {
-							// Wrap to the end of shuffle order
-							const lastPos = _shuffleOrder.length - 1;
-							set({ _shufflePos: lastPos, ...goToIndex(_shuffleOrder[lastPos], queue) });
-						} else {
-							set({ currentTime: 0, _seekTo: 0 });
-						}
-						return;
-					}
-					set({ _shufflePos: prevShufflePos, ...goToIndex(_shuffleOrder[prevShufflePos], queue) });
-					return;
-				}
-
-				// Sequential mode
 				if (queueIndex === 0) {
 					if (repeat === "all") {
 						set(goToIndex(queue.length - 1, queue));
@@ -279,23 +257,8 @@ export const usePlayerStore = create<PlayerState>()(
 			},
 
 			prevTrack: () => {
-				const { queue, queueIndex, repeat, shuffle, _shuffleOrder, _shufflePos } = get();
+				const { queue, queueIndex, repeat } = get();
 				if (queue.length === 0) return;
-
-				if (shuffle && _shuffleOrder.length > 0) {
-					const prevShufflePos = _shufflePos - 1;
-					if (prevShufflePos < 0) {
-						if (repeat === "all") {
-							const lastPos = _shuffleOrder.length - 1;
-							set({ _shufflePos: lastPos, ...goToIndex(_shuffleOrder[lastPos], queue) });
-						} else {
-							set({ currentTime: 0, _seekTo: 0 });
-						}
-						return;
-					}
-					set({ _shufflePos: prevShufflePos, ...goToIndex(_shuffleOrder[prevShufflePos], queue) });
-					return;
-				}
 
 				if (queueIndex === 0) {
 					if (repeat === "all") {
@@ -348,16 +311,22 @@ export const usePlayerStore = create<PlayerState>()(
 			toggleShuffle: () => {
 				const { shuffle, queue, queueIndex } = get();
 				if (!shuffle) {
-					// Turning ON: build shuffle order starting from current track
-					if (queue.length <= 1) {
+					// Turning ON: shuffle the upcoming tracks. Played tracks and the
+					// current track keep their position so history stays coherent.
+					if (queue.length <= 1 || queueIndex < 0) {
 						set({ shuffle: true });
 						return;
 					}
-					const order = buildShuffleOrder(queue.length, queueIndex);
-					set({ shuffle: true, _shuffleOrder: order, _shufflePos: 0 });
+					const before = queue.slice(0, queueIndex + 1);
+					const after = queue.slice(queueIndex + 1);
+					set({
+						shuffle: true,
+						queue: [...before, ...shuffleArray(after)],
+					});
 				} else {
-					// Turning OFF: clear shuffle state, keep current track position
-					set({ shuffle: false, _shuffleOrder: [], _shufflePos: 0 });
+					// Turning OFF: keep the current queue order — don't try to restore
+					// the original order, which we no longer track.
+					set({ shuffle: false });
 				}
 			},
 
@@ -365,16 +334,9 @@ export const usePlayerStore = create<PlayerState>()(
 			setQueuePanelOpen: (queuePanelOpen) => set({ queuePanelOpen }),
 
 			jumpToIndex: (index) => {
-				const { queue, shuffle, _shuffleOrder } = get();
+				const { queue } = get();
 				if (index < 0 || index >= queue.length) return;
-				const update: Partial<PlayerState> = goToIndex(index, queue);
-				// Keep shuffle progression coherent: if the target index is in
-				// the shuffle order, snap _shufflePos to its position.
-				if (shuffle && _shuffleOrder.length > 0) {
-					const pos = _shuffleOrder.indexOf(index);
-					if (pos >= 0) update._shufflePos = pos;
-				}
-				set(update);
+				set(goToIndex(index, queue));
 			},
 
 			setSleepTimer: (minutes) => {
@@ -391,24 +353,32 @@ export const usePlayerStore = create<PlayerState>()(
 			playQueue: (queue, startIndex = 0) => {
 				if (queue.length === 0) return;
 				const { shuffle } = get();
-				const shuffleUpdate = shuffle
-					? { _shuffleOrder: buildShuffleOrder(queue.length, startIndex), _shufflePos: 0 }
-					: { _shuffleOrder: [] as number[], _shufflePos: 0 };
-				set({
-					queue,
-					queueIndex: startIndex,
-					currentTrack: queue[startIndex],
-					isPlaying: true,
-					isBuffering: true,
-					currentTime: 0,
-					...shuffleUpdate,
-				});
+				if (shuffle && queue.length > 1) {
+					const shuffled = shuffleAround(queue, startIndex);
+					set({
+						queue: shuffled,
+						queueIndex: 0,
+						currentTrack: shuffled[0],
+						isPlaying: true,
+						isBuffering: true,
+						currentTime: 0,
+					});
+				} else {
+					set({
+						queue,
+						queueIndex: startIndex,
+						currentTrack: queue[startIndex],
+						isPlaying: true,
+						isBuffering: true,
+						currentTime: 0,
+					});
+				}
 			},
 
 			// --- Queue Management (P2) ---
 
 			addNext: (track) => {
-				const { queue, queueIndex, shuffle, _shuffleOrder, _shufflePos } = get();
+				const { queue, queueIndex } = get();
 				// If nothing is playing, just start playing this track
 				if (queue.length === 0 || queueIndex < 0) {
 					get().play(track);
@@ -416,72 +386,33 @@ export const usePlayerStore = create<PlayerState>()(
 				}
 				// Avoid duplicates: remove existing occurrence first
 				const existingIdx = queue.findIndex((t) => t.trackId === track.trackId);
-				let newQueue = [...queue];
+				const newQueue = [...queue];
 				let newQueueIndex = queueIndex;
-				let newShuffleOrder = [..._shuffleOrder];
 
 				if (existingIdx >= 0 && existingIdx !== queueIndex) {
 					newQueue.splice(existingIdx, 1);
-					// Adjust queueIndex if removed track was before current
 					if (existingIdx < newQueueIndex) newQueueIndex--;
-					// Rebuild shuffle order if active
-					if (shuffle) {
-						newShuffleOrder = buildShuffleOrder(newQueue.length, newQueueIndex);
-					}
 				}
 
-				// Insert after current track
 				const insertAt = newQueueIndex + 1;
 				newQueue.splice(insertAt, 0, track);
 
-				if (shuffle && newShuffleOrder.length > 0) {
-					// Rebuild shuffle to include the new track
-					newShuffleOrder = buildShuffleOrder(newQueue.length, newQueueIndex);
-					// Ensure the new track is next in shuffle order
-					const newTrackIdx = insertAt;
-					const posInShuffle = newShuffleOrder.indexOf(newTrackIdx);
-					const nextPos = _shufflePos + 1;
-					if (posInShuffle >= 0 && posInShuffle !== nextPos && nextPos < newShuffleOrder.length) {
-						[newShuffleOrder[nextPos], newShuffleOrder[posInShuffle]] =
-							[newShuffleOrder[posInShuffle], newShuffleOrder[nextPos]];
-					}
-				}
-
-				set({
-					queue: newQueue,
-					queueIndex: newQueueIndex,
-					_shuffleOrder: newShuffleOrder,
-					_shufflePos: shuffle ? _shufflePos : 0,
-				});
+				set({ queue: newQueue, queueIndex: newQueueIndex });
 			},
 
 			addToQueue: (track) => {
-				const { queue, queueIndex, shuffle, _shuffleOrder, _shufflePos } = get();
+				const { queue, queueIndex } = get();
 				if (queue.length === 0 || queueIndex < 0) {
 					get().play(track);
 					return;
 				}
-				// Avoid duplicates in queue
 				if (queue.some((t) => t.trackId === track.trackId)) return;
-
-				const newQueue = [...queue, track];
-				let newShuffleOrder = _shuffleOrder;
-
-				if (shuffle) {
-					// Add the new index at a random position after current shuffle position
-					newShuffleOrder = [..._shuffleOrder];
-					const newIdx = newQueue.length - 1;
-					const insertAfter = _shufflePos + 1 + Math.floor(Math.random() * (newShuffleOrder.length - _shufflePos));
-					newShuffleOrder.splice(insertAfter, 0, newIdx);
-				}
-
-				set({ queue: newQueue, _shuffleOrder: newShuffleOrder });
+				set({ queue: [...queue, track] });
 			},
 
 			removeFromQueue: (index) => {
-				const { queue, queueIndex, shuffle, _shuffleOrder, _shufflePos } = get();
+				const { queue, queueIndex } = get();
 				if (index < 0 || index >= queue.length) return;
-				// Don't remove the currently playing track
 				if (index === queueIndex) return;
 
 				const newQueue = [...queue];
@@ -490,38 +421,21 @@ export const usePlayerStore = create<PlayerState>()(
 				let newQueueIndex = queueIndex;
 				if (index < queueIndex) newQueueIndex--;
 
-				let newShuffleOrder: number[] = [];
-				let newShufflePos = _shufflePos;
-				if (shuffle && _shuffleOrder.length > 0) {
-					// Remove the index from shuffle order and adjust all indices > removed
-					newShuffleOrder = _shuffleOrder
-						.filter((i) => i !== index)
-						.map((i) => (i > index ? i - 1 : i));
-					// Adjust shuffle position if the removed entry was before current pos
-					const removedPos = _shuffleOrder.indexOf(index);
-					if (removedPos >= 0 && removedPos < _shufflePos) {
-						newShufflePos--;
-					}
-				}
-
 				set({
 					queue: newQueue,
 					queueIndex: newQueueIndex,
 					currentTrack: newQueue[newQueueIndex],
-					_shuffleOrder: newShuffleOrder,
-					_shufflePos: newShufflePos,
 				});
 			},
 
 			moveInQueue: (from, to) => {
-				const { queue, queueIndex, shuffle, _shuffleOrder, _shufflePos } = get();
+				const { queue, queueIndex } = get();
 				if (from === to || from < 0 || to < 0 || from >= queue.length || to >= queue.length) return;
 
 				const newQueue = [...queue];
 				const [moved] = newQueue.splice(from, 1);
 				newQueue.splice(to, 0, moved);
 
-				// Adjust queueIndex to follow the current track
 				let newQueueIndex = queueIndex;
 				if (from === queueIndex) {
 					newQueueIndex = to;
@@ -531,28 +445,19 @@ export const usePlayerStore = create<PlayerState>()(
 					newQueueIndex++;
 				}
 
-				// Rebuild shuffle order since indices shifted
-				const newShuffleOrder = shuffle
-					? buildShuffleOrder(newQueue.length, newQueueIndex)
-					: _shuffleOrder;
-
 				set({
 					queue: newQueue,
 					queueIndex: newQueueIndex,
 					currentTrack: newQueue[newQueueIndex],
-					_shuffleOrder: newShuffleOrder,
-					_shufflePos: shuffle ? 0 : _shufflePos,
 				});
 			},
 
 			clearQueue: () => {
-				const { currentTrack, queueIndex, queue } = get();
+				const { currentTrack, queue } = get();
 				if (!currentTrack || queue.length <= 1) return;
 				set({
 					queue: [currentTrack],
 					queueIndex: 0,
-					_shuffleOrder: [],
-					_shufflePos: 0,
 				});
 			},
 		}),
@@ -568,8 +473,6 @@ export const usePlayerStore = create<PlayerState>()(
 				queue: state.queue,
 				queueIndex: state.queueIndex,
 				currentTrack: state.currentTrack,
-				_shuffleOrder: state._shuffleOrder,
-				_shufflePos: state._shufflePos,
 				playbackRate: state.playbackRate,
 				crossfadeDuration: state.crossfadeDuration,
 				normalizationEnabled: state.normalizationEnabled,

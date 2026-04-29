@@ -1,11 +1,11 @@
 "use client";
 
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence, Reorder } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
-import { Reorder } from "motion/react";
 import { GripVertical, X, Trash2, ListMusic } from "lucide-react";
 import { PlaybackIndicator } from "./PlaybackIndicator";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,30 @@ export function QueuePanel() {
 	const moveInQueue = usePlayerStore((s) => s.moveInQueue);
 	const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
 	const clearQueue = usePlayerStore((s) => s.clearQueue);
+	const currentTrack = usePlayerStore((s) => s.currentTrack);
+
+	const [isDesktop, setIsDesktop] = useState(() =>
+		typeof window !== "undefined" &&
+		window.matchMedia("(min-width: 768px)").matches
+	);
+	useEffect(() => {
+		const mq = window.matchMedia("(min-width: 768px)");
+		const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+		mq.addEventListener("change", handler);
+		return () => mq.removeEventListener("change", handler);
+	}, []);
+
+	// Close on Escape — match LyricsPanel ergonomics
+	useEffect(() => {
+		if (!open) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") setOpen(false);
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [open, setOpen]);
+
+	if (!currentTrack) return null;
 
 	const current = queueIndex >= 0 ? queue[queueIndex] : null;
 	const played = queueIndex > 0 ? queue.slice(0, queueIndex) : [];
@@ -49,33 +73,58 @@ export function QueuePanel() {
 		totalCount === 0
 			? ""
 			: totalCount === 1
-				? "1 track"
-				: `${totalCount} tracks`;
+				? "1 TRACK"
+				: `${totalCount} TRACKS`;
 
 	return (
-		<Sheet open={open} onOpenChange={setOpen}>
-			<SheetContent
-				side="right"
-				className="z-[70] flex flex-col p-0 sm:max-w-md w-full"
-				showCloseButton={false}
-			>
-				<SheetHeader className="flex-row items-center justify-between gap-2 border-b-[3px] border-foreground bg-card px-4 py-3 space-y-0">
-					<div className="flex items-center gap-2 min-w-0">
-						<ListMusic className="h-4 w-4 shrink-0 text-foreground" />
-						<div className="min-w-0">
-							<SheetTitle className="text-sm">Up Next</SheetTitle>
-							{subtitle && (
-								<p className="text-[10px] font-mono text-muted-foreground tracking-wider uppercase">
-									{subtitle}
-								</p>
-							)}
+		<AnimatePresence>
+			{open && (
+				<motion.aside
+					key="queue-panel"
+					initial={isDesktop ? { x: 440, opacity: 0 } : { y: "100%", opacity: 0 }}
+					animate={isDesktop ? { x: 0, opacity: 1 } : { y: 0, opacity: 1 }}
+					exit={isDesktop ? { x: 440, opacity: 0 } : { y: "100%", opacity: 0 }}
+					transition={{ type: "spring", damping: 28, stiffness: 280 }}
+					role="region"
+					aria-label="Queue"
+					className="fixed z-40 flex flex-col bg-card border-foreground shadow-[-8px_0_0_rgba(13,13,13,0.06)]
+						inset-x-0 bottom-[96px] top-[calc(env(safe-area-inset-top,0px)+4px)] border-l-0 border-t-[3px]
+						md:inset-auto md:top-0 md:right-0 md:bottom-[96px] md:w-[420px] md:border-l-[3px] md:border-t-0"
+				>
+					{/* Header */}
+					<div className="flex items-center gap-3 px-[18px] py-3.5 border-b-[3px] border-foreground bg-background">
+						<div className="flex h-11 w-11 shrink-0 items-center justify-center border-2 border-foreground bg-primary text-white">
+							<ListMusic className="h-5 w-5" />
 						</div>
+						<div className="flex-1 min-w-0">
+							<p className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-muted-foreground">
+								UP NEXT · QUEUE
+							</p>
+							<p className="text-[14px] font-extrabold tracking-[-0.01em] truncate leading-tight mt-0.5">
+								{currentTrack.title}
+							</p>
+							<p className="text-[11px] font-mono text-muted-foreground truncate mt-0.5">
+								{currentTrack.artist}
+							</p>
+						</div>
+						<button
+							onClick={() => setOpen(false)}
+							aria-label="Close queue"
+							className="w-8 h-8 border-2 border-foreground bg-card hover:bg-accent flex items-center justify-center font-mono text-base font-extrabold leading-none shrink-0 transition-colors"
+						>
+							×
+						</button>
 					</div>
-					<div className="flex items-center gap-1 shrink-0">
+
+					{/* Stats strip — matches LyricsPanel "progress strip" */}
+					<div className="flex justify-between items-center px-[18px] py-2 border-b-2 border-foreground bg-card font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+						<span>
+							{subtitle}
+							{shuffle && " · SHUFFLED"}
+						</span>
 						{queue.length > 1 && (
-							<Button
-								variant="ghost"
-								size="sm"
+							<button
+								type="button"
 								onClick={() => {
 									const removed = queue.length - 1;
 									clearQueue();
@@ -84,108 +133,105 @@ export function QueuePanel() {
 										{ duration: 3000 }
 									);
 								}}
-								className="h-7 px-2 text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive"
+								className="flex items-center gap-1 hover:text-destructive transition-colors"
 								aria-label="Clear queue"
 							>
-								<Trash2 className="h-3 w-3 mr-1" />
-								Clear
-							</Button>
+								<Trash2 className="h-3 w-3" />
+								CLEAR
+							</button>
 						)}
-						<Button
-							variant="ghost"
-							size="icon"
-							aria-label="Close queue"
-							className="h-7 w-7"
-							onClick={() => setOpen(false)}
-						>
-							<X className="h-4 w-4" />
-						</Button>
 					</div>
-				</SheetHeader>
 
-				<ScrollArea className="flex-1">
-					<div className="px-3 py-4 space-y-5">
-						{/* Now Playing */}
-						{current && (
-							<section>
-								<SectionLabel>Now Playing</SectionLabel>
-								<QueueRow
-									track={current}
-									active
-									isPlaying={isPlaying}
-								/>
-							</section>
-						)}
+					{/* Body */}
+					<ScrollArea className="flex-1 min-h-0 bg-card">
+						<div className="px-3 py-4 space-y-5">
+							{current && (
+								<section>
+									<SectionLabel>Now Playing</SectionLabel>
+									<QueueRow
+										track={current}
+										active
+										isPlaying={isPlaying}
+									/>
+								</section>
+							)}
 
-						{/* Up Next */}
-						{upNext.length > 0 && (
-							<section>
-								<SectionLabel>
-									Up Next
-									{shuffle && (
-										<span className="ml-2 text-[9px] text-muted-foreground tracking-normal normal-case font-normal">
-											· playback in shuffled order
-										</span>
-									)}
-								</SectionLabel>
-								<Reorder.Group
-									axis="y"
-									values={upNext.map((t) => t.trackId)}
-									onReorder={handleReorder}
-									className="flex flex-col gap-1"
-								>
-									{upNext.map((track, i) => (
-										<Reorder.Item
-											key={track.trackId}
-											value={track.trackId}
-											className="cursor-grab active:cursor-grabbing"
-										>
+							{upNext.length > 0 && (
+								<section>
+									<SectionLabel>
+										Up Next
+										{shuffle && (
+											<span className="ml-2 text-[9px] text-muted-foreground tracking-normal normal-case font-normal">
+												· playback in shuffled order
+											</span>
+										)}
+									</SectionLabel>
+									<Reorder.Group
+										axis="y"
+										values={upNext.map((t) => t.trackId)}
+										onReorder={handleReorder}
+										className="flex flex-col gap-1"
+									>
+										{upNext.map((track, i) => (
+											<Reorder.Item
+												key={track.trackId}
+												value={track.trackId}
+												className="cursor-grab active:cursor-grabbing"
+											>
+												<QueueRow
+													track={track}
+													onJump={() => jumpToIndex(queueIndex + 1 + i)}
+													onRemove={() => removeFromQueue(queueIndex + 1 + i)}
+													showHandle
+												/>
+											</Reorder.Item>
+										))}
+									</Reorder.Group>
+								</section>
+							)}
+
+							{played.length > 0 && (
+								<section>
+									<SectionLabel className="text-muted-foreground">
+										Played
+									</SectionLabel>
+									<div className="flex flex-col gap-1">
+										{played.map((track, i) => (
 											<QueueRow
+												key={`played-${i}-${track.trackId}`}
 												track={track}
-												onJump={() => jumpToIndex(queueIndex + 1 + i)}
-												onRemove={() => removeFromQueue(queueIndex + 1 + i)}
-												showHandle
+												onJump={() => jumpToIndex(i)}
+												muted
 											/>
-										</Reorder.Item>
-									))}
-								</Reorder.Group>
-							</section>
-						)}
+										))}
+									</div>
+								</section>
+							)}
 
-						{/* Played */}
-						{played.length > 0 && (
-							<section>
-								<SectionLabel className="text-muted-foreground">
-									Played
-								</SectionLabel>
-								<div className="flex flex-col gap-1">
-									{played.map((track, i) => (
-										<QueueRow
-											key={`played-${i}-${track.trackId}`}
-											track={track}
-											onJump={() => jumpToIndex(i)}
-											muted
-										/>
-									))}
+							{queue.length <= 1 && (
+								<div className="text-center py-12 text-sm text-muted-foreground">
+									<ListMusic className="h-8 w-8 mx-auto mb-3 opacity-30" />
+									<p className="font-bold uppercase tracking-wider text-[11px]">
+										Nothing up next
+									</p>
+									<p className="mt-1 text-[11px]">
+										Add tracks to fill your queue.
+									</p>
 								</div>
-							</section>
-						)}
+							)}
+						</div>
+					</ScrollArea>
 
-						{queue.length === 0 && (
-							<div className="text-center py-16 text-sm text-muted-foreground">
-								<ListMusic className="h-8 w-8 mx-auto mb-3 opacity-30" />
-								<p className="font-bold uppercase tracking-wider text-[11px]">
-									Queue is empty
-								</p>
-								<p className="mt-1 text-[11px]">
-									Play a track to start your queue.
-								</p>
-							</div>
-						)}
+					{/* Footer — mirrors LyricsPanel */}
+					<div className="px-[18px] py-2.5 border-t-2 border-foreground bg-foreground text-background flex justify-between items-center font-mono text-[10px] font-bold uppercase tracking-[0.14em]">
+						<span>
+							{upNext.length} UP · {played.length} PLAYED
+						</span>
+						<span className="opacity-70">DRAG TO REORDER</span>
 					</div>
-				</ScrollArea>
-			</SheetContent>
-		</Sheet>
+				</motion.aside>
+			)}
+		</AnimatePresence>
 	);
 }
 
