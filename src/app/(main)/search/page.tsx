@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { fetchData, postToServer } from "@/utils/api";
+import { fetchData } from "@/utils/api";
 import Link from "next/link";
 import {
 	Tabs,
@@ -17,23 +17,21 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type {
 	SuggestAlbum,
 	SuggestArtist,
-	SuggestTrackOut,
-	ResolvedMatch,
-} from "@/lib/spotify";
+	SuggestTrack,
+} from "@/lib/deezer/suggest";
 
 const SUGGEST_DEBOUNCE_MS = 200;
 const MIN_SUGGEST_LENGTH = 2;
 
 interface SuggestResponse {
-	tracks: SuggestTrackOut[];
+	tracks: SuggestTrack[];
 	albums: SuggestAlbum[];
 	artists: SuggestArtist[];
-	source: "spotify";
-	unavailable?: string;
+	source: "deezer";
 }
 
 type SuggestRow =
-	| { kind: "track"; data: SuggestTrackOut }
+	| { kind: "track"; data: SuggestTrack }
 	| { kind: "album"; data: SuggestAlbum }
 	| { kind: "artist"; data: SuggestArtist };
 
@@ -58,7 +56,6 @@ function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 	const [open, setOpen] = useState(false);
 	const [data, setData] = useState<SuggestResponse | null>(null);
 	const [loading, setLoading] = useState(false);
-	const [resolving, setResolving] = useState(false);
 	const [activeIdx, setActiveIdx] = useState(-1);
 
 	useEffect(() => {
@@ -127,57 +124,20 @@ function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 		[router]
 	);
 
-	const resolveAndNavigateTrack = useCallback(
-		async (t: SuggestTrackOut) => {
-			if (t.deezerTrackId) {
-				router.push(`/track?id=${t.deezerTrackId}`);
-				setOpen(false);
-				return;
-			}
-			setResolving(true);
-			try {
-				const resolved = (await postToServer("search/resolve", {
-					source: t.source,
-					sourceId: t.sourceId,
-					hint: {
-						spotifyId: t.sourceId,
-						title: t.title,
-						artists: t.artists,
-						album: t.album,
-						albumId: t.albumId,
-						durationMs: t.durationMs,
-						isrc: t.isrc,
-						coverUrl: t.coverUrl,
-					},
-				})) as ResolvedMatch;
-				if (resolved.deezerTrackId) {
-					router.push(`/track?id=${resolved.deezerTrackId}`);
-					setOpen(false);
-				} else {
-					goFullSearch(`${t.title} ${t.artists[0] ?? ""}`);
-				}
-			} catch {
-				goFullSearch(`${t.title} ${t.artists[0] ?? ""}`);
-			} finally {
-				setResolving(false);
-			}
-		},
-		[router, goFullSearch]
-	);
-
 	const onSelectRow = useCallback(
 		(row: SuggestRow) => {
 			if (row.kind === "track") {
-				resolveAndNavigateTrack(row.data);
+				router.push(`/track?id=${row.data.deezerTrackId}`);
+				setOpen(false);
 			} else if (row.kind === "album") {
-				// Album/artist matching is best-effort; route through full text
-				// search so the user can pick from Deezer-side results.
-				goFullSearch(`${row.data.title} ${row.data.artists[0] ?? ""}`);
+				router.push(`/album?id=${row.data.deezerAlbumId}`);
+				setOpen(false);
 			} else {
-				goFullSearch(row.data.name);
+				router.push(`/artist?id=${row.data.deezerArtistId}`);
+				setOpen(false);
 			}
 		},
-		[resolveAndNavigateTrack, goFullSearch]
+		[router]
 	);
 
 	const submit = useCallback(
@@ -275,7 +235,6 @@ function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 						data={data}
 						rows={rows}
 						loading={loading}
-						resolving={resolving}
 						activeIdx={activeIdx}
 						onHover={setActiveIdx}
 						onSelect={onSelectRow}
@@ -295,7 +254,6 @@ interface DropdownProps {
 	data: SuggestResponse | null;
 	rows: SuggestRow[];
 	loading: boolean;
-	resolving: boolean;
 	activeIdx: number;
 	onHover: (idx: number) => void;
 	onSelect: (row: SuggestRow) => void;
@@ -305,7 +263,6 @@ function SuggestDropdown({
 	data,
 	rows,
 	loading,
-	resolving,
 	activeIdx,
 	onHover,
 	onSelect,
@@ -324,16 +281,6 @@ function SuggestDropdown({
 		);
 	}
 
-	if (data?.unavailable === "not_configured") {
-		return (
-			<div className={shellClass}>
-				<div className="px-4 py-3 text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-muted-foreground">
-					Press <kbd className="font-mono font-black text-foreground">Enter</kbd> to search Deezer.
-				</div>
-			</div>
-		);
-	}
-
 	if (!data || rows.length === 0) {
 		return (
 			<div className={shellClass}>
@@ -347,13 +294,6 @@ function SuggestDropdown({
 	let cursor = 0;
 	return (
 		<div className={shellClass}>
-			{resolving && (
-				<div className="flex items-center gap-2 border-b-2 border-foreground bg-accent/40 px-4 py-1.5 text-[10px] font-mono font-black uppercase tracking-[0.14em]">
-					<Loader2 className="h-3 w-3 animate-spin" />
-					Matching to Deezer…
-				</div>
-			)}
-
 			{data.tracks.length > 0 && (
 				<DropdownSection title="Tracks" icon={<Music className="h-3 w-3" />}>
 					{data.tracks.map((t) => {
@@ -471,7 +411,7 @@ function DropdownTrackRow({
 	onMouseEnter,
 	onClick,
 }: {
-	track: SuggestTrackOut;
+	track: SuggestTrack;
 	active: boolean;
 	onMouseEnter: () => void;
 	onClick: () => void;
@@ -485,11 +425,6 @@ function DropdownTrackRow({
 					{track.artists.join(", ")}
 				</div>
 			</div>
-			{!track.matched && (
-				<span className="shrink-0 border-2 border-foreground px-1.5 py-0.5 text-[9px] font-mono font-black uppercase tracking-[0.14em] text-muted-foreground">
-					Match
-				</span>
-			)}
 		</DropdownRowShell>
 	);
 }
@@ -534,11 +469,6 @@ function DropdownArtistRow({
 			<DropdownCover src={artist.imageUrl} alt={artist.name} rounded />
 			<div className="min-w-0 flex-1">
 				<div className="truncate text-sm font-bold text-foreground">{artist.name}</div>
-				{artist.genres.length > 0 && (
-					<div className="truncate text-[11px] font-mono text-muted-foreground">
-						{artist.genres.slice(0, 2).join(" · ")}
-					</div>
-				)}
 			</div>
 		</DropdownRowShell>
 	);
