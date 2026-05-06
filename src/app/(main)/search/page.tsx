@@ -1,18 +1,41 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { fetchData } from "@/utils/api";
+import { fetchData, postToServer } from "@/utils/api";
 import Link from "next/link";
 import {
 	Tabs,
 	TabsContent,
 } from "@/components/ui/tabs";
-import { Search, X, Loader2, CheckCircle2 } from "lucide-react";
+import { Search, X, Loader2, CheckCircle2, Music, Disc, User as UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { CoverImage } from "@/components/ui/cover-image";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import type {
+	SuggestAlbum,
+	SuggestArtist,
+	SuggestTrackOut,
+	ResolvedMatch,
+} from "@/lib/spotify";
+
+const SUGGEST_DEBOUNCE_MS = 200;
+const MIN_SUGGEST_LENGTH = 2;
+
+interface SuggestResponse {
+	tracks: SuggestTrackOut[];
+	albums: SuggestAlbum[];
+	artists: SuggestArtist[];
+	source: "spotify";
+	unavailable?: string;
+}
+
+type SuggestRow =
+	| { kind: "track"; data: SuggestTrackOut }
+	| { kind: "album"; data: SuggestAlbum }
+	| { kind: "artist"; data: SuggestArtist };
 
 function parseDeezerLink(url: string): { type: string; id: string } | null {
 	const trackMatch = url.match(/\/track\/(\d+)/);
@@ -29,74 +52,495 @@ function parseDeezerLink(url: string): { type: string; id: string } | null {
 function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 	const router = useRouter();
 	const inputRef = useRef<HTMLInputElement>(null);
+	const containerRef = useRef<HTMLDivElement>(null);
 	const [q, setQ] = useState(initialTerm);
+
+	const [open, setOpen] = useState(false);
+	const [data, setData] = useState<SuggestResponse | null>(null);
+	const [loading, setLoading] = useState(false);
+	const [resolving, setResolving] = useState(false);
+	const [activeIdx, setActiveIdx] = useState(-1);
 
 	useEffect(() => {
 		setQ(initialTerm);
 	}, [initialTerm]);
 
-	const submit = useCallback(
-		(e?: React.FormEvent) => {
-			e?.preventDefault();
-			const v = q.trim();
+	const debounced = useDebouncedValue(q, SUGGEST_DEBOUNCE_MS);
+
+	// Fetch Spotify suggestions on debounced typing.
+	useEffect(() => {
+		const t = debounced.trim();
+		if (t.length < MIN_SUGGEST_LENGTH) {
+			setData(null);
+			setLoading(false);
+			return;
+		}
+		if (parseDeezerLink(t)) {
+			// User pasted a link — let the submit handler take it.
+			setData(null);
+			setLoading(false);
+			return;
+		}
+
+		let cancelled = false;
+		setLoading(true);
+		fetchData("search/suggest", { term: t })
+			.then((res: SuggestResponse) => {
+				if (cancelled) return;
+				setData(res);
+				setActiveIdx(-1);
+			})
+			.catch(() => {
+				if (!cancelled) setData(null);
+			})
+			.finally(() => {
+				if (!cancelled) setLoading(false);
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [debounced]);
+
+	const rows = useMemo<SuggestRow[]>(() => {
+		if (!data) return [];
+		return [
+			...data.tracks.map((d) => ({ kind: "track" as const, data: d })),
+			...data.albums.map((d) => ({ kind: "album" as const, data: d })),
+			...data.artists.map((d) => ({ kind: "artist" as const, data: d })),
+		];
+	}, [data]);
+
+	const goFullSearch = useCallback(
+		(value: string) => {
+			const v = value.trim();
 			if (!v) return;
 			const link = parseDeezerLink(v);
 			if (link) {
 				router.push(`/${link.type}?id=${link.id}`);
 				setQ("");
+			} else {
+				router.push(`/search?term=${encodeURIComponent(v)}`);
+			}
+			setOpen(false);
+		},
+		[router]
+	);
+
+	const resolveAndNavigateTrack = useCallback(
+		async (t: SuggestTrackOut) => {
+			if (t.deezerTrackId) {
+				router.push(`/track?id=${t.deezerTrackId}`);
+				setOpen(false);
 				return;
 			}
-			router.push(`/search?term=${encodeURIComponent(v)}`);
+			setResolving(true);
+			try {
+				const resolved = (await postToServer("search/resolve", {
+					source: t.source,
+					sourceId: t.sourceId,
+					hint: {
+						spotifyId: t.sourceId,
+						title: t.title,
+						artists: t.artists,
+						album: t.album,
+						albumId: t.albumId,
+						durationMs: t.durationMs,
+						isrc: t.isrc,
+						coverUrl: t.coverUrl,
+					},
+				})) as ResolvedMatch;
+				if (resolved.deezerTrackId) {
+					router.push(`/track?id=${resolved.deezerTrackId}`);
+					setOpen(false);
+				} else {
+					goFullSearch(`${t.title} ${t.artists[0] ?? ""}`);
+				}
+			} catch {
+				goFullSearch(`${t.title} ${t.artists[0] ?? ""}`);
+			} finally {
+				setResolving(false);
+			}
 		},
-		[q, router]
+		[router, goFullSearch]
 	);
+
+	const onSelectRow = useCallback(
+		(row: SuggestRow) => {
+			if (row.kind === "track") {
+				resolveAndNavigateTrack(row.data);
+			} else if (row.kind === "album") {
+				// Album/artist matching is best-effort; route through full text
+				// search so the user can pick from Deezer-side results.
+				goFullSearch(`${row.data.title} ${row.data.artists[0] ?? ""}`);
+			} else {
+				goFullSearch(row.data.name);
+			}
+		},
+		[resolveAndNavigateTrack, goFullSearch]
+	);
+
+	const submit = useCallback(
+		(e?: React.FormEvent) => {
+			e?.preventDefault();
+			if (open && activeIdx >= 0 && rows[activeIdx]) {
+				onSelectRow(rows[activeIdx]);
+				return;
+			}
+			goFullSearch(q);
+		},
+		[open, activeIdx, rows, q, onSelectRow, goFullSearch]
+	);
+
+	const handleKeyDown = useCallback(
+		(e: React.KeyboardEvent<HTMLInputElement>) => {
+			if (!open || rows.length === 0) return;
+			if (e.key === "ArrowDown") {
+				e.preventDefault();
+				setActiveIdx((i) => (i + 1) % rows.length);
+			} else if (e.key === "ArrowUp") {
+				e.preventDefault();
+				setActiveIdx((i) => (i <= 0 ? rows.length - 1 : i - 1));
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				setOpen(false);
+			}
+		},
+		[open, rows.length]
+	);
+
+	// Close dropdown on outside click.
+	useEffect(() => {
+		const onClick = (ev: MouseEvent) => {
+			if (!containerRef.current?.contains(ev.target as Node)) setOpen(false);
+		};
+		window.addEventListener("mousedown", onClick);
+		return () => window.removeEventListener("mousedown", onClick);
+	}, []);
+
+	const showDropdown = open && q.trim().length >= MIN_SUGGEST_LENGTH;
 
 	return (
 		<div>
 			<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
 				SEARCH / DEEZER
 			</p>
-			<form onSubmit={submit} className="flex items-stretch">
-				{/* Input box */}
-				<div className="flex-1 flex items-center px-4 sm:px-5 border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] min-w-0">
-					<Search className="size-5 shrink-0 text-foreground" />
-					<input
-						ref={inputRef}
-						value={q}
-						onChange={(e) => setQ(e.target.value)}
-						placeholder="ARTIST, TRACK, ALBUM, OR DEEZER LINK…"
-						autoComplete="off"
-						autoCorrect="off"
-						autoCapitalize="off"
-						spellCheck={false}
-						className="flex-1 min-w-0 bg-transparent border-0 outline-none px-3 py-3.5 sm:py-4 text-base sm:text-lg font-bold tracking-[-0.01em] text-foreground placeholder:text-muted-foreground/60 placeholder:tracking-[0.05em] placeholder:text-sm placeholder:font-bold placeholder:uppercase"
-					/>
-					{q && (
-						<button
-							type="button"
-							aria-label="Clear search"
-							onClick={() => {
-								setQ("");
-								inputRef.current?.focus();
+			<div ref={containerRef} className="relative">
+				<form onSubmit={submit} className="flex items-stretch">
+					{/* Input box */}
+					<div className="flex-1 flex items-center px-4 sm:px-5 border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] min-w-0">
+						<Search className="size-5 shrink-0 text-foreground" />
+						<input
+							ref={inputRef}
+							value={q}
+							onChange={(e) => {
+								setQ(e.target.value);
+								setOpen(true);
 							}}
-							className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-						>
-							<X className="size-4" />
-						</button>
-					)}
-				</div>
-				{/* GO button */}
-				<button
-					type="submit"
-					className="shrink-0 px-5 sm:px-7 border-2 sm:border-[3px] border-l-0 sm:border-l-0 border-foreground bg-primary text-white font-mono text-sm sm:text-base font-black tracking-[0.14em] uppercase shadow-[var(--shadow-brutal)] hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)]"
-				>
-					GO
-				</button>
-			</form>
+							onFocus={() => setOpen(true)}
+							onKeyDown={handleKeyDown}
+							placeholder="ARTIST, TRACK, ALBUM, OR DEEZER LINK…"
+							autoComplete="off"
+							autoCorrect="off"
+							autoCapitalize="off"
+							spellCheck={false}
+							className="flex-1 min-w-0 bg-transparent border-0 outline-none px-3 py-3.5 sm:py-4 text-base sm:text-lg font-bold tracking-[-0.01em] text-foreground placeholder:text-muted-foreground/60 placeholder:tracking-[0.05em] placeholder:text-sm placeholder:font-bold placeholder:uppercase"
+						/>
+						{q && (
+							<button
+								type="button"
+								aria-label="Clear search"
+								onClick={() => {
+									setQ("");
+									setOpen(false);
+									inputRef.current?.focus();
+								}}
+								className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+							>
+								<X className="size-4" />
+							</button>
+						)}
+					</div>
+					{/* GO button */}
+					<button
+						type="submit"
+						className="shrink-0 px-5 sm:px-7 border-2 sm:border-[3px] border-l-0 sm:border-l-0 border-foreground bg-primary text-white font-mono text-sm sm:text-base font-black tracking-[0.14em] uppercase shadow-[var(--shadow-brutal)] hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)]"
+					>
+						GO
+					</button>
+				</form>
+
+				{showDropdown && (
+					<SuggestDropdown
+						data={data}
+						rows={rows}
+						loading={loading}
+						resolving={resolving}
+						activeIdx={activeIdx}
+						onHover={setActiveIdx}
+						onSelect={onSelectRow}
+					/>
+				)}
+			</div>
 			<p className="mt-2 text-[10px] font-mono font-bold uppercase tracking-[0.05em] text-muted-foreground">
 				TIP — PASTE A DEEZER URL TO QUEUE AN ENTIRE ALBUM OR PLAYLIST.
 			</p>
 		</div>
+	);
+}
+
+// ─── Suggestion dropdown (brutalist) ────────────────────────────────────────
+
+interface DropdownProps {
+	data: SuggestResponse | null;
+	rows: SuggestRow[];
+	loading: boolean;
+	resolving: boolean;
+	activeIdx: number;
+	onHover: (idx: number) => void;
+	onSelect: (row: SuggestRow) => void;
+}
+
+function SuggestDropdown({
+	data,
+	rows,
+	loading,
+	resolving,
+	activeIdx,
+	onHover,
+	onSelect,
+}: DropdownProps) {
+	const shellClass =
+		"absolute left-0 right-0 top-full z-50 mt-2 max-h-[70vh] overflow-y-auto border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)]";
+
+	if (loading && !data) {
+		return (
+			<div className={shellClass}>
+				<div className="flex items-center gap-2 px-4 py-3 text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-muted-foreground">
+					<Loader2 className="h-3.5 w-3.5 animate-spin" />
+					Searching…
+				</div>
+			</div>
+		);
+	}
+
+	if (data?.unavailable === "not_configured") {
+		return (
+			<div className={shellClass}>
+				<div className="px-4 py-3 text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-muted-foreground">
+					Press <kbd className="font-mono font-black text-foreground">Enter</kbd> to search Deezer.
+				</div>
+			</div>
+		);
+	}
+
+	if (!data || rows.length === 0) {
+		return (
+			<div className={shellClass}>
+				<div className="px-4 py-3 text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-muted-foreground">
+					No matches.
+				</div>
+			</div>
+		);
+	}
+
+	let cursor = 0;
+	return (
+		<div className={shellClass}>
+			{resolving && (
+				<div className="flex items-center gap-2 border-b-2 border-foreground bg-accent/40 px-4 py-1.5 text-[10px] font-mono font-black uppercase tracking-[0.14em]">
+					<Loader2 className="h-3 w-3 animate-spin" />
+					Matching to Deezer…
+				</div>
+			)}
+
+			{data.tracks.length > 0 && (
+				<DropdownSection title="Tracks" icon={<Music className="h-3 w-3" />}>
+					{data.tracks.map((t) => {
+						const idx = cursor++;
+						return (
+							<DropdownTrackRow
+								key={`t-${t.sourceId}`}
+								track={t}
+								active={idx === activeIdx}
+								onMouseEnter={() => onHover(idx)}
+								onClick={() => onSelect({ kind: "track", data: t })}
+							/>
+						);
+					})}
+				</DropdownSection>
+			)}
+
+			{data.albums.length > 0 && (
+				<DropdownSection title="Albums" icon={<Disc className="h-3 w-3" />}>
+					{data.albums.map((a) => {
+						const idx = cursor++;
+						return (
+							<DropdownAlbumRow
+								key={`a-${a.sourceId}`}
+								album={a}
+								active={idx === activeIdx}
+								onMouseEnter={() => onHover(idx)}
+								onClick={() => onSelect({ kind: "album", data: a })}
+							/>
+						);
+					})}
+				</DropdownSection>
+			)}
+
+			{data.artists.length > 0 && (
+				<DropdownSection title="Artists" icon={<UserIcon className="h-3 w-3" />}>
+					{data.artists.map((a) => {
+						const idx = cursor++;
+						return (
+							<DropdownArtistRow
+								key={`r-${a.sourceId}`}
+								artist={a}
+								active={idx === activeIdx}
+								onMouseEnter={() => onHover(idx)}
+								onClick={() => onSelect({ kind: "artist", data: a })}
+							/>
+						);
+					})}
+				</DropdownSection>
+			)}
+		</div>
+	);
+}
+
+function DropdownSection({
+	title,
+	icon,
+	children,
+}: {
+	title: string;
+	icon: React.ReactNode;
+	children: React.ReactNode;
+}) {
+	return (
+		<div>
+			<div className="flex items-center gap-1.5 border-b-2 border-foreground bg-muted/60 px-4 py-1.5 text-[10px] font-mono font-black uppercase tracking-[0.14em] text-foreground">
+				{icon}
+				{title}
+			</div>
+			<div>{children}</div>
+		</div>
+	);
+}
+
+function DropdownRowShell({
+	active,
+	onMouseEnter,
+	onClick,
+	children,
+}: {
+	active: boolean;
+	onMouseEnter: () => void;
+	onClick: () => void;
+	children: React.ReactNode;
+}) {
+	return (
+		<button
+			type="button"
+			onMouseEnter={onMouseEnter}
+			onClick={onClick}
+			className={`flex w-full items-center gap-3 border-b border-border px-4 py-2.5 text-left transition-colors last:border-b-0 ${
+				active ? "bg-accent" : "hover:bg-accent/40"
+			}`}
+		>
+			{children}
+		</button>
+	);
+}
+
+function DropdownCover({ src, alt, rounded = false }: { src: string | null; alt: string; rounded?: boolean }) {
+	const cls = `h-10 w-10 shrink-0 overflow-hidden border-2 border-foreground bg-muted ${rounded ? "rounded-full" : ""}`;
+	return (
+		<div className={cls}>
+			{src ? (
+				// eslint-disable-next-line @next/next/no-img-element
+				<img src={src} alt={alt} className="h-full w-full object-cover" loading="lazy" />
+			) : null}
+		</div>
+	);
+}
+
+function DropdownTrackRow({
+	track,
+	active,
+	onMouseEnter,
+	onClick,
+}: {
+	track: SuggestTrackOut;
+	active: boolean;
+	onMouseEnter: () => void;
+	onClick: () => void;
+}) {
+	return (
+		<DropdownRowShell active={active} onMouseEnter={onMouseEnter} onClick={onClick}>
+			<DropdownCover src={track.coverUrl} alt={track.title} />
+			<div className="min-w-0 flex-1">
+				<div className="truncate text-sm font-bold text-foreground">{track.title}</div>
+				<div className="truncate text-[11px] font-mono text-muted-foreground">
+					{track.artists.join(", ")}
+				</div>
+			</div>
+			{!track.matched && (
+				<span className="shrink-0 border-2 border-foreground px-1.5 py-0.5 text-[9px] font-mono font-black uppercase tracking-[0.14em] text-muted-foreground">
+					Match
+				</span>
+			)}
+		</DropdownRowShell>
+	);
+}
+
+function DropdownAlbumRow({
+	album,
+	active,
+	onMouseEnter,
+	onClick,
+}: {
+	album: SuggestAlbum;
+	active: boolean;
+	onMouseEnter: () => void;
+	onClick: () => void;
+}) {
+	return (
+		<DropdownRowShell active={active} onMouseEnter={onMouseEnter} onClick={onClick}>
+			<DropdownCover src={album.coverUrl} alt={album.title} />
+			<div className="min-w-0 flex-1">
+				<div className="truncate text-sm font-bold text-foreground">{album.title}</div>
+				<div className="truncate text-[11px] font-mono text-muted-foreground">
+					{album.artists.join(", ")}
+				</div>
+			</div>
+		</DropdownRowShell>
+	);
+}
+
+function DropdownArtistRow({
+	artist,
+	active,
+	onMouseEnter,
+	onClick,
+}: {
+	artist: SuggestArtist;
+	active: boolean;
+	onMouseEnter: () => void;
+	onClick: () => void;
+}) {
+	return (
+		<DropdownRowShell active={active} onMouseEnter={onMouseEnter} onClick={onClick}>
+			<DropdownCover src={artist.imageUrl} alt={artist.name} rounded />
+			<div className="min-w-0 flex-1">
+				<div className="truncate text-sm font-bold text-foreground">{artist.name}</div>
+				{artist.genres.length > 0 && (
+					<div className="truncate text-[11px] font-mono text-muted-foreground">
+						{artist.genres.slice(0, 2).join(" · ")}
+					</div>
+				)}
+			</div>
+		</DropdownRowShell>
 	);
 }
 

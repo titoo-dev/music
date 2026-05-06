@@ -14,3 +14,20 @@ export type {
 	MatchStrategy,
 } from "./match";
 export type { SpotifyTrackMeta, SpotifyPlaylistMeta } from "./types";
+export {
+	spotifyMultiSearch,
+	trackToMatchTarget,
+} from "./search";
+export type {
+	SpotifySuggestions,
+	SuggestTrack,
+	SuggestTrackOut,
+	SuggestAlbum,
+	SuggestArtist,
+	MultiSearchOptions,
+} from "./search";
+export {
+	getOrResolveMatch,
+	lookupCachedMatches,
+} from "./resolve";
+export type { ResolvedMatch } from "./resolve";

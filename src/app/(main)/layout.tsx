@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { MotionConfig } from "motion/react";
 import { Navigation } from "@/components/layout/Sidebar";
-import { SearchBar } from "@/components/layout/SearchBar";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { useInitApp } from "@/hooks/useInitApp";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -225,12 +224,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 						</div>
 					</div>
 
-					{/* Mobile search bar */}
-					<div className="border-t-[2px] border-foreground px-4 py-2 md:hidden">
-						<Suspense>
-							<SearchBar />
-						</Suspense>
-					</div>
 				</header>
 
 				{/* ─── Main Content ─── */}
