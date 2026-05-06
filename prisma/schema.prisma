@@ -285,6 +285,30 @@ model RecentPlay {
   @@map("recent_play")
 }
 
+// ─── External → Deezer track match cache ───
+//
+// Cross-platform suggestion engine: Spotify (or other sources) feed the
+// autocomplete and search-enrichment flows; we cache the resolved Deezer
+// trackId here so repeated suggestions don't re-pay the matching cost.
+//
+// `deezerTrackId` is null when the matcher couldn't find anything on Deezer
+// (kept as a negative cache for `NEG_TTL_MS`, see search/resolve route).
+
+model TrackMatch {
+  id            String   @id @default(cuid())
+  source        String   // "spotify"
+  sourceId      String   // e.g. Spotify track ID
+  isrc          String?
+  deezerTrackId String?
+  strategy      String?  // "isrc" | "advanced" | "advanced-clean" | "fuzzy" | "not_found"
+  confidence    Float?
+  resolvedAt    DateTime @default(now())
+
+  @@unique([source, sourceId])
+  @@index([isrc])
+  @@map("track_match")
+}
+
 // ─── Track Sharing ───
 //
 // Public share links for individual tracks. The file may be evicted from S3
