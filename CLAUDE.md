@@ -62,7 +62,63 @@ npm run dev:all      # Both servers
 npm run build        # Production build
 npm run lint         # ESLint
 npm run studio       # Prisma Studio
+npm test             # Vitest one-shot
+npm run test:watch   # Vitest watch mode
+npm run test:coverage # Coverage with thresholds (gate used by CI)
 ```
+
+## Testing & Regression Prevention
+
+This project uses **Vitest 4** + **vitest-mock-extended** for tests. Config at `vitest.config.ts`. Reusable helpers in `src/test/helpers/` (`nextRequest.ts`, `mockPrisma.ts`, `mockAuth.ts`). Reference test to mirror: `src/app/api/v1/stream-url/[trackId]/route.test.ts`.
+
+CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc --noEmit` + ESLint. Coverage thresholds: lines 90, branches 85, functions 90, statements 90 (global, scoped to the modules locked in — see `vitest.config.ts` `include`).
+
+### Locked-in surface (do not regress without a passing replacement test)
+
+| Domain | Source | Test |
+|---|---|---|
+| Player store | `src/stores/usePlayerStore.ts` | `usePlayerStore.test.ts` (71 tests) |
+| Preview store | `src/stores/usePreviewStore.ts` | `usePreviewStore.test.ts` (14 tests) |
+| Track-action sheet | `src/stores/useTrackActionStore.ts` | `useTrackActionStore.test.ts` (5 tests) |
+| Library logic | `src/lib/library.ts` | `library.test.ts` (26 tests) |
+| API auth guards | `src/app/api/v1/_lib/helpers.ts` | `helpers.test.ts` (40 tests) |
+| Streaming routes | `src/app/api/v1/stream{,-progressive,-url}/[trackId]/route.ts` | `route.test.ts` (32 tests) |
+| Library routes | `src/app/api/v1/library/*` | `route.test.ts` (50 tests) |
+| Recent plays | `src/app/api/v1/recent-plays/**` | `route.test.ts` (26 tests) |
+| Preferences | `src/app/api/v1/preferences/route.ts` | `route.test.ts` (11 tests) |
+
+### Fix-bug-once strategy (read this before fixing anything)
+
+**Every bug fix must ship with a failing-then-passing test.** No exceptions. The workflow is:
+
+1. **Reproduce the bug as a test first.** Before touching the source, write a test that captures the exact failure (status code, error message, redirect target, store state, whatever the symptom is). The test must fail.
+2. **Fix the source.**
+3. **Re-run the test — it must now pass.** Then run the whole suite to make sure nothing else broke.
+4. **Name the test after the bug.** e.g. `it("does not redirect to /stream when S3 is unreachable (was: 500 ENOTFOUND in Network tab)")`. The "was:" tag makes the test self-documenting and grep-able when the same symptom returns.
+
+This is non-negotiable for the locked-in modules above — CI enforces it via the coverage gate (a regression in those modules would have to delete an existing test, which is visible in the diff).
+
+For new code outside the locked-in surface, write at minimum one test per branch you add. If you add a new error code path, write a test for it in the same PR. Untested new code is a future bug waiting to be re-fixed.
+
+### When you find a non-blocking quirk
+
+If you spot behavior that looks wrong but is intentional (or you don't have time to fix it), **lock it in with a test** that asserts the current behavior, plus a `// TODO:` comment explaining what the right behavior would be. This way:
+- The current behavior can't silently change.
+- The test fails the moment someone "fixes" it without updating the test — forcing them to consciously decide what the new contract should be.
+
+Examples already in the suite (search for `TODO` in `*.test.ts`):
+- `library/tracks` GET treats `limit=0` as default 100 instead of clamping to 1.
+- `recent-plays` GET treats `limit=0` as default 50.
+- `library/status` POST silently coerces non-array `trackIds`/`albumIds` to `[]` instead of 400.
+
+### Out of scope (still to be locked)
+
+- `AudioEngine.tsx` and audio prefetch helpers (`getTrackUrl`, `fetchPresignedUrl`, `preloadAudio`) — too coupled to `HTMLAudioElement` / `IndexedDB` for unit tests. Plan: extract pure helpers, then add Playwright for the full flow.
+- Routes: `playlists/**`, `shares/**`, `search/**`, `lyrics/**`, `auth/**`, `settings/**`, `content/**`, `stream-warm/**`.
+- Deemix engine: `decryption.ts`, `tagger.ts`, `progressive-stream.ts`, `downloader.ts` (need real Deezer/S3 — gate them behind `[skip]` until we have a recorded-cassette setup).
+- Stores: `useAuthStore`, `useAppStore`, `useShareStore`, `useLyricsStore`, `useLoginStore`, `useErrorStore`.
+
+When you finish locking in any of the above, append it to the table above and to `vitest.config.ts` `coverage.include`.
 
 ## Database Models (Prisma)
 
