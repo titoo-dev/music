@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Prototype code excluded from tsconfig (see commit b87bf70).
+    "design/**",
+    // Generated coverage output (vitest --coverage).
+    "coverage/**",
+    // Generated Prisma client.
+    "src/generated/**",
   ]),
 ]);
 

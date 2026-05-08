@@ -21,8 +21,14 @@ export async function GET(
 			where: { trackId },
 			orderBy: { bitrate: "desc" },
 		});
+		// Cache miss — bounce back to /stream-progressive so the live Deezer
+		// fallback runs. Returning 404 here would kill the <audio> element with
+		// no recovery path, even though the track is fully streamable live.
 		if (!stored) {
-			return fail("NOT_CACHED", "Track is not in the file cache.", 404);
+			return new Response(null, {
+				status: 302,
+				headers: { Location: `/api/v1/stream-progressive/${trackId}` },
+			});
 		}
 
 		if (stored.storageType !== "s3") {
@@ -60,12 +66,35 @@ export async function GET(
 		if (e?.name === "NotFound" || e?.$metadata?.httpStatusCode === 404) {
 			// Stale StoredTrack: DB row points to a file that no longer exists
 			// in S3 (manual cleanup, lifecycle policy, migration). Drop every
-			// row for this trackId so the next call to /stream-progressive
-			// re-fetches from Deezer instead of redirecting back here.
+			// row for this trackId so the redirect below falls through to a
+			// live Deezer stream in /stream-progressive.
 			try {
 				await prisma.storedTrack.deleteMany({ where: { trackId } });
 			} catch {}
-			return fail("FILE_NOT_FOUND", "Audio file not found in storage.", 404);
+			return new Response(null, {
+				status: 302,
+				headers: { Location: `/api/v1/stream-progressive/${trackId}` },
+			});
+		}
+		// Network / DNS / permissions failure — S3 is unreachable but the file
+		// might still exist. Bounce to /stream-progressive (which will detect
+		// the same problem and serve a live Deezer stream instead of 500ing)
+		// so the user can keep playing while storage is down. Don't delete the
+		// row: it's still valid once storage comes back.
+		const code = (e as { code?: string })?.code;
+		const status = (e as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
+		if (
+			code === "ENOTFOUND" ||
+			code === "ECONNREFUSED" ||
+			code === "ETIMEDOUT" ||
+			code === "EAI_AGAIN" ||
+			(typeof status === "number" && status >= 500)
+		) {
+			console.warn("[stream] storage unreachable — falling back to live stream:", e);
+			return new Response(null, {
+				status: 302,
+				headers: { Location: `/api/v1/stream-progressive/${trackId}` },
+			});
 		}
 		return handleError(e);
 	}

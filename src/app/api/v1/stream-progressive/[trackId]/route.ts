@@ -39,31 +39,38 @@ export async function GET(
 		});
 		if (stored) {
 			let missing = false;
+			let unreachable = false;
 			if (stored.storageType === "s3") {
 				try {
 					const { headObject } = await import("@/lib/s3-stream");
 					await headObject(stored.storagePath);
 				} catch (e: any) {
-					// Only treat actual NotFound as missing. For any other error
-					// (network, permissions) keep the redirect path so /stream
-					// can produce its own actionable error.
 					if (
 						e?.name === "NotFound" ||
 						e?.$metadata?.httpStatusCode === 404
 					) {
 						missing = true;
+					} else {
+						// Network / DNS / permissions failure (S3 down). Don't
+						// redirect to /stream — it would also fail and 500. Fall
+						// through to the live Deezer stream so playback still
+						// works while storage is unreachable. Keep the row so
+						// the cached file is reused once S3 comes back.
+						unreachable = true;
 					}
 				}
 			}
-			if (!missing) {
+			if (!missing && !unreachable) {
 				return new Response(null, {
 					status: 302,
 					headers: { Location: `/api/v1/stream/${trackId}` },
 				});
 			}
-			// Drop every stale row for this track so we don't keep redirecting
-			// to a missing file. Then fall through to the live stream below.
-			await prisma.storedTrack.deleteMany({ where: { trackId } });
+			if (missing) {
+				// File is genuinely gone — drop every stale row so we don't
+				// keep redirecting to it on the next call.
+				await prisma.storedTrack.deleteMany({ where: { trackId } });
+			}
 		}
 
 		// Not cached — open a progressive stream

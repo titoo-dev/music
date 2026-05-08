@@ -54,6 +54,11 @@ function pruneUrlCache() {
 }
 
 async function fetchPresignedUrl(trackId: string): Promise<string | null> {
+	// Session-wide kill switch — once the S3/MinIO host is known unreachable,
+	// short-circuit every caller (on-demand, prefetch, hover-preload) so we
+	// don't burn a DNS-timeout per track.
+	if (!usePresigned) return null;
+
 	const cached = urlCache.get(trackId);
 	if (cached && Date.now() - cached.fetchedAt < URL_CACHE_TTL) {
 		return cached.url;
@@ -1248,12 +1253,25 @@ export function AudioEngine() {
 			readyState: audio.readyState,
 		});
 
-		// First: try falling back from presigned URL to proxy stream
-		// Only this trackId is marked — keep presigned enabled globally so
-		// other tracks still benefit from direct S3 streaming.
+		// First: try falling back from presigned URL to proxy stream.
 		if (src && !src.includes("/api/v1/stream-progressive/") && !src.includes("/api/v1/stream/")) {
 			presignedDenied.add(currentTrack.trackId);
 			urlCache.delete(currentTrack.trackId);
+
+			// MEDIA_ERR_NETWORK (2) and MEDIA_ERR_SRC_NOT_SUPPORTED (4) on a
+			// presigned URL almost always mean the S3/MinIO host is unreachable
+			// from the browser (DNS failure, expired tunnel, mixed content,
+			// firewall). Disable presigned URLs globally for the rest of the
+			// session so subsequent tracks don't each pay a DNS-timeout before
+			// falling back. The proxy stream at /stream-progressive still works
+			// because the server-side fallback handles unreachable storage too.
+			const code = mediaErr?.code;
+			if (code === 2 || code === 4) {
+				usePresigned = false;
+				urlCache.clear();
+				inflightPresigned.clear();
+			}
+
 			audio.src = `/api/v1/stream-progressive/${currentTrack.trackId}`;
 			audio.load();
 			return;
@@ -1274,7 +1292,8 @@ export function AudioEngine() {
 		// All retries exhausted — fetch the route once with credentials so we
 		// can surface the server's actual error code/message in the console.
 		// Useful in prod where server-side logs aren't accessible.
-		void fetch(`/api/v1/stream-progressive/${currentTrack.trackId}`, {
+		const failingTrackId = currentTrack.trackId;
+		void fetch(`/api/v1/stream-progressive/${failingTrackId}`, {
 			credentials: "include",
 		})
 			.then(async (res) => {
@@ -1284,9 +1303,24 @@ export function AudioEngine() {
 					return;
 				}
 				const body = await res.text().catch(() => "");
+				let errorCode: string | undefined;
+				let errorMessage: string | undefined;
+				try {
+					const parsed = JSON.parse(body);
+					errorCode = parsed?.error?.code;
+					errorMessage = parsed?.error?.message;
+				} catch {
+					// Non-JSON body — keep raw body slice in the log
+				}
 				console.error(
-					`[AudioEngine] giving up — server says ${res.status}`,
-					{ trackId: currentTrack.trackId, body: body.slice(0, 500) }
+					`[AudioEngine] giving up — server says ${res.status} ${res.statusText || ""}`.trim(),
+					{
+						trackId: failingTrackId,
+						finalUrl: res.url,
+						errorCode,
+						errorMessage,
+						body: body.slice(0, 500),
+					}
 				);
 			})
 			.catch((e) =>
