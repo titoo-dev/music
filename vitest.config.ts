@@ -12,15 +12,14 @@ export default defineConfig({
 	},
 	test: {
 		globals: true,
-		environment: "node",
+		// jsdom by default — store tests need it (Zustand persist + localStorage).
+		// API/route tests run fine under jsdom too since they never touch the DOM.
+		// To opt back to node for a specific file, add `// @vitest-environment node`
+		// at the top of that test file.
+		environment: "jsdom",
 		setupFiles: ["./src/test/setup.ts"],
 		include: ["src/**/*.{test,spec}.{ts,tsx}"],
 		exclude: ["node_modules", ".next", "dist"],
-		environmentMatchGlobs: [
-			["src/components/**", "jsdom"],
-			["src/hooks/**", "jsdom"],
-			["src/stores/**", "jsdom"],
-		],
 		clearMocks: true,
 		restoreMocks: true,
 		coverage: {

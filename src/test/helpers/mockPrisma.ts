@@ -1,10 +1,16 @@
-import { mockDeep, mockReset, type DeepMockProxy } from "vitest-mock-extended";
-import type { PrismaClient } from "@prisma/client";
+import { mockDeep, mockReset } from "vitest-mock-extended";
 
 /**
  * Deep-mocked Prisma client shared across tests.
  *
- * Usage in a test file:
+ * Typed as `any` on purpose: deep-mocking the real `PrismaClient` from the
+ * Prisma 7 generated client triggers TS2615 "circular reference" errors in
+ * `tsc --noEmit` because of Prisma's recursive `*WhereWithAggregatesInput`
+ * generics. We don't need the precise surface inside tests — every call is
+ * a stub like `prismaMock.savedTrack.findMany.mockResolvedValue(...)`, which
+ * works fine without the generated types.
+ *
+ * Usage:
  *
  *   import { vi, beforeEach } from "vitest";
  *   import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
@@ -14,10 +20,11 @@ import type { PrismaClient } from "@prisma/client";
  *   beforeEach(() => resetPrismaMock());
  *
  *   it("...", async () => {
- *     prismaMock.storedTrack.findFirst.mockResolvedValue({ ... } as any);
+ *     prismaMock.storedTrack.findFirst.mockResolvedValue({ ... });
  *   });
  */
-export const prismaMock: DeepMockProxy<PrismaClient> = mockDeep<PrismaClient>();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const prismaMock: any = mockDeep<any>();
 
 export function resetPrismaMock() {
 	mockReset(prismaMock);

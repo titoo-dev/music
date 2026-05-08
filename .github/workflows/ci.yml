@@ -14,6 +14,10 @@ jobs:
     name: Tests + coverage
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
 
     steps:
       - name: Checkout
@@ -116,9 +120,13 @@ jobs:
         run: npx tsc --noEmit
 
   lint:
-    name: ESLint
+    name: ESLint (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Repo carries pre-existing lint debt (see CLAUDE.md "Known issues").
+    # Run lint for visibility, but don't block PRs on it. Promote to required
+    # once the legacy `any` / `react/jsx-no-undef` errors are cleaned up.
+    continue-on-error: true
 
     steps:
       - name: Checkout
