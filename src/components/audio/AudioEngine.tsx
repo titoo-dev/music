@@ -1037,6 +1037,10 @@ export function AudioEngine() {
 	}, [karaokeMode]);
 
 	// Retry: bumped by retryTrack() — reload the current track from scratch.
+	// We preserve the current playback position across the reload so callers
+	// like the karaoke toggle (which swaps source between original and the
+	// no_vocals stem) keep the user on the same timeline instead of jumping
+	// back to 0. applyResumePosition picks the captured time up on canplay.
 	const retryLoadCount = usePlayerStore((s) => s._retryLoadCount);
 	const prevRetryRef = useRef(retryLoadCount);
 	useEffect(() => {
@@ -1045,6 +1049,15 @@ export function AudioEngine() {
 		const track = currentTrack;
 		const audio = audioRef.current;
 		if (!track || !audio) return;
+
+		// Capture position before tearing the old element down. Anything <1s
+		// is treated as "near the start" and skipped — that's the recovery
+		// case where there's nothing to preserve.
+		const liveTime = audio.currentTime;
+		if (isFinite(liveTime) && liveTime >= 1) {
+			resumePositionRef.current = liveTime;
+		}
+
 		retryCountRef.current = 0;
 		setError(null);
 		setBuffering(true);
