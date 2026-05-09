@@ -55,6 +55,16 @@ interface PlayerState {
 	crossfadeDuration: number;
 	normalizationEnabled: boolean;
 
+	/**
+	 * When on, AudioEngine.getTrackUrl prefers the `no_vocals` stem of the
+	 * current track (and any future track with stems available) so the user
+	 * hears the instrumental version. If a track has no stems yet, the
+	 * KaraokeToggle component triggers a `two_stems` separation in the
+	 * background; the original audio keeps playing until stems are ready,
+	 * then AudioEngine swaps the source.
+	 */
+	karaokeMode: boolean;
+
 	play: (track: PlayerTrack, queue?: PlayerTrack[]) => void;
 	pause: () => void;
 	resume: () => void;
@@ -87,6 +97,8 @@ interface PlayerState {
 	setPlaybackRate: (rate: number) => void;
 	setCrossfadeDuration: (seconds: number) => void;
 	toggleNormalization: () => void;
+	setKaraokeMode: (on: boolean) => void;
+	toggleKaraokeMode: () => void;
 
 	// Queue management (P2)
 	/** Insert a track right after the current track ("Play Next"). */
@@ -150,6 +162,7 @@ export const usePlayerStore = create<PlayerState>()(
 			playbackRate: 1.0,
 			crossfadeDuration: 0,
 			normalizationEnabled: false,
+			karaokeMode: false,
 
 			play: (track, queue) => {
 				const state = get();
@@ -345,6 +358,11 @@ export const usePlayerStore = create<PlayerState>()(
 			setPlaybackRate: (playbackRate) => set({ playbackRate }),
 			setCrossfadeDuration: (crossfadeDuration) => set({ crossfadeDuration }),
 			toggleNormalization: () => set((s) => ({ normalizationEnabled: !s.normalizationEnabled })),
+			setKaraokeMode: (karaokeMode) => set({ karaokeMode }),
+			toggleKaraokeMode: () => {
+				haptic(8);
+				set((s) => ({ karaokeMode: !s.karaokeMode }));
+			},
 			toggleRepeat: () =>
 				set((s) => ({
 					repeat: s.repeat === "off" ? "all" : s.repeat === "all" ? "one" : "off",
@@ -476,6 +494,7 @@ export const usePlayerStore = create<PlayerState>()(
 				playbackRate: state.playbackRate,
 				crossfadeDuration: state.crossfadeDuration,
 				normalizationEnabled: state.normalizationEnabled,
+				karaokeMode: state.karaokeMode,
 			}),
 		}
 	)

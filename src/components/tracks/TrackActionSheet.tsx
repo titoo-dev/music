@@ -8,7 +8,6 @@ import { usePreviewStore } from "@/stores/usePreviewStore";
 import { useShareStore } from "@/stores/useShareStore";
 import { useSavedTracks } from "@/hooks/useLibrary";
 import { ShareDialog } from "./ShareDialog";
-import { StemsActionRow } from "@/components/audio/StemsActionRow";
 import {
 	Sheet,
 	SheetContent,
@@ -447,9 +446,6 @@ export function TrackActionSheet() {
 								onClick={handleShare}
 							/>
 						)}
-
-						{/* AI stem separation */}
-						{isAuthenticated && <StemsActionRow trackId={track.id} />}
 
 						{/* Go to Album */}
 						{track.albumId && (

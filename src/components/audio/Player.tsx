@@ -6,6 +6,7 @@ import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { Button } from "@/components/ui/button";
 import { SeekBar } from "./SeekBar";
+import { KaraokeToggle } from "./KaraokeToggle";
 import {
 	DropdownMenu,
 	DropdownMenuTrigger,
@@ -301,6 +302,9 @@ export function Player() {
 									</span>
 								)}
 							</Button>
+
+							{/* Karaoke toggle — same chip style as LRC / speed */}
+							<KaraokeToggle />
 
 							{/* Lyrics toggle (LRC label like prototype) */}
 							<Button

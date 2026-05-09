@@ -65,8 +65,14 @@ function getQueue(): Queue<SeparateJobData> {
 	_queue = new Queue<SeparateJobData>(QUEUE_NAME, {
 		connection: getConnection(),
 		defaultJobOptions: {
-			removeOnComplete: { age: 86400 },
-			removeOnFail: { age: 3600 },
+			// Immediate cleanup so the same trackId can be re-queued after
+			// a previous run finishes. The DB (StemSeparation row) is the
+			// source of truth for completed/failed state, not the BullMQ
+			// job — keeping completed jobs around just blocks retries via
+			// jobId dedup. If we ever want job-level inspection back,
+			// switch to `{ count: 100 }` to keep the last N instead.
+			removeOnComplete: true,
+			removeOnFail: true,
 			attempts: 2,
 			backoff: { type: "exponential", delay: 30000 },
 		},

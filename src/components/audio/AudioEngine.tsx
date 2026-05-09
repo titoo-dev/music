@@ -90,6 +90,25 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 	return promise;
 }
 
+// Karaoke mode — fetch the presigned URL for a track's `no_vocals` stem.
+// Returns null when the stem doesn't exist yet (separation hasn't run, or
+// the track was processed in a different mode that didn't produce no_vocals).
+// Caller falls back to the original track URL on null.
+async function fetchKaraokeStemUrl(trackId: string): Promise<string | null> {
+	try {
+		const res = await fetch(
+			`/api/v1/stems/${encodeURIComponent(trackId)}/no_vocals/url`,
+			{ credentials: "include", cache: "no-store" },
+		);
+		if (!res.ok) return null;
+		const json = (await res.json()) as { success?: boolean; data?: { url?: string | null } };
+		if (!json.success) return null;
+		return json.data?.url ?? null;
+	} catch {
+		return null;
+	}
+}
+
 // Warm the URL cache for upcoming tracks. Cheap (one DB query + S3 sign per
 // track) and turns the next click-to-play into a cache hit on the URL fetch.
 function prefetchPresignedUrls(trackIds: string[]) {
@@ -104,11 +123,31 @@ function prefetchPresignedUrls(trackIds: string[]) {
 
 /**
  * Resolve audio URL for a track. Priority:
+ * 0. Karaoke override — if karaokeMode is on AND a `no_vocals` stem exists,
+ *    play that instead. Falls through to the normal chain on miss so
+ *    enabling karaoke on a track without stems still produces audio while
+ *    the worker prepares the separation in the background.
  * 1. IndexedDB blob URL (instant, zero network)
  * 2. Presigned S3 URL (direct browser streaming for downloaded tracks)
  * 3. Progressive endpoint (live decrypts from Deezer; auto-redirects to /stream once cached)
  */
 async function getTrackUrl(trackId: string): Promise<string> {
+	// 0. Karaoke mode — try the no_vocals stem first.
+	if (usePlayerStore.getState().karaokeMode) {
+		const stemUrl = await fetchKaraokeStemUrl(trackId);
+		if (stemUrl) {
+			if (window.location.protocol === "https:" && stemUrl.startsWith("http://")) {
+				// Mixed-content guard: same as the regular presigned path.
+				return `/api/v1/stems/${encodeURIComponent(trackId)}/no_vocals/stream`;
+			}
+			return stemUrl;
+		}
+		// Stem not ready — fall through. The KaraokeToggle component is
+		// responsible for kicking off the separation; once it lands, it
+		// will call retryTrack() and we'll hit the stem URL on the next
+		// pass through this resolver.
+	}
+
 	// 1. Check IndexedDB cache — instant blob URL
 	try {
 		const blobUrl = await getCachedBlobUrl(trackId);
@@ -984,6 +1023,18 @@ export function AudioEngine() {
 		}, 1000);
 		return () => clearInterval(interval);
 	}, [sleepTimerEnd]);
+
+	// Karaoke toggle — reload the current track when the user flips it so the
+	// audio source switches between original and no_vocals stem. Skips the
+	// initial mount (the regular currentTrack effect already handles that).
+	const karaokeMode = usePlayerStore((s) => s.karaokeMode);
+	const prevKaraokeRef = useRef(karaokeMode);
+	useEffect(() => {
+		if (prevKaraokeRef.current === karaokeMode) return;
+		prevKaraokeRef.current = karaokeMode;
+		if (!usePlayerStore.getState().currentTrack) return;
+		usePlayerStore.getState().retryTrack();
+	}, [karaokeMode]);
 
 	// Retry: bumped by retryTrack() — reload the current track from scratch.
 	const retryLoadCount = usePlayerStore((s) => s._retryLoadCount);
