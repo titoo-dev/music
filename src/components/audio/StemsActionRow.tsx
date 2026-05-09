@@ -3,6 +3,7 @@
 import { useStems, type StemMode } from "@/hooks/useStems";
 import { Loader2, Sparkles, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useCallback } from "react";
+import { StemsPlayerPanel } from "./StemsPlayerPanel";
 
 // Small wrapper around an action-row entry in TrackActionSheet that surfaces
 // the stem-separation lifecycle: kick off a job, show progress while the
@@ -44,7 +45,7 @@ export function StemsActionRow({
 	trackId,
 	defaultMode = "six_stems",
 }: StemsActionRowProps) {
-	const { status, progress, mode, errorMessage, requestSeparation } =
+	const { status, progress, mode, errorMessage, files, requestSeparation } =
 		useStems(trackId);
 
 	const handleClick = useCallback(() => {
@@ -75,31 +76,36 @@ export function StemsActionRow({
 		status === "processing";
 
 	return (
-		<button
-			onClick={handleClick}
-			disabled={isBusy}
-			className="flex items-center gap-3 px-4 py-3.5 w-full text-left active:bg-accent/20 transition-colors text-foreground disabled:opacity-70"
-			aria-label={statusLabel(status, progress, mode)}
-		>
-			<span className="shrink-0">{icon}</span>
-			<div className="flex-1 min-w-0">
-				<p className="text-sm font-bold truncate">
-					{statusLabel(status, progress, mode)}
-				</p>
-				{status === "failed" && errorMessage && (
-					<p className="text-[11px] text-destructive truncate">
-						{errorMessage}
+		<>
+			<button
+				onClick={handleClick}
+				disabled={isBusy}
+				className="flex items-center gap-3 px-4 py-3.5 w-full text-left active:bg-accent/20 transition-colors text-foreground disabled:opacity-70"
+				aria-label={statusLabel(status, progress, mode)}
+			>
+				<span className="shrink-0">{icon}</span>
+				<div className="flex-1 min-w-0">
+					<p className="text-sm font-bold truncate">
+						{statusLabel(status, progress, mode)}
 					</p>
-				)}
-				{status === "processing" && (
-					<div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
-						<div
-							className="h-full bg-primary transition-all"
-							style={{ width: `${progress}%` }}
-						/>
-					</div>
-				)}
-			</div>
-		</button>
+					{status === "failed" && errorMessage && (
+						<p className="text-[11px] text-destructive truncate">
+							{errorMessage}
+						</p>
+					)}
+					{status === "processing" && (
+						<div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
+							<div
+								className="h-full bg-primary transition-all"
+								style={{ width: `${progress}%` }}
+							/>
+						</div>
+					)}
+				</div>
+			</button>
+			{status === "completed" && files.length > 0 && (
+				<StemsPlayerPanel trackId={trackId} stems={files} variant="sheet" />
+			)}
+		</>
 	);
 }

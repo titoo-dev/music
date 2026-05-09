@@ -35,6 +35,7 @@ import {
 	AlertCircle,
 } from "lucide-react";
 import { useStems } from "@/hooks/useStems";
+import { StemsPlayerPanel } from "@/components/audio/StemsPlayerPanel";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -491,6 +492,16 @@ export function TrackActionMenu({
 									<span className="flex-1 truncate">{stemsLabel}</span>
 								</DropdownMenuItem>
 							)}
+
+							{isAuthenticated &&
+								stems.status === "completed" &&
+								stems.files.length > 0 && (
+									<StemsPlayerPanel
+										trackId={track.id}
+										stems={stems.files}
+										variant="dropdown"
+									/>
+								)}
 
 							{(track.albumId || track.artistId) && <DropdownMenuSeparator />}
 

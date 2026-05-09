@@ -45,6 +45,7 @@ export default defineConfig({
 				"src/lib/queue/**",
 				"src/hooks/useStems.ts",
 				"src/stores/useStemsStore.ts",
+				"src/components/audio/StemsPlayerPanel.tsx",
 			],
 			exclude: [
 				"**/*.test.{ts,tsx}",
