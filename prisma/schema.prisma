@@ -285,6 +285,54 @@ model RecentPlay {
   @@map("recent_play")
 }
 
+// ─── Stem Separation (AI vocal/instrument splitting) ───
+//
+// Per-track AI separation jobs. The worker (stems-worker container) runs
+// Demucs (htdemucs_6s) on a cached audio file and produces N stem files
+// (vocals, drums, bass, guitar, piano, other) or two stems (vocals,
+// no_vocals) depending on `mode`. Files are uploaded to S3 alongside the
+// original under `stems/{trackId}/{stemName}.mp3`.
+//
+// Job dedup: BullMQ uses the trackId as jobId, so concurrent requests for
+// the same track collapse into a single worker run; the StemSeparation row
+// is upserted by trackId. Re-running after completion is allowed once the
+// 24h dedup window expires (see queue config).
+
+model StemSeparation {
+  id           String    @id @default(cuid())
+  trackId      String    @unique
+  status       String    // "pending" | "processing" | "completed" | "failed"
+  mode         String    // "two_stems" | "six_stems"
+  progress     Int       @default(0)
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  files StemFile[]
+
+  @@index([status])
+  @@map("stem_separation")
+}
+
+model StemFile {
+  id           String   @id @default(cuid())
+  separationId String
+  trackId      String
+  stemName     String   // "vocals" | "no_vocals" | "drums" | "bass" | "guitar" | "piano" | "other"
+  storagePath  String
+  storageType  String   // "s3" | "local"
+  fileSize     Int?
+  createdAt    DateTime @default(now())
+
+  separation StemSeparation @relation(fields: [separationId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, stemName])
+  @@index([trackId])
+  @@map("stem_file")
+}
+
 // ─── External → Deezer track match cache ───
 //
 // Cross-platform suggestion engine: Spotify (or other sources) feed the
