@@ -39,6 +39,16 @@ export interface StemJobStatus {
 
 const QUEUE_NAME = "stems";
 
+// BullMQ rejects custom job IDs that look like integers (`Error: Custom Id
+// cannot be integers`) AND custom IDs that contain `:` (`Error: Custom Id
+// cannot contain :`). Deezer track IDs are numeric strings, so we prefix
+// them with `track-`. The same prefix has to be used everywhere we read
+// or write a job keyed on trackId.
+const JOB_ID_PREFIX = "track-";
+function jobIdFor(trackId: string): string {
+	return `${JOB_ID_PREFIX}${trackId}`;
+}
+
 let _connection: Redis | null = null;
 let _queue: Queue<SeparateJobData> | null = null;
 
@@ -66,12 +76,12 @@ function getQueue(): Queue<SeparateJobData> {
 
 export async function enqueueSeparation(trackId: string, mode: StemMode) {
 	const queue = getQueue();
-	return queue.add("separate", { trackId, mode }, { jobId: trackId });
+	return queue.add("separate", { trackId, mode }, { jobId: jobIdFor(trackId) });
 }
 
 export async function getJobStatus(trackId: string): Promise<StemJobStatus | null> {
 	const queue = getQueue();
-	const job = await queue.getJob(trackId);
+	const job = await queue.getJob(jobIdFor(trackId));
 	if (!job) return null;
 	const state = (await job.getState()) as StemJobState;
 	const progress = typeof job.progress === "number" ? job.progress : 0;

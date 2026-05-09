@@ -31,7 +31,10 @@ import {
 	MoreHorizontal,
 	ChevronRight,
 	Plus,
+	Sparkles,
+	AlertCircle,
 } from "lucide-react";
+import { useStems } from "@/hooks/useStems";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -348,6 +351,50 @@ export function TrackActionMenu({
 		close();
 	};
 
+	// Stems: same hook as the mobile action sheet. We render its state inline
+	// here so users on desktop can kick off + watch a separation without
+	// closing the dropdown. closeOnClick={false} below keeps the menu open
+	// while the worker runs.
+	const stems = useStems(track.id);
+	const stemsBusy =
+		stems.status === "requesting" ||
+		stems.status === "queued" ||
+		stems.status === "processing";
+	const stemsLabel = (() => {
+		switch (stems.status) {
+			case "requesting":
+				return "Requesting…";
+			case "queued":
+				return "Queued — waiting for worker";
+			case "processing":
+				return `Separating… ${stems.progress}%`;
+			case "completed":
+				return stems.mode === "two_stems" ? "Karaoke ready" : "Stems ready";
+			case "failed":
+				return "Separation failed — retry";
+			default:
+				return "Generate stems";
+		}
+	})();
+	const stemsIcon = (() => {
+		switch (stems.status) {
+			case "requesting":
+			case "queued":
+			case "processing":
+				return <Loader2 className="size-4 animate-spin" />;
+			case "completed":
+				return <CheckCircle2 className="size-4 text-green-600" />;
+			case "failed":
+				return <AlertCircle className="size-4 text-destructive" />;
+			default:
+				return <Sparkles className="size-4" />;
+		}
+	})();
+	const handleStems = () => {
+		if (stemsBusy) return;
+		void stems.requestSeparation("six_stems");
+	};
+
 	return (
 		<>
 			<DropdownMenu open={open} onOpenChange={setOpen}>
@@ -430,6 +477,18 @@ export function TrackActionMenu({
 								<DropdownMenuItem onClick={handleShare} className="gap-2.5">
 									{isShared ? <LinkIcon className="size-4 text-primary" /> : <Share2 className="size-4" />}
 									{isShared ? "Manage share" : "Share track"}
+								</DropdownMenuItem>
+							)}
+
+							{isAuthenticated && (
+								<DropdownMenuItem
+									onClick={handleStems}
+									closeOnClick={false}
+									disabled={stemsBusy}
+									className="gap-2.5"
+								>
+									{stemsIcon}
+									<span className="flex-1 truncate">{stemsLabel}</span>
 								</DropdownMenuItem>
 							)}
 

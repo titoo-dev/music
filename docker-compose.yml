@@ -2,6 +2,8 @@ services:
   postgres:
     image: postgres:17-alpine
     container_name: Deemix-Postgres
+    ports:
+      - "15432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
@@ -17,7 +19,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: Deemix-Redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    # BullMQ requires `noeviction` — under any other policy Redis can purge
+    # job keys under memory pressure and silently drop work. AOF persistence
+    # so jobs survive a container restart.
+    command: redis-server --appendonly yes --maxmemory-policy noeviction
     volumes:
       - redis-data:/data
     healthcheck:

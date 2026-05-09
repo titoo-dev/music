@@ -2,8 +2,11 @@
 // npm install --save-dev prisma dotenv
 import { config as loadEnv } from "dotenv";
 // Next.js convention: .env.local takes precedence over .env. Load both so
-// `prisma migrate dev` / `prisma db push` see the same DATABASE_URL the app does.
-loadEnv({ path: ".env.local", override: true });
+// `prisma migrate dev` / `prisma db push` see the same DATABASE_URL the app
+// does. Neither call uses `override: true` — that lets a caller pin
+// DATABASE_URL via process.env (e.g. to push the schema to a local Docker
+// postgres while .env.local still points at the remote one).
+loadEnv({ path: ".env.local" });
 loadEnv();
 import { defineConfig } from "prisma/config";
 
