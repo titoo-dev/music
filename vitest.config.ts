@@ -41,6 +41,8 @@ export default defineConfig({
 				"src/app/api/v1/library/**",
 				"src/app/api/v1/recent-plays/**",
 				"src/app/api/v1/preferences/**",
+				"src/app/api/v1/stems/**",
+				"src/lib/queue/**",
 			],
 			exclude: [
 				"**/*.test.{ts,tsx}",
