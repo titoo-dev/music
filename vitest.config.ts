@@ -43,6 +43,8 @@ export default defineConfig({
 				"src/app/api/v1/preferences/**",
 				"src/app/api/v1/stems/**",
 				"src/lib/queue/**",
+				"src/hooks/useStems.ts",
+				"src/stores/useStemsStore.ts",
 			],
 			exclude: [
 				"**/*.test.{ts,tsx}",
