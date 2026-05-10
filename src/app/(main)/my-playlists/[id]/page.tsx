@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, ArrowDownUp } from "lucide-react";
+import { Loader2, ArrowLeft, ArrowDownUp, Play, Shuffle } from "lucide-react";
 import Link from "next/link";
-import { usePlayerStore } from "@/stores/usePlayerStore";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
+import { EntityHero } from "@/components/layout/EntityHero";
 import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { usePrefetch } from "@/hooks/usePrefetch";
@@ -41,6 +42,8 @@ export default function PlaylistDetailPage() {
 	const setSortOrder = (order: "asc" | "desc") => updatePrefs({ playlistSortOrder: order });
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
 	const stopPlayer = usePlayerStore((s) => s.stop);
+	const playerPlay = usePlayerStore((s) => s.play);
+	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 
 	// Background prefetch: warm IndexedDB for the first tracks so playback starts instantly
 	const allTrackIds = playlist?.tracks.map((t) => t.trackId) || [];
@@ -126,38 +129,87 @@ export default function PlaylistDetailPage() {
 		);
 	}
 
+	const playablePlaylistTracks: PlayerTrack[] = sortedTracks.map((t) => ({
+		trackId: t.trackId,
+		title: t.title,
+		artist: t.artist,
+		artistId: null,
+		cover: t.coverUrl,
+		duration: t.duration,
+	}));
+
+	const handlePlayAll = () => {
+		if (playablePlaylistTracks.length === 0) return;
+		playerPlay(playablePlaylistTracks[0], playablePlaylistTracks);
+	};
+
+	const handleShuffleAll = () => {
+		if (playablePlaylistTracks.length === 0) return;
+		const wasShuffled = usePlayerStore.getState().shuffle;
+		if (!wasShuffled) toggleShuffle();
+		playerPlay(playablePlaylistTracks[0], playablePlaylistTracks);
+	};
+
 	return (
 		<div className="space-y-6">
-			<div className="flex items-center gap-3 min-w-0">
+			<div className="flex items-start gap-3 min-w-0">
 				<Button
 					variant="ghost"
-					size="icon"
+					size="icon-touch"
 					className="shrink-0"
+					aria-label="Back"
 					onClick={() => router.back()}
 				>
-					<ArrowLeft className="size-4" />
+					<ArrowLeft className="size-4" aria-hidden />
 				</Button>
 				<div className="flex-1 min-w-0">
-					<h1 className="text-brutal-lg">{playlist.title}</h1>
-					{playlist.description && (
-						<p className="text-sm text-muted-foreground mt-1">{playlist.description}</p>
-					)}
-					<p className="text-xs text-muted-foreground mt-0.5 font-mono font-bold">
-						{playlist.tracks.length} track{playlist.tracks.length !== 1 ? "s" : ""}
-					</p>
-				</div>
-				<div className="flex items-center gap-2 shrink-0">
-					{playlist.tracks.length > 1 && (
-						<Button
-							variant="outline"
-							size="sm"
-							className="gap-1.5"
-							onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-						>
-							<ArrowDownUp className="size-3.5" />
-							{sortOrder === "asc" ? "Oldest first" : "Newest first"}
-						</Button>
-					)}
+					<EntityHero
+						eyebrow="MY PLAYLIST"
+						title={playlist.title}
+						subtitle={
+							playlist.description ? (
+								<span className="text-sm text-muted-foreground">{playlist.description}</span>
+							) : undefined
+						}
+						meta={`${playlist.tracks.length} TRACK${playlist.tracks.length !== 1 ? "S" : ""}`}
+						primaryAction={
+							playlist.tracks.length > 0 ? (
+								<Button
+									onClick={handlePlayAll}
+									className="h-12 md:h-10 w-full md:w-auto px-6 gap-2"
+								>
+									<Play className="size-4" aria-hidden />
+									PLAY
+								</Button>
+							) : undefined
+						}
+						secondaryActions={
+							playlist.tracks.length > 0 ? (
+								<>
+									<Button
+										onClick={handleShuffleAll}
+										variant="ghost"
+										size="icon-touch"
+										aria-label="Shuffle playlist"
+									>
+										<Shuffle className="size-4" aria-hidden />
+									</Button>
+									{playlist.tracks.length > 1 && (
+										<Button
+											variant="outline"
+											size="sm"
+											className="gap-1.5 min-h-11 md:min-h-9"
+											onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+											aria-label="Toggle sort order"
+										>
+											<ArrowDownUp className="size-3.5" aria-hidden />
+											{sortOrder === "asc" ? "Oldest" : "Newest"}
+										</Button>
+									)}
+								</>
+							) : undefined
+						}
+					/>
 				</div>
 			</div>
 
