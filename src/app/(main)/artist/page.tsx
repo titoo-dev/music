@@ -5,10 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import Link from "next/link";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, CheckCircle2, Play, Shuffle } from "lucide-react";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { CoverImage } from "@/components/ui/cover-image";
+import { EntityHero } from "@/components/layout/EntityHero";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -69,6 +72,32 @@ function ArtistContent() {
 
 	const artistName = artist.name || artist.ART_NAME;
 	const nbFan = artist.nb_fan || artist.NB_FAN;
+	const playerPlay = usePlayerStore((s) => s.play);
+	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+
+	const playableTopTracks: PlayerTrack[] = topTracks.slice(0, 10).map((t: any) => {
+		const n = trackFromDeezerRaw(t);
+		return {
+			trackId: n.trackId,
+			title: n.title,
+			artist: n.artist,
+			artistId: n.artistId ?? null,
+			cover: n.cover,
+			duration: n.duration ?? null,
+		};
+	});
+
+	const handlePlayTop = () => {
+		if (playableTopTracks.length === 0) return;
+		playerPlay(playableTopTracks[0], playableTopTracks);
+	};
+
+	const handleShuffleTop = () => {
+		if (playableTopTracks.length === 0) return;
+		const wasShuffled = usePlayerStore.getState().shuffle;
+		if (!wasShuffled) toggleShuffle();
+		playerPlay(playableTopTracks[0], playableTopTracks);
+	};
 
 	// Filter discography tabs that have content, preferred order
 	const tabOrder = ["all", "album", "single", "ep", "featured", "more"];
@@ -84,29 +113,36 @@ function ArtistContent() {
 
 	return (
 		<div className="space-y-10">
-			{/* Artist Hero */}
-			<div>
-				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-					ARTIST{nbFan != null ? ` · ${Number(nbFan).toLocaleString()} FANS` : ""}
-				</p>
-				<div className="flex flex-col md:flex-row items-center md:items-end gap-6 md:gap-8">
-					<CoverImage
-						src={artistPicture}
-						alt={artistName}
-						className="w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 flex-shrink-0 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] rounded-full overflow-hidden"
-					/>
-					<div className="flex flex-col gap-3 text-center md:text-left min-w-0 flex-1">
-						<h1 className="text-brutal-xl m-0">
-							{artistName}<span className="text-primary">.</span>
-						</h1>
-						{nbFan != null && (
-							<p className="text-sm font-mono font-bold text-muted-foreground tracking-[0.05em]">
-								{Number(nbFan).toLocaleString()} FANS · DEEZER
-							</p>
-						)}
-					</div>
-				</div>
-			</div>
+			<EntityHero
+				eyebrow={`ARTIST${nbFan != null ? ` · ${Number(nbFan).toLocaleString()} FANS` : ""}`}
+				title={artistName}
+				coverSrc={artistPicture}
+				coverAlt={artistName}
+				meta={nbFan != null ? `${Number(nbFan).toLocaleString()} FANS · DEEZER` : null}
+				primaryAction={
+					playableTopTracks.length > 0 ? (
+						<Button
+							onClick={handlePlayTop}
+							className="h-12 md:h-10 w-full md:w-auto px-6 gap-2"
+						>
+							<Play className="size-4" aria-hidden />
+							PLAY TOP TRACKS
+						</Button>
+					) : undefined
+				}
+				secondaryActions={
+					playableTopTracks.length > 0 ? (
+						<Button
+							onClick={handleShuffleTop}
+							variant="ghost"
+							size="icon-touch"
+							aria-label="Shuffle top tracks"
+						>
+							<Shuffle className="size-4" aria-hidden />
+						</Button>
+					) : undefined
+				}
+			/>
 
 			{/* Top Tracks */}
 			{topTracks.length > 0 && (
