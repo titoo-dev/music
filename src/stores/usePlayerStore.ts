@@ -113,7 +113,10 @@ interface PlayerState {
 	clearQueue: () => void;
 }
 
-/** Navigate to a queue index, setting it as the current track. */
+/** Navigate to a queue index, setting it as the current track. Karaoke
+ *  mode is reset because every caller of goToIndex advances to a
+ *  different queue position (next/prev/jumpToIndex). The "restart same
+ *  track" branches in prev() / prevTrack() bypass this helper. */
 function goToIndex(queueIndex: number, queue: PlayerTrack[]): Partial<PlayerState> {
 	return {
 		currentTrack: queue[queueIndex],
@@ -123,6 +126,7 @@ function goToIndex(queueIndex: number, queue: PlayerTrack[]): Partial<PlayerStat
 		currentTime: 0,
 		buffered: 0,
 		error: null,
+		karaokeMode: false,
 	};
 }
 
@@ -166,6 +170,11 @@ export const usePlayerStore = create<PlayerState>()(
 
 			play: (track, queue) => {
 				const state = get();
+				const isSameTrack = state.currentTrack?.trackId === track.trackId;
+				// Reset karaoke whenever the track id changes. The "resume same
+				// track without a queue" branch keeps it intentionally — that's
+				// just a play after pause, the user's preference shouldn't flip.
+				const karaokeReset = isSameTrack ? {} : { karaokeMode: false };
 				if (queue) {
 					const idx = queue.findIndex((t) => t.trackId === track.trackId);
 					const startIdx = idx >= 0 ? idx : 0;
@@ -179,6 +188,7 @@ export const usePlayerStore = create<PlayerState>()(
 							isBuffering: true,
 							currentTime: 0,
 							error: null,
+							...karaokeReset,
 						});
 					} else {
 						set({
@@ -189,9 +199,10 @@ export const usePlayerStore = create<PlayerState>()(
 							isBuffering: true,
 							currentTime: 0,
 							error: null,
+							...karaokeReset,
 						});
 					}
-				} else if (state.currentTrack?.trackId === track.trackId) {
+				} else if (isSameTrack) {
 					set({ isPlaying: true, error: null });
 				} else {
 					set({
@@ -202,6 +213,7 @@ export const usePlayerStore = create<PlayerState>()(
 						isBuffering: true,
 						currentTime: 0,
 						error: null,
+						karaokeMode: false,
 					});
 				}
 			},
@@ -380,6 +392,7 @@ export const usePlayerStore = create<PlayerState>()(
 						isPlaying: true,
 						isBuffering: true,
 						currentTime: 0,
+						karaokeMode: false,
 					});
 				} else {
 					set({
@@ -389,6 +402,7 @@ export const usePlayerStore = create<PlayerState>()(
 						isPlaying: true,
 						isBuffering: true,
 						currentTime: 0,
+						karaokeMode: false,
 					});
 				}
 			},
