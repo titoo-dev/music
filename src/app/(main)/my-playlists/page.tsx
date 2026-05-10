@@ -208,7 +208,7 @@ export default function MyPlaylistsPage() {
 					{playlists.map((pl) => (
 						<div
 							key={pl.id}
-							className="group relative border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden"
+							className="group relative border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card overflow-hidden"
 						>
 							<Link href={`/my-playlists/${pl.id}`} className="no-underline">
 								<PlaylistCover covers={pl.covers} title={pl.title} />

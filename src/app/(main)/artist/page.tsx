@@ -225,7 +225,7 @@ function ArtistContent() {
 
 										return (
 											<div key={albumId} className="group space-y-2">
-												<div className="relative overflow-hidden border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card">
+												<div className="relative overflow-hidden border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card">
 													<Link href={albumHref}>
 														<CoverImage
 															src={albumCover}

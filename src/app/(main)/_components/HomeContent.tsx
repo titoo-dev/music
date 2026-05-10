@@ -233,7 +233,7 @@ export function HomeContent({ playlists, albums, recentPlays, user }: HomeConten
 							<Link
 								key={pl.id}
 								href={`/my-playlists/${pl.id}`}
-								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[2px] hover:-translate-y-[2px] transition-all"
+								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[2px] [@media(hover:hover)]:hover:-translate-y-[2px] transition-all"
 							>
 								<PlaylistCover covers={pl.covers} title={pl.title} />
 								<div className="p-2.5 border-t-[2px] border-foreground">
@@ -273,7 +273,7 @@ export function HomeContent({ playlists, albums, recentPlays, user }: HomeConten
 							<Link
 								key={album.id}
 								href={`/album?id=${album.deezerAlbumId}`}
-								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[2px] hover:-translate-y-[2px] transition-all"
+								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[2px] [@media(hover:hover)]:hover:-translate-y-[2px] transition-all"
 							>
 								<div className="w-full aspect-square bg-muted flex items-center justify-center">
 									{album.coverUrl ? (

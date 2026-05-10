@@ -207,9 +207,9 @@ function LibraryContent() {
 						<button
 							key={t.key}
 							onClick={() => setTab(t.key)}
-							className={`shrink-0 px-5 py-2.5 font-mono text-[11px] font-bold tracking-[0.14em] uppercase cursor-pointer transition-colors ${
+							className={`shrink-0 min-h-11 md:min-h-9 px-5 py-2.5 font-mono text-[11px] font-bold tracking-[0.14em] uppercase cursor-pointer transition-colors ${
 								i < TABS.length - 1 ? "border-r-[2px] border-foreground" : ""
-							} ${active ? "bg-foreground text-background" : "bg-transparent text-foreground hover:bg-accent/40"}`}
+							} ${active ? "bg-foreground text-background" : "bg-transparent text-foreground active:bg-accent/40 [@media(hover:hover)]:hover:bg-accent/40"}`}
 						>
 							{t.label}
 							<span className={`ml-1.5 ${active ? "opacity-70" : "text-muted-foreground"}`}>
@@ -277,7 +277,7 @@ function LibraryContent() {
 							<Link
 								key={pl.id}
 								href={`/my-playlists/${pl.id}`}
-								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[2px] hover:-translate-y-[2px] transition-all"
+								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[2px] [@media(hover:hover)]:hover:-translate-y-[2px] transition-all"
 							>
 								<PlaylistCover covers={pl.covers} title={pl.title} />
 								<div className="p-2.5 border-t-[2px] border-foreground">
@@ -313,7 +313,7 @@ function LibraryContent() {
 							<Link
 								key={album.id}
 								href={`/album?id=${album.deezerAlbumId}`}
-								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[2px] hover:-translate-y-[2px] transition-all"
+								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[2px] [@media(hover:hover)]:hover:-translate-y-[2px] transition-all"
 							>
 								<div className="w-full aspect-square bg-muted flex items-center justify-center">
 									{album.coverUrl ? (

@@ -862,7 +862,7 @@ function AlbumCard({
 	const albumHref = `/album?id=${id}`;
 
 	return (
-		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
+		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
 			<div className="relative">
 				<Link href={albumHref}>
 					<CoverImage
@@ -908,7 +908,7 @@ function ArtistCard({ artist }: { artist: any }) {
 		"/placeholder.jpg";
 
 	return (
-		<div className="group text-center border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
+		<div className="group text-center border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
 			<Link href={`/artist?id=${id}`}>
 				<div className="overflow-hidden aspect-square">
 					<CoverImage
@@ -1012,7 +1012,7 @@ function PlaylistCard({ playlist: pl }: { playlist: any }) {
 		"/placeholder.jpg";
 
 	return (
-		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
+		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
 			<div className="relative">
 				<Link href={`/playlist?id=${id}`}>
 					<CoverImage
