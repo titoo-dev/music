@@ -6,6 +6,7 @@ interface PreviewState {
 		id: string;
 		title: string;
 		artist: string;
+		artistId?: string | null;
 		cover: string;
 		previewUrl: string;
 	} | null;

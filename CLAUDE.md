@@ -9,7 +9,7 @@ This project uses Next.js 16 which has breaking changes from earlier versions. *
 ## Stack
 
 - **Frontend**: Next.js 16 (app router), React 19, Zustand stores, Tailwind CSS 4, shadcn/ui, Motion
-- **Backend**: Next.js API routes (`src/app/api/v1/`) + Express WebSocket server (`server/`)
+- **Backend**: Next.js API routes (`src/app/api/v1/`) + BullMQ stems-worker (`stems-worker/`)
 - **Database**: PostgreSQL via Prisma 7 (schema at `prisma/schema.prisma`)
 - **Storage**: S3 (AWS SDK v3) or local filesystem — see `src/lib/deemix/storage/`
 - **Auth**: better-auth (`src/lib/auth.ts`, `src/lib/auth-client.ts`)
@@ -48,7 +48,7 @@ src/
 │   └── server-state.ts      # Shared server state
 ├── stores/                  # Zustand: useAppStore, usePlayerStore, useQueueStore, etc.
 └── utils/                   # api helpers, volume adjustment, misc helpers
-server/                      # Express + WebSocket server
+stems-worker/                # BullMQ consumer for Demucs stem separation
 scripts/                     # DB check, icon generation, streaming tasks
 prisma/schema.prisma         # Database schema
 ```
@@ -57,8 +57,6 @@ prisma/schema.prisma         # Database schema
 
 ```bash
 npm run dev          # Next.js dev server
-npm run server       # Express/WS server
-npm run dev:all      # Both servers
 npm run build        # Production build
 npm run lint         # ESLint
 npm run studio       # Prisma Studio

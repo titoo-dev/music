@@ -1,5 +1,4 @@
 const API_BASE = "/api/v1";
-const WS_PORT = 6595;
 
 async function unwrap(res: Response) {
 	const json = await res.json();
@@ -29,9 +28,4 @@ export async function postToServer(endpoint: string, data: Record<string, any> =
 		body: JSON.stringify(data),
 	});
 	return unwrap(res);
-}
-
-export function getWsUrl() {
-	const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-	return `${protocol}://${window.location.hostname}:${WS_PORT}`;
 }

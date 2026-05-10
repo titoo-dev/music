@@ -289,6 +289,7 @@ export function TrackActionMenu({
 			trackId: track.id,
 			title: track.title,
 			artist: track.artist,
+			artistId: track.artistId ?? null,
 			cover: track.cover ?? null,
 			duration: track.duration ?? null,
 		}),
@@ -301,6 +302,7 @@ export function TrackActionMenu({
 			id: track.id,
 			title: track.title,
 			artist: track.artist,
+			artistId: track.artistId ?? null,
 			cover: track.cover || "",
 			previewUrl: track.previewUrl,
 		});

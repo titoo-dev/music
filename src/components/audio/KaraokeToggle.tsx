@@ -6,6 +6,7 @@ import { useTrackCached } from "@/hooks/useTrackCached";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { Mic, MicOff, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 // Karaoke toggle button rendered in the player chrome. One click = "remove
@@ -113,43 +114,48 @@ export function KaraokeToggle() {
 	})();
 
 	const icon = (() => {
-		if (isPreparing) return <Loader2 className="h-3 w-3 animate-spin" />;
-		if (isFailed) return <AlertCircle className="h-3 w-3" />;
-		return karaokeMode ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />;
+		if (isPreparing) return <Loader2 className="h-3.5 w-3.5 animate-spin" />;
+		if (isFailed) return <AlertCircle className="h-3.5 w-3.5" />;
+		return karaokeMode ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />;
 	})();
 
 	const isActive = karaokeMode && stems.status === "completed";
+	// Default state is icon-only; expand only to surface the live progress
+	// percentage or RETRY affordance, since those carry information beyond
+	// what an icon can convey.
+	const showText = isPreparing || isFailed;
 
 	return (
-		<Button
-			variant="ghost"
-			size="sm"
-			aria-label={label}
-			aria-pressed={karaokeMode}
-			data-testid="karaoke-toggle"
-			className={`hidden md:inline-flex h-7 px-2 gap-1.5 font-mono text-[10px] font-black tracking-[0.1em] border-[2px] ${
-				isFailed
-					? "bg-destructive/10 text-destructive border-destructive"
-					: isActive
-						? "bg-primary text-white border-foreground"
-						: isPreparing
-							? "bg-accent text-foreground border-foreground"
-							: karaokeMode
-								? "bg-accent text-foreground border-foreground"
-								: "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"
-			}`}
-			onClick={handleClick}
-		>
-			{icon}
-			<span>
-				{isPreparing
-					? `${stems.progress}%`
-					: isFailed
-						? "RETRY"
-						: karaokeMode
-							? "KARAOKE"
-							: "KARAOKE"}
-			</span>
-		</Button>
+		<Tooltip>
+			<TooltipTrigger
+				render={
+					<Button
+						variant="ghost"
+						size="sm"
+						aria-label={label}
+						aria-pressed={karaokeMode}
+						data-testid="karaoke-toggle"
+						className={`hidden md:inline-flex h-7 ${showText ? "px-2 gap-1.5" : "w-7 px-0"} font-mono text-[10px] font-black tracking-[0.1em] border-[2px] ${
+							isFailed
+								? "bg-destructive/10 text-destructive border-destructive"
+								: isActive
+									? "bg-primary text-white border-foreground"
+									: isPreparing
+										? "bg-accent text-foreground border-foreground"
+										: karaokeMode
+											? "bg-accent text-foreground border-foreground"
+											: "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"
+						}`}
+						onClick={handleClick}
+					/>
+				}
+			>
+				{icon}
+				{showText && (
+					<span>{isPreparing ? `${stems.progress}%` : "RETRY"}</span>
+				)}
+			</TooltipTrigger>
+			<TooltipContent>{label}</TooltipContent>
+		</Tooltip>
 	);
 }

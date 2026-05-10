@@ -517,9 +517,7 @@ export function AudioEngine() {
 	const setBuffering = usePlayerStore((s) => s.setBuffering);
 	const setBuffered = usePlayerStore((s) => s.setBuffered);
 	const setError = usePlayerStore((s) => s.setError);
-	const playbackRate = usePlayerStore((s) => s.playbackRate);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
-	const sleepTimerEnd = usePlayerStore((s) => s.sleepTimerEnd);
 	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
 
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
@@ -628,7 +626,6 @@ export function AudioEngine() {
 					// will handle it by re-buffering and seeking when ready.
 				}
 				fullAudio.volume = userVol;
-				fullAudio.playbackRate = usePlayerStore.getState().playbackRate;
 				if (wasPlaying || usePlayerStore.getState().isPlaying) {
 					fullAudio.play().catch(() => {});
 				}
@@ -937,7 +934,6 @@ export function AudioEngine() {
 					// Already buffered — play immediately
 					setBuffering(false);
 					setDuration(preloaded.duration || 0);
-					preloaded.playbackRate = usePlayerStore.getState().playbackRate;
 					applyResumePosition(preloaded);
 					if (usePlayerStore.getState().isPlaying) {
 						skipPlayEffectRef.current = true;
@@ -998,12 +994,6 @@ export function AudioEngine() {
 		adjustVolume(audio, volume / 100, { duration: 300 });
 	}, [volume, isPlaying]);
 
-	// Playback rate
-	useEffect(() => {
-		const audio = audioRef.current;
-		if (audio) audio.playbackRate = playbackRate;
-	}, [playbackRate]);
-
 	// Normalization toggle — reset gain when turned off
 	useEffect(() => {
 		if (!normalizationEnabled) {
@@ -1011,18 +1001,6 @@ export function AudioEngine() {
 			resetNormGain();
 		}
 	}, [normalizationEnabled]);
-
-	// Sleep timer
-	useEffect(() => {
-		if (!sleepTimerEnd) return;
-		const interval = setInterval(() => {
-			if (Date.now() >= sleepTimerEnd) {
-				usePlayerStore.getState().pause();
-				usePlayerStore.getState().setSleepTimer(null);
-			}
-		}, 1000);
-		return () => clearInterval(interval);
-	}, [sleepTimerEnd]);
 
 	// Karaoke toggle — reload the current track when the user flips it so the
 	// audio source switches between original and no_vocals stem. Skips the
@@ -1124,7 +1102,6 @@ export function AudioEngine() {
 		if (!audio) return;
 		setBuffering(false);
 		setDuration(audio.duration || 0);
-		audio.playbackRate = usePlayerStore.getState().playbackRate;
 		applyResumePosition(audio);
 		onPositionUpdate();
 		if (usePlayerStore.getState().isPlaying) {
@@ -1262,7 +1239,6 @@ export function AudioEngine() {
 					prevTrackIdRef.current = nextTrack.trackId;
 					skipPlayEffectRef.current = true;
 
-					preloaded.playbackRate = playbackRate;
 					preloaded.volume = 0;
 					preloaded.currentTime = 0;
 					preloaded.play().catch(() => {});

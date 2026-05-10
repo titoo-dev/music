@@ -139,7 +139,6 @@ describe("usePlayerStore — pause/resume/toggle/stop", () => {
 			error: "x",
 			fullscreenOpen: true,
 			queuePanelOpen: true,
-			sleepTimerEnd: 12345,
 		});
 		usePlayerStore.getState().stop();
 		const s = usePlayerStore.getState();
@@ -154,7 +153,6 @@ describe("usePlayerStore — pause/resume/toggle/stop", () => {
 		expect(s.error).toBeNull();
 		expect(s.fullscreenOpen).toBe(false);
 		expect(s.queuePanelOpen).toBe(false);
-		expect(s.sleepTimerEnd).toBeNull();
 	});
 });
 
@@ -815,19 +813,7 @@ describe("usePlayerStore — misc setters", () => {
 		expect(usePlayerStore.getState().queuePanelOpen).toBe(true);
 	});
 
-	it("setSleepTimer with null clears, with minutes sets future timestamp", () => {
-		const before = Date.now();
-		usePlayerStore.getState().setSleepTimer(5);
-		const end = usePlayerStore.getState().sleepTimerEnd;
-		expect(end).not.toBeNull();
-		expect(end!).toBeGreaterThanOrEqual(before + 5 * 60 * 1000 - 5);
-		usePlayerStore.getState().setSleepTimer(null);
-		expect(usePlayerStore.getState().sleepTimerEnd).toBeNull();
-	});
-
-	it("setPlaybackRate / setCrossfadeDuration / toggleNormalization", () => {
-		usePlayerStore.getState().setPlaybackRate(1.5);
-		expect(usePlayerStore.getState().playbackRate).toBe(1.5);
+	it("setCrossfadeDuration / toggleNormalization", () => {
 		usePlayerStore.getState().setCrossfadeDuration(3);
 		expect(usePlayerStore.getState().crossfadeDuration).toBe(3);
 		const before = usePlayerStore.getState().normalizationEnabled;

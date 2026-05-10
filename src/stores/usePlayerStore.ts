@@ -6,6 +6,7 @@ export interface PlayerTrack {
 	trackId: string;
 	title: string;
 	artist: string;
+	artistId?: string | null;
 	cover: string | null;
 	duration: number | null;
 }
@@ -50,8 +51,6 @@ interface PlayerState {
 	queuePanelOpen: boolean;
 
 	// P2 features
-	sleepTimerEnd: number | null;
-	playbackRate: number;
 	crossfadeDuration: number;
 	normalizationEnabled: boolean;
 
@@ -93,8 +92,6 @@ interface PlayerState {
 	/** Jump directly to a queue index (used by Queue panel click-to-play). */
 	jumpToIndex: (index: number) => void;
 	playQueue: (queue: PlayerTrack[], startIndex?: number) => void;
-	setSleepTimer: (minutes: number | null) => void;
-	setPlaybackRate: (rate: number) => void;
 	setCrossfadeDuration: (seconds: number) => void;
 	toggleNormalization: () => void;
 	setKaraokeMode: (on: boolean) => void;
@@ -162,8 +159,6 @@ export const usePlayerStore = create<PlayerState>()(
 			error: null,
 			fullscreenOpen: false,
 			queuePanelOpen: false,
-			sleepTimerEnd: null,
-			playbackRate: 1.0,
 			crossfadeDuration: 0,
 			normalizationEnabled: false,
 			karaokeMode: false,
@@ -229,7 +224,6 @@ export const usePlayerStore = create<PlayerState>()(
 				isPlaying: false, isBuffering: false,
 				currentTime: 0, duration: 0, buffered: 0, error: null,
 				fullscreenOpen: false, queuePanelOpen: false,
-				sleepTimerEnd: null,
 			}),
 
 			next: () => {
@@ -364,10 +358,6 @@ export const usePlayerStore = create<PlayerState>()(
 				set(goToIndex(index, queue));
 			},
 
-			setSleepTimer: (minutes) => {
-				set({ sleepTimerEnd: minutes === null ? null : Date.now() + minutes * 60 * 1000 });
-			},
-			setPlaybackRate: (playbackRate) => set({ playbackRate }),
 			setCrossfadeDuration: (crossfadeDuration) => set({ crossfadeDuration }),
 			toggleNormalization: () => set((s) => ({ normalizationEnabled: !s.normalizationEnabled })),
 			setKaraokeMode: (karaokeMode) => set({ karaokeMode }),
@@ -505,7 +495,6 @@ export const usePlayerStore = create<PlayerState>()(
 				queue: state.queue,
 				queueIndex: state.queueIndex,
 				currentTrack: state.currentTrack,
-				playbackRate: state.playbackRate,
 				crossfadeDuration: state.crossfadeDuration,
 				normalizationEnabled: state.normalizationEnabled,
 				karaokeMode: state.karaokeMode,

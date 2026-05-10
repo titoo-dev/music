@@ -13,47 +13,30 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuLabel,
+	DropdownMenuGroup,
 	DropdownMenuSeparator,
 	DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion, AnimatePresence } from "motion/react";
-import { Loader2, Moon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Loader2, Captions } from "lucide-react";
 import { formatTime } from "@/utils/format-time";
-
-const SPEED_STEPS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-
-/** Tiny chip that ticks down the remaining time on the active sleep timer. */
-function SleepCountdown({ endTs }: { endTs: number }) {
-	// Tick `now` every second; `remaining` is derived so endTs updates apply
-	// instantly on the next render without setState-in-effect.
-	const [now, setNow] = useState(() => Date.now());
-	useEffect(() => {
-		const id = setInterval(() => setNow(Date.now()), 1000);
-		return () => clearInterval(id);
-	}, []);
-	const remaining = Math.max(0, endTs - now);
-	if (remaining <= 0) return null;
-	const totalSec = Math.ceil(remaining / 1000);
-	const m = Math.floor(totalSec / 60);
-	const s = totalSec % 60;
-	return (
-		<span
-			className="hidden sm:inline-flex items-center gap-1 border-2 border-foreground bg-accent px-1.5 py-0.5 text-[9px] font-mono font-black uppercase tracking-wider text-foreground"
-			aria-label={`Sleep timer: ${m} minutes ${s} seconds remaining`}
-		>
-			<Moon className="h-2.5 w-2.5" />
-			{m > 0 ? `${m}:${s.toString().padStart(2, "0")}` : `${s}s`}
-		</span>
-	);
-}
-
-function formatRate(rate: number): string {
-	return rate === 1 ? "1×" : `${rate}×`;
-}
+import Link from "next/link";
+import type { ReactElement } from "react";
 
 function seek(time: number) {
 	usePlayerStore.getState().seek(time);
+}
+
+/** Wraps a button-like trigger so every icon control gets a hover tooltip
+ *  without repeating the Tooltip/TooltipTrigger boilerplate at every site. */
+function Tip({ label, trigger, children }: { label: string; trigger: ReactElement; children: React.ReactNode }) {
+	return (
+		<Tooltip>
+			<TooltipTrigger render={trigger}>{children}</TooltipTrigger>
+			<TooltipContent>{label}</TooltipContent>
+		</Tooltip>
+	);
 }
 
 export function Player() {
@@ -76,10 +59,6 @@ export function Player() {
 	const toggleMute = usePlayerStore((s) => s.toggleMute);
 	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 	const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
-	const playbackRate = usePlayerStore((s) => s.playbackRate);
-	const setPlaybackRate = usePlayerStore((s) => s.setPlaybackRate);
-	const sleepTimerEnd = usePlayerStore((s) => s.sleepTimerEnd);
-	const setSleepTimer = usePlayerStore((s) => s.setSleepTimer);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
 	const setCrossfadeDuration = usePlayerStore((s) => s.setCrossfadeDuration);
 	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
@@ -107,13 +86,6 @@ export function Player() {
 		if (!lyricsVisible && queuePanelOpen) setQueuePanelOpen(false);
 		toggleLyrics();
 	};
-	const sleepActive = sleepTimerEnd !== null;
-
-	function cycleSpeed() {
-		const idx = SPEED_STEPS.indexOf(playbackRate);
-		const next = SPEED_STEPS[(idx + 1) % SPEED_STEPS.length];
-		setPlaybackRate(next);
-	}
 
 	const handleContextMenu = (e: React.MouseEvent) => {
 		e.preventDefault();
@@ -168,7 +140,17 @@ export function Player() {
 									{currentTrack.title}
 								</p>
 								<p className="truncate text-[11px] text-muted-foreground leading-tight font-medium mt-0.5">
-									{currentTrack.artist}
+									{currentTrack.artistId ? (
+										<Link
+											href={`/artist?id=${currentTrack.artistId}`}
+											onClick={(e) => e.stopPropagation()}
+											className="hover:underline hover:text-foreground transition-colors"
+										>
+											{currentTrack.artist}
+										</Link>
+									) : (
+										currentTrack.artist
+									)}
 								</p>
 							</div>
 						</div>
@@ -177,13 +159,18 @@ export function Player() {
 						<div className="flex items-center justify-center gap-1 flex-1">
 							{/* Shuffle */}
 							{hasQueue && (
-								<Button
-									variant="ghost"
-									size="icon"
-									aria-label="Shuffle"
-									aria-pressed={shuffle}
-									className={`h-7 w-7 sm:h-8 sm:w-8 ${shuffle ? "text-foreground" : "text-muted-foreground"}`}
-									onClick={toggleShuffle}
+								<Tip
+									label={shuffle ? "Shuffle on" : "Shuffle"}
+									trigger={
+										<Button
+											variant="ghost"
+											size="icon"
+											aria-label="Shuffle"
+											aria-pressed={shuffle}
+											className={`h-7 w-7 sm:h-8 sm:w-8 ${shuffle ? "text-foreground" : "text-muted-foreground"}`}
+											onClick={toggleShuffle}
+										/>
+									}
 								>
 									<svg width="12" height="12" className="sm:w-[14px] sm:h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
 										<polyline points="16 3 21 3 21 8" />
@@ -192,30 +179,40 @@ export function Player() {
 										<line x1="15" y1="15" x2="21" y2="21" />
 										<line x1="4" y1="4" x2="9" y2="9" />
 									</svg>
-								</Button>
+								</Tip>
 							)}
 
 							{/* Prev */}
-							<Button
-								variant="ghost"
-								size="icon"
-								aria-label="Previous track"
-								className="h-8 w-8 text-foreground hover:bg-accent border-[2px] border-transparent hover:border-foreground"
-								onClick={prev}
+							<Tip
+								label="Previous track"
+								trigger={
+									<Button
+										variant="ghost"
+										size="icon"
+										aria-label="Previous track"
+										className="h-8 w-8 text-foreground hover:bg-accent border-[2px] border-transparent hover:border-foreground"
+										onClick={prev}
+									/>
+								}
 							>
 								<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
 									<rect x="2" y="4" width="3" height="16" rx="1" />
 									<path d="M22 4L9 12L22 20V4Z" />
 								</svg>
-							</Button>
+							</Tip>
 
 							{/* Play/Pause */}
-							<Button
-								variant="ghost"
-								size="icon"
-								aria-label={isPlaying ? "Pause" : "Play"}
-								className="h-10 w-10 border-[2px] border-foreground bg-primary text-white hover:bg-primary/90 shadow-[var(--shadow-brutal-sm)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
-								onClick={toggle}
+							<Tip
+								label={isPlaying ? "Pause" : "Play"}
+								trigger={
+									<Button
+										variant="ghost"
+										size="icon"
+										aria-label={isPlaying ? "Pause" : "Play"}
+										className="h-10 w-10 border-[2px] border-foreground bg-primary text-white hover:bg-primary/90 shadow-[var(--shadow-brutal-sm)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+										onClick={toggle}
+									/>
+								}
 							>
 								{isPlaying && isBuffering ? (
 									<Loader2 className="h-4 w-4 animate-spin" />
@@ -229,31 +226,41 @@ export function Player() {
 										<path d="M2.5 1.5L10.5 6L2.5 10.5V1.5Z" />
 									</svg>
 								)}
-							</Button>
+							</Tip>
 
 							{/* Next */}
-							<Button
-								variant="ghost"
-								size="icon"
-								aria-label="Next track"
-								className="h-8 w-8 text-foreground hover:bg-accent border-[2px] border-transparent hover:border-foreground"
-								onClick={next}
+							<Tip
+								label="Next track"
+								trigger={
+									<Button
+										variant="ghost"
+										size="icon"
+										aria-label="Next track"
+										className="h-8 w-8 text-foreground hover:bg-accent border-[2px] border-transparent hover:border-foreground"
+										onClick={next}
+									/>
+								}
 							>
 								<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
 									<rect x="19" y="4" width="3" height="16" rx="1" />
 									<path d="M2 4L15 12L2 20V4Z" />
 								</svg>
-							</Button>
+							</Tip>
 
 							{/* Repeat */}
 							{hasQueue && (
-								<Button
-									variant="ghost"
-									size="icon"
-									aria-label={`Repeat ${repeat}`}
-									aria-pressed={repeat !== "off"}
-									className={`h-7 w-7 sm:h-8 sm:w-8 relative ${repeat !== "off" ? "text-foreground" : "text-muted-foreground"}`}
-									onClick={toggleRepeat}
+								<Tip
+									label={repeat === "off" ? "Repeat" : repeat === "all" ? "Repeat all" : "Repeat one"}
+									trigger={
+										<Button
+											variant="ghost"
+											size="icon"
+											aria-label={`Repeat ${repeat}`}
+											aria-pressed={repeat !== "off"}
+											className={`h-7 w-7 sm:h-8 sm:w-8 relative ${repeat !== "off" ? "text-foreground" : "text-muted-foreground"}`}
+											onClick={toggleRepeat}
+										/>
+									}
 								>
 									<svg width="12" height="12" className="sm:w-[14px] sm:h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
 										<polyline points="17 1 21 5 17 9" />
@@ -264,26 +271,29 @@ export function Player() {
 									{repeat === "one" && (
 										<span className="absolute text-[8px] font-bold">1</span>
 									)}
-								</Button>
+								</Tip>
 							)}
 						</div>
 
-						{/* Time + Volume */}
-						<div className="flex items-center gap-2 sm:gap-3 justify-end w-[30%]">
-							<span className="text-[10px] sm:text-[11px] font-mono font-bold text-muted-foreground tabular-nums tracking-[0.05em]">
+						{/* Time + secondary controls */}
+						<div className="flex items-center gap-1.5 sm:gap-2 justify-end w-[30%]">
+							<span className="text-[10px] sm:text-[11px] font-mono font-bold text-muted-foreground tabular-nums tracking-[0.05em] mr-0.5">
 								{formatTime(currentTime)}<span className="hidden sm:inline"> / {formatTime(duration)}</span>
 							</span>
 
-							{sleepActive && sleepTimerEnd && <SleepCountdown endTs={sleepTimerEnd} />}
-
 							{/* Queue panel toggle */}
-							<Button
-								variant="ghost"
-								size="icon"
-								aria-label={queuePanelOpen ? "Close queue" : "Open queue"}
-								aria-pressed={queuePanelOpen}
-								className={`relative h-7 w-7 sm:h-8 sm:w-8 border-[2px] ${queuePanelOpen ? "bg-accent text-foreground border-foreground" : "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"}`}
-								onClick={handleToggleQueue}
+							<Tip
+								label={queuePanelOpen ? "Close queue" : `Queue (${queue.length})`}
+								trigger={
+									<Button
+										variant="ghost"
+										size="icon"
+										aria-label={queuePanelOpen ? "Close queue" : "Open queue"}
+										aria-pressed={queuePanelOpen}
+										className={`relative h-7 w-7 sm:h-8 sm:w-8 border-[2px] ${queuePanelOpen ? "bg-accent text-foreground border-foreground" : "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"}`}
+										onClick={handleToggleQueue}
+									/>
+								}
 							>
 								<svg width="13" height="13" className="sm:w-[14px] sm:h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
 									<line x1="8" y1="6" x2="21" y2="6" />
@@ -301,42 +311,41 @@ export function Player() {
 										{queue.length > 99 ? "99+" : queue.length}
 									</span>
 								)}
-							</Button>
+							</Tip>
 
-							{/* Karaoke toggle — same chip style as LRC / speed */}
+							{/* Karaoke toggle (icon-only with tooltip; expands during prepare/retry) */}
 							<KaraokeToggle />
 
-							{/* Lyrics toggle (LRC label like prototype) */}
-							<Button
-								variant="ghost"
-								size="sm"
-								aria-label="Toggle lyrics"
-								aria-pressed={lyricsVisible}
-								className={`hidden md:inline-flex h-7 px-2 font-mono text-[10px] font-black tracking-[0.1em] border-[2px] ${lyricsVisible ? "bg-accent text-foreground border-foreground" : "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"}`}
-								onClick={handleToggleLyrics}
+							{/* Lyrics toggle */}
+							<Tip
+								label={lyricsVisible ? "Hide lyrics" : "Show lyrics"}
+								trigger={
+									<Button
+										variant="ghost"
+										size="icon"
+										aria-label="Toggle lyrics"
+										aria-pressed={lyricsVisible}
+										className={`hidden md:inline-flex h-7 w-7 border-[2px] ${lyricsVisible ? "bg-accent text-foreground border-foreground" : "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"}`}
+										onClick={handleToggleLyrics}
+									/>
+								}
 							>
-								LRC
-							</Button>
-
-							{/* Speed control */}
-							<Button
-								variant="ghost"
-								size="sm"
-								aria-label={`Playback speed ${formatRate(playbackRate)}`}
-								className="hidden md:flex h-7 px-2 text-[10px] font-mono font-bold text-muted-foreground hover:text-foreground tracking-[0.05em]"
-								onClick={cycleSpeed}
-							>
-								{formatRate(playbackRate)}
-							</Button>
+								<Captions className="h-3.5 w-3.5" />
+							</Tip>
 
 							{/* Volume — brutal bar */}
 							<div className="hidden md:flex items-center gap-1.5">
-								<button
-									type="button"
-									onClick={toggleMute}
-									aria-label={volume === 0 ? "Unmute" : "Mute"}
-									aria-pressed={volume === 0}
-									className="shrink-0 text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm p-0.5"
+								<Tip
+									label={volume === 0 ? "Unmute" : "Mute"}
+									trigger={
+										<button
+											type="button"
+											onClick={toggleMute}
+											aria-label={volume === 0 ? "Unmute" : "Mute"}
+											aria-pressed={volume === 0}
+											className="shrink-0 text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm p-0.5"
+										/>
+									}
 								>
 									<svg
 										width="13"
@@ -359,8 +368,8 @@ export function Player() {
 											</>
 										)}
 									</svg>
-								</button>
-								<div className="relative w-20 h-2 border-[2px] border-foreground bg-background">
+								</Tip>
+								<div className="relative w-16 h-2 border-[2px] border-foreground bg-background">
 									<div
 										className="absolute inset-y-0 left-0 bg-foreground"
 										style={{ width: `${volume}%` }}
@@ -377,39 +386,38 @@ export function Player() {
 								</div>
 							</div>
 
-							{/* Sleep timer + crossfade settings */}
+							{/* Crossfade + loudness settings — native title; can't nest base-ui Tooltip and Menu triggers on the same button without the click being swallowed */}
 							<DropdownMenu>
 								<DropdownMenuTrigger
-									aria-label="Sleep timer and crossfade settings"
-									className={`hidden md:inline-flex h-7 w-7 items-center justify-center rounded-md ${sleepActive ? "text-foreground" : "text-muted-foreground"} hover:bg-accent hover:text-foreground`}
+									aria-label="Audio settings"
+									title="Audio settings"
+									className="hidden md:inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
 								>
 									<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-										<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+										<line x1="4" y1="21" x2="4" y2="14" />
+										<line x1="4" y1="10" x2="4" y2="3" />
+										<line x1="12" y1="21" x2="12" y2="12" />
+										<line x1="12" y1="8" x2="12" y2="3" />
+										<line x1="20" y1="21" x2="20" y2="16" />
+										<line x1="20" y1="12" x2="20" y2="3" />
+										<line x1="1" y1="14" x2="7" y2="14" />
+										<line x1="9" y1="8" x2="15" y2="8" />
+										<line x1="17" y1="16" x2="23" y2="16" />
 									</svg>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent side="top" align="end">
-									<DropdownMenuLabel>Sleep timer</DropdownMenuLabel>
-									{sleepActive && (
-										<DropdownMenuItem onClick={() => setSleepTimer(null)}>
-											Turn off
-										</DropdownMenuItem>
-									)}
-									{([5, 10, 15, 30, 45, 60] as const).map((m) => (
-										<DropdownMenuItem key={m} onClick={() => setSleepTimer(m)}>
-											{m} min
-										</DropdownMenuItem>
-									))}
-									<DropdownMenuSeparator />
-									<DropdownMenuLabel>Crossfade</DropdownMenuLabel>
-									{([0, 1, 2, 3, 5, 8] as const).map((s) => (
-										<DropdownMenuItem
-											key={s}
-											onClick={() => setCrossfadeDuration(s)}
-											className={crossfadeDuration === s ? "font-semibold" : ""}
-										>
-											{s === 0 ? "Off" : `${s}s`}
-										</DropdownMenuItem>
-									))}
+									<DropdownMenuGroup>
+										<DropdownMenuLabel>Crossfade</DropdownMenuLabel>
+										{([0, 1, 2, 3, 5, 8] as const).map((s) => (
+											<DropdownMenuItem
+												key={s}
+												onClick={() => setCrossfadeDuration(s)}
+												className={crossfadeDuration === s ? "font-semibold" : ""}
+											>
+												{s === 0 ? "Off" : `${s}s`}
+											</DropdownMenuItem>
+										))}
+									</DropdownMenuGroup>
 									<DropdownMenuSeparator />
 									<DropdownMenuCheckboxItem
 										checked={normalizationEnabled}
@@ -421,12 +429,17 @@ export function Player() {
 							</DropdownMenu>
 
 							{/* Close */}
-							<Button
-								variant="ghost"
-								size="icon"
-								aria-label="Close player"
-								className="h-7 w-7 text-muted-foreground hover:text-foreground"
-								onClick={stop}
+							<Tip
+								label="Close player"
+								trigger={
+									<Button
+										variant="ghost"
+										size="icon"
+										aria-label="Close player"
+										className="h-7 w-7 text-muted-foreground hover:text-foreground"
+										onClick={stop}
+									/>
+								}
 							>
 								<svg
 									width="12"
@@ -438,7 +451,7 @@ export function Player() {
 								>
 									<path d="M18 6L6 18M6 6l12 12" />
 								</svg>
-							</Button>
+							</Tip>
 						</div>
 					</div>
 				</motion.div>
