@@ -27,6 +27,11 @@ vi.mock("@/hooks/useStems", () => ({
 	})),
 }));
 
+let cachedState = true;
+vi.mock("@/hooks/useTrackCached", () => ({
+	useTrackCached: vi.fn(() => cachedState),
+}));
+
 vi.mock("sonner", () => ({
 	toast: { error: vi.fn() },
 }));
@@ -38,6 +43,7 @@ const INITIAL_PLAYER = usePlayerStore.getState();
 
 beforeEach(() => {
 	requestSeparation.mockReset();
+	cachedState = true;
 	stemsState = {
 		status: "idle",
 		progress: 0,
@@ -69,6 +75,12 @@ afterEach(() => {
 describe("KaraokeToggle", () => {
 	it("does not render when there is no current track", () => {
 		usePlayerStore.setState({ currentTrack: null });
+		const { container } = render(<KaraokeToggle />);
+		expect(container.firstChild).toBeNull();
+	});
+
+	it("does not render while the track is not yet cached (was: 409 TRACK_NOT_CACHED on click)", () => {
+		cachedState = false;
 		const { container } = render(<KaraokeToggle />);
 		expect(container.firstChild).toBeNull();
 	});

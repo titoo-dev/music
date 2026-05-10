@@ -44,6 +44,7 @@ export default defineConfig({
 				"src/app/api/v1/stems/**",
 				"src/lib/queue/**",
 				"src/hooks/useStems.ts",
+				"src/hooks/useTrackCached.ts",
 				"src/stores/useStemsStore.ts",
 				"src/components/audio/KaraokeToggle.tsx",
 			],

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useStems } from "@/hooks/useStems";
+import { useTrackCached } from "@/hooks/useTrackCached";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { Mic, MicOff, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ export function KaraokeToggle() {
 	const retryTrack = usePlayerStore((s) => s.retryTrack);
 
 	const trackId = currentTrack?.trackId ?? null;
+	const cached = useTrackCached(trackId);
 	const stems = useStems(trackId);
 
 	// Auto-trigger a separation request when karaoke is ON and the current
@@ -81,6 +83,11 @@ export function KaraokeToggle() {
 	}, [stems.errorMessage, karaokeMode]);
 
 	if (!currentTrack) return null;
+	// Hide the toggle until the track is cached — stems can only be
+	// generated from a stored file, so showing it earlier would just lead
+	// to a 409 TRACK_NOT_CACHED on click. Once playback crosses ~30s the
+	// server persists the file and useTrackCached's poll picks it up.
+	if (!cached) return null;
 
 	const isPreparing =
 		karaokeMode &&
