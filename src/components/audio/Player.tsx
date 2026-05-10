@@ -110,7 +110,7 @@ export function Player() {
 					animate={{ y: 0, opacity: 1 }}
 					exit={{ y: 80, opacity: 0 }}
 					transition={{ type: "spring", damping: 25, stiffness: 300 }}
-					className="fixed bottom-0 left-0 right-0 z-50 border-t-[3px] border-foreground bg-card md:left-60 pb-[env(safe-area-inset-bottom)]"
+					className="fixed bottom-[var(--bottom-nav-h)] md:bottom-0 left-0 right-0 z-[45] border-t-[3px] border-foreground bg-card md:left-60 pb-[env(safe-area-inset-bottom)]"
 				>
 
 					{/* Progress bar (touch-friendly) — flush with top border */}

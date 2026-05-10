@@ -33,6 +33,8 @@ const buttonVariants = cva(
         "icon-sm":
           "size-8",
         "icon-lg": "size-10",
+        // Touch-first: 44×44 mobile (DESIGN.md §5), shrinks to 36×36 desktop.
+        "icon-touch": "size-11 md:size-9",
       },
     },
     defaultVariants: {

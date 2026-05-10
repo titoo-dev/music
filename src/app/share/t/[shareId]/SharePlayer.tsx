@@ -163,7 +163,7 @@ export function SharePlayer({
 	const year = "—";
 
 	return (
-		<div className="min-h-screen bg-background">
+		<div className="min-h-dvh bg-background">
 			{/* Header strip */}
 			<header className="border-b-[2px] sm:border-b-[3px] border-foreground bg-background sticky top-0 z-10">
 				<div className="max-w-6xl mx-auto px-5 sm:px-10 py-4 flex items-center justify-between gap-4">

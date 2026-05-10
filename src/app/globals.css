@@ -45,6 +45,10 @@
 	--shadow-brutal-sm: 2px 2px 0px #0D0D0D;
 	--shadow-brutal-hover: 4px 4px 0px #0D0D0D;
 	--shadow-brutal-active: 1px 1px 0px #0D0D0D;
+
+	/* ─── MOBILE-FIRST CHROME TOKENS ─── */
+	--mini-player-h: 64px;
+	--bottom-nav-h: calc(64px + env(safe-area-inset-bottom));
 }
 
 @theme inline {
@@ -136,9 +140,11 @@
 	.brutal-card-hover {
 		transition: box-shadow 0.1s, transform 0.1s;
 	}
-	.brutal-card-hover:hover {
-		box-shadow: var(--shadow-brutal-hover);
-		transform: translate(-2px, -2px);
+	@media (hover: hover) {
+		.brutal-card-hover:hover {
+			box-shadow: var(--shadow-brutal-hover);
+			transform: translate(-2px, -2px);
+		}
 	}
 	.brutal-card-hover:active {
 		box-shadow: var(--shadow-brutal-active);
@@ -193,6 +199,18 @@
 			var(--border) 4px,
 			var(--border) 5px
 		);
+	}
+
+	/* ─── MOBILE-FIRST CHROME PADDING ───
+	 * Reserves space for bottom nav (mobile) + floating MiniPlayer.
+	 * Apply on the scroll container of every page that sits inside (main)/layout. */
+	.pb-app-chrome {
+		padding-bottom: calc(var(--bottom-nav-h) + var(--mini-player-h) + 16px);
+	}
+	@media (min-width: 768px) {
+		.pb-app-chrome {
+			padding-bottom: calc(var(--mini-player-h) + 24px);
+		}
 	}
 }
 

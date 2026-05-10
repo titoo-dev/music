@@ -48,7 +48,7 @@ export default function LoginPage() {
 	};
 
 	return (
-		<div className="grid min-h-screen lg:grid-cols-2">
+		<div className="grid min-h-dvh lg:grid-cols-2">
 			{/* Left: brutalist collage */}
 			<div className="relative hidden flex-col overflow-hidden bg-foreground p-8 text-background lg:flex lg:p-12">
 				{/* Repeating label bg */}

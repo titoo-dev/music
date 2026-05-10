@@ -135,7 +135,7 @@ export function KaraokeToggle() {
 						aria-label={label}
 						aria-pressed={karaokeMode}
 						data-testid="karaoke-toggle"
-						className={`hidden md:inline-flex h-7 ${showText ? "px-2 gap-1.5" : "w-7 px-0"} font-mono text-[10px] font-black tracking-[0.1em] border-[2px] ${
+						className={`inline-flex h-7 ${showText ? "px-2 gap-1.5" : "w-7 px-0"} font-mono text-[10px] font-black tracking-[0.1em] border-[2px] ${
 							isFailed
 								? "bg-destructive/10 text-destructive border-destructive"
 								: isActive

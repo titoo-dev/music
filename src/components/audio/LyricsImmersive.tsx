@@ -143,7 +143,7 @@ export function LyricsImmersive() {
 					transition={{ duration: 0.25 }}
 					role="dialog"
 					aria-label="Lyrics fullscreen"
-					className="fixed inset-0 z-[80] bg-foreground text-background overflow-hidden"
+					className="fixed inset-0 z-[71] bg-foreground text-background overflow-hidden"
 				>
 					{/* Atmospheric backdrop */}
 					{currentTrack.cover && (

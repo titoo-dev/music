@@ -37,7 +37,7 @@ export function MiniPlayer() {
 					transition={{ type: "spring", damping: 25, stiffness: 300 }}
 					role="region"
 					aria-label="Preview player"
-					className="fixed bottom-5 right-5 z-50 flex items-center gap-3 border-2 sm:border-[3px] border-foreground bg-background px-4 py-3 shadow-[var(--shadow-brutal-hover)]"
+					className="fixed bottom-[calc(var(--bottom-nav-h)+8px)] right-3 md:bottom-5 md:right-5 z-[45] flex items-center gap-3 border-2 sm:border-[3px] border-foreground bg-background px-4 py-3 shadow-[var(--shadow-brutal-hover)]"
 				>
 					{/* Cover */}
 					<CoverImage

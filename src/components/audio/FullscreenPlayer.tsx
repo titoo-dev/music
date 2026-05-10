@@ -441,7 +441,7 @@ export function FullscreenPlayer() {
 					onDragEnd={handleDragEnd}
 					role="dialog"
 					aria-label="Now playing"
-					className="fixed inset-0 z-[60] flex flex-col bg-background md:hidden"
+					className="fixed inset-0 z-[70] flex flex-col bg-background md:hidden"
 				>
 					{/* Drag handle */}
 					<div
