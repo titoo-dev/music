@@ -97,9 +97,9 @@ export function MiniPlayer() {
 					{/* Play/Pause */}
 					<Button
 						variant="ghost"
-						size="icon"
+						size="icon-touch"
 						aria-label={isPlaying ? "Pause preview" : "Play preview"}
-						className="h-8 w-8 border-[2px] border-foreground"
+						className="border-[2px] border-foreground"
 						onClick={() => toggle(currentTrack)}
 					>
 						{isBuffering ? (
@@ -129,9 +129,8 @@ export function MiniPlayer() {
 					{/* Close */}
 					<Button
 						variant="ghost"
-						size="icon"
+						size="icon-touch"
 						aria-label="Close preview"
-						className="h-6 w-6"
 						onClick={stop}
 					>
 						<svg

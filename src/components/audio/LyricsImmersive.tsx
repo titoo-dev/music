@@ -179,7 +179,7 @@ export function LyricsImmersive() {
 						<button
 							onClick={() => setOpen(false)}
 							aria-label="Close lyrics"
-							className="w-9 h-9 border-2 border-background bg-transparent text-background hover:bg-background hover:text-foreground transition-colors font-mono text-lg font-extrabold leading-none flex items-center justify-center"
+							className="w-11 h-11 border-2 border-background bg-transparent text-background hover:bg-background hover:text-foreground transition-colors font-mono text-xl font-extrabold leading-none flex items-center justify-center"
 						>
 							×
 						</button>

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AudioVisualizer } from "./AudioVisualizer";
 import { LyricsDisplay } from "./LyricsDisplay";
+import { KaraokeToggle } from "./KaraokeToggle";
 import { motion, AnimatePresence, useDragControls } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { formatTime } from "@/utils/format-time";
@@ -463,12 +464,11 @@ export function FullscreenPlayer() {
 					</div>
 
 					{/* Header */}
-					<div className="flex shrink-0 items-center border-b-2 border-foreground px-4 py-2">
+					<div className="flex shrink-0 items-center border-b-2 border-foreground px-3 py-2">
 						<Button
 							variant="ghost"
-							size="icon"
+							size="icon-touch"
 							aria-label="Close fullscreen player"
-							className="h-9 w-9"
 							onClick={() => setFullscreenOpen(false)}
 						>
 							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
@@ -478,13 +478,14 @@ export function FullscreenPlayer() {
 						<span className="brutal-label flex-1 text-center text-muted-foreground">
 							{lyricsVisible ? "Lyrics" : "Now Playing"}
 						</span>
-						<div className="flex items-center gap-1">
+						<div className="flex items-center gap-0.5">
+							<KaraokeToggle className="h-11 w-11 px-0" iconSize={18} />
 							{hasQueue && (
 								<Button
 									variant="ghost"
-									size="icon"
+									size="icon-touch"
 									aria-label="Open queue"
-									className="h-9 w-9 text-muted-foreground"
+									className="text-muted-foreground"
 									onClick={() => {
 										setFullscreenOpen(false);
 										if (lyricsVisible) setLyricsVisible(false);
@@ -503,10 +504,10 @@ export function FullscreenPlayer() {
 							)}
 							<Button
 								variant="ghost"
-								size="icon"
+								size="icon-touch"
 								aria-label="Toggle lyrics"
 								aria-pressed={lyricsVisible}
-								className={`h-9 w-9 ${lyricsVisible ? "text-primary" : "text-muted-foreground"}`}
+								className={lyricsVisible ? "text-primary" : "text-muted-foreground"}
 								onClick={toggleLyrics}
 							>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

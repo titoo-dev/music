@@ -124,7 +124,78 @@ export function Player() {
 						/>
 					</div>
 
-					<div className="flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3">
+					{/* ─── Mobile pill (<md): cover + meta + Prev/Play/Next ─── */}
+					<div
+						className="flex md:hidden items-center gap-2 px-3 py-2"
+						onContextMenu={handleContextMenu}
+					>
+						<button
+							type="button"
+							aria-label="Open fullscreen player"
+							onClick={() => setFullscreenOpen(true)}
+							className="flex items-center gap-2.5 min-w-0 flex-1 text-left"
+						>
+							<CoverImage
+								src={currentTrack.cover}
+								className="h-12 w-12 shrink-0 border-2 border-foreground"
+							/>
+							<div className="min-w-0">
+								<p className="truncate text-[13px] font-extrabold leading-tight tracking-[-0.01em]">
+									{currentTrack.title}
+								</p>
+								<p className="truncate text-[11px] text-muted-foreground leading-tight font-medium mt-0.5">
+									{currentTrack.artist}
+								</p>
+							</div>
+						</button>
+						<Button
+							variant="ghost"
+							size="icon-touch"
+							aria-label="Previous track"
+							className="text-foreground"
+							onClick={prev}
+						>
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+								<rect x="2" y="4" width="3" height="16" rx="1" />
+								<path d="M22 4L9 12L22 20V4Z" />
+							</svg>
+						</Button>
+						<Button
+							variant="ghost"
+							size="icon"
+							aria-label={isPlaying ? "Pause" : "Play"}
+							className="h-12 w-12 border-[2px] border-foreground bg-primary text-white shadow-[var(--shadow-brutal-sm)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+							onClick={toggle}
+						>
+							{isPlaying && isBuffering ? (
+								<Loader2 className="h-5 w-5 animate-spin" />
+							) : isPlaying ? (
+								<svg width="18" height="18" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+									<rect x="1" y="1" width="3.5" height="10" />
+									<rect x="7.5" y="1" width="3.5" height="10" />
+								</svg>
+							) : (
+								<svg width="18" height="18" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+									<path d="M2.5 1.5L10.5 6L2.5 10.5V1.5Z" />
+								</svg>
+							)}
+						</Button>
+						<Button
+							variant="ghost"
+							size="icon-touch"
+							aria-label="Next track"
+							className="text-foreground"
+							onClick={next}
+						>
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+								<rect x="19" y="4" width="3" height="16" rx="1" />
+								<path d="M2 4L15 12L2 20V4Z" />
+							</svg>
+						</Button>
+					</div>
+
+					{/* ─── Desktop bar (≥md): full controls ─── */}
+					<div className="hidden md:flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3">
 						{/* Track info — tap opens fullscreen on mobile */}
 						<div
 							className="flex items-center gap-3 min-w-0 w-[30%] cursor-pointer md:cursor-default"

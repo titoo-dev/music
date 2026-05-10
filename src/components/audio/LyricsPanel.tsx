@@ -53,8 +53,8 @@ export function LyricsPanel() {
 					transition={{ type: "spring", damping: 28, stiffness: 280 }}
 					role="region"
 					aria-label="Lyrics"
-					className="fixed z-40 flex flex-col bg-card border-foreground shadow-[-8px_0_0_rgba(13,13,13,0.06)]
-						inset-x-0 bottom-[96px] top-[calc(env(safe-area-inset-top,0px)+4px)] border-l-0 border-t-[3px]
+					className="fixed z-[60] flex flex-col bg-card border-foreground shadow-[-8px_0_0_rgba(13,13,13,0.06)]
+						inset-x-0 bottom-[calc(var(--bottom-nav-h)+var(--mini-player-h)+8px)] top-[calc(env(safe-area-inset-top,0px)+4px)] border-l-0 border-t-[3px]
 						md:inset-auto md:top-0 md:right-0 md:bottom-[96px] md:w-[420px] md:border-l-[3px] md:border-t-0"
 				>
 					{/* Header */}
