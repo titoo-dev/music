@@ -18,10 +18,6 @@ export async function GET(
 
 		const { trackId, stemName } = await params;
 
-		if (process.env.DEEMIX_DISABLE_PRESIGNED_URLS === "1") {
-			return ok({ url: null, status: "presigned_disabled" });
-		}
-
 		const stored = await prisma.stemFile.findUnique({
 			where: { trackId_stemName: { trackId, stemName } },
 		});
@@ -32,6 +28,14 @@ export async function GET(
 
 		if (stored.storageType !== "s3") {
 			return ok({ url: null, status: "unsupported_storage" });
+		}
+
+		// DB lookup happens before this check so the client can distinguish
+		// "no stem yet" (status=not_cached → fall through to original audio)
+		// from "stem exists, just no direct URL" (status=presigned_disabled →
+		// use the /stream proxy instead).
+		if (process.env.DEEMIX_DISABLE_PRESIGNED_URLS === "1") {
+			return ok({ url: null, status: "presigned_disabled" });
 		}
 
 		const { url, contentType } = await getPresignedUrl(stored.storagePath, 900);

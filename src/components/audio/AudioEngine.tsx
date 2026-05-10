@@ -94,6 +94,11 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 // Returns null when the stem doesn't exist yet (separation hasn't run, or
 // the track was processed in a different mode that didn't produce no_vocals).
 // Caller falls back to the original track URL on null.
+//
+// When DEEMIX_DISABLE_PRESIGNED_URLS=1 the server returns
+// status=presigned_disabled (after confirming the stem is cached). The
+// client must use the /stream proxy in that case — returning null would
+// fall through to the original track and silently break karaoke.
 async function fetchKaraokeStemUrl(trackId: string): Promise<string | null> {
 	try {
 		const res = await fetch(
@@ -101,8 +106,14 @@ async function fetchKaraokeStemUrl(trackId: string): Promise<string | null> {
 			{ credentials: "include", cache: "no-store" },
 		);
 		if (!res.ok) return null;
-		const json = (await res.json()) as { success?: boolean; data?: { url?: string | null } };
+		const json = (await res.json()) as {
+			success?: boolean;
+			data?: { url?: string | null; status?: string };
+		};
 		if (!json.success) return null;
+		if (json.data?.status === "presigned_disabled") {
+			return `/api/v1/stems/${encodeURIComponent(trackId)}/no_vocals/stream`;
+		}
 		return json.data?.url ?? null;
 	} catch {
 		return null;
