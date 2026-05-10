@@ -30,14 +30,14 @@ function SettingRow({
 	children: React.ReactNode;
 }) {
 	return (
-		<div className="flex items-center gap-5 px-4 py-3.5">
+		<div className="flex flex-col gap-3 px-4 py-3.5 md:flex-row md:items-center md:gap-5">
 			<div className="flex-1 min-w-0">
 				<p className="text-[13px] font-bold tracking-[0.02em]">{label}</p>
 				{hint && (
 					<p className="text-[11px] text-muted-foreground font-medium mt-0.5">{hint}</p>
 				)}
 			</div>
-			<div className="shrink-0">{children}</div>
+			<div className="shrink-0 self-end md:self-auto">{children}</div>
 		</div>
 	);
 }
@@ -45,10 +45,12 @@ function SettingRow({
 function BrutalToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
 	return (
 		<button
+			type="button"
 			role="switch"
 			aria-checked={on}
 			onClick={onChange}
-			className={`relative w-11 h-6 border-[2px] border-foreground transition-colors ${
+			// 44×44 hit area via before:; visual track stays w-11 h-6.
+			className={`relative w-11 h-6 border-[2px] border-foreground transition-colors before:absolute before:-inset-y-[10px] before:-inset-x-1 before:content-[''] ${
 				on ? "bg-primary" : "bg-card"
 			}`}
 		>
@@ -79,13 +81,14 @@ function PillGroup<T extends string | number>({
 				return (
 					<button
 						key={String(opt)}
+						type="button"
 						onClick={() => onChange(opt)}
-						className={`px-3 py-1.5 border-[2px] border-foreground font-mono text-[11px] font-bold tracking-[0.05em] uppercase cursor-pointer transition-colors ${
+						className={`min-h-11 md:min-h-9 px-3 border-[2px] border-foreground font-mono text-[11px] font-bold tracking-[0.05em] uppercase cursor-pointer transition-colors ${
 							i > 0 ? "-ml-[2px]" : ""
 						} ${
 							active
 								? "bg-foreground text-background z-10 relative"
-								: "bg-card text-foreground hover:bg-accent/40"
+								: "bg-card text-foreground active:bg-accent/40 [@media(hover:hover)]:hover:bg-accent/40"
 						}`}
 					>
 						{format ? format(opt) : String(opt)}
