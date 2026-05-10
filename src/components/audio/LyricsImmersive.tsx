@@ -67,7 +67,7 @@ const ImmersiveLines = memo(function ImmersiveLines({ lines }: { lines: LyricLin
 					className={`cursor-pointer leading-[1.18] tracking-[-0.02em] py-3 text-balance text-background transition-all duration-[380ms] ease-out
 						font-semibold text-[clamp(2rem,4.5vw,2.4rem)] opacity-55
 						data-[state=past]:opacity-[0.22]
-						data-[state=active]:opacity-100 data-[state=active]:font-extrabold data-[state=active]:text-[clamp(2.6rem,6vw,3.5rem)]
+						data-[state=active]:opacity-100 data-[state=active]:font-extrabold data-[state=active]:text-[clamp(2.6rem,6vw,3.5rem)] data-[state=active]:!text-accent
 						data-[distance='3']:blur-[1px] data-[distance='4']:blur-[2px] data-[distance='5']:blur-[4px] data-[state=active]:!blur-0
 						${line.text === "" ? "h-6 py-0" : ""}
 					`}
