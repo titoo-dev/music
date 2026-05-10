@@ -157,7 +157,7 @@ export default function LoginPage() {
 					</div>
 
 					<Link href="/" className="block no-underline">
-						<Button variant="outline" size="lg" className="h-13 w-full">
+						<Button variant="outline" size="lg" className="h-12 w-full">
 							CONTINUE AS GUEST
 						</Button>
 					</Link>
