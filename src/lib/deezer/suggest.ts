@@ -12,6 +12,7 @@ export interface SuggestTrack {
 	deezerTrackId: string;
 	title: string;
 	artists: string[];
+	artistId: string | null;
 	album: string;
 	albumId: string | null;
 	durationMs: number;
@@ -73,6 +74,7 @@ function normalizeTrack(t: RawTrack): SuggestTrack | null {
 		deezerTrackId: id,
 		title: t.title,
 		artists: t.artist?.name ? [t.artist.name] : [],
+		artistId: t.artist?.id != null ? String(t.artist.id) : null,
 		album: t.album?.title ?? "",
 		albumId: t.album?.id != null ? String(t.album.id) : null,
 		durationMs: (t.duration ?? 0) * 1000,

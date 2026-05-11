@@ -112,6 +112,7 @@ export function TrackRow({
 			trackId: track.trackId,
 			title: track.title,
 			artist: track.artist,
+			artistId: track.artistId ?? null,
 			cover: track.cover,
 			duration: track.duration ?? null,
 		};
@@ -120,6 +121,7 @@ export function TrackRow({
 				trackId: t.trackId,
 				title: t.title,
 				artist: t.artist,
+				artistId: t.artistId ?? null,
 				cover: t.cover,
 				duration: t.duration ?? null,
 			}));

@@ -14,6 +14,7 @@ import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { CoverImage } from "@/components/ui/cover-image";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import type {
 	SuggestAlbum,
 	SuggestArtist,
@@ -36,8 +37,6 @@ type SuggestRow =
 	| { kind: "artist"; data: SuggestArtist };
 
 function parseDeezerLink(url: string): { type: string; id: string } | null {
-	const trackMatch = url.match(/\/track\/(\d+)/);
-	if (trackMatch) return { type: "track", id: trackMatch[1] };
 	const albumMatch = url.match(/\/album\/(\d+)/);
 	if (albumMatch) return { type: "album", id: albumMatch[1] };
 	const playlistMatch = url.match(/\/playlist\/(\d+)/);
@@ -49,6 +48,7 @@ function parseDeezerLink(url: string): { type: string; id: string } | null {
 
 function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 	const router = useRouter();
+	const playerPlay = usePlayerStore((s) => s.play);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [q, setQ] = useState(initialTerm);
@@ -127,7 +127,16 @@ function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 	const onSelectRow = useCallback(
 		(row: SuggestRow) => {
 			if (row.kind === "track") {
-				router.push(`/track?id=${row.data.deezerTrackId}`);
+				const t = row.data;
+				const playerTrack: PlayerTrack = {
+					trackId: t.deezerTrackId,
+					title: t.title,
+					artist: t.artists.join(", "),
+					artistId: t.artistId,
+					cover: t.coverUrl,
+					duration: t.durationMs ? Math.round(t.durationMs / 1000) : null,
+				};
+				playerPlay(playerTrack);
 				setOpen(false);
 			} else if (row.kind === "album") {
 				router.push(`/album?id=${row.data.deezerAlbumId}`);
@@ -137,7 +146,7 @@ function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 				setOpen(false);
 			}
 		},
-		[router]
+		[router, playerPlay]
 	);
 
 	const submit = useCallback(

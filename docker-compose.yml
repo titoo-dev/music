@@ -2,6 +2,8 @@ services:
   postgres:
     image: postgres:17-alpine
     container_name: Deemix-Postgres
+    ports:
+      - "15432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
@@ -12,6 +14,23 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deemix}"]
       interval: 5s
       timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: Deemix-Redis
+    ports:
+      - "6379:6379"
+    # BullMQ requires `noeviction` — under any other policy Redis can purge
+    # job keys under memory pressure and silently drop work. AOF persistence
+    # so jobs survive a container restart.
+    command: redis-server --appendonly yes --maxmemory-policy noeviction
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
   minio:
@@ -53,24 +72,43 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-deemix}:${POSTGRES_PASSWORD:-deemix}@postgres:5432/${POSTGRES_DB:-deemix}
-      - WS_BROADCAST_URL=http://ws:6595
+      - REDIS_URL=redis://redis:6379
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
-  ws:
+  stems-worker:
     build:
       context: .
-      dockerfile: server/Dockerfile
-    ports:
-      - "6595:6595"
+      dockerfile: stems-worker/Dockerfile
+    container_name: Deemix-StemsWorker
     env_file: .env
     environment:
       - NODE_ENV=production
-      - NEXT_URL=http://web:3000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-deemix}:${POSTGRES_PASSWORD:-deemix}@postgres:5432/${POSTGRES_DB:-deemix}
+      - REDIS_URL=redis://redis:6379
+      - TORCH_HOME=/models
+      - OMP_NUM_THREADS=4
+      - MKL_NUM_THREADS=4
+    volumes:
+      - demucs-models:/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: "4"
     restart: unless-stopped
 
 volumes:
   postgres-data:
   minio-data:
+  redis-data:
+  demucs-models:

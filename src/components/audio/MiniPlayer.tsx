@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import Link from "next/link";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
@@ -50,7 +51,16 @@ export function MiniPlayer() {
 							{currentTrack.title}
 						</p>
 						<p className="truncate text-xs text-muted-foreground leading-tight font-medium">
-							{currentTrack.artist}
+							{currentTrack.artistId ? (
+								<Link
+									href={`/artist?id=${currentTrack.artistId}`}
+									className="hover:underline hover:text-foreground transition-colors"
+								>
+									{currentTrack.artist}
+								</Link>
+							) : (
+								currentTrack.artist
+							)}
 						</p>
 					</div>
 

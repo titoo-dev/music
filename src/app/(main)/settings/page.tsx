@@ -5,7 +5,6 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 
-const PLAYBACK_RATES = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 const CROSSFADE_OPTIONS = [0, 2, 4, 6, 8, 10];
 
 function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
@@ -100,8 +99,6 @@ function PillGroup<T extends string | number>({
 export default function SettingsPage() {
 	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
 	const toggleNormalization = usePlayerStore((s) => s.toggleNormalization);
-	const playbackRate = usePlayerStore((s) => s.playbackRate);
-	const setPlaybackRate = usePlayerStore((s) => s.setPlaybackRate);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
 	const setCrossfadeDuration = usePlayerStore((s) => s.setCrossfadeDuration);
 
@@ -142,18 +139,6 @@ export default function SettingsPage() {
 						/>
 					</SettingRow>
 				)}
-
-				<SettingRow
-					label="PLAYBACK SPEED"
-					hint={playbackRate === 1 ? "Normal speed" : `Currently playing at ${playbackRate}× speed`}
-				>
-					<PillGroup
-						value={playbackRate}
-						options={PLAYBACK_RATES}
-						onChange={setPlaybackRate}
-						format={(r) => (r === 1 ? "1×" : `${r}×`)}
-					/>
-				</SettingRow>
 
 				<SettingRow
 					label="CROSSFADE"

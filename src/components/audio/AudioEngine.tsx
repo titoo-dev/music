@@ -90,6 +90,36 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 	return promise;
 }
 
+// Karaoke mode — fetch the presigned URL for a track's `no_vocals` stem.
+// Returns null when the stem doesn't exist yet (separation hasn't run, or
+// the track was processed in a different mode that didn't produce no_vocals).
+// Caller falls back to the original track URL on null.
+//
+// When DEEMIX_DISABLE_PRESIGNED_URLS=1 the server returns
+// status=presigned_disabled (after confirming the stem is cached). The
+// client must use the /stream proxy in that case — returning null would
+// fall through to the original track and silently break karaoke.
+async function fetchKaraokeStemUrl(trackId: string): Promise<string | null> {
+	try {
+		const res = await fetch(
+			`/api/v1/stems/${encodeURIComponent(trackId)}/no_vocals/url`,
+			{ credentials: "include", cache: "no-store" },
+		);
+		if (!res.ok) return null;
+		const json = (await res.json()) as {
+			success?: boolean;
+			data?: { url?: string | null; status?: string };
+		};
+		if (!json.success) return null;
+		if (json.data?.status === "presigned_disabled") {
+			return `/api/v1/stems/${encodeURIComponent(trackId)}/no_vocals/stream`;
+		}
+		return json.data?.url ?? null;
+	} catch {
+		return null;
+	}
+}
+
 // Warm the URL cache for upcoming tracks. Cheap (one DB query + S3 sign per
 // track) and turns the next click-to-play into a cache hit on the URL fetch.
 function prefetchPresignedUrls(trackIds: string[]) {
@@ -104,11 +134,31 @@ function prefetchPresignedUrls(trackIds: string[]) {
 
 /**
  * Resolve audio URL for a track. Priority:
+ * 0. Karaoke override — if karaokeMode is on AND a `no_vocals` stem exists,
+ *    play that instead. Falls through to the normal chain on miss so
+ *    enabling karaoke on a track without stems still produces audio while
+ *    the worker prepares the separation in the background.
  * 1. IndexedDB blob URL (instant, zero network)
  * 2. Presigned S3 URL (direct browser streaming for downloaded tracks)
  * 3. Progressive endpoint (live decrypts from Deezer; auto-redirects to /stream once cached)
  */
 async function getTrackUrl(trackId: string): Promise<string> {
+	// 0. Karaoke mode — try the no_vocals stem first.
+	if (usePlayerStore.getState().karaokeMode) {
+		const stemUrl = await fetchKaraokeStemUrl(trackId);
+		if (stemUrl) {
+			if (window.location.protocol === "https:" && stemUrl.startsWith("http://")) {
+				// Mixed-content guard: same as the regular presigned path.
+				return `/api/v1/stems/${encodeURIComponent(trackId)}/no_vocals/stream`;
+			}
+			return stemUrl;
+		}
+		// Stem not ready — fall through. The KaraokeToggle component is
+		// responsible for kicking off the separation; once it lands, it
+		// will call retryTrack() and we'll hit the stem URL on the next
+		// pass through this resolver.
+	}
+
 	// 1. Check IndexedDB cache — instant blob URL
 	try {
 		const blobUrl = await getCachedBlobUrl(trackId);
@@ -478,9 +528,7 @@ export function AudioEngine() {
 	const setBuffering = usePlayerStore((s) => s.setBuffering);
 	const setBuffered = usePlayerStore((s) => s.setBuffered);
 	const setError = usePlayerStore((s) => s.setError);
-	const playbackRate = usePlayerStore((s) => s.playbackRate);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
-	const sleepTimerEnd = usePlayerStore((s) => s.sleepTimerEnd);
 	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
 
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
@@ -589,7 +637,6 @@ export function AudioEngine() {
 					// will handle it by re-buffering and seeking when ready.
 				}
 				fullAudio.volume = userVol;
-				fullAudio.playbackRate = usePlayerStore.getState().playbackRate;
 				if (wasPlaying || usePlayerStore.getState().isPlaying) {
 					fullAudio.play().catch(() => {});
 				}
@@ -898,7 +945,6 @@ export function AudioEngine() {
 					// Already buffered — play immediately
 					setBuffering(false);
 					setDuration(preloaded.duration || 0);
-					preloaded.playbackRate = usePlayerStore.getState().playbackRate;
 					applyResumePosition(preloaded);
 					if (usePlayerStore.getState().isPlaying) {
 						skipPlayEffectRef.current = true;
@@ -959,12 +1005,6 @@ export function AudioEngine() {
 		adjustVolume(audio, volume / 100, { duration: 300 });
 	}, [volume, isPlaying]);
 
-	// Playback rate
-	useEffect(() => {
-		const audio = audioRef.current;
-		if (audio) audio.playbackRate = playbackRate;
-	}, [playbackRate]);
-
 	// Normalization toggle — reset gain when turned off
 	useEffect(() => {
 		if (!normalizationEnabled) {
@@ -973,19 +1013,23 @@ export function AudioEngine() {
 		}
 	}, [normalizationEnabled]);
 
-	// Sleep timer
+	// Karaoke toggle — reload the current track when the user flips it so the
+	// audio source switches between original and no_vocals stem. Skips the
+	// initial mount (the regular currentTrack effect already handles that).
+	const karaokeMode = usePlayerStore((s) => s.karaokeMode);
+	const prevKaraokeRef = useRef(karaokeMode);
 	useEffect(() => {
-		if (!sleepTimerEnd) return;
-		const interval = setInterval(() => {
-			if (Date.now() >= sleepTimerEnd) {
-				usePlayerStore.getState().pause();
-				usePlayerStore.getState().setSleepTimer(null);
-			}
-		}, 1000);
-		return () => clearInterval(interval);
-	}, [sleepTimerEnd]);
+		if (prevKaraokeRef.current === karaokeMode) return;
+		prevKaraokeRef.current = karaokeMode;
+		if (!usePlayerStore.getState().currentTrack) return;
+		usePlayerStore.getState().retryTrack();
+	}, [karaokeMode]);
 
 	// Retry: bumped by retryTrack() — reload the current track from scratch.
+	// We preserve the current playback position across the reload so callers
+	// like the karaoke toggle (which swaps source between original and the
+	// no_vocals stem) keep the user on the same timeline instead of jumping
+	// back to 0. applyResumePosition picks the captured time up on canplay.
 	const retryLoadCount = usePlayerStore((s) => s._retryLoadCount);
 	const prevRetryRef = useRef(retryLoadCount);
 	useEffect(() => {
@@ -994,6 +1038,15 @@ export function AudioEngine() {
 		const track = currentTrack;
 		const audio = audioRef.current;
 		if (!track || !audio) return;
+
+		// Capture position before tearing the old element down. Anything <1s
+		// is treated as "near the start" and skipped — that's the recovery
+		// case where there's nothing to preserve.
+		const liveTime = audio.currentTime;
+		if (isFinite(liveTime) && liveTime >= 1) {
+			resumePositionRef.current = liveTime;
+		}
+
 		retryCountRef.current = 0;
 		setError(null);
 		setBuffering(true);
@@ -1060,7 +1113,6 @@ export function AudioEngine() {
 		if (!audio) return;
 		setBuffering(false);
 		setDuration(audio.duration || 0);
-		audio.playbackRate = usePlayerStore.getState().playbackRate;
 		applyResumePosition(audio);
 		onPositionUpdate();
 		if (usePlayerStore.getState().isPlaying) {
@@ -1198,7 +1250,6 @@ export function AudioEngine() {
 					prevTrackIdRef.current = nextTrack.trackId;
 					skipPlayEffectRef.current = true;
 
-					preloaded.playbackRate = playbackRate;
 					preloaded.volume = 0;
 					preloaded.currentTime = 0;
 					preloaded.play().catch(() => {});

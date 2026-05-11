@@ -309,6 +309,7 @@ export function TrackActionSheet() {
 			id: track.id,
 			title: track.title,
 			artist: track.artist,
+			artistId: track.artistId ?? null,
 			cover: track.cover || "",
 			previewUrl: track.previewUrl,
 		});
@@ -320,6 +321,7 @@ export function TrackActionSheet() {
 			trackId: track.id,
 			title: track.title,
 			artist: track.artist,
+			artistId: track.artistId ?? null,
 			cover: track.cover ?? null,
 			duration: track.duration ?? null,
 		};

@@ -19,6 +19,7 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuLabel,
+	DropdownMenuGroup,
 	DropdownMenuSeparator,
 	DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
@@ -27,13 +28,8 @@ import { LyricsDisplay } from "./LyricsDisplay";
 import { motion, AnimatePresence, useDragControls } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { formatTime } from "@/utils/format-time";
+import Link from "next/link";
 import type { PlayerTrack } from "@/stores/usePlayerStore";
-
-const SPEED_STEPS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-
-function formatRate(rate: number): string {
-	return rate === 1 ? "1×" : `${rate}×`;
-}
 
 function seek(time: number) {
 	usePlayerStore.getState().seek(time);
@@ -141,12 +137,24 @@ function TrackInfo() {
 		});
 	}, [currentTrack, openSheet]);
 
+	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
+
 	if (!currentTrack) return null;
 	return (
 		<div className="shrink-0 px-8 pb-3" onContextMenu={handleContextMenu}>
 			<p className="truncate text-brutal-md">{currentTrack.title}</p>
 			<p className="truncate text-sm font-bold uppercase tracking-wide text-muted-foreground">
-				{currentTrack.artist}
+				{currentTrack.artistId ? (
+					<Link
+						href={`/artist?id=${currentTrack.artistId}`}
+						onClick={() => setFullscreenOpen(false)}
+						className="hover:underline hover:text-foreground transition-colors"
+					>
+						{currentTrack.artist}
+					</Link>
+				) : (
+					currentTrack.artist
+				)}
 			</p>
 		</div>
 	);
@@ -317,71 +325,45 @@ function VolumeSection() {
 	);
 }
 
-/* ─── Extra Controls (speed + sleep timer + crossfade) ─── */
+/* ─── Extra Controls (crossfade + loudness norm) ─── */
 function ExtraControls() {
-	const playbackRate = usePlayerStore((s) => s.playbackRate);
-	const setPlaybackRate = usePlayerStore((s) => s.setPlaybackRate);
-	const sleepTimerEnd = usePlayerStore((s) => s.sleepTimerEnd);
-	const setSleepTimer = usePlayerStore((s) => s.setSleepTimer);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
 	const setCrossfadeDuration = usePlayerStore((s) => s.setCrossfadeDuration);
 	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
 	const toggleNormalization = usePlayerStore((s) => s.toggleNormalization);
 
-	const sleepActive = sleepTimerEnd !== null;
-
-	function cycleSpeed() {
-		const idx = SPEED_STEPS.indexOf(playbackRate);
-		const next = SPEED_STEPS[(idx + 1) % SPEED_STEPS.length];
-		setPlaybackRate(next);
-	}
-
 	return (
-		<div className="shrink-0 flex items-center justify-between px-8 pb-2">
-			{/* Speed */}
-			<Button
-				variant="ghost"
-				size="sm"
-				aria-label={`Playback speed ${formatRate(playbackRate)}`}
-				className="h-9 px-3 text-sm font-mono text-muted-foreground hover:text-foreground"
-				onClick={cycleSpeed}
-			>
-				{formatRate(playbackRate)}
-			</Button>
-
-			{/* Sleep timer + crossfade dropdown */}
+		<div className="shrink-0 flex items-center justify-end px-8 pb-2">
 			<DropdownMenu>
 				<DropdownMenuTrigger
-					aria-label="Sleep timer and crossfade settings"
-					className={`inline-flex h-10 w-10 items-center justify-center rounded-md ${sleepActive ? "text-foreground" : "text-muted-foreground"} hover:bg-accent hover:text-foreground`}
+					aria-label="Audio settings"
+					className="inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
 				>
 					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-						<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+						<line x1="4" y1="21" x2="4" y2="14" />
+						<line x1="4" y1="10" x2="4" y2="3" />
+						<line x1="12" y1="21" x2="12" y2="12" />
+						<line x1="12" y1="8" x2="12" y2="3" />
+						<line x1="20" y1="21" x2="20" y2="16" />
+						<line x1="20" y1="12" x2="20" y2="3" />
+						<line x1="1" y1="14" x2="7" y2="14" />
+						<line x1="9" y1="8" x2="15" y2="8" />
+						<line x1="17" y1="16" x2="23" y2="16" />
 					</svg>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent side="top" align="end">
-					<DropdownMenuLabel>Sleep timer</DropdownMenuLabel>
-					{sleepActive && (
-						<DropdownMenuItem onClick={() => setSleepTimer(null)}>
-							Turn off
-						</DropdownMenuItem>
-					)}
-					{([5, 10, 15, 30, 45, 60] as const).map((m) => (
-						<DropdownMenuItem key={m} onClick={() => setSleepTimer(m)}>
-							{m} min
-						</DropdownMenuItem>
-					))}
-					<DropdownMenuSeparator />
-					<DropdownMenuLabel>Crossfade</DropdownMenuLabel>
-					{([0, 1, 2, 3, 5, 8] as const).map((s) => (
-						<DropdownMenuItem
-							key={s}
-							onClick={() => setCrossfadeDuration(s)}
-							className={crossfadeDuration === s ? "font-semibold" : ""}
-						>
-							{s === 0 ? "Off" : `${s}s`}
-						</DropdownMenuItem>
-					))}
+					<DropdownMenuGroup>
+						<DropdownMenuLabel>Crossfade</DropdownMenuLabel>
+						{([0, 1, 2, 3, 5, 8] as const).map((s) => (
+							<DropdownMenuItem
+								key={s}
+								onClick={() => setCrossfadeDuration(s)}
+								className={crossfadeDuration === s ? "font-semibold" : ""}
+							>
+								{s === 0 ? "Off" : `${s}s`}
+							</DropdownMenuItem>
+						))}
+					</DropdownMenuGroup>
 					<DropdownMenuSeparator />
 					<DropdownMenuCheckboxItem
 						checked={normalizationEnabled}
