@@ -25,7 +25,7 @@ export default function ErrorsPage() {
 						</p>
 					</div>
 					{errors.length > 0 && (
-						<Button variant="destructive" size="sm" onClick={clearErrors} className="font-mono uppercase tracking-[0.1em]">
+						<Button variant="destructive" size="sm" onClick={clearErrors} className="font-mono uppercase tracking-[0.1em] min-h-11 sm:min-h-9">
 							Clear all
 						</Button>
 					)}

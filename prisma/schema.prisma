@@ -18,16 +18,17 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  sessions      Session[]
-  accounts      Account[]
-  settings      UserSettings?
-  preferences   UserPreferences?
-  deezerCred    DeezerCredential?
-  playlists     Playlist[]
-  savedTracks   SavedTrack[]
-  savedAlbums   Album[]
-  sharedTracks  SharedTrack[]
-  recentPlays   RecentPlay[]
+  sessions         Session[]
+  accounts         Account[]
+  settings         UserSettings?
+  preferences      UserPreferences?
+  deezerCred       DeezerCredential?
+  playlists        Playlist[]
+  savedTracks      SavedTrack[]
+  savedAlbums      Album[]
+  followedArtists  FollowedArtist[]
+  sharedTracks     SharedTrack[]
+  recentPlays      RecentPlay[]
 
   @@map("user")
 }
@@ -233,6 +234,29 @@ model AlbumTrack {
   @@unique([albumId, trackId])
   @@index([trackId])
   @@map("album_track")
+}
+
+// ─── Followed Artists ───
+//
+// Spotify-like "Following" list — a flat metadata table. The Deezer artist
+// id is the upstream identity; we cache the display name and picture so
+// listing the user's followed artists doesn't require a Deezer round-trip.
+// No file-lifecycle implications: following an artist never anchors any
+// StoredTrack.
+
+model FollowedArtist {
+  id              String   @id @default(cuid())
+  userId          String
+  deezerArtistId  String
+  name            String
+  pictureUrl      String?
+  followedAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deezerArtistId])
+  @@index([userId, followedAt(sort: Desc)])
+  @@map("followed_artist")
 }
 
 // ─── File Cache (server-side, transparent to user) ───

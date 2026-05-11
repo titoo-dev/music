@@ -10,15 +10,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px]",
+        default: "bg-primary text-primary-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px]",
         outline:
-          "bg-background text-foreground shadow-[var(--shadow-brutal)] hover:bg-accent hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px]",
+          "bg-background text-foreground shadow-[var(--shadow-brutal)] hover:bg-accent [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px]",
         secondary:
-          "bg-foreground text-background shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px]",
+          "bg-foreground text-background shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px]",
         ghost:
           "border-transparent shadow-none hover:bg-muted hover:border-foreground hover:shadow-[var(--shadow-brutal-sm)]",
         destructive:
-          "bg-destructive text-white shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px]",
+          "bg-destructive text-white shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px]",
         link: "border-transparent shadow-none text-primary underline-offset-4 hover:underline uppercase",
       },
       size: {
@@ -33,6 +33,8 @@ const buttonVariants = cva(
         "icon-sm":
           "size-8",
         "icon-lg": "size-10",
+        // Touch-first: 44×44 mobile (DESIGN.md §5), shrinks to 36×36 desktop.
+        "icon-touch": "size-11 md:size-9",
       },
     },
     defaultVariants: {

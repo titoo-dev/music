@@ -132,7 +132,9 @@ export function SeekBar({
 			aria-disabled={disabled}
 			tabIndex={disabled ? -1 : 0}
 			className={`relative flex items-center w-full select-none ${
-				isThin ? "h-8" : "h-10"
+				isThin
+					? "h-8 before:absolute before:inset-x-0 before:-inset-y-3 before:content-['']"
+					: "h-10 before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']"
 			} ${disabled ? "cursor-default opacity-50 pointer-events-none" : "cursor-pointer"}`}
 			style={{ touchAction: "none" }}
 			onTouchStart={handleTouchStart}
@@ -192,7 +194,7 @@ export function SeekBar({
 				<div
 					className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 bg-foreground border-2 border-foreground transition-opacity ${
 						isThin
-							? "h-3.5 w-3.5 opacity-0 group-hover/seekbar:opacity-100"
+							? "h-3.5 w-3.5 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/seekbar:opacity-100"
 							: "h-5 w-5 shadow-[var(--shadow-brutal-sm)]"
 					} ${dragProgress !== null ? "!opacity-100 scale-110 !bg-primary" : ""}`}
 					style={{ left: `${displayProgress * 100}%` }}

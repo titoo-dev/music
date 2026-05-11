@@ -64,7 +64,7 @@ export default function AboutPage() {
 			</section>
 
 			{/* Receipt-style credits */}
-			<div className="border-[2px] sm:border-[3px] border-foreground bg-[#fffdf6] shadow-[var(--shadow-brutal)] px-6 py-5 font-mono">
+			<div className="border-[2px] sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] px-6 py-5 font-mono">
 				<div className="text-center border-b-[2px] border-dashed border-foreground pb-3 mb-3">
 					<div className="font-black text-base tracking-[0.2em]">DEEMIX</div>
 					<div className="text-[10px] mt-0.5">── ABOUT / CREDITS ──</div>

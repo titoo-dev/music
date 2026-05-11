@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence, Reorder } from "motion/react";
+import { motion, AnimatePresence, Reorder, useDragControls } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,6 +34,19 @@ export function QueuePanel() {
 		mq.addEventListener("change", handler);
 		return () => mq.removeEventListener("change", handler);
 	}, []);
+
+	// Mobile-only drag-to-dismiss: scoped via useDragControls so only the top
+	// handle bar starts a drag. Below 120px / 500px·s⁻¹ snaps back to the
+	// resting position; above either threshold dismisses the panel.
+	const dragControls = useDragControls();
+	const handleDragEnd = (
+		_: unknown,
+		info: { offset: { y: number }; velocity: { y: number } }
+	) => {
+		if (info.offset.y > 120 || info.velocity.y > 500) {
+			setOpen(false);
+		}
+	};
 
 	// Close on Escape — match LyricsPanel ergonomics
 	useEffect(() => {
@@ -85,12 +98,30 @@ export function QueuePanel() {
 					animate={isDesktop ? { x: 0, opacity: 1 } : { y: 0, opacity: 1 }}
 					exit={isDesktop ? { x: 440, opacity: 0 } : { y: "100%", opacity: 0 }}
 					transition={{ type: "spring", damping: 28, stiffness: 280 }}
+					drag={isDesktop ? false : "y"}
+					dragControls={dragControls}
+					dragListener={false}
+					dragConstraints={{ top: 0, bottom: 0 }}
+					dragElastic={{ top: 0, bottom: 0.4 }}
+					onDragEnd={handleDragEnd}
 					role="region"
 					aria-label="Queue"
-					className="fixed z-40 flex flex-col bg-card border-foreground shadow-[-8px_0_0_rgba(13,13,13,0.06)]
-						inset-x-0 bottom-[96px] top-[calc(env(safe-area-inset-top,0px)+4px)] border-l-0 border-t-[3px]
+					className="fixed z-[60] flex flex-col bg-card border-foreground shadow-[-8px_0_0_rgba(13,13,13,0.06)]
+						inset-x-0 bottom-[calc(var(--bottom-nav-h)+var(--mini-player-h)+8px)] top-[calc(env(safe-area-inset-top,0px)+4px)] border-l-0 border-t-[3px]
 						md:inset-auto md:top-0 md:right-0 md:bottom-[96px] md:w-[420px] md:border-l-[3px] md:border-t-0"
 				>
+					{/* Drag handle (mobile only) — scoped drag surface, also signals "swipeable" */}
+					{!isDesktop && (
+						<div
+							onPointerDown={(e) => dragControls.start(e)}
+							role="button"
+							aria-label="Drag down to close queue"
+							className="flex shrink-0 items-center justify-center pt-2.5 pb-1.5 cursor-grab active:cursor-grabbing touch-none"
+						>
+							<div className="h-1.5 w-12 bg-foreground/40 rounded-sm" />
+						</div>
+					)}
+
 					{/* Header */}
 					<div className="flex items-center gap-3 px-[18px] py-3.5 border-b-[3px] border-foreground bg-background">
 						<div className="flex h-11 w-11 shrink-0 items-center justify-center border-2 border-foreground bg-primary text-white">
@@ -110,7 +141,7 @@ export function QueuePanel() {
 						<button
 							onClick={() => setOpen(false)}
 							aria-label="Close queue"
-							className="w-8 h-8 border-2 border-foreground bg-card hover:bg-accent flex items-center justify-center font-mono text-base font-extrabold leading-none shrink-0 transition-colors"
+							className="w-11 h-11 md:w-9 md:h-9 border-2 border-foreground bg-card hover:bg-accent flex items-center justify-center font-mono text-lg md:text-base font-extrabold leading-none shrink-0 transition-colors"
 						>
 							×
 						</button>

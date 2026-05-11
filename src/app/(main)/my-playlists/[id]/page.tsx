@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Reorder, useDragControls } from "motion/react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, ArrowDownUp } from "lucide-react";
+import { Loader2, ArrowLeft, ArrowDownUp, Play, Shuffle, GripVertical } from "lucide-react";
 import Link from "next/link";
-import { usePlayerStore } from "@/stores/usePlayerStore";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
+import { EntityHero } from "@/components/layout/EntityHero";
 import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { usePrefetch } from "@/hooks/usePrefetch";
@@ -41,6 +43,8 @@ export default function PlaylistDetailPage() {
 	const setSortOrder = (order: "asc" | "desc") => updatePrefs({ playlistSortOrder: order });
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
 	const stopPlayer = usePlayerStore((s) => s.stop);
+	const playerPlay = usePlayerStore((s) => s.play);
+	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 
 	// Background prefetch: warm IndexedDB for the first tracks so playback starts instantly
 	const allTrackIds = playlist?.tracks.map((t) => t.trackId) || [];
@@ -94,12 +98,50 @@ export default function PlaylistDetailPage() {
 		}
 	};
 
-	const formatDuration = (seconds: number | null) => {
-		if (!seconds) return "";
-		const m = Math.floor(seconds / 60);
-		const s = seconds % 60;
-		return `${m}:${s.toString().padStart(2, "0")}`;
-	};
+	// Drag-reorder persistence: optimistic local update on every onReorder
+	// (fires continuously during drag), but POST the final order to the API
+	// debounced so we don't spam the endpoint mid-drag.
+	const reorderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const playlistIdRef = useRef<string | null>(null);
+	playlistIdRef.current = playlist?.id ?? null;
+
+	useEffect(() => () => {
+		if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
+	}, []);
+
+	const handleReorder = useCallback(
+		(newOrderIds: string[]) => {
+			// Optimistic local update — also rewrites .position so re-renders
+			// in any sort order stay consistent until the API confirms.
+			setPlaylist((prev) => {
+				if (!prev) return prev;
+				const byId = new Map(prev.tracks.map((t) => [t.trackId, t]));
+				const next = newOrderIds
+					.map((trackId, position) => {
+						const t = byId.get(trackId);
+						return t ? { ...t, position } : null;
+					})
+					.filter((t): t is PlaylistTrack => t !== null);
+				return { ...prev, tracks: next };
+			});
+
+			// Debounce the API call until the drag settles (~250ms idle).
+			if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
+			reorderTimerRef.current = setTimeout(() => {
+				const pid = playlistIdRef.current;
+				if (!pid) return;
+				void fetch(`/api/v1/playlists/${pid}/tracks`, {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ trackIds: newOrderIds }),
+				}).catch(() => {
+					// Persist failed — leave the optimistic state in place. A future
+					// fetch on mount will re-sync from the server.
+				});
+			}, 250);
+		},
+		[]
+	);
 
 	if (loading) {
 		return (
@@ -126,38 +168,102 @@ export default function PlaylistDetailPage() {
 		);
 	}
 
+	const playablePlaylistTracks: PlayerTrack[] = sortedTracks.map((t) => ({
+		trackId: t.trackId,
+		title: t.title,
+		artist: t.artist,
+		artistId: null,
+		cover: t.coverUrl,
+		duration: t.duration,
+	}));
+
+	const handlePlayAll = () => {
+		if (playablePlaylistTracks.length === 0) return;
+		playerPlay(playablePlaylistTracks[0], playablePlaylistTracks);
+	};
+
+	const handleShuffleAll = () => {
+		if (playablePlaylistTracks.length === 0) return;
+		const wasShuffled = usePlayerStore.getState().shuffle;
+		if (!wasShuffled) toggleShuffle();
+		playerPlay(playablePlaylistTracks[0], playablePlaylistTracks);
+	};
+
+	const normalized: TrackRowTrack[] = sortedTracks.map((track) => ({
+		trackId: track.trackId,
+		title: track.title,
+		artist: track.artist,
+		album: track.album,
+		cover: track.coverUrl,
+		duration: track.duration,
+		bitrateLabel: null,
+	}));
+
+	// Drag-reorder is only correct when the display order matches the stored
+	// position order (i.e. ascending). In "newest first" mode, dragging would
+	// invert positions on save — disable until the user flips back to "asc".
+	const reorderEnabled = sortOrder === "asc" && sortedTracks.length > 1;
+
 	return (
 		<div className="space-y-6">
-			<div className="flex items-center gap-3 min-w-0">
+			<div className="flex items-start gap-3 min-w-0">
 				<Button
 					variant="ghost"
-					size="icon"
+					size="icon-touch"
 					className="shrink-0"
+					aria-label="Back"
 					onClick={() => router.back()}
 				>
-					<ArrowLeft className="size-4" />
+					<ArrowLeft className="size-4" aria-hidden />
 				</Button>
 				<div className="flex-1 min-w-0">
-					<h1 className="text-brutal-lg">{playlist.title}</h1>
-					{playlist.description && (
-						<p className="text-sm text-muted-foreground mt-1">{playlist.description}</p>
-					)}
-					<p className="text-xs text-muted-foreground mt-0.5 font-mono font-bold">
-						{playlist.tracks.length} track{playlist.tracks.length !== 1 ? "s" : ""}
-					</p>
-				</div>
-				<div className="flex items-center gap-2 shrink-0">
-					{playlist.tracks.length > 1 && (
-						<Button
-							variant="outline"
-							size="sm"
-							className="gap-1.5"
-							onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-						>
-							<ArrowDownUp className="size-3.5" />
-							{sortOrder === "asc" ? "Oldest first" : "Newest first"}
-						</Button>
-					)}
+					<EntityHero
+						eyebrow="MY PLAYLIST"
+						title={playlist.title}
+						subtitle={
+							playlist.description ? (
+								<span className="text-sm text-muted-foreground">{playlist.description}</span>
+							) : undefined
+						}
+						meta={`${playlist.tracks.length} TRACK${playlist.tracks.length !== 1 ? "S" : ""}`}
+						primaryAction={
+							playlist.tracks.length > 0 ? (
+								<Button
+									onClick={handlePlayAll}
+									className="h-12 md:h-10 w-full md:w-auto px-6 gap-2"
+								>
+									<Play className="size-4" aria-hidden />
+									PLAY
+								</Button>
+							) : undefined
+						}
+						secondaryActions={
+							playlist.tracks.length > 0 ? (
+								<>
+									<Button
+										onClick={handleShuffleAll}
+										variant="ghost"
+										size="icon-touch"
+										aria-label="Shuffle playlist"
+									>
+										<Shuffle className="size-4" aria-hidden />
+									</Button>
+									{playlist.tracks.length > 1 && (
+										<Button
+											variant="outline"
+											size="sm"
+											className="gap-1.5 min-h-11 md:min-h-9"
+											onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+											aria-label="Toggle sort order"
+										>
+											<ArrowDownUp className="size-3.5" aria-hidden />
+											{sortOrder === "asc" ? "Oldest" : "Newest"}
+										</Button>
+									)}
+								</>
+							) : undefined
+						}
+					/>
 				</div>
 			</div>
 
@@ -169,31 +275,82 @@ export default function PlaylistDetailPage() {
 					</p>
 				</div>
 			) : (
-				<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
-					{(() => {
-						const normalized: TrackRowTrack[] = sortedTracks.map((track) => ({
-							trackId: track.trackId,
-							title: track.title,
-							artist: track.artist,
-							album: track.album,
-							cover: track.coverUrl,
-							duration: track.duration,
-							bitrateLabel: null,
-						}));
-						return sortedTracks.map((track, idx) => (
-							<TrackRow
-								key={track.id}
-								track={normalized[idx]}
-								trackNumber={idx + 1}
-								showBitrate={false}
-								showDuration
-								onDelete={() => handleRemoveTrack(track.trackId)}
-								queue={normalized}
-							/>
-						));
-					})()}
-				</div>
+				<Reorder.Group
+					as="div"
+					axis="y"
+					values={sortedTracks.map((t) => t.trackId)}
+					onReorder={handleReorder}
+					className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden"
+				>
+					{sortedTracks.map((track, idx) => (
+						<DraggableRow
+							key={track.id}
+							trackId={track.trackId}
+							idx={idx}
+							normalized={normalized[idx]}
+							queue={normalized}
+							onDelete={() => handleRemoveTrack(track.trackId)}
+							canDrag={reorderEnabled}
+						/>
+					))}
+				</Reorder.Group>
 			)}
 		</div>
+	);
+}
+
+/** One reorderable row. Each instance owns a `useDragControls` so the drag
+ *  surface stays scoped to the grip handle — touching the cover, title, or
+ *  three-dot menu never starts a drag and never collides with long-press →
+ *  TrackActionSheet on the underlying TrackRow. */
+function DraggableRow({
+	trackId,
+	idx,
+	normalized,
+	queue,
+	onDelete,
+	canDrag,
+}: {
+	trackId: string;
+	idx: number;
+	normalized: TrackRowTrack;
+	queue: TrackRowTrack[];
+	onDelete: () => void;
+	canDrag: boolean;
+}) {
+	const dragControls = useDragControls();
+
+	return (
+		<Reorder.Item
+			as="div"
+			value={trackId}
+			dragListener={false}
+			dragControls={dragControls}
+			className="flex items-stretch border-b border-foreground/15 last:border-b-0 bg-card data-[dragging=true]:shadow-[var(--shadow-brutal-hover)] data-[dragging=true]:bg-accent/10"
+		>
+			{canDrag && (
+				<button
+					type="button"
+					aria-label={`Drag to reorder track ${idx + 1}`}
+					onPointerDown={(e) => {
+						e.preventDefault();
+						dragControls.start(e);
+					}}
+					className="shrink-0 flex items-center justify-center w-10 md:w-8 cursor-grab active:cursor-grabbing touch-none text-muted-foreground [@media(hover:hover)]:hover:text-foreground"
+				>
+					<GripVertical className="size-4" aria-hidden />
+				</button>
+			)}
+			<div className="flex-1 min-w-0">
+				<TrackRow
+					track={normalized}
+					trackNumber={idx + 1}
+					showBitrate={false}
+					showDuration
+					onDelete={onDelete}
+					queue={queue}
+				/>
+			</div>
+		</Reorder.Item>
 	);
 }

@@ -7,6 +7,7 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
 import { Mic, MicOff, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 // Karaoke toggle button rendered in the player chrome. One click = "remove
@@ -30,7 +31,14 @@ import { toast } from "sonner";
 
 const KARAOKE_LABEL_DEFAULT = "Karaoke (remove vocals)";
 
-export function KaraokeToggle() {
+interface KaraokeToggleProps {
+	/** Override default sizing/spacing — pass touch-friendly classes when mounted in mobile chrome. */
+	className?: string;
+	/** Icon size in px. Default 14 (matches the compact desktop chrome). */
+	iconSize?: number;
+}
+
+export function KaraokeToggle({ className, iconSize = 14 }: KaraokeToggleProps = {}) {
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const karaokeMode = usePlayerStore((s) => s.karaokeMode);
 	const setKaraokeMode = usePlayerStore((s) => s.setKaraokeMode);
@@ -113,10 +121,11 @@ export function KaraokeToggle() {
 		return karaokeMode ? "Karaoke on (vocals removed)" : KARAOKE_LABEL_DEFAULT;
 	})();
 
+	const iconStyle = { width: iconSize, height: iconSize };
 	const icon = (() => {
-		if (isPreparing) return <Loader2 className="h-3.5 w-3.5 animate-spin" />;
-		if (isFailed) return <AlertCircle className="h-3.5 w-3.5" />;
-		return karaokeMode ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />;
+		if (isPreparing) return <Loader2 style={iconStyle} className="animate-spin" />;
+		if (isFailed) return <AlertCircle style={iconStyle} />;
+		return karaokeMode ? <MicOff style={iconStyle} /> : <Mic style={iconStyle} />;
 	})();
 
 	const isActive = karaokeMode && stems.status === "completed";
@@ -135,7 +144,10 @@ export function KaraokeToggle() {
 						aria-label={label}
 						aria-pressed={karaokeMode}
 						data-testid="karaoke-toggle"
-						className={`hidden md:inline-flex h-7 ${showText ? "px-2 gap-1.5" : "w-7 px-0"} font-mono text-[10px] font-black tracking-[0.1em] border-[2px] ${
+						className={cn(
+							"inline-flex h-7",
+							showText ? "px-2 gap-1.5" : "w-7 px-0",
+							"font-mono text-[10px] font-black tracking-[0.1em] border-[2px]",
 							isFailed
 								? "bg-destructive/10 text-destructive border-destructive"
 								: isActive
@@ -144,8 +156,9 @@ export function KaraokeToggle() {
 										? "bg-accent text-foreground border-foreground"
 										: karaokeMode
 											? "bg-accent text-foreground border-foreground"
-											: "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground"
-						}`}
+											: "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground",
+							className
+						)}
 						onClick={handleClick}
 					/>
 				}

@@ -164,23 +164,23 @@ export function TrackRow({
 	if (hasNum) {
 		if (showBitrateCell && showDuration) {
 			gridClass =
-				"grid-cols-[28px_40px_1fr_auto_40px] sm:grid-cols-[28px_40px_1fr_auto_60px_64px]";
+				"grid-cols-[28px_44px_1fr_auto_44px] sm:grid-cols-[28px_44px_1fr_auto_60px_64px]";
 		} else if (showBitrateCell) {
-			gridClass = "grid-cols-[28px_40px_1fr_auto_40px] sm:grid-cols-[28px_40px_1fr_auto_64px]";
+			gridClass = "grid-cols-[28px_44px_1fr_auto_44px] sm:grid-cols-[28px_44px_1fr_auto_64px]";
 		} else if (showDuration) {
-			gridClass = "grid-cols-[28px_40px_1fr_40px] sm:grid-cols-[28px_40px_1fr_60px_64px]";
+			gridClass = "grid-cols-[28px_44px_1fr_44px] sm:grid-cols-[28px_44px_1fr_60px_64px]";
 		} else {
-			gridClass = "grid-cols-[28px_40px_1fr_40px] sm:grid-cols-[28px_40px_1fr_64px]";
+			gridClass = "grid-cols-[28px_44px_1fr_44px] sm:grid-cols-[28px_44px_1fr_64px]";
 		}
 	} else if (showBitrateCell && showDuration) {
 		gridClass =
-			"grid-cols-[40px_1fr_auto_40px] sm:grid-cols-[40px_1fr_auto_60px_64px]";
+			"grid-cols-[44px_1fr_auto_44px] sm:grid-cols-[44px_1fr_auto_60px_64px]";
 	} else if (showBitrateCell) {
-		gridClass = "grid-cols-[40px_1fr_auto_40px] sm:grid-cols-[40px_1fr_auto_64px]";
+		gridClass = "grid-cols-[44px_1fr_auto_44px] sm:grid-cols-[44px_1fr_auto_64px]";
 	} else if (showDuration) {
-		gridClass = "grid-cols-[40px_1fr_40px] sm:grid-cols-[40px_1fr_60px_64px]";
+		gridClass = "grid-cols-[44px_1fr_44px] sm:grid-cols-[44px_1fr_60px_64px]";
 	} else {
-		gridClass = "grid-cols-[40px_1fr_40px] sm:grid-cols-[40px_1fr_64px]";
+		gridClass = "grid-cols-[44px_1fr_44px] sm:grid-cols-[44px_1fr_64px]";
 	}
 
 	const handleHoverWarm = () => {
@@ -238,11 +238,11 @@ export function TrackRow({
 				type="button"
 				onClick={handlePlay}
 				aria-label={isPlayerActive ? `Pause ${track.title}` : `Play ${track.title}`}
-				className="relative shrink-0 size-9 p-0 m-0 bg-transparent border-0 appearance-none cursor-pointer overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+				className="relative shrink-0 size-11 md:size-9 p-0 m-0 bg-transparent border-0 appearance-none cursor-pointer overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
 			>
 				<CoverImage
 					src={track.cover || ""}
-					className={`size-9 border-0 block transition-opacity ${
+					className={`size-11 md:size-9 border-0 block transition-opacity ${
 						isActive || isPaused ? "opacity-50" : "group-hover:opacity-60"
 					}`}
 				/>

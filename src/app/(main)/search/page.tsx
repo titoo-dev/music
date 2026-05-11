@@ -190,15 +190,15 @@ function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 	const showDropdown = open && q.trim().length >= MIN_SUGGEST_LENGTH;
 
 	return (
-		<div>
-			<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+		<div className="sticky top-0 z-20 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 pt-3 pb-3 bg-background border-b border-foreground/10 md:static md:bg-transparent md:border-0 md:px-0 md:mx-0 md:pt-0 md:pb-0">
+			<p className="hidden md:block text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
 				SEARCH / DEEZER
 			</p>
 			<div ref={containerRef} className="relative">
 				<form onSubmit={submit} className="flex items-stretch">
-					{/* Input box */}
-					<div className="flex-1 flex items-center px-4 sm:px-5 border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] min-w-0">
-						<Search className="size-5 shrink-0 text-foreground" />
+					{/* Input box (full-width — Enter submits) */}
+					<div className="flex-1 flex items-center px-3 sm:px-5 border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] min-w-0 min-h-12">
+						<Search className="size-5 shrink-0 text-foreground" aria-hidden />
 						<input
 							ref={inputRef}
 							value={q}
@@ -213,7 +213,10 @@ function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 							autoCorrect="off"
 							autoCapitalize="off"
 							spellCheck={false}
-							className="flex-1 min-w-0 bg-transparent border-0 outline-none px-3 py-3.5 sm:py-4 text-base sm:text-lg font-bold tracking-[-0.01em] text-foreground placeholder:text-muted-foreground/60 placeholder:tracking-[0.05em] placeholder:text-sm placeholder:font-bold placeholder:uppercase"
+							enterKeyHint="search"
+							inputMode="search"
+							aria-label="Search Deezer"
+							className="flex-1 min-w-0 bg-transparent border-0 outline-none px-3 py-3 sm:py-4 text-base sm:text-lg font-bold tracking-[-0.01em] text-foreground placeholder:text-muted-foreground/60 placeholder:tracking-[0.05em] placeholder:text-sm placeholder:font-bold placeholder:uppercase"
 						/>
 						{q && (
 							<button
@@ -224,19 +227,12 @@ function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 									setOpen(false);
 									inputRef.current?.focus();
 								}}
-								className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+								className="shrink-0 size-11 -mr-2 flex items-center justify-center text-muted-foreground active:text-foreground [@media(hover:hover)]:hover:text-foreground transition-colors"
 							>
-								<X className="size-4" />
+								<X className="size-4" aria-hidden />
 							</button>
 						)}
 					</div>
-					{/* GO button */}
-					<button
-						type="submit"
-						className="shrink-0 px-5 sm:px-7 border-2 sm:border-[3px] border-l-0 sm:border-l-0 border-foreground bg-primary text-white font-mono text-sm sm:text-base font-black tracking-[0.14em] uppercase shadow-[var(--shadow-brutal)] hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)]"
-					>
-						GO
-					</button>
 				</form>
 
 				{showDropdown && (
@@ -250,7 +246,7 @@ function BrutalSearchBar({ initialTerm }: { initialTerm: string }) {
 					/>
 				)}
 			</div>
-			<p className="mt-2 text-[10px] font-mono font-bold uppercase tracking-[0.05em] text-muted-foreground">
+			<p className="hidden md:block mt-2 text-[10px] font-mono font-bold uppercase tracking-[0.05em] text-muted-foreground">
 				TIP — PASTE A DEEZER URL TO QUEUE AN ENTIRE ALBUM OR PLAYLIST.
 			</p>
 		</div>
@@ -276,8 +272,10 @@ function SuggestDropdown({
 	onHover,
 	onSelect,
 }: DropdownProps) {
+	// Mobile: cap height at 45vh so the on-screen keyboard never buries the
+	// suggestions. Desktop: keep the generous 70vh.
 	const shellClass =
-		"absolute left-0 right-0 top-full z-50 mt-2 max-h-[70vh] overflow-y-auto border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)]";
+		"absolute left-0 right-0 top-full z-[55] mt-2 max-h-[45vh] sm:max-h-[70vh] overflow-y-auto overscroll-contain border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)]";
 
 	if (loading && !data) {
 		return (
@@ -642,10 +640,10 @@ function SearchContent() {
 						<button
 							key={value}
 							onClick={() => setTab(value)}
-							className={`shrink-0 px-4 py-2.5 border-r-[2px] border-foreground last:border-r-0 font-mono text-[11px] font-bold tracking-[0.14em] cursor-pointer transition-colors ${
+							className={`shrink-0 min-h-11 md:min-h-9 px-4 py-2.5 border-r-[2px] border-foreground last:border-r-0 font-mono text-[11px] font-bold tracking-[0.14em] cursor-pointer transition-colors ${
 								tab === value
 									? "bg-foreground text-background"
-									: "bg-transparent text-foreground hover:bg-accent/40"
+									: "bg-transparent text-foreground active:bg-accent/40 [@media(hover:hover)]:hover:bg-accent/40"
 							}`}
 						>
 							{label}
@@ -864,7 +862,7 @@ function AlbumCard({
 	const albumHref = `/album?id=${id}`;
 
 	return (
-		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
+		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
 			<div className="relative">
 				<Link href={albumHref}>
 					<CoverImage
@@ -910,7 +908,7 @@ function ArtistCard({ artist }: { artist: any }) {
 		"/placeholder.jpg";
 
 	return (
-		<div className="group text-center border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
+		<div className="group text-center border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
 			<Link href={`/artist?id=${id}`}>
 				<div className="overflow-hidden aspect-square">
 					<CoverImage
@@ -1014,7 +1012,7 @@ function PlaylistCard({ playlist: pl }: { playlist: any }) {
 		"/placeholder.jpg";
 
 	return (
-		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
+		<div className="group border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card overflow-hidden">
 			<div className="relative">
 				<Link href={`/playlist?id=${id}`}>
 					<CoverImage

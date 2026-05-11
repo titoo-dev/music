@@ -5,10 +5,71 @@ import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import Link from "next/link";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, CheckCircle2, Play, Shuffle, Heart, ChevronDown } from "lucide-react";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { CoverImage } from "@/components/ui/cover-image";
+import { EntityHero } from "@/components/layout/EntityHero";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
+import { useAuthStore } from "@/stores/useAuthStore";
+
+// Deezer GW's deezer.pageArtist response is loosely typed and field names
+// vary between regions and artist types. Probe the spots a bio is most
+// likely to live; bail out and render nothing if none of them match.
+function extractArtistBio(artist: any): string | null {
+	if (!artist) return null;
+	const candidates: unknown[] = [
+		artist.BIO?.BIO,
+		artist.BIO,
+		artist.bio,
+		artist.SUMMARY,
+		artist.summary,
+		artist.description,
+		artist.DESCRIPTION,
+	];
+	for (const c of candidates) {
+		if (typeof c === "string" && c.trim().length > 0) {
+			return c.trim();
+		}
+	}
+	return null;
+}
+
+function ArtistBio({ bio }: { bio: string }) {
+	const [expanded, setExpanded] = useState(false);
+	const isLong = bio.length > 320;
+	const visible = expanded || !isLong ? bio : `${bio.slice(0, 320).trimEnd()}…`;
+
+	return (
+		<section>
+			<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
+				<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
+					ABOUT
+				</h2>
+			</div>
+			<div className="border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] p-5">
+				<p className="text-[13px] leading-[1.55] text-foreground whitespace-pre-line">
+					{visible}
+				</p>
+				{isLong && (
+					<button
+						type="button"
+						onClick={() => setExpanded((v) => !v)}
+						aria-expanded={expanded}
+						className="mt-3 inline-flex items-center gap-1.5 min-h-11 md:min-h-9 px-3 -ml-3 font-mono text-[11px] font-bold tracking-[0.1em] uppercase text-muted-foreground [@media(hover:hover)]:hover:text-foreground transition-colors"
+					>
+						<ChevronDown
+							className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
+							aria-hidden
+						/>
+						{expanded ? "Show less" : "Show more"}
+					</button>
+				)}
+			</div>
+		</section>
+	);
+}
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -29,6 +90,9 @@ function ArtistContent() {
 	const [topTracks, setTopTracks] = useState<any[]>([]);
 	const [discography, setDiscography] = useState<any>({});
 	const [loading, setLoading] = useState(true);
+	const [isFollowed, setIsFollowed] = useState(false);
+	const [followBusy, setFollowBusy] = useState(false);
+	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const { albumMap } = useDownloadedAlbums();
 
 	useEffect(() => {
@@ -46,6 +110,33 @@ function ArtistContent() {
 		}
 		loadArtist();
 	}, [id]);
+
+	// Resolve follow status once per (auth, artist) — uses the full list as the
+	// single source of truth. Cheap enough on the typical "few hundred followed
+	// artists" scale; a batched status endpoint can replace this if the list
+	// grows past that.
+	useEffect(() => {
+		if (!isAuthenticated || !id) {
+			setIsFollowed(false);
+			return;
+		}
+		let cancelled = false;
+		(async () => {
+			try {
+				const res = await fetch("/api/v1/library/artists", { credentials: "include" });
+				if (!res.ok) return;
+				const json = await res.json();
+				if (cancelled || !json.success) return;
+				const items = (json.data?.items as Array<{ deezerArtistId: string }>) || [];
+				setIsFollowed(items.some((a) => a.deezerArtistId === id));
+			} catch {
+				// ignore — UI defaults to "not followed"
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [id, isAuthenticated]);
 
 	if (loading)
 		return (
@@ -69,6 +160,63 @@ function ArtistContent() {
 
 	const artistName = artist.name || artist.ART_NAME;
 	const nbFan = artist.nb_fan || artist.NB_FAN;
+	const playerPlay = usePlayerStore((s) => s.play);
+	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+
+	const playableTopTracks: PlayerTrack[] = topTracks.slice(0, 10).map((t: any) => {
+		const n = trackFromDeezerRaw(t);
+		return {
+			trackId: n.trackId,
+			title: n.title,
+			artist: n.artist,
+			artistId: n.artistId ?? null,
+			cover: n.cover,
+			duration: n.duration ?? null,
+		};
+	});
+
+	const handlePlayTop = () => {
+		if (playableTopTracks.length === 0) return;
+		playerPlay(playableTopTracks[0], playableTopTracks);
+	};
+
+	const handleShuffleTop = () => {
+		if (playableTopTracks.length === 0) return;
+		const wasShuffled = usePlayerStore.getState().shuffle;
+		if (!wasShuffled) toggleShuffle();
+		playerPlay(playableTopTracks[0], playableTopTracks);
+	};
+
+	const handleToggleFollow = async () => {
+		if (!id || !isAuthenticated || followBusy) return;
+		const wasFollowed = isFollowed;
+		setIsFollowed(!wasFollowed);
+		setFollowBusy(true);
+		try {
+			if (wasFollowed) {
+				const res = await fetch(`/api/v1/library/artists/${encodeURIComponent(id)}`, {
+					method: "DELETE",
+					credentials: "include",
+				});
+				if (!res.ok) throw new Error("unfollow failed");
+			} else {
+				const res = await fetch("/api/v1/library/artists", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					credentials: "include",
+					body: JSON.stringify({
+						deezerArtistId: id,
+						name: artistName,
+						pictureUrl: artistPicture,
+					}),
+				});
+				if (!res.ok) throw new Error("follow failed");
+			}
+		} catch {
+			setIsFollowed(wasFollowed);
+		}
+		setFollowBusy(false);
+	};
 
 	// Filter discography tabs that have content, preferred order
 	const tabOrder = ["all", "album", "single", "ep", "featured", "more"];
@@ -81,32 +229,64 @@ function ArtistContent() {
 		more: "More",
 	};
 	const tabKeys = tabOrder.filter((k) => discography[k]?.length > 0);
+	const artistBio = extractArtistBio(artist);
 
 	return (
 		<div className="space-y-10">
-			{/* Artist Hero */}
-			<div>
-				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-					ARTIST{nbFan != null ? ` · ${Number(nbFan).toLocaleString()} FANS` : ""}
-				</p>
-				<div className="flex flex-col md:flex-row items-center md:items-end gap-6 md:gap-8">
-					<CoverImage
-						src={artistPicture}
-						alt={artistName}
-						className="w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 flex-shrink-0 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] rounded-full overflow-hidden"
-					/>
-					<div className="flex flex-col gap-3 text-center md:text-left min-w-0 flex-1">
-						<h1 className="text-brutal-xl m-0">
-							{artistName}<span className="text-primary">.</span>
-						</h1>
-						{nbFan != null && (
-							<p className="text-sm font-mono font-bold text-muted-foreground tracking-[0.05em]">
-								{Number(nbFan).toLocaleString()} FANS · DEEZER
-							</p>
+			<EntityHero
+				eyebrow={`ARTIST${nbFan != null ? ` · ${Number(nbFan).toLocaleString()} FANS` : ""}`}
+				title={artistName}
+				coverSrc={artistPicture}
+				coverAlt={artistName}
+				meta={nbFan != null ? `${Number(nbFan).toLocaleString()} FANS · DEEZER` : null}
+				primaryAction={
+					playableTopTracks.length > 0 ? (
+						<Button
+							onClick={handlePlayTop}
+							className="h-12 md:h-10 w-full md:w-auto px-6 gap-2"
+						>
+							<Play className="size-4" aria-hidden />
+							PLAY TOP TRACKS
+						</Button>
+					) : undefined
+				}
+				secondaryActions={
+					<>
+						{isAuthenticated && (
+							<Button
+								onClick={handleToggleFollow}
+								disabled={followBusy}
+								variant={isFollowed ? "outline" : "secondary"}
+								size="icon-touch"
+								aria-label={isFollowed ? "Unfollow artist" : "Follow artist"}
+								aria-pressed={isFollowed}
+							>
+								{followBusy ? (
+									<Loader2 className="size-4 animate-spin" aria-hidden />
+								) : (
+									<Heart
+										className={`size-4 ${isFollowed ? "fill-primary text-primary" : ""}`}
+										aria-hidden
+									/>
+								)}
+							</Button>
 						)}
-					</div>
-				</div>
-			</div>
+						{playableTopTracks.length > 0 && (
+							<Button
+								onClick={handleShuffleTop}
+								variant="ghost"
+								size="icon-touch"
+								aria-label="Shuffle top tracks"
+							>
+								<Shuffle className="size-4" aria-hidden />
+							</Button>
+						)}
+					</>
+				}
+			/>
+
+			{/* Bio — defensive: shown only if Deezer returned one for this artist */}
+			{artistBio && <ArtistBio bio={artistBio} />}
 
 			{/* Top Tracks */}
 			{topTracks.length > 0 && (
@@ -189,7 +369,7 @@ function ArtistContent() {
 
 										return (
 											<div key={albumId} className="group space-y-2">
-												<div className="relative overflow-hidden border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card">
+												<div className="relative overflow-hidden border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card">
 													<Link href={albumHref}>
 														<CoverImage
 															src={albumCover}

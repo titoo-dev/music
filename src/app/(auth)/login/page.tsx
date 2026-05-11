@@ -48,7 +48,7 @@ export default function LoginPage() {
 	};
 
 	return (
-		<div className="grid min-h-screen lg:grid-cols-2">
+		<div className="grid min-h-dvh lg:grid-cols-2">
 			{/* Left: brutalist collage */}
 			<div className="relative hidden flex-col overflow-hidden bg-foreground p-8 text-background lg:flex lg:p-12">
 				{/* Repeating label bg */}
@@ -157,7 +157,7 @@ export default function LoginPage() {
 					</div>
 
 					<Link href="/" className="block no-underline">
-						<Button variant="outline" size="lg" className="h-13 w-full">
+						<Button variant="outline" size="lg" className="h-12 w-full">
 							CONTINUE AS GUEST
 						</Button>
 					</Link>

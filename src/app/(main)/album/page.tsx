@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CoverImage } from "@/components/ui/cover-image";
-import { Heart, Loader2 } from "lucide-react";
+import { EntityHero } from "@/components/layout/EntityHero";
+import { Heart, Loader2, Play, Shuffle } from "lucide-react";
 import { useSavedAlbums } from "@/hooks/useLibrary";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 
 function getCoverUrl(picture: string, size = 500) {
 	if (!picture) return "/placeholder.jpg";
@@ -30,15 +31,16 @@ function AlbumSaveButton({
 		<Button
 			onClick={onClick}
 			disabled={saving}
-			variant={saved ? "outline" : "default"}
-			className="w-fit mt-1 gap-2"
+			variant={saved ? "outline" : "secondary"}
+			size="icon-touch"
+			aria-label={saved ? "Remove from library" : "Save album"}
+			aria-pressed={saved}
 		>
 			{saving ? (
-				<Loader2 className="size-4 animate-spin" />
+				<Loader2 className="size-4 animate-spin" aria-hidden />
 			) : (
-				<Heart className={`size-4 ${saved ? "fill-primary text-primary" : ""}`} />
+				<Heart className={`size-4 ${saved ? "fill-primary text-primary" : ""}`} aria-hidden />
 			)}
-			{saved ? "Saved" : "Save album"}
 		</Button>
 	);
 }
@@ -53,6 +55,8 @@ function AlbumContent() {
 
 	const { isSaved, save, unsave } = useSavedAlbums(id ? [id] : []);
 	const albumSaved = id ? isSaved(id) : false;
+	const playerPlay = usePlayerStore((s) => s.play);
+	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 
 	useEffect(() => {
 		if (!id) return;
@@ -130,49 +134,84 @@ function AlbumContent() {
 	// Handle both GW format (ALB_PICTURE, ALB_TITLE) and standard API format (cover_xl, title)
 	const title = album.ALB_TITLE || album.title || "";
 	const artistName = album.ART_NAME || album.artist?.name || "";
+	const artistId = album.ART_ID || album.artist?.id;
 	const cover = album.cover_xl || album.cover_big || getCoverUrl(album.ALB_PICTURE, 500);
 	const nbTracks = album.NUMBER_TRACK || album.nb_tracks;
 	const releaseDate = album.PHYSICAL_RELEASE_DATE || album.DIGITAL_RELEASE_DATE || album.release_date;
+	const releaseYear = releaseDate ? String(releaseDate).slice(0, 4) : null;
 	const recordType = album.TYPE === "0" ? "Single" : album.TYPE === "1" ? "Album" : album.TYPE === "2" ? "Compilation" : album.record_type || "Album";
+
+	const playableTracks: PlayerTrack[] = tracks.map((t: any) => {
+		const n = trackFromDeezerRaw(t);
+		return {
+			trackId: n.trackId,
+			title: n.title,
+			artist: n.artist,
+			artistId: n.artistId ?? null,
+			cover: n.cover,
+			duration: n.duration ?? null,
+		};
+	});
+
+	const handlePlayAll = () => {
+		if (playableTracks.length === 0) return;
+		playerPlay(playableTracks[0], playableTracks);
+	};
+
+	const handleShuffleAll = () => {
+		if (playableTracks.length === 0) return;
+		// Toggle on then start — usePlayerStore handles the queue order.
+		const wasShuffled = usePlayerStore.getState().shuffle;
+		if (!wasShuffled) toggleShuffle();
+		playerPlay(playableTracks[0], playableTracks);
+	};
 
 	return (
 		<div className="space-y-8">
-			{/* Album Header */}
-			<div className="flex flex-col md:flex-row gap-8">
-				<CoverImage
-					src={cover}
-					alt={title}
-					className="w-32 h-32 sm:w-48 sm:h-48 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] flex-shrink-0"
-				/>
-				<div className="flex flex-col justify-end gap-3">
-					<Badge variant="secondary" className="w-fit">
-						{recordType}
-					</Badge>
-					<h1 className="text-brutal-lg">
-						{title}
-					</h1>
-					<div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-						<span>{artistName}</span>
-						{nbTracks && (
-							<>
-								<span className="text-border">·</span>
-								<span>{nbTracks} tracks</span>
-							</>
-						)}
-						{releaseDate && (
-							<>
-								<span className="text-border">·</span>
-								<span>{releaseDate}</span>
-							</>
-						)}
-					</div>
-					<AlbumSaveButton
-						saved={albumSaved}
-						saving={saving}
-						onClick={handleToggleSave}
-					/>
-				</div>
-			</div>
+			<EntityHero
+				eyebrow={`${recordType.toUpperCase()}${releaseYear ? ` · ${releaseYear}` : ""}`}
+				title={title}
+				subtitle={
+					artistId ? (
+						<Link href={`/artist?id=${artistId}`} className="font-bold text-foreground hover:underline">
+							{artistName}
+						</Link>
+					) : (
+						<span className="font-bold text-foreground">{artistName}</span>
+					)
+				}
+				meta={nbTracks ? `${nbTracks} TRACKS${releaseDate ? ` · ${releaseDate}` : ""}` : releaseDate}
+				coverSrc={cover}
+				coverAlt={title}
+				primaryAction={
+					<Button
+						onClick={handlePlayAll}
+						disabled={playableTracks.length === 0}
+						className="h-12 md:h-10 w-full md:w-auto px-6 gap-2"
+					>
+						<Play className="size-4" aria-hidden />
+						PLAY
+					</Button>
+				}
+				secondaryActions={
+					<>
+						<Button
+							onClick={handleShuffleAll}
+							disabled={playableTracks.length === 0}
+							variant="ghost"
+							size="icon-touch"
+							aria-label="Shuffle album"
+						>
+							<Shuffle className="size-4" aria-hidden />
+						</Button>
+						<AlbumSaveButton
+							saved={albumSaved}
+							saving={saving}
+							onClick={handleToggleSave}
+						/>
+					</>
+				}
+			/>
 
 			<Separator />
 

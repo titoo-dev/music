@@ -163,7 +163,7 @@ export function SharePlayer({
 	const year = "—";
 
 	return (
-		<div className="min-h-screen bg-background">
+		<div className="min-h-dvh bg-background">
 			{/* Header strip */}
 			<header className="border-b-[2px] sm:border-b-[3px] border-foreground bg-background sticky top-0 z-10">
 				<div className="max-w-6xl mx-auto px-5 sm:px-10 py-4 flex items-center justify-between gap-4">
@@ -175,9 +175,9 @@ export function SharePlayer({
 					</Link>
 					<Link
 						href="/"
-						className="inline-flex items-center gap-2 px-3 py-2 border-2 border-foreground bg-card font-mono text-[11px] font-bold tracking-[0.1em] uppercase shadow-[var(--shadow-brutal-sm)] hover:bg-accent active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] transition-colors no-underline"
+						className="inline-flex items-center gap-2 min-h-11 md:min-h-9 px-4 py-2 border-2 border-foreground bg-card font-mono text-[11px] font-bold tracking-[0.1em] uppercase shadow-[var(--shadow-brutal-sm)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] [@media(hover:hover)]:hover:bg-accent transition-colors no-underline"
 					>
-						OPEN IN APP <ExternalLink className="size-3" />
+						OPEN IN APP <ExternalLink className="size-3" aria-hidden />
 					</Link>
 				</div>
 			</header>
@@ -217,28 +217,28 @@ export function SharePlayer({
 							</p>
 						)}
 
-						{/* Action buttons */}
-						<div className="flex flex-wrap gap-2.5 mb-7">
+						{/* Action buttons — stack full-width on mobile, inline on tablet+ */}
+						<div className="flex flex-col sm:flex-row sm:flex-wrap gap-2.5 mb-7">
 							<button
 								onClick={handleToggle}
 								disabled={!loaded}
-								className="inline-flex items-center gap-2 px-5 py-3 border-2 sm:border-[3px] border-foreground bg-primary text-white font-mono text-sm font-black tracking-[0.12em] uppercase shadow-[var(--shadow-brutal)] hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] disabled:opacity-40 transition-all"
+								className="inline-flex items-center justify-center sm:justify-start gap-2 min-h-12 sm:min-h-11 px-5 py-3 border-2 sm:border-[3px] border-foreground bg-primary text-white font-mono text-sm font-black tracking-[0.12em] uppercase shadow-[var(--shadow-brutal)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] disabled:opacity-40 transition-all [@media(hover:hover)]:hover:bg-primary/90"
 							>
-								{isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
+								{isPlaying ? <Pause className="size-4" aria-hidden /> : <Play className="size-4" aria-hidden />}
 								{isPlaying ? "PAUSE" : "PLAY"}
 							</button>
 							<Link
 								href="/"
-								className="inline-flex items-center gap-2 px-5 py-3 border-2 sm:border-[3px] border-foreground bg-card text-foreground font-mono text-sm font-black tracking-[0.12em] uppercase shadow-[var(--shadow-brutal)] hover:bg-accent active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] transition-all no-underline"
+								className="inline-flex items-center justify-center sm:justify-start gap-2 min-h-12 sm:min-h-11 px-5 py-3 border-2 sm:border-[3px] border-foreground bg-card text-foreground font-mono text-sm font-black tracking-[0.12em] uppercase shadow-[var(--shadow-brutal)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] transition-all no-underline [@media(hover:hover)]:hover:bg-accent"
 							>
-								<Download className="size-4" />
+								<Download className="size-4" aria-hidden />
 								GET IT
 							</Link>
 							<button
 								onClick={handleCopyLink}
-								className="inline-flex items-center gap-2 px-5 py-3 border-2 sm:border-[3px] border-transparent text-foreground font-mono text-sm font-black tracking-[0.12em] uppercase hover:border-foreground hover:bg-card transition-colors"
+								className="inline-flex items-center justify-center sm:justify-start gap-2 min-h-12 sm:min-h-11 px-5 py-3 border-2 sm:border-[3px] border-transparent text-foreground font-mono text-sm font-black tracking-[0.12em] uppercase transition-colors [@media(hover:hover)]:hover:border-foreground [@media(hover:hover)]:hover:bg-card"
 							>
-								{linkCopied ? <Check className="size-4 text-foreground" strokeWidth={3} /> : <Share2 className="size-4" />}
+								{linkCopied ? <Check className="size-4 text-foreground" strokeWidth={3} aria-hidden /> : <Share2 className="size-4" aria-hidden />}
 								{linkCopied ? "COPIED" : "COPY LINK"}
 							</button>
 						</div>

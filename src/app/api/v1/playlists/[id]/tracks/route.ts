@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail, handleError, requireUser } from "../../../_lib/helpers";
-import { addToPlaylist, removeFromPlaylist } from "@/lib/library";
+import { addToPlaylist, removeFromPlaylist, reorderPlaylist } from "@/lib/library";
 
 // POST /api/v1/playlists/[id]/tracks — add track(s) to playlist
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -31,6 +31,45 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 			}))
 		);
 		return ok(result);
+	} catch (e) {
+		return handleError(e);
+	}
+}
+
+// PATCH /api/v1/playlists/[id]/tracks — reorder tracks in a playlist.
+// Body shape: { trackIds: string[] } — the new order, must include exactly
+// the trackIds already in the playlist (no more, no less, no duplicates).
+// Positions are rewritten 0..N-1 in a single transaction.
+export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+	try {
+		const { userId, error } = await requireUser(request);
+		if (error) return error;
+
+		const { id } = await ctx.params;
+		const playlist = await prisma.playlist.findFirst({ where: { id, userId } });
+		if (!playlist) return fail("NOT_FOUND", "Playlist not found.", 404);
+
+		const { trackIds } = await request.json();
+		if (!Array.isArray(trackIds)) {
+			return fail("MISSING_TRACK_IDS", "trackIds array is required.", 400);
+		}
+
+		try {
+			const result = await reorderPlaylist(id, trackIds.map(String));
+			return ok(result);
+		} catch (e) {
+			const code = e instanceof Error ? e.message : "REORDER_FAILED";
+			if (code === "REORDER_LENGTH_MISMATCH") {
+				return fail(code, "trackIds length must match the playlist's track count.", 400);
+			}
+			if (code === "REORDER_DUPLICATE_TRACK") {
+				return fail(code, "trackIds contains duplicate entries.", 400);
+			}
+			if (code === "REORDER_UNKNOWN_TRACK") {
+				return fail(code, "trackIds contains a track not in this playlist.", 400);
+			}
+			throw e;
+		}
 	} catch (e) {
 		return handleError(e);
 	}

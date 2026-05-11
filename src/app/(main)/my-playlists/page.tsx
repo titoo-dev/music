@@ -143,7 +143,7 @@ export default function MyPlaylistsPage() {
 
 	return (
 		<div className="space-y-6">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div>
 					<h1 className="text-brutal-lg">My Playlists</h1>
 					<p className="text-sm text-muted-foreground mt-1 uppercase tracking-wider font-bold">
@@ -151,11 +151,11 @@ export default function MyPlaylistsPage() {
 					</p>
 				</div>
 
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-2 flex-wrap">
 					<ImportSpotifyDialog
 						trigger={
-							<Button size="sm" variant="outline" className="gap-1.5">
-								<Download className="size-4" />
+							<Button size="sm" variant="outline" className="gap-1.5 min-h-11 sm:min-h-9">
+								<Download className="size-4" aria-hidden />
 								Import from Spotify
 							</Button>
 						}
@@ -165,8 +165,8 @@ export default function MyPlaylistsPage() {
 					<Dialog>
 						<DialogTrigger
 							render={
-								<Button size="sm" className="gap-1.5">
-									<Plus className="size-4" />
+								<Button size="sm" className="gap-1.5 min-h-11 sm:min-h-9">
+									<Plus className="size-4" aria-hidden />
 									New Playlist
 								</Button>
 							}
@@ -208,7 +208,7 @@ export default function MyPlaylistsPage() {
 					{playlists.map((pl) => (
 						<div
 							key={pl.id}
-							className="group relative border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] hover:shadow-[var(--shadow-brutal-hover)] hover:-translate-x-[1px] hover:-translate-y-[1px] transition-all bg-card overflow-hidden"
+							className="group relative border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card overflow-hidden"
 						>
 							<Link href={`/my-playlists/${pl.id}`} className="no-underline">
 								<PlaylistCover covers={pl.covers} title={pl.title} />
@@ -221,14 +221,15 @@ export default function MyPlaylistsPage() {
 							</Link>
 							<Button
 								variant="ghost"
-								size="icon-xs"
-								className="absolute top-1.5 right-1.5 bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+								size="icon-touch"
+								aria-label={`Delete ${pl.title}`}
+								className="absolute top-1.5 right-1.5 bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-destructive md:opacity-0 md:[@media(hover:hover)]:group-hover:opacity-100 transition-opacity"
 								onClick={(e) => {
 									e.preventDefault();
 									setDeleteTarget(pl);
 								}}
 							>
-								<Trash2 className="size-3" />
+								<Trash2 className="size-3.5" aria-hidden />
 							</Button>
 						</div>
 					))}

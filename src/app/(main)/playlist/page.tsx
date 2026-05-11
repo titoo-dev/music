@@ -3,9 +3,11 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
-import { Loader2 } from "lucide-react";
-import { CoverImage } from "@/components/ui/cover-image";
+import { Button } from "@/components/ui/button";
+import { Loader2, Play, Shuffle } from "lucide-react";
+import { EntityHero } from "@/components/layout/EntityHero";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -19,6 +21,8 @@ function PlaylistContent() {
 	const [playlist, setPlaylist] = useState<any>(null);
 	const [tracks, setTracks] = useState<any[]>([]);
 	const [loading, setLoading] = useState(true);
+	const playerPlay = usePlayerStore((s) => s.play);
+	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 
 	useEffect(() => {
 		if (!id) return;
@@ -59,36 +63,69 @@ function PlaylistContent() {
 		"/placeholder.jpg";
 
 	const playlistTitle = playlist.title || playlist.TITLE || "Playlist";
+	const creatorName = playlist.creator?.name;
+
+	const playableTracks: PlayerTrack[] = tracks.map((t: any) => {
+		const n = trackFromDeezerRaw(t);
+		return {
+			trackId: n.trackId,
+			title: n.title,
+			artist: n.artist,
+			artistId: n.artistId ?? null,
+			cover: n.cover,
+			duration: n.duration ?? null,
+		};
+	});
+
+	const handlePlayAll = () => {
+		if (playableTracks.length === 0) return;
+		playerPlay(playableTracks[0], playableTracks);
+	};
+
+	const handleShuffleAll = () => {
+		if (playableTracks.length === 0) return;
+		const wasShuffled = usePlayerStore.getState().shuffle;
+		if (!wasShuffled) toggleShuffle();
+		playerPlay(playableTracks[0], playableTracks);
+	};
 
 	return (
 		<div className="space-y-10">
-			{/* Playlist Hero */}
-			<div>
-				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-					PLAYLIST{playlist.creator?.name ? ` · BY ${String(playlist.creator.name).toUpperCase()}` : " · PERSONAL"}
-				</p>
-				<div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-end">
-					<CoverImage
-						src={playlistCover}
-						alt={playlistTitle}
-						className="w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] flex-shrink-0"
-					/>
-					<div className="flex flex-col justify-end gap-3 min-w-0 flex-1">
-						<h1 className="text-brutal-xl m-0">
-							{playlistTitle}<span className="text-primary">.</span>
-						</h1>
-						<div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[12px] font-mono font-bold uppercase tracking-[0.05em] text-muted-foreground">
-							{playlist.creator?.name && (
-								<>
-									<span>BY <span className="text-primary">{playlist.creator.name}</span></span>
-									<span className="text-border">·</span>
-								</>
-							)}
-							<span>{playlist.nb_tracks || tracks.length} TRACKS</span>
-						</div>
-					</div>
-				</div>
-			</div>
+			<EntityHero
+				eyebrow={`PLAYLIST${creatorName ? ` · BY ${String(creatorName).toUpperCase()}` : " · PERSONAL"}`}
+				title={playlistTitle}
+				subtitle={
+					creatorName ? (
+						<span className="font-bold">
+							BY <span className="text-primary">{creatorName}</span>
+						</span>
+					) : undefined
+				}
+				meta={`${playlist.nb_tracks || tracks.length} TRACKS`}
+				coverSrc={playlistCover}
+				coverAlt={playlistTitle}
+				primaryAction={
+					<Button
+						onClick={handlePlayAll}
+						disabled={playableTracks.length === 0}
+						className="h-12 md:h-10 w-full md:w-auto px-6 gap-2"
+					>
+						<Play className="size-4" aria-hidden />
+						PLAY
+					</Button>
+				}
+				secondaryActions={
+					<Button
+						onClick={handleShuffleAll}
+						disabled={playableTracks.length === 0}
+						variant="ghost"
+						size="icon-touch"
+						aria-label="Shuffle playlist"
+					>
+						<Shuffle className="size-4" aria-hidden />
+					</Button>
+				}
+			/>
 
 			{/* Tracklist */}
 			<div>

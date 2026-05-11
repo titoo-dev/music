@@ -37,7 +37,7 @@ export function MiniPlayer() {
 					transition={{ type: "spring", damping: 25, stiffness: 300 }}
 					role="region"
 					aria-label="Preview player"
-					className="fixed bottom-5 right-5 z-50 flex items-center gap-3 border-2 sm:border-[3px] border-foreground bg-background px-4 py-3 shadow-[var(--shadow-brutal-hover)]"
+					className="fixed bottom-[calc(var(--bottom-nav-h)+8px)] right-3 md:bottom-5 md:right-5 z-[45] flex items-center gap-3 border-2 sm:border-[3px] border-foreground bg-background px-4 py-3 shadow-[var(--shadow-brutal-hover)]"
 				>
 					{/* Cover */}
 					<CoverImage
@@ -97,9 +97,9 @@ export function MiniPlayer() {
 					{/* Play/Pause */}
 					<Button
 						variant="ghost"
-						size="icon"
+						size="icon-touch"
 						aria-label={isPlaying ? "Pause preview" : "Play preview"}
-						className="h-8 w-8 border-[2px] border-foreground"
+						className="border-[2px] border-foreground"
 						onClick={() => toggle(currentTrack)}
 					>
 						{isBuffering ? (
@@ -129,9 +129,8 @@ export function MiniPlayer() {
 					{/* Close */}
 					<Button
 						variant="ghost"
-						size="icon"
+						size="icon-touch"
 						aria-label="Close preview"
-						className="h-6 w-6"
 						onClick={stop}
 					>
 						<svg

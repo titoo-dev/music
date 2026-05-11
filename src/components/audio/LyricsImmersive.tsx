@@ -67,7 +67,7 @@ const ImmersiveLines = memo(function ImmersiveLines({ lines }: { lines: LyricLin
 					className={`cursor-pointer leading-[1.18] tracking-[-0.02em] py-3 text-balance text-background transition-all duration-[380ms] ease-out
 						font-semibold text-[clamp(2rem,4.5vw,2.4rem)] opacity-55
 						data-[state=past]:opacity-[0.22]
-						data-[state=active]:opacity-100 data-[state=active]:font-extrabold data-[state=active]:text-[clamp(2.6rem,6vw,3.5rem)]
+						data-[state=active]:opacity-100 data-[state=active]:font-extrabold data-[state=active]:text-[clamp(2.6rem,6vw,3.5rem)] data-[state=active]:!text-accent
 						data-[distance='3']:blur-[1px] data-[distance='4']:blur-[2px] data-[distance='5']:blur-[4px] data-[state=active]:!blur-0
 						${line.text === "" ? "h-6 py-0" : ""}
 					`}
@@ -143,7 +143,7 @@ export function LyricsImmersive() {
 					transition={{ duration: 0.25 }}
 					role="dialog"
 					aria-label="Lyrics fullscreen"
-					className="fixed inset-0 z-[80] bg-foreground text-background overflow-hidden"
+					className="fixed inset-0 z-[71] bg-foreground text-background overflow-hidden"
 				>
 					{/* Atmospheric backdrop */}
 					{currentTrack.cover && (
@@ -179,7 +179,7 @@ export function LyricsImmersive() {
 						<button
 							onClick={() => setOpen(false)}
 							aria-label="Close lyrics"
-							className="w-9 h-9 border-2 border-background bg-transparent text-background hover:bg-background hover:text-foreground transition-colors font-mono text-lg font-extrabold leading-none flex items-center justify-center"
+							className="w-11 h-11 border-2 border-background bg-transparent text-background hover:bg-background hover:text-foreground transition-colors font-mono text-xl font-extrabold leading-none flex items-center justify-center"
 						>
 							×
 						</button>
