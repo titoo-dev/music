@@ -44,9 +44,19 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 		expect(body?.data.status).toBe("not_cached");
 	});
 
-	it("returns null url when presigned URLs are globally disabled", async () => {
+	it("returns null url when presigned URLs are globally disabled, only when the stem actually exists on s3", async () => {
+		// Behavior locked in by f3ff82a: the DB lookup runs BEFORE the env-var
+		// short-circuit so the client can distinguish "no stem yet" (status=
+		// not_cached → fall through to original audio) from "stem exists,
+		// just no direct URL" (status=presigned_disabled → use /stream).
 		setSessionUser("u1");
 		process.env.DEEMIX_DISABLE_PRESIGNED_URLS = "1";
+		prismaMock.stemFile.findUnique.mockResolvedValue({
+			trackId: "1",
+			stemName: "vocals",
+			storagePath: "deemix-music/stems/1/vocals.mp3",
+			storageType: "s3",
+		} as any);
 
 		const res = await GET(
 			makeNextRequest(),
@@ -55,7 +65,24 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 		expect(res.status).toBe(200);
 		const body = await readJson<{ data: { url: null; status: string } }>(res);
 		expect(body?.data.status).toBe("presigned_disabled");
-		expect(prismaMock.stemFile.findUnique).not.toHaveBeenCalled();
+		expect(prismaMock.stemFile.findUnique).toHaveBeenCalledTimes(1);
+	});
+
+	it("returns not_cached (not presigned_disabled) when the env-var is set but no stem row exists", async () => {
+		// Companion to the above — guarantees the karaoke fall-through path:
+		// when the stem doesn't exist, the client must see not_cached so it
+		// falls back to original audio, even with presigned URLs disabled.
+		setSessionUser("u1");
+		process.env.DEEMIX_DISABLE_PRESIGNED_URLS = "1";
+		prismaMock.stemFile.findUnique.mockResolvedValue(null);
+
+		const res = await GET(
+			makeNextRequest(),
+			makeParams({ trackId: "1", stemName: "vocals" }),
+		);
+		expect(res.status).toBe(200);
+		const body = await readJson<{ data: { url: null; status: string } }>(res);
+		expect(body?.data.status).toBe("not_cached");
 	});
 
 	it("returns null url when the cached row is not on s3", async () => {
