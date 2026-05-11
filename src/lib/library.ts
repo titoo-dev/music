@@ -254,6 +254,52 @@ export async function removeFromPlaylist(
 	return { removed: result.count };
 }
 
+// Reorder all tracks in a playlist. Caller passes the full desired order of
+// trackIds (must match exactly the set of trackIds already in the playlist,
+// no more, no less). Positions are rewritten 0..N-1 in a single transaction
+// so the listing endpoint's `orderBy: { position: "asc" }` always returns
+// the new sequence.
+export async function reorderPlaylist(
+	playlistId: string,
+	orderedTrackIds: string[]
+) {
+	const existing = await prisma.playlistTrack.findMany({
+		where: { playlistId },
+		select: { trackId: true },
+	});
+
+	if (existing.length !== orderedTrackIds.length) {
+		throw new Error("REORDER_LENGTH_MISMATCH");
+	}
+
+	const existingSet = new Set(existing.map((t) => t.trackId));
+	const orderedSet = new Set(orderedTrackIds);
+	if (orderedSet.size !== orderedTrackIds.length) {
+		throw new Error("REORDER_DUPLICATE_TRACK");
+	}
+	for (const id of orderedTrackIds) {
+		if (!existingSet.has(id)) {
+			throw new Error("REORDER_UNKNOWN_TRACK");
+		}
+	}
+
+	await prisma.$transaction(
+		orderedTrackIds.map((trackId, position) =>
+			prisma.playlistTrack.update({
+				where: { playlistId_trackId: { playlistId, trackId } },
+				data: { position },
+			})
+		)
+	);
+
+	await prisma.playlist.update({
+		where: { id: playlistId },
+		data: { updatedAt: new Date() },
+	});
+
+	return { reordered: orderedTrackIds.length };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // File ref-counting + eviction
 // ─────────────────────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ import {
 	maybeEvictFile,
 	forceEvictFile,
 	isPreCacheEnabled,
+	reorderPlaylist,
 } from "./library";
 import { getDeemixApp } from "@/lib/server-state";
 
@@ -484,5 +485,84 @@ describe("isPreCacheEnabled", () => {
 	it("returns false when no UserPreferences row exists", async () => {
 		prismaMock.userPreferences.findUnique.mockResolvedValue(null);
 		expect(await isPreCacheEnabled("u1")).toBe(false);
+	});
+});
+
+describe("reorderPlaylist", () => {
+	it("rewrites positions 0..N-1 in the supplied order and bumps the playlist updatedAt", async () => {
+		prismaMock.playlistTrack.findMany.mockResolvedValue([
+			{ trackId: "a" },
+			{ trackId: "b" },
+			{ trackId: "c" },
+		] as any);
+		prismaMock.$transaction.mockResolvedValue([] as any);
+		prismaMock.playlist.update.mockResolvedValue({} as any);
+		// Each .update returns a thenable so the array we pass to $transaction is well-typed.
+		prismaMock.playlistTrack.update.mockResolvedValue({} as any);
+
+		const result = await reorderPlaylist("pl1", ["c", "a", "b"]);
+
+		expect(result).toEqual({ reordered: 3 });
+		expect(prismaMock.playlistTrack.findMany).toHaveBeenCalledWith({
+			where: { playlistId: "pl1" },
+			select: { trackId: true },
+		});
+		// Three updates queued, one per (trackId, newPosition).
+		expect(prismaMock.playlistTrack.update).toHaveBeenNthCalledWith(1, {
+			where: { playlistId_trackId: { playlistId: "pl1", trackId: "c" } },
+			data: { position: 0 },
+		});
+		expect(prismaMock.playlistTrack.update).toHaveBeenNthCalledWith(2, {
+			where: { playlistId_trackId: { playlistId: "pl1", trackId: "a" } },
+			data: { position: 1 },
+		});
+		expect(prismaMock.playlistTrack.update).toHaveBeenNthCalledWith(3, {
+			where: { playlistId_trackId: { playlistId: "pl1", trackId: "b" } },
+			data: { position: 2 },
+		});
+		expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+		expect(prismaMock.playlist.update).toHaveBeenCalledWith({
+			where: { id: "pl1" },
+			data: { updatedAt: expect.any(Date) },
+		});
+	});
+
+	it("throws REORDER_LENGTH_MISMATCH when the supplied order has the wrong number of trackIds", async () => {
+		prismaMock.playlistTrack.findMany.mockResolvedValue([
+			{ trackId: "a" },
+			{ trackId: "b" },
+		] as any);
+
+		await expect(reorderPlaylist("pl1", ["a"])).rejects.toThrow("REORDER_LENGTH_MISMATCH");
+		await expect(reorderPlaylist("pl1", ["a", "b", "c"])).rejects.toThrow(
+			"REORDER_LENGTH_MISMATCH"
+		);
+		// No writes attempted when validation fails up front.
+		expect(prismaMock.$transaction).not.toHaveBeenCalled();
+		expect(prismaMock.playlistTrack.update).not.toHaveBeenCalled();
+	});
+
+	it("throws REORDER_DUPLICATE_TRACK when the supplied order repeats a trackId", async () => {
+		prismaMock.playlistTrack.findMany.mockResolvedValue([
+			{ trackId: "a" },
+			{ trackId: "b" },
+		] as any);
+
+		await expect(reorderPlaylist("pl1", ["a", "a"])).rejects.toThrow(
+			"REORDER_DUPLICATE_TRACK"
+		);
+		expect(prismaMock.$transaction).not.toHaveBeenCalled();
+	});
+
+	it("throws REORDER_UNKNOWN_TRACK when a supplied trackId is not part of the playlist", async () => {
+		prismaMock.playlistTrack.findMany.mockResolvedValue([
+			{ trackId: "a" },
+			{ trackId: "b" },
+		] as any);
+
+		await expect(reorderPlaylist("pl1", ["a", "z"])).rejects.toThrow(
+			"REORDER_UNKNOWN_TRACK"
+		);
+		expect(prismaMock.$transaction).not.toHaveBeenCalled();
 	});
 });
