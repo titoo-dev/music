@@ -191,6 +191,72 @@ export async function getSavedAlbumIds(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// FollowedArtist — Spotify-like "Following" list, flat metadata.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FollowedArtistMeta {
+	deezerArtistId: string;
+	name: string;
+	pictureUrl?: string | null;
+}
+
+export async function followArtist(userId: string, artist: FollowedArtistMeta) {
+	return prisma.followedArtist.upsert({
+		where: {
+			userId_deezerArtistId: { userId, deezerArtistId: artist.deezerArtistId },
+		},
+		update: {
+			name: artist.name,
+			pictureUrl: artist.pictureUrl ?? null,
+		},
+		create: {
+			userId,
+			deezerArtistId: artist.deezerArtistId,
+			name: artist.name,
+			pictureUrl: artist.pictureUrl ?? null,
+		},
+	});
+}
+
+export async function unfollowArtist(userId: string, deezerArtistId: string) {
+	await prisma.followedArtist.deleteMany({
+		where: { userId, deezerArtistId },
+	});
+}
+
+export async function isArtistFollowed(userId: string, deezerArtistId: string) {
+	const row = await prisma.followedArtist.findUnique({
+		where: { userId_deezerArtistId: { userId, deezerArtistId } },
+		select: { id: true },
+	});
+	return !!row;
+}
+
+export async function getFollowedArtistIds(
+	userId: string,
+	deezerArtistIds: string[]
+): Promise<Set<string>> {
+	if (deezerArtistIds.length === 0) return new Set();
+	const rows = await prisma.followedArtist.findMany({
+		where: { userId, deezerArtistId: { in: deezerArtistIds } },
+		select: { deezerArtistId: true },
+	});
+	return new Set(rows.map((r) => r.deezerArtistId));
+}
+
+export async function listFollowedArtists(
+	userId: string,
+	opts?: { limit?: number; offset?: number }
+) {
+	return prisma.followedArtist.findMany({
+		where: { userId },
+		orderBy: { followedAt: "desc" },
+		take: opts?.limit,
+		skip: opts?.offset,
+	});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Playlist — user playlists. Decoupled from file lifecycle.
 // ─────────────────────────────────────────────────────────────────────────────
 

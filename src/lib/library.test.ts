@@ -21,6 +21,11 @@ import {
 	forceEvictFile,
 	isPreCacheEnabled,
 	reorderPlaylist,
+	followArtist,
+	unfollowArtist,
+	isArtistFollowed,
+	getFollowedArtistIds,
+	listFollowedArtists,
 } from "./library";
 import { getDeemixApp } from "@/lib/server-state";
 
@@ -564,5 +569,126 @@ describe("reorderPlaylist", () => {
 			"REORDER_UNKNOWN_TRACK"
 		);
 		expect(prismaMock.$transaction).not.toHaveBeenCalled();
+	});
+});
+
+describe("followArtist", () => {
+	it("upserts on userId_deezerArtistId composite and returns the row", async () => {
+		const row = { id: "f1", userId: "u1", deezerArtistId: "27" } as any;
+		prismaMock.followedArtist.upsert.mockResolvedValue(row);
+
+		const result = await followArtist("u1", {
+			deezerArtistId: "27",
+			name: "Daft Punk",
+			pictureUrl: "http://cdn/artist/27.jpg",
+		});
+
+		expect(result).toBe(row);
+		expect(prismaMock.followedArtist.upsert).toHaveBeenCalledWith({
+			where: { userId_deezerArtistId: { userId: "u1", deezerArtistId: "27" } },
+			update: {
+				name: "Daft Punk",
+				pictureUrl: "http://cdn/artist/27.jpg",
+			},
+			create: {
+				userId: "u1",
+				deezerArtistId: "27",
+				name: "Daft Punk",
+				pictureUrl: "http://cdn/artist/27.jpg",
+			},
+		});
+	});
+
+	it("normalizes a missing pictureUrl to null on both update and create branches", async () => {
+		prismaMock.followedArtist.upsert.mockResolvedValue({} as any);
+
+		await followArtist("u1", { deezerArtistId: "27", name: "Daft Punk" });
+
+		const call = prismaMock.followedArtist.upsert.mock.calls[0][0];
+		expect(call.update.pictureUrl).toBeNull();
+		expect(call.create.pictureUrl).toBeNull();
+	});
+});
+
+describe("unfollowArtist", () => {
+	it("removes the (userId, deezerArtistId) row when it exists", async () => {
+		prismaMock.followedArtist.deleteMany.mockResolvedValue({ count: 1 } as any);
+
+		await unfollowArtist("u1", "27");
+
+		expect(prismaMock.followedArtist.deleteMany).toHaveBeenCalledWith({
+			where: { userId: "u1", deezerArtistId: "27" },
+		});
+	});
+
+	it("is idempotent — deleteMany returning count:0 does not throw", async () => {
+		prismaMock.followedArtist.deleteMany.mockResolvedValue({ count: 0 } as any);
+		await expect(unfollowArtist("u1", "doesnotexist")).resolves.toBeUndefined();
+	});
+});
+
+describe("isArtistFollowed", () => {
+	it("returns true when the (userId, deezerArtistId) row exists", async () => {
+		prismaMock.followedArtist.findUnique.mockResolvedValue({ id: "f1" } as any);
+		expect(await isArtistFollowed("u1", "27")).toBe(true);
+	});
+
+	it("returns false when no row exists", async () => {
+		prismaMock.followedArtist.findUnique.mockResolvedValue(null);
+		expect(await isArtistFollowed("u1", "27")).toBe(false);
+	});
+});
+
+describe("getFollowedArtistIds", () => {
+	it("returns the set of deezerArtistIds the user follows from the supplied list", async () => {
+		prismaMock.followedArtist.findMany.mockResolvedValue([
+			{ deezerArtistId: "27" },
+			{ deezerArtistId: "55" },
+		] as any);
+
+		const result = await getFollowedArtistIds("u1", ["27", "55", "99"]);
+		expect(result).toEqual(new Set(["27", "55"]));
+		expect(prismaMock.followedArtist.findMany).toHaveBeenCalledWith({
+			where: { userId: "u1", deezerArtistId: { in: ["27", "55", "99"] } },
+			select: { deezerArtistId: true },
+		});
+	});
+
+	it("short-circuits on empty input — no DB call", async () => {
+		const result = await getFollowedArtistIds("u1", []);
+		expect(result).toEqual(new Set());
+		expect(prismaMock.followedArtist.findMany).not.toHaveBeenCalled();
+	});
+});
+
+describe("listFollowedArtists", () => {
+	it("returns the user's followed artists ordered by followedAt desc", async () => {
+		const rows = [
+			{ id: "f1", deezerArtistId: "27" },
+			{ id: "f2", deezerArtistId: "55" },
+		];
+		prismaMock.followedArtist.findMany.mockResolvedValue(rows as any);
+
+		const result = await listFollowedArtists("u1");
+		expect(result).toBe(rows);
+		expect(prismaMock.followedArtist.findMany).toHaveBeenCalledWith({
+			where: { userId: "u1" },
+			orderBy: { followedAt: "desc" },
+			take: undefined,
+			skip: undefined,
+		});
+	});
+
+	it("forwards limit + offset to Prisma when supplied", async () => {
+		prismaMock.followedArtist.findMany.mockResolvedValue([] as any);
+
+		await listFollowedArtists("u1", { limit: 20, offset: 40 });
+
+		expect(prismaMock.followedArtist.findMany).toHaveBeenCalledWith({
+			where: { userId: "u1" },
+			orderBy: { followedAt: "desc" },
+			take: 20,
+			skip: 40,
+		});
 	});
 });

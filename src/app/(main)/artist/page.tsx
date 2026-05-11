@@ -6,12 +6,13 @@ import { fetchData } from "@/utils/api";
 import Link from "next/link";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle2, Play, Shuffle } from "lucide-react";
+import { Loader2, CheckCircle2, Play, Shuffle, Heart } from "lucide-react";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { CoverImage } from "@/components/ui/cover-image";
 import { EntityHero } from "@/components/layout/EntityHero";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -32,6 +33,9 @@ function ArtistContent() {
 	const [topTracks, setTopTracks] = useState<any[]>([]);
 	const [discography, setDiscography] = useState<any>({});
 	const [loading, setLoading] = useState(true);
+	const [isFollowed, setIsFollowed] = useState(false);
+	const [followBusy, setFollowBusy] = useState(false);
+	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const { albumMap } = useDownloadedAlbums();
 
 	useEffect(() => {
@@ -49,6 +53,33 @@ function ArtistContent() {
 		}
 		loadArtist();
 	}, [id]);
+
+	// Resolve follow status once per (auth, artist) — uses the full list as the
+	// single source of truth. Cheap enough on the typical "few hundred followed
+	// artists" scale; a batched status endpoint can replace this if the list
+	// grows past that.
+	useEffect(() => {
+		if (!isAuthenticated || !id) {
+			setIsFollowed(false);
+			return;
+		}
+		let cancelled = false;
+		(async () => {
+			try {
+				const res = await fetch("/api/v1/library/artists", { credentials: "include" });
+				if (!res.ok) return;
+				const json = await res.json();
+				if (cancelled || !json.success) return;
+				const items = (json.data?.items as Array<{ deezerArtistId: string }>) || [];
+				setIsFollowed(items.some((a) => a.deezerArtistId === id));
+			} catch {
+				// ignore — UI defaults to "not followed"
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [id, isAuthenticated]);
 
 	if (loading)
 		return (
@@ -99,6 +130,37 @@ function ArtistContent() {
 		playerPlay(playableTopTracks[0], playableTopTracks);
 	};
 
+	const handleToggleFollow = async () => {
+		if (!id || !isAuthenticated || followBusy) return;
+		const wasFollowed = isFollowed;
+		setIsFollowed(!wasFollowed);
+		setFollowBusy(true);
+		try {
+			if (wasFollowed) {
+				const res = await fetch(`/api/v1/library/artists/${encodeURIComponent(id)}`, {
+					method: "DELETE",
+					credentials: "include",
+				});
+				if (!res.ok) throw new Error("unfollow failed");
+			} else {
+				const res = await fetch("/api/v1/library/artists", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					credentials: "include",
+					body: JSON.stringify({
+						deezerArtistId: id,
+						name: artistName,
+						pictureUrl: artistPicture,
+					}),
+				});
+				if (!res.ok) throw new Error("follow failed");
+			}
+		} catch {
+			setIsFollowed(wasFollowed);
+		}
+		setFollowBusy(false);
+	};
+
 	// Filter discography tabs that have content, preferred order
 	const tabOrder = ["all", "album", "single", "ep", "featured", "more"];
 	const tabLabels: Record<string, string> = {
@@ -131,16 +193,37 @@ function ArtistContent() {
 					) : undefined
 				}
 				secondaryActions={
-					playableTopTracks.length > 0 ? (
-						<Button
-							onClick={handleShuffleTop}
-							variant="ghost"
-							size="icon-touch"
-							aria-label="Shuffle top tracks"
-						>
-							<Shuffle className="size-4" aria-hidden />
-						</Button>
-					) : undefined
+					<>
+						{isAuthenticated && (
+							<Button
+								onClick={handleToggleFollow}
+								disabled={followBusy}
+								variant={isFollowed ? "outline" : "secondary"}
+								size="icon-touch"
+								aria-label={isFollowed ? "Unfollow artist" : "Follow artist"}
+								aria-pressed={isFollowed}
+							>
+								{followBusy ? (
+									<Loader2 className="size-4 animate-spin" aria-hidden />
+								) : (
+									<Heart
+										className={`size-4 ${isFollowed ? "fill-primary text-primary" : ""}`}
+										aria-hidden
+									/>
+								)}
+							</Button>
+						)}
+						{playableTopTracks.length > 0 && (
+							<Button
+								onClick={handleShuffleTop}
+								variant="ghost"
+								size="icon-touch"
+								aria-label="Shuffle top tracks"
+							>
+								<Shuffle className="size-4" aria-hidden />
+							</Button>
+						)}
+					</>
 				}
 			/>
 
