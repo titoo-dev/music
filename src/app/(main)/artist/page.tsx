@@ -6,13 +6,70 @@ import { fetchData } from "@/utils/api";
 import Link from "next/link";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle2, Play, Shuffle, Heart } from "lucide-react";
+import { Loader2, CheckCircle2, Play, Shuffle, Heart, ChevronDown } from "lucide-react";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { CoverImage } from "@/components/ui/cover-image";
 import { EntityHero } from "@/components/layout/EntityHero";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { useAuthStore } from "@/stores/useAuthStore";
+
+// Deezer GW's deezer.pageArtist response is loosely typed and field names
+// vary between regions and artist types. Probe the spots a bio is most
+// likely to live; bail out and render nothing if none of them match.
+function extractArtistBio(artist: any): string | null {
+	if (!artist) return null;
+	const candidates: unknown[] = [
+		artist.BIO?.BIO,
+		artist.BIO,
+		artist.bio,
+		artist.SUMMARY,
+		artist.summary,
+		artist.description,
+		artist.DESCRIPTION,
+	];
+	for (const c of candidates) {
+		if (typeof c === "string" && c.trim().length > 0) {
+			return c.trim();
+		}
+	}
+	return null;
+}
+
+function ArtistBio({ bio }: { bio: string }) {
+	const [expanded, setExpanded] = useState(false);
+	const isLong = bio.length > 320;
+	const visible = expanded || !isLong ? bio : `${bio.slice(0, 320).trimEnd()}…`;
+
+	return (
+		<section>
+			<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
+				<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
+					ABOUT
+				</h2>
+			</div>
+			<div className="border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] p-5">
+				<p className="text-[13px] leading-[1.55] text-foreground whitespace-pre-line">
+					{visible}
+				</p>
+				{isLong && (
+					<button
+						type="button"
+						onClick={() => setExpanded((v) => !v)}
+						aria-expanded={expanded}
+						className="mt-3 inline-flex items-center gap-1.5 min-h-11 md:min-h-9 px-3 -ml-3 font-mono text-[11px] font-bold tracking-[0.1em] uppercase text-muted-foreground [@media(hover:hover)]:hover:text-foreground transition-colors"
+					>
+						<ChevronDown
+							className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
+							aria-hidden
+						/>
+						{expanded ? "Show less" : "Show more"}
+					</button>
+				)}
+			</div>
+		</section>
+	);
+}
 
 function getCoverUrl(hash: string, size = 500) {
 	if (!hash) return "";
@@ -172,6 +229,7 @@ function ArtistContent() {
 		more: "More",
 	};
 	const tabKeys = tabOrder.filter((k) => discography[k]?.length > 0);
+	const artistBio = extractArtistBio(artist);
 
 	return (
 		<div className="space-y-10">
@@ -226,6 +284,9 @@ function ArtistContent() {
 					</>
 				}
 			/>
+
+			{/* Bio — defensive: shown only if Deezer returned one for this artist */}
+			{artistBio && <ArtistBio bio={artistBio} />}
 
 			{/* Top Tracks */}
 			{topTracks.length > 0 && (
