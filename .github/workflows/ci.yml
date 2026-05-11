@@ -30,7 +30,10 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # npm install (not npm ci) so the Linux CI runner can pull platform-
+        # specific optional deps (e.g. @emnapi/runtime via sharp) that the
+        # Windows-generated lock omits. Same fix as 87cefca for Docker.
+        run: npm install --no-audit --no-fund --no-progress
 
       - name: Generate Prisma client
         run: npm run db:generate
@@ -111,7 +114,10 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # npm install (not npm ci) so the Linux CI runner can pull platform-
+        # specific optional deps (e.g. @emnapi/runtime via sharp) that the
+        # Windows-generated lock omits. Same fix as 87cefca for Docker.
+        run: npm install --no-audit --no-fund --no-progress
 
       - name: Generate Prisma client
         run: npm run db:generate
@@ -139,7 +145,10 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # npm install (not npm ci) so the Linux CI runner can pull platform-
+        # specific optional deps (e.g. @emnapi/runtime via sharp) that the
+        # Windows-generated lock omits. Same fix as 87cefca for Docker.
+        run: npm install --no-audit --no-fund --no-progress
 
       - name: Generate Prisma client
         run: npm run db:generate
