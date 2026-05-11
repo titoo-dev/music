@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2, Music, Disc3, Heart, Clock } from "lucide-react";
+import { Loader2, Music, Disc3, Heart, Clock, User as UserIcon } from "lucide-react";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
 
 interface UserPlaylist {
@@ -52,13 +52,22 @@ interface RecentPlayItem {
 	playedAt: string;
 }
 
-type Tab = "recent" | "tracks" | "albums" | "playlists";
+interface FollowedArtistItem {
+	id: string;
+	deezerArtistId: string;
+	name: string;
+	pictureUrl: string | null;
+	followedAt: string;
+}
+
+type Tab = "recent" | "tracks" | "albums" | "playlists" | "following";
 
 const TABS: { key: Tab; label: string }[] = [
 	{ key: "recent", label: "RECENT" },
 	{ key: "tracks", label: "TRACKS" },
 	{ key: "albums", label: "ALBUMS" },
 	{ key: "playlists", label: "PLAYLISTS" },
+	{ key: "following", label: "FOLLOWING" },
 ];
 
 function fmtRelative(dateStr: string): string {
@@ -110,10 +119,11 @@ function LibraryContent() {
 	const [albums, setAlbums] = useState<UserAlbum[]>([]);
 	const [tracks, setTracks] = useState<SavedTrackItem[]>([]);
 	const [recentPlays, setRecentPlays] = useState<RecentPlayItem[]>([]);
+	const [followedArtists, setFollowedArtists] = useState<FollowedArtistItem[]>([]);
 	const [loading, setLoading] = useState(true);
 	const initialTab = (searchParams.get("tab") as Tab) || "recent";
 	const [tab, setTab] = useState<Tab>(
-		["recent", "tracks", "albums", "playlists"].includes(initialTab) ? initialTab : "recent"
+		["recent", "tracks", "albums", "playlists", "following"].includes(initialTab) ? initialTab : "recent"
 	);
 
 	useEffect(() => {
@@ -124,16 +134,18 @@ function LibraryContent() {
 		(async () => {
 			setLoading(true);
 			try {
-				const [pls, als, tks, rps] = await Promise.all([
+				const [pls, als, tks, rps, ars] = await Promise.all([
 					fetchData("playlists").catch(() => []),
 					fetchData("library/albums").catch(() => ({ items: [] })),
 					fetchData("library/tracks", { limit: "200" }).catch(() => ({ items: [] })),
 					fetchData("recent-plays", { limit: "100" }).catch(() => ({ items: [] })),
+					fetchData("library/artists").catch(() => ({ items: [] })),
 				]);
 				setPlaylists(Array.isArray(pls) ? pls : []);
 				setAlbums((als as { items?: UserAlbum[] }).items || []);
 				setTracks((tks as { items?: SavedTrackItem[] }).items || []);
 				setRecentPlays((rps as { items?: RecentPlayItem[] }).items || []);
+				setFollowedArtists((ars as { items?: FollowedArtistItem[] }).items || []);
 			} catch {
 				// ignore
 			}
@@ -186,7 +198,7 @@ function LibraryContent() {
 						MY <span className="text-primary">COLLECTION.</span>
 					</h1>
 					<p className="mt-3 text-sm font-bold uppercase tracking-[0.04em] text-muted-foreground">
-						{playlists.length} PLAYLIST{playlists.length !== 1 ? "S" : ""} · {albums.length} ALBUM{albums.length !== 1 ? "S" : ""} · {totalTracks} TRACKS
+						{playlists.length} PLAYLIST{playlists.length !== 1 ? "S" : ""} · {albums.length} ALBUM{albums.length !== 1 ? "S" : ""} · {totalTracks} TRACKS · {followedArtists.length} ARTIST{followedArtists.length !== 1 ? "S" : ""}
 					</p>
 				</div>
 			</div>
@@ -202,7 +214,9 @@ function LibraryContent() {
 								? albums.length
 								: t.key === "recent"
 									? recentPlays.length
-									: tracks.length;
+									: t.key === "following"
+										? followedArtists.length
+										: tracks.length;
 					return (
 						<button
 							key={t.key}
@@ -335,6 +349,50 @@ function LibraryContent() {
 										<span className="truncate">{album.artist}</span>
 										<span className="tabular-nums shrink-0">{album.trackCount} TR</span>
 									</div>
+								</div>
+							</Link>
+						))}
+					</div>
+				)
+			)}
+
+			{/* Followed artists grid */}
+			{tab === "following" && (
+				followedArtists.length === 0 ? (
+					<EmptyState
+						icon={<UserIcon className="size-7" />}
+						title="NO FOLLOWED ARTISTS"
+						hint="Tap the heart on an artist page to start following them."
+						actionHref="/search"
+						actionLabel="OPEN SEARCH"
+					/>
+				) : (
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+						{followedArtists.map((artist) => (
+							<Link
+								key={artist.id}
+								href={`/artist?id=${artist.deezerArtistId}`}
+								className="group text-center border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[2px] [@media(hover:hover)]:hover:-translate-y-[2px] transition-all"
+							>
+								<div className="w-full aspect-square bg-muted flex items-center justify-center">
+									{artist.pictureUrl ? (
+										<CoverImage
+											src={artist.pictureUrl}
+											alt={artist.name}
+											loading="lazy"
+											className="w-full aspect-square border-0"
+										/>
+									) : (
+										<UserIcon className="size-12 text-muted-foreground/30" aria-hidden />
+									)}
+								</div>
+								<div className="p-2.5 border-t-[2px] border-foreground">
+									<p className="text-[12px] font-extrabold uppercase tracking-[-0.01em] truncate leading-[1.15]">
+										{artist.name}
+									</p>
+									<p className="mt-1 font-mono text-[10px] text-muted-foreground tabular-nums">
+										FOLLOWED {fmtRelative(artist.followedAt)}
+									</p>
 								</div>
 							</Link>
 						))}
