@@ -94,6 +94,11 @@ function ArtistContent() {
 	const [followBusy, setFollowBusy] = useState(false);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const { albumMap } = useDownloadedAlbums();
+	// Must stay above the early returns below — calling these hooks after a
+	// conditional `return` makes the hook count vary between renders and crashes
+	// React (#310 "Rendered fewer hooks than expected"). See rules-of-hooks.
+	const playerPlay = usePlayerStore((s) => s.play);
+	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 
 	useEffect(() => {
 		if (!id) return;
@@ -160,8 +165,6 @@ function ArtistContent() {
 
 	const artistName = artist.name || artist.ART_NAME;
 	const nbFan = artist.nb_fan || artist.NB_FAN;
-	const playerPlay = usePlayerStore((s) => s.play);
-	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 
 	const playableTopTracks: PlayerTrack[] = topTracks.slice(0, 10).map((t: any) => {
 		const n = trackFromDeezerRaw(t);
