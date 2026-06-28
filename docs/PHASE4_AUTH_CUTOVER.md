@@ -12,9 +12,12 @@
   - `getCurrentUser` renvoie `null` sans session (testé via `npx convex run auth:getCurrentUser`).
 - **Secrets Convex posés (dev)** : `BETTER_AUTH_SECRET`, `SITE_URL`.
 
-## ⏳ Reste à faire (OPÉRATIONNEL — non exécutable headless : console Google, données prod, navigateur)
-L'auth **live** de l'app tourne TOUJOURS sur Prisma (`src/lib/auth.ts`) — rien n'est cassé.
-Les étapes ci-dessous réalisent la bascule effective.
+## ✅ Bascule effectuée — 2026-06-28
+La bascule auth est **faite et committée** (branche `feature/convex-migration`) : `src/lib/auth.ts` (prismaAdapter) **supprimé**, guards `helpers.ts` réécrits sur l'auth Convex, provider Better Auth monté. La **console Google OAuth est configurée** (redirect `*.convex.site/api/auth/callback/google`). **Aucune migration d'utilisateurs** : démarrage à neuf sur Convex → la préservation des `id` (§7) et le re-login sont **sans objet**.
+
+Il ne reste que l'**opérationnel de prod** : poser les variables d'env sur le déploiement Convex de prod et déployer. Les sections ci-dessous restent la référence pour ce setup et l'historique de la bascule.
+
+## ⏳ Référence — setup opérationnel de prod (non exécutable headless : console Google, navigateur)
 
 ## 0. Sauvegarde (avant tout)
 

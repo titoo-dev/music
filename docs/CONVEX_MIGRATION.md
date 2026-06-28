@@ -293,13 +293,20 @@ npx convex import --table trackMatch --replace scratch/convex-export/trackMatch.
 
 ## 11. Journal d'avancement
 
+### ✅ COMMITÉE + OAuth configuré — 2026-06-28
+La migration (toutes phases) est **committée** sur la branche `feature/convex-migration` (commit `feat(db): migrate from Postgres/Prisma to Convex (all phases)`), prête pour PR vers `main`.
+- **Console Google OAuth** : configurée (redirect `*.convex.site/api/auth/callback/google` posé). ✅
+- **Décision données** : **pas de migration des données existantes** — démarrage à neuf sur Convex. En conséquence, `db:export`/`db:import`/`db:verify`, la **préservation des `id` users** et le **re-login forcé** deviennent **sans objet** (les scripts restent dans le repo pour usage futur éventuel).
+- **Vérif au commit** : `tsc --noEmit` clean · 367 app tests · 10 convex tests verts.
+- **Reste avant prod** : poser les variables d'env de prod sur le déploiement Convex prod (`SITE_URL`, `GOOGLE_CLIENT_*`, `BETTER_AUTH_SECRET`) + `NEXT_PUBLIC_*` côté app, et déployer (`npx convex deploy`). Aucun travail de code restant.
+
 ### ✅✅ MIGRATION TERMINÉE (toutes phases) — 2026-06-23
 Convex est désormais l'**unique** base de données. Postgres/Prisma **supprimés** du code applicatif.
 - **Phase 5** ✅ : `ConvexBetterAuthProvider` monté dans `layout.tsx` ; `useUserPreferences` converti en `useQuery`/`useMutation` réactif (queries auth-aware `preferences.getMine`/`setMine`). Les autres hooks de polling suivent le même patron.
 - **Phase 6** ✅ : supprimés `src/lib/prisma.ts`, `src/lib/auth.ts`, `src/lib/auth-backend.ts`, `repositories/backend.ts`, `config-store/{Postgres,Dual}ConfigStore.ts`, `test/helpers/mockPrisma.ts`, `prisma/schema.prisma`, `prisma.config.ts`, `src/generated/`. Repos/library/helpers/config-store/stems-worker **Convex-only**. Deps `prisma`/`@prisma/*`/`@better-auth/prisma-adapter` retirées de `package.json` (`pg` conservé en devDep pour les scripts de migration). Étapes CI `db:generate` retirées. Les **~225 tests** ont été re-pointés (mocks prisma → mocks repos/Convex/auth-server).
 - **Vérif finale** : `tsc` clean · `npm run build` ✓ (compile + TS + 37/37 pages, **sans `DATABASE_URL`**) · gate `test:coverage` **95.13/90.8/94.79/96.06** · 10 tests convex · 24 tests worker · **0 référence prisma** dans le code app.
 
-**Reste strictement opérationnel** (humain, non headless) : Google OAuth console (redirect `*.convex.site`), lancer `db:export`+`db:import`+`db:verify` sur le Postgres de PROD pour migrer les données réelles + migrer les comptes utilisateurs (préserver les `id`), forcer le re-login. Le code, lui, est 100% sur Convex.
+**Reste strictement opérationnel** (humain, non headless) : ~~Google OAuth console~~ ✅ fait · ~~migration des données + comptes users + re-login~~ **sans objet** (démarrage à neuf, voir l'entrée 2026-06-28). Le code est 100% sur Convex. Ne reste que la pose des variables d'env de prod + `npx convex deploy`.
 
 ### 🟢 SYNTHÈSE (état autonome antérieur)
 | Phase | État | Vérif |
