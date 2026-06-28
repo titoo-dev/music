@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { setUserDz } from "@/lib/server-state";
-import { prisma } from "@/lib/prisma";
+import { upsertDeezerCredential } from "@/lib/repositories/deezerCredentials";
 import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
 
 export async function POST(request: NextRequest) {
@@ -29,25 +29,13 @@ export async function POST(request: NextRequest) {
 			?.find((c: any) => c.key === "arl")?.value;
 
 		if (arl) {
-			await prisma.deezerCredential.upsert({
-				where: { userId: userResult.userId },
-				update: {
-					arl,
-					deezerUserId: dz.currentUser?.id ?? null,
-					deezerUserName: dz.currentUser?.name ?? null,
-					deezerPicture: dz.currentUser?.picture ?? null,
-					canStreamHq: dz.currentUser?.can_stream_hq ?? false,
-					canStreamLossless: dz.currentUser?.can_stream_lossless ?? false,
-				},
-				create: {
-					userId: userResult.userId,
-					arl,
-					deezerUserId: dz.currentUser?.id ?? null,
-					deezerUserName: dz.currentUser?.name ?? null,
-					deezerPicture: dz.currentUser?.picture ?? null,
-					canStreamHq: dz.currentUser?.can_stream_hq ?? false,
-					canStreamLossless: dz.currentUser?.can_stream_lossless ?? false,
-				},
+			await upsertDeezerCredential(userResult.userId, {
+				arl,
+				deezerUserId: dz.currentUser?.id != null ? Number(dz.currentUser.id) : null,
+				deezerUserName: dz.currentUser?.name ?? null,
+				deezerPicture: dz.currentUser?.picture ?? null,
+				canStreamHq: dz.currentUser?.can_stream_hq ?? false,
+				canStreamLossless: dz.currentUser?.can_stream_lossless ?? false,
 			});
 		}
 

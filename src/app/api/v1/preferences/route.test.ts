@@ -1,25 +1,34 @@
+// @vitest-environment node
+// Convex-only (Phase 6) : la route délègue au repo userPreferences (Convex) et
+// l'auth passe par @/lib/auth-server. On mocke ces frontières (pas Prisma).
+// TEMPLATE de conversion des tests de routes post-Phase-6.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
 import {
-	authMock,
+	authServerMock,
+	convexApiMock,
 	setSessionUser,
 	clearSession,
 } from "@/test/helpers/mockAuth";
 import { makeNextRequest, readJson } from "@/test/helpers/nextRequest";
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/auth-server", () => authServerMock);
+vi.mock("@convex/_generated/api", () => convexApiMock);
+
+const { prefsRepo } = vi.hoisted(() => ({
+	prefsRepo: {
+		getUserPreferences: vi.fn(),
+		upsertUserPreferences: vi.fn(),
+	},
+}));
+vi.mock("@/lib/repositories/userPreferences", () => prefsRepo);
 
 import { GET, PATCH } from "./route";
 
 beforeEach(() => {
-	resetPrismaMock();
 	clearSession();
+	prefsRepo.getUserPreferences.mockReset();
+	prefsRepo.upsertUserPreferences.mockReset();
 });
-
-// ────────────────────────────────────────────────────────────
-// GET
-// ────────────────────────────────────────────────────────────
 
 describe("GET /api/v1/preferences", () => {
 	it("returns 401 when not authenticated", async () => {
@@ -31,67 +40,36 @@ describe("GET /api/v1/preferences", () => {
 
 	it("returns the user's preferences when present", async () => {
 		setSessionUser("u1");
-		prismaMock.userPreferences.findUnique.mockResolvedValue({
-			userId: "u1",
-			preferences: { playlistSortOrder: "asc", preCacheSaved: true },
-		} as any);
-
-		const res = await GET(makeNextRequest());
-		expect(res.status).toBe(200);
-		const body = await readJson<{
-			data: { playlistSortOrder?: string; preCacheSaved?: boolean };
-		}>(res);
-		expect(body?.data).toEqual({
+		prefsRepo.getUserPreferences.mockResolvedValue({
 			playlistSortOrder: "asc",
 			preCacheSaved: true,
 		});
-		expect(prismaMock.userPreferences.findUnique).toHaveBeenCalledWith({
-			where: { userId: "u1" },
-		});
+		const res = await GET(makeNextRequest());
+		expect(res.status).toBe(200);
+		const body = await readJson<{ data: object }>(res);
+		expect(body?.data).toEqual({ playlistSortOrder: "asc", preCacheSaved: true });
+		expect(prefsRepo.getUserPreferences).toHaveBeenCalledWith("u1");
 	});
 
-	it("returns an empty object when no preferences row exists", async () => {
+	it("returns an empty object when no preferences exist", async () => {
 		setSessionUser("u1");
-		prismaMock.userPreferences.findUnique.mockResolvedValue(null);
-
+		prefsRepo.getUserPreferences.mockResolvedValue(null);
 		const res = await GET(makeNextRequest());
 		expect(res.status).toBe(200);
 		const body = await readJson<{ data: object }>(res);
 		expect(body?.data).toEqual({});
 	});
 
-	it("returns an empty object when row exists but preferences is null", async () => {
+	it("returns 500 INTERNAL_ERROR when the repo throws", async () => {
 		setSessionUser("u1");
-		prismaMock.userPreferences.findUnique.mockResolvedValue({
-			userId: "u1",
-			preferences: null,
-		} as any);
-
-		const res = await GET(makeNextRequest());
-		expect(res.status).toBe(200);
-		const body = await readJson<{ data: object }>(res);
-		expect(body?.data).toEqual({});
-	});
-
-	it("returns 500 INTERNAL_ERROR when prisma throws", async () => {
-		setSessionUser("u1");
-		prismaMock.userPreferences.findUnique.mockRejectedValue(
-			new Error("db down")
-		);
-
+		prefsRepo.getUserPreferences.mockRejectedValue(new Error("db down"));
 		const res = await GET(makeNextRequest());
 		expect(res.status).toBe(500);
-		const body = await readJson<{ error: { code: string; message: string } }>(
-			res
-		);
+		const body = await readJson<{ error: { code: string; message: string } }>(res);
 		expect(body?.error.code).toBe("INTERNAL_ERROR");
 		expect(body?.error.message).toBe("db down");
 	});
 });
-
-// ────────────────────────────────────────────────────────────
-// PATCH
-// ────────────────────────────────────────────────────────────
 
 describe("PATCH /api/v1/preferences", () => {
 	it("returns 401 when not authenticated", async () => {
@@ -103,101 +81,49 @@ describe("PATCH /api/v1/preferences", () => {
 
 	it("rejects unknown keys with 400 INVALID_KEY", async () => {
 		setSessionUser("u1");
-
 		const res = await PATCH(
-			makeNextRequest({
-				method: "PATCH",
-				body: { hackerKey: "yes" },
-			})
+			makeNextRequest({ method: "PATCH", body: { hackerKey: "yes" } })
 		);
 		expect(res.status).toBe(400);
-		const body = await readJson<{ error: { code: string; message: string } }>(
-			res
-		);
+		const body = await readJson<{ error: { code: string; message: string } }>(res);
 		expect(body?.error.code).toBe("INVALID_KEY");
 		expect(body?.error.message).toContain("hackerKey");
-		expect(prismaMock.userPreferences.upsert).not.toHaveBeenCalled();
+		expect(prefsRepo.upsertUserPreferences).not.toHaveBeenCalled();
 	});
 
 	it("merges updates into existing preferences and upserts", async () => {
 		setSessionUser("u1");
-		prismaMock.userPreferences.findUnique.mockResolvedValue({
-			userId: "u1",
-			preferences: { playlistSortOrder: "asc", preCacheSaved: false },
-		} as any);
-		prismaMock.userPreferences.upsert.mockResolvedValue({
-			userId: "u1",
-			preferences: {
-				playlistSortOrder: "desc",
-				preCacheSaved: false,
-			},
-		} as any);
-
-		const res = await PATCH(
-			makeNextRequest({
-				method: "PATCH",
-				body: { playlistSortOrder: "desc" },
-			})
-		);
-		expect(res.status).toBe(200);
-
-		expect(prismaMock.userPreferences.upsert).toHaveBeenCalledWith({
-			where: { userId: "u1" },
-			update: {
-				preferences: { playlistSortOrder: "desc", preCacheSaved: false },
-			},
-			create: {
-				userId: "u1",
-				preferences: { playlistSortOrder: "desc", preCacheSaved: false },
-			},
-		});
-
-		const body = await readJson<{
-			data: { playlistSortOrder?: string; preCacheSaved?: boolean };
-		}>(res);
-		expect(body?.data).toEqual({
-			playlistSortOrder: "desc",
+		prefsRepo.getUserPreferences.mockResolvedValue({
+			playlistSortOrder: "asc",
 			preCacheSaved: false,
 		});
+		const merged = { playlistSortOrder: "desc", preCacheSaved: false };
+		prefsRepo.upsertUserPreferences.mockResolvedValue(merged);
+		const res = await PATCH(
+			makeNextRequest({ method: "PATCH", body: { playlistSortOrder: "desc" } })
+		);
+		expect(res.status).toBe(200);
+		expect(prefsRepo.upsertUserPreferences).toHaveBeenCalledWith("u1", merged);
+		const body = await readJson<{ data: object }>(res);
+		expect(body?.data).toEqual(merged);
 	});
 
-	it("creates a new row with just the updates when no existing row", async () => {
+	it("creates with just the updates when no existing prefs", async () => {
 		setSessionUser("u1");
-		prismaMock.userPreferences.findUnique.mockResolvedValue(null);
-		prismaMock.userPreferences.upsert.mockResolvedValue({
-			userId: "u1",
-			preferences: { albumSortOrder: "desc" },
-		} as any);
-
+		prefsRepo.getUserPreferences.mockResolvedValue(null);
+		prefsRepo.upsertUserPreferences.mockResolvedValue({ albumSortOrder: "desc" });
 		await PATCH(
-			makeNextRequest({
-				method: "PATCH",
-				body: { albumSortOrder: "desc" },
-			})
+			makeNextRequest({ method: "PATCH", body: { albumSortOrder: "desc" } })
 		);
-
-		expect(prismaMock.userPreferences.upsert).toHaveBeenCalledWith({
-			where: { userId: "u1" },
-			update: { preferences: { albumSortOrder: "desc" } },
-			create: {
-				userId: "u1",
-				preferences: { albumSortOrder: "desc" },
-			},
+		expect(prefsRepo.upsertUserPreferences).toHaveBeenCalledWith("u1", {
+			albumSortOrder: "desc",
 		});
 	});
 
-	it("accepts all allowed keys: playlistSortOrder / albumSortOrder / preCacheSaved", async () => {
+	it("accepts all allowed keys", async () => {
 		setSessionUser("u1");
-		prismaMock.userPreferences.findUnique.mockResolvedValue(null);
-		prismaMock.userPreferences.upsert.mockResolvedValue({
-			userId: "u1",
-			preferences: {
-				playlistSortOrder: "desc",
-				albumSortOrder: "asc",
-				preCacheSaved: true,
-			},
-		} as any);
-
+		prefsRepo.getUserPreferences.mockResolvedValue(null);
+		prefsRepo.upsertUserPreferences.mockResolvedValue({});
 		const res = await PATCH(
 			makeNextRequest({
 				method: "PATCH",
@@ -213,19 +139,13 @@ describe("PATCH /api/v1/preferences", () => {
 
 	it("returns 500 INTERNAL_ERROR when upsert throws", async () => {
 		setSessionUser("u1");
-		prismaMock.userPreferences.findUnique.mockResolvedValue(null);
-		prismaMock.userPreferences.upsert.mockRejectedValue(new Error("write fail"));
-
+		prefsRepo.getUserPreferences.mockResolvedValue(null);
+		prefsRepo.upsertUserPreferences.mockRejectedValue(new Error("write fail"));
 		const res = await PATCH(
-			makeNextRequest({
-				method: "PATCH",
-				body: { playlistSortOrder: "desc" },
-			})
+			makeNextRequest({ method: "PATCH", body: { playlistSortOrder: "desc" } })
 		);
 		expect(res.status).toBe(500);
-		const body = await readJson<{ error: { code: string; message: string } }>(
-			res
-		);
+		const body = await readJson<{ error: { code: string } }>(res);
 		expect(body?.error.code).toBe("INTERNAL_ERROR");
 	});
 });

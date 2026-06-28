@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireDeezerAndApp, handleError } from "../../_lib/helpers";
+import { hasStored } from "@/lib/repositories/storedTracks";
 import { getPreferredBitrate } from "@/lib/deemix/utils/getPreferredBitrate";
 import { utils, type Deezer } from "@/lib/deezer";
 import Track from "@/lib/deemix/types/Track";
@@ -29,11 +29,7 @@ export async function GET(
 
 		// Already cached on storage? Nothing to warm — playback uses the fast
 		// /stream path which doesn't touch Deezer.
-		const stored = await prisma.storedTrack.findFirst({
-			where: { trackId },
-			select: { id: true },
-		});
-		if (stored) return new NextResponse(null, { status: 204 });
+		if (await hasStored(trackId)) return new NextResponse(null, { status: 204 });
 
 		// Already warm? Skip the work.
 		if (gwTrackCache.get(String(trackId))) {

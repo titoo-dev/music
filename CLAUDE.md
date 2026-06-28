@@ -10,7 +10,7 @@ This project uses Next.js 16 which has breaking changes from earlier versions. *
 
 - **Frontend**: Next.js 16 (app router), React 19, Zustand stores, Tailwind CSS 4, shadcn/ui, Motion
 - **Backend**: Next.js API routes (`src/app/api/v1/`) + BullMQ stems-worker (`stems-worker/`)
-- **Database**: PostgreSQL via Prisma 7 (schema at `prisma/schema.prisma`)
+- **Database**: Convex (schema at `convex/schema.ts`, functions in `convex/`). Migrated from PostgreSQL/Prisma — see `docs/CONVEX_MIGRATION.md`. App code calls Convex via repos (`src/lib/repositories/`) + `src/lib/library.ts`; auth via the `@convex-dev/better-auth` component (`convex/auth.ts`). The `pg`-based scripts in `scripts/` (`db:export`/`db:verify`) are one-time data-migration bridges only.
 - **Storage**: S3 (AWS SDK v3) or local filesystem — see `src/lib/deemix/storage/`
 - **Auth**: better-auth (`src/lib/auth.ts`, `src/lib/auth-client.ts`)
 
@@ -171,3 +171,17 @@ Many internal files are in `.claudeignore` to save tokens. Only **entry points**
 - `deemix/types/{Artist,Playlist,Lyrics,Picture,CustomDate,listener,Settings}.ts` — secondary models
 - `deemix/errors.ts`, `deezer/{types,utils,errors,store,schema/*}.ts` — internals
 - `components/ui/*.tsx` — shadcn generated primitives
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->

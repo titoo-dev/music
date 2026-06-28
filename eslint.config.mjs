@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     "coverage/**",
     // Generated Prisma client.
     "src/generated/**",
+    // Generated Convex API/types (npx convex dev).
+    "convex/_generated/**",
   ]),
 ]);
 

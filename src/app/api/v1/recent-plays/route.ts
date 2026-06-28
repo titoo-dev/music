@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser, ok, fail, handleError } from "../_lib/helpers";
 import { maybeEvictFile } from "@/lib/library";
+import {
+	listRecentPlays,
+	recordPlayWithCap,
+} from "@/lib/repositories/recentPlays";
 
 const RECENT_PLAYS_CAP = 100;
 
@@ -17,11 +20,7 @@ export async function GET(request: NextRequest) {
 			RECENT_PLAYS_CAP
 		);
 
-		const rows = await prisma.recentPlay.findMany({
-			where: { userId: userResult.userId },
-			orderBy: { playedAt: "desc" },
-			take: limit,
-		});
+		const rows = await listRecentPlays(userResult.userId, limit);
 
 		return ok({ items: rows });
 	} catch (e) {
@@ -64,43 +63,21 @@ export async function POST(request: NextRequest) {
 			duration?: number | null;
 		};
 
-		await prisma.recentPlay.upsert({
-			where: { userId_trackId: { userId, trackId } },
-			update: { playedAt: new Date() },
-			create: {
-				userId,
-				trackId,
-				title,
-				artist,
-				album,
-				albumId,
-				coverUrl,
-				duration: duration ?? null,
-			},
-		});
+		// Upsert + cap appliqués par le repository (Postgres autoritatif). Il
+		// renvoie les trackIds évincés ; l'éviction S3 (maybeEvictFile) reste
+		// ici car elle touche le stockage. maybeEvictFile vérifie tous les
+		// ancrages (SavedTrack / AlbumTrack / SharedTrack / RecentPlay) avant
+		// de libérer un fichier — un replay re-streame via progressive.
+		const evicted = await recordPlayWithCap(
+			userId,
+			{ trackId, title, artist, album, albumId, coverUrl, duration },
+			RECENT_PLAYS_CAP
+		);
 
-		// Cap the user's history at RECENT_PLAYS_CAP entries. The maybeEvictFile
-		// helper checks all anchors (SavedTrack / AlbumTrack / SharedTrack /
-		// RecentPlay) before deleting — it only frees the file when nothing
-		// references it anymore. Replay later just re-streams via progressive.
-		const total = await prisma.recentPlay.count({ where: { userId } });
-		if (total > RECENT_PLAYS_CAP) {
-			const toEvict = await prisma.recentPlay.findMany({
-				where: { userId },
-				orderBy: { playedAt: "asc" },
-				take: total - RECENT_PLAYS_CAP,
-				select: { id: true, trackId: true },
-			});
-
-			await prisma.recentPlay.deleteMany({
-				where: { id: { in: toEvict.map((r) => r.id) } },
-			});
-
-			for (const row of toEvict) {
-				await maybeEvictFile(row.trackId).catch((e) =>
-					console.error("[recent-plays] eviction failed:", e)
-				);
-			}
+		for (const evictedTrackId of evicted) {
+			await maybeEvictFile(evictedTrackId).catch((e) =>
+				console.error("[recent-plays] eviction failed:", e)
+			);
 		}
 
 		return ok({ logged: true });

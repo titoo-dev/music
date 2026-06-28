@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser, fail, handleError } from "../../../../_lib/helpers";
 import { streamObject } from "@/lib/s3-stream";
+import { getStemFile, deleteStemFileByName } from "@/lib/repositories/stems";
 
 // GET /api/v1/stems/[trackId]/[stemName]/stream — stream a stem file from S3
 // through the backend (range-request aware). Used as the fallback when the
@@ -20,9 +20,7 @@ export async function GET(
 		const userResult = await requireUser(request);
 		if (userResult.error) return userResult.error;
 
-		const stored = await prisma.stemFile.findUnique({
-			where: { trackId_stemName: { trackId, stemName } },
-		});
+		const stored = await getStemFile(trackId, stemName);
 
 		if (!stored) {
 			return fail("STEM_NOT_FOUND", "Stem not available — request separation first.", 404);
@@ -66,9 +64,7 @@ export async function GET(
 			// Stale StemFile row — file gone from S3 (manual cleanup, lifecycle).
 			// Drop the row so a future POST re-runs the separation.
 			try {
-				await prisma.stemFile.deleteMany({
-					where: { trackId, stemName },
-				});
+				await deleteStemFileByName(trackId, stemName);
 			} catch {}
 			return fail("STEM_FILE_GONE", "Stem file was removed from storage.", 404);
 		}

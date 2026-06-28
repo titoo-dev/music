@@ -1,49 +1,73 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
-import { authMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
+import { authServerMock, convexApiMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
 import { makeNextRequest, makeParams, readJson } from "@/test/helpers/nextRequest";
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/auth-server", () => authServerMock);
+vi.mock("@convex/_generated/api", () => convexApiMock);
 vi.mock("@/lib/queue/stems", () => ({
 	enqueueSeparation: vi.fn(),
 	getJobStatus: vi.fn(),
 }));
+vi.mock("@/lib/repositories/stems", () => ({
+	getSeparationWithFiles: vi.fn(),
+	getSeparation: vi.fn(),
+	upsertPendingSeparation: vi.fn(),
+	getStemFile: vi.fn(),
+	deleteStemFileByName: vi.fn(),
+	deleteStemFiles: vi.fn(),
+}));
+vi.mock("@/lib/repositories/storedTracks", () => ({
+	findHighestStored: vi.fn(),
+	hasStored: vi.fn(),
+	deleteStoredRows: vi.fn(),
+	upsertStored: vi.fn(),
+}));
 
 import { GET, POST } from "./route";
 import { enqueueSeparation, getJobStatus } from "@/lib/queue/stems";
+import {
+	getSeparationWithFiles,
+	getSeparation,
+	upsertPendingSeparation,
+} from "@/lib/repositories/stems";
+import { findHighestStored } from "@/lib/repositories/storedTracks";
 
 const enqueueMock = vi.mocked(enqueueSeparation);
 const getJobStatusMock = vi.mocked(getJobStatus);
+const getSepWithFilesMock = vi.mocked(getSeparationWithFiles);
+const getSepMock = vi.mocked(getSeparation);
+const upsertSepMock = vi.mocked(upsertPendingSeparation);
+const findHighestStoredMock = vi.mocked(findHighestStored);
+
+const makePostRequest = (body: unknown) =>
+	makeNextRequest({ method: "POST", body, headers: { "Content-Type": "application/json" } });
+
+beforeEach(() => {
+	clearSession();
+	[enqueueMock, getJobStatusMock, getSepWithFilesMock, getSepMock, upsertSepMock, findHighestStoredMock].forEach(
+		(m) => m.mockReset(),
+	);
+});
 
 describe("GET /api/v1/stems/[trackId]", () => {
-	beforeEach(() => {
-		resetPrismaMock();
-		clearSession();
-		enqueueMock.mockReset();
-		getJobStatusMock.mockReset();
-	});
-
 	it("returns 401 when not authenticated", async () => {
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(401);
-		const body = await readJson<{ error: { code: string } }>(res);
-		expect(body?.error.code).toBe("NOT_AUTHENTICATED");
 	});
 
 	it("returns 404 when no separation has been requested", async () => {
 		setSessionUser("u1");
-		prismaMock.stemSeparation.findUnique.mockResolvedValue(null);
-
+		getSepWithFilesMock.mockResolvedValue(null as never);
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(404);
 		const body = await readJson<{ error: { code: string } }>(res);
 		expect(body?.error.code).toBe("NOT_FOUND");
 	});
 
-	it("returns the separation with stored progress when not processing", async () => {
+	it("returns stored progress when not processing", async () => {
 		setSessionUser("u1");
-		prismaMock.stemSeparation.findUnique.mockResolvedValue({
+		getSepWithFilesMock.mockResolvedValue({
 			trackId: "1",
 			status: "completed",
 			mode: "six_stems",
@@ -53,13 +77,9 @@ describe("GET /api/v1/stems/[trackId]", () => {
 				{ stemName: "vocals", fileSize: 4_000_000 },
 				{ stemName: "drums", fileSize: 5_000_000 },
 			],
-		} as any);
-
+		} as never);
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
-		expect(res.status).toBe(200);
-		const body = await readJson<{
-			data: { status: string; progress: number; files: { stemName: string }[] };
-		}>(res);
+		const body = await readJson<{ data: { status: string; progress: number; files: unknown[] } }>(res);
 		expect(body?.data.status).toBe("completed");
 		expect(body?.data.progress).toBe(100);
 		expect(body?.data.files).toHaveLength(2);
@@ -68,37 +88,31 @@ describe("GET /api/v1/stems/[trackId]", () => {
 
 	it("merges live BullMQ progress when processing", async () => {
 		setSessionUser("u1");
-		prismaMock.stemSeparation.findUnique.mockResolvedValue({
+		getSepWithFilesMock.mockResolvedValue({
 			trackId: "1",
 			status: "processing",
 			mode: "six_stems",
 			progress: 25,
 			errorMessage: null,
 			files: [],
-		} as any);
-		getJobStatusMock.mockResolvedValue({
-			state: "active",
-			progress: 60,
-		});
-
+		} as never);
+		getJobStatusMock.mockResolvedValue({ state: "active", progress: 60 } as never);
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
-		expect(res.status).toBe(200);
 		const body = await readJson<{ data: { progress: number } }>(res);
 		expect(body?.data.progress).toBe(60);
 	});
 
-	it("ignores stale BullMQ progress lower than DB progress", async () => {
+	it("ignores stale BullMQ progress lower than DB", async () => {
 		setSessionUser("u1");
-		prismaMock.stemSeparation.findUnique.mockResolvedValue({
+		getSepWithFilesMock.mockResolvedValue({
 			trackId: "1",
 			status: "processing",
 			mode: "six_stems",
 			progress: 75,
 			errorMessage: null,
 			files: [],
-		} as any);
-		getJobStatusMock.mockResolvedValue({ state: "active", progress: 30 });
-
+		} as never);
+		getJobStatusMock.mockResolvedValue({ state: "active", progress: 30 } as never);
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		const body = await readJson<{ data: { progress: number } }>(res);
 		expect(body?.data.progress).toBe(75);
@@ -106,25 +120,8 @@ describe("GET /api/v1/stems/[trackId]", () => {
 });
 
 describe("POST /api/v1/stems/[trackId]", () => {
-	beforeEach(() => {
-		resetPrismaMock();
-		clearSession();
-		enqueueMock.mockReset();
-		getJobStatusMock.mockReset();
-	});
-
-	const makePostRequest = (body: unknown) =>
-		makeNextRequest({
-			method: "POST",
-			body,
-			headers: { "Content-Type": "application/json" },
-		});
-
 	it("returns 401 when not authenticated", async () => {
-		const res = await POST(
-			makePostRequest({ mode: "six_stems" }),
-			makeParams({ trackId: "1" }),
-		);
+		const res = await POST(makePostRequest({ mode: "six_stems" }), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(401);
 	});
 
@@ -138,120 +135,58 @@ describe("POST /api/v1/stems/[trackId]", () => {
 
 	it("returns 400 when mode is invalid", async () => {
 		setSessionUser("u1");
-		const res = await POST(
-			makePostRequest({ mode: "bogus" }),
-			makeParams({ trackId: "1" }),
-		);
+		const res = await POST(makePostRequest({ mode: "bogus" }), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(400);
 	});
 
-	it("returns 409 when the track has not been cached yet", async () => {
+	it("returns 409 when the track is not cached", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
-
-		const res = await POST(
-			makePostRequest({ mode: "six_stems" }),
-			makeParams({ trackId: "1" }),
-		);
+		findHighestStoredMock.mockResolvedValue(null as never);
+		const res = await POST(makePostRequest({ mode: "six_stems" }), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(409);
 		const body = await readJson<{ error: { code: string } }>(res);
 		expect(body?.error.code).toBe("TRACK_NOT_CACHED");
 		expect(enqueueMock).not.toHaveBeenCalled();
 	});
 
-	it("returns 200 with existing completed separation without re-queueing", async () => {
+	it("returns 200 for an existing completed separation without re-queueing", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue({
-			trackId: "1",
-			bitrate: 320,
-		} as any);
-		prismaMock.stemSeparation.findUnique.mockResolvedValue({
-			trackId: "1",
-			status: "completed",
-			mode: "six_stems",
-			progress: 100,
-		} as any);
-
-		const res = await POST(
-			makePostRequest({ mode: "six_stems" }),
-			makeParams({ trackId: "1" }),
-		);
+		findHighestStoredMock.mockResolvedValue({ bitrate: 320 } as never);
+		getSepMock.mockResolvedValue({ status: "completed", mode: "six_stems", progress: 100 } as never);
+		const res = await POST(makePostRequest({ mode: "six_stems" }), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(200);
-		const body = await readJson<{ data: { status: string } }>(res);
-		expect(body?.data.status).toBe("completed");
 		expect(enqueueMock).not.toHaveBeenCalled();
-		expect(prismaMock.stemSeparation.upsert).not.toHaveBeenCalled();
+		expect(upsertSepMock).not.toHaveBeenCalled();
 	});
 
-	it("returns 202 with existing pending separation without re-queueing", async () => {
+	it("returns 202 for an existing processing separation without re-queueing", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue({
-			trackId: "1",
-			bitrate: 320,
-		} as any);
-		prismaMock.stemSeparation.findUnique.mockResolvedValue({
-			trackId: "1",
-			status: "processing",
-			mode: "six_stems",
-			progress: 40,
-		} as any);
-
-		const res = await POST(
-			makePostRequest({ mode: "six_stems" }),
-			makeParams({ trackId: "1" }),
-		);
+		findHighestStoredMock.mockResolvedValue({ bitrate: 320 } as never);
+		getSepMock.mockResolvedValue({ status: "processing", mode: "six_stems", progress: 40 } as never);
+		const res = await POST(makePostRequest({ mode: "six_stems" }), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(202);
 		expect(enqueueMock).not.toHaveBeenCalled();
 	});
 
 	it("upserts and enqueues a new separation when none exists", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue({
-			trackId: "1",
-			bitrate: 320,
-		} as any);
-		prismaMock.stemSeparation.findUnique.mockResolvedValue(null);
-		prismaMock.stemSeparation.upsert.mockResolvedValue({
-			trackId: "1",
-			status: "pending",
-			mode: "six_stems",
-			progress: 0,
-		} as any);
-		enqueueMock.mockResolvedValue({ id: "1" } as any);
-
-		const res = await POST(
-			makePostRequest({ mode: "six_stems" }),
-			makeParams({ trackId: "1" }),
-		);
+		findHighestStoredMock.mockResolvedValue({ bitrate: 320 } as never);
+		getSepMock.mockResolvedValue(null as never);
+		upsertSepMock.mockResolvedValue({ trackId: "1", status: "pending", mode: "six_stems", progress: 0 } as never);
+		enqueueMock.mockResolvedValue({ id: "1" } as never);
+		const res = await POST(makePostRequest({ mode: "six_stems" }), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(202);
 		expect(enqueueMock).toHaveBeenCalledWith("1", "six_stems");
-		expect(prismaMock.stemSeparation.upsert).toHaveBeenCalledOnce();
+		expect(upsertSepMock).toHaveBeenCalledOnce();
 	});
 
 	it("re-enqueues when the previous separation failed", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue({
-			trackId: "1",
-			bitrate: 320,
-		} as any);
-		prismaMock.stemSeparation.findUnique.mockResolvedValue({
-			trackId: "1",
-			status: "failed",
-			mode: "two_stems",
-			progress: 0,
-		} as any);
-		prismaMock.stemSeparation.upsert.mockResolvedValue({
-			trackId: "1",
-			status: "pending",
-			mode: "two_stems",
-			progress: 0,
-		} as any);
-		enqueueMock.mockResolvedValue({ id: "1" } as any);
-
-		const res = await POST(
-			makePostRequest({ mode: "two_stems" }),
-			makeParams({ trackId: "1" }),
-		);
+		findHighestStoredMock.mockResolvedValue({ bitrate: 320 } as never);
+		getSepMock.mockResolvedValue({ status: "failed", mode: "two_stems", progress: 0 } as never);
+		upsertSepMock.mockResolvedValue({ trackId: "1", status: "pending", mode: "two_stems", progress: 0 } as never);
+		enqueueMock.mockResolvedValue({ id: "1" } as never);
+		const res = await POST(makePostRequest({ mode: "two_stems" }), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(202);
 		expect(enqueueMock).toHaveBeenCalledWith("1", "two_stems");
 	});

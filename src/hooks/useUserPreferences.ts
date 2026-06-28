@@ -1,31 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useAuthStore } from "@/stores/useAuthStore";
+// Réactif via Convex (Phase 5) : useQuery souscrit aux préférences de
+// l'utilisateur courant (auth Convex) et se met à jour en temps réel ; plus de
+// polling/fetch. Voir docs/CONVEX_MIGRATION.md.
+
+import { useCallback } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@convex/_generated/api";
 import type { UserPrefsData } from "@/app/api/v1/preferences/route";
 
 export function useUserPreferences() {
-	const [prefs, setPrefs] = useState<UserPrefsData>({});
-	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const data = useQuery(api.preferences.getMine);
+	const prefs = (data ?? {}) as UserPrefsData;
+	const setMine = useMutation(api.preferences.setMine);
 
-	useEffect(() => {
-		if (!isAuthenticated) return;
-		fetch("/api/v1/preferences")
-			.then((r) => r.json())
-			.then((json) => {
-				if (json.success) setPrefs(json.data);
-			})
-			.catch(() => {});
-	}, [isAuthenticated]);
-
-	const updatePrefs = useCallback(async (updates: Partial<UserPrefsData>) => {
-		setPrefs((prev) => ({ ...prev, ...updates }));
-		await fetch("/api/v1/preferences", {
-			method: "PATCH",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(updates),
-		});
-	}, []);
+	const updatePrefs = useCallback(
+		async (updates: Partial<UserPrefsData>) => {
+			await setMine({ preferences: { ...prefs, ...updates } });
+		},
+		[setMine, prefs],
+	);
 
 	return { prefs, updatePrefs };
 }

@@ -1,16 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
-import { authMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
+import { authServerMock, convexApiMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
 import { makeNextRequest, makeParams, readJson } from "@/test/helpers/nextRequest";
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/auth-server", () => authServerMock);
+vi.mock("@convex/_generated/api", () => convexApiMock);
+vi.mock("@/lib/repositories/storedTracks", () => ({ findHighestStored: vi.fn(), deleteStoredRows: vi.fn(), hasStored: vi.fn(), upsertStored: vi.fn() }));
 vi.mock("@/lib/s3-stream", () => ({
 	streamObject: vi.fn(),
 }));
 
 import { GET } from "./route";
 import { streamObject } from "@/lib/s3-stream";
+import { findHighestStored, deleteStoredRows } from "@/lib/repositories/storedTracks";
+const findHighestStoredMock = vi.mocked(findHighestStored);
+const deleteStoredRowsMock = vi.mocked(deleteStoredRows);
 
 const streamObjectMock = vi.mocked(streamObject);
 
@@ -33,7 +36,8 @@ function fakeBody() {
 
 describe("GET /api/v1/stream/[trackId]", () => {
 	beforeEach(() => {
-		resetPrismaMock();
+		findHighestStoredMock.mockReset();
+		deleteStoredRowsMock.mockReset();
 		clearSession();
 		streamObjectMock.mockReset();
 	});
@@ -47,7 +51,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 
 	it("redirects to /stream-progressive when no StoredTrack row exists", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		findHighestStoredMock.mockResolvedValue(null);
 
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(302);
@@ -57,7 +61,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 
 	it("returns 400 UNSUPPORTED_STORAGE when storageType is not s3", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue({
+		findHighestStoredMock.mockResolvedValue({
 			...s3Row,
 			storageType: "local",
 		});
@@ -70,7 +74,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 
 	it("returns 200 + cache headers when streaming without a Range header", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue(s3Row);
+		findHighestStoredMock.mockResolvedValue(s3Row);
 		streamObjectMock.mockResolvedValue({
 			body: fakeBody(),
 			contentLength: 12345,
@@ -90,7 +94,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 
 	it("returns the streamObject statusCode + Content-Range when a Range header is present", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue(s3Row);
+		findHighestStoredMock.mockResolvedValue(s3Row);
 		streamObjectMock.mockResolvedValue({
 			body: fakeBody(),
 			contentLength: 100,
@@ -111,7 +115,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 
 	it("on streamObject NotFound (by name): deletes stale rows and 302s to /stream-progressive", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue(s3Row);
+		findHighestStoredMock.mockResolvedValue(s3Row);
 		const err: any = new Error("Not found");
 		err.name = "NotFound";
 		streamObjectMock.mockRejectedValue(err);
@@ -119,14 +123,12 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(302);
 		expect(res.headers.get("Location")).toBe("/api/v1/stream-progressive/1");
-		expect(prismaMock.storedTrack.deleteMany).toHaveBeenCalledWith({
-			where: { trackId: "1" },
-		});
+		expect(deleteStoredRowsMock).toHaveBeenCalledWith("1");
 	});
 
 	it("on streamObject 404 ($metadata): deletes stale rows and 302s to /stream-progressive", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue(s3Row);
+		findHighestStoredMock.mockResolvedValue(s3Row);
 		const err: any = new Error("404");
 		err.$metadata = { httpStatusCode: 404 };
 		streamObjectMock.mockRejectedValue(err);
@@ -134,16 +136,14 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(302);
 		expect(res.headers.get("Location")).toBe("/api/v1/stream-progressive/1");
-		expect(prismaMock.storedTrack.deleteMany).toHaveBeenCalledWith({
-			where: { trackId: "1" },
-		});
+		expect(deleteStoredRowsMock).toHaveBeenCalledWith("1");
 	});
 
 	it.each(["ENOTFOUND", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN"])(
 		"on network error %s: 302 to /stream-progressive WITHOUT deleting the row",
 		async (code) => {
 			setSessionUser("u1");
-			prismaMock.storedTrack.findFirst.mockResolvedValue(s3Row);
+			findHighestStoredMock.mockResolvedValue(s3Row);
 			const err: any = new Error(code);
 			err.code = code;
 			streamObjectMock.mockRejectedValue(err);
@@ -151,13 +151,13 @@ describe("GET /api/v1/stream/[trackId]", () => {
 			const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 			expect(res.status).toBe(302);
 			expect(res.headers.get("Location")).toBe("/api/v1/stream-progressive/1");
-			expect(prismaMock.storedTrack.deleteMany).not.toHaveBeenCalled();
+			expect(deleteStoredRowsMock).not.toHaveBeenCalled();
 		}
 	);
 
 	it("on 5xx storage error: 302 to /stream-progressive WITHOUT deleting the row", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue(s3Row);
+		findHighestStoredMock.mockResolvedValue(s3Row);
 		const err: any = new Error("Service Unavailable");
 		err.$metadata = { httpStatusCode: 503 };
 		streamObjectMock.mockRejectedValue(err);
@@ -165,18 +165,18 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(302);
 		expect(res.headers.get("Location")).toBe("/api/v1/stream-progressive/1");
-		expect(prismaMock.storedTrack.deleteMany).not.toHaveBeenCalled();
+		expect(deleteStoredRowsMock).not.toHaveBeenCalled();
 	});
 
 	it("on a generic error: falls through to handleError (500 INTERNAL_ERROR)", async () => {
 		setSessionUser("u1");
-		prismaMock.storedTrack.findFirst.mockResolvedValue(s3Row);
+		findHighestStoredMock.mockResolvedValue(s3Row);
 		streamObjectMock.mockRejectedValue(new Error("kaboom"));
 
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(500);
 		const body = await readJson<{ error: { code: string } }>(res);
 		expect(body?.error.code).toBe("INTERNAL_ERROR");
-		expect(prismaMock.storedTrack.deleteMany).not.toHaveBeenCalled();
+		expect(deleteStoredRowsMock).not.toHaveBeenCalled();
 	});
 });

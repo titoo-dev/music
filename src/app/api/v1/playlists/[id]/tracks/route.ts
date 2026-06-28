@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { ok, fail, handleError, requireUser } from "../../../_lib/helpers";
 import { addToPlaylist, removeFromPlaylist, reorderPlaylist } from "@/lib/library";
+import { isPlaylistOwned } from "@/lib/repositories/playlists";
 
 // POST /api/v1/playlists/[id]/tracks — add track(s) to playlist
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -10,8 +10,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 		if (error) return error;
 
 		const { id } = await ctx.params;
-		const playlist = await prisma.playlist.findFirst({ where: { id, userId } });
-		if (!playlist) return fail("NOT_FOUND", "Playlist not found.", 404);
+		if (!(await isPlaylistOwned(id, userId)))
+			return fail("NOT_FOUND", "Playlist not found.", 404);
 
 		const { tracks } = await request.json();
 		if (!Array.isArray(tracks) || tracks.length === 0) {
@@ -46,8 +46,8 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
 		if (error) return error;
 
 		const { id } = await ctx.params;
-		const playlist = await prisma.playlist.findFirst({ where: { id, userId } });
-		if (!playlist) return fail("NOT_FOUND", "Playlist not found.", 404);
+		if (!(await isPlaylistOwned(id, userId)))
+			return fail("NOT_FOUND", "Playlist not found.", 404);
 
 		const { trackIds } = await request.json();
 		if (!Array.isArray(trackIds)) {
@@ -84,8 +84,8 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
 		if (error) return error;
 
 		const { id } = await ctx.params;
-		const playlist = await prisma.playlist.findFirst({ where: { id, userId } });
-		if (!playlist) return fail("NOT_FOUND", "Playlist not found.", 404);
+		if (!(await isPlaylistOwned(id, userId)))
+			return fail("NOT_FOUND", "Playlist not found.", 404);
 
 		const { trackIds } = await request.json();
 		if (!Array.isArray(trackIds) || trackIds.length === 0) {

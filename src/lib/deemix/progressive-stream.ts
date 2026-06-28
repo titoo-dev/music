@@ -309,17 +309,16 @@ export async function startProgressiveStream(
 				// Record the global StoredTrack so future plays hit the cached file.
 				// Per-user state (SavedTrack / RecentPlay) is set independently by the
 				// user's actions (save) or playback rules (30s threshold).
-				const { prisma } = await import("@/lib/prisma");
+				// Routé via le seam (DATA_BACKEND) — dernière écriture storedTrack migrée.
+				const { upsertStored } = await import(
+					"@/lib/repositories/storedTracks"
+				);
 				const storageType = settings.storageType || "local";
-				await prisma.storedTrack.upsert({
-					where: { trackId_bitrate: { trackId, bitrate: resolvedBitrate } },
-					update: { storagePath: writepath, storageType },
-					create: {
-						trackId,
-						bitrate: resolvedBitrate,
-						storagePath: writepath,
-						storageType,
-					},
+				await upsertStored({
+					trackId,
+					bitrate: resolvedBitrate,
+					storagePath: writepath,
+					storageType,
 				});
 			} catch (e) {
 				console.error("[progressive-stream] persist failed:", e);

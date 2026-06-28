@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import {
+	listPlaylistsWithCovers,
+	createPlaylist,
+} from "@/lib/repositories/playlists";
 import { ok, fail, handleError, requireUser } from "../_lib/helpers";
 
 // GET /api/v1/playlists — List all playlists for current user.
@@ -11,42 +14,7 @@ export async function GET(request: NextRequest) {
 		if (error) return error;
 
 		const trackId = request.nextUrl.searchParams.get("trackId");
-
-		const playlists = await prisma.playlist.findMany({
-			where: { userId },
-			orderBy: { updatedAt: "desc" },
-			include: {
-				_count: { select: { tracks: true } },
-				tracks: {
-					take: 4,
-					orderBy: { position: "asc" },
-					select: { coverUrl: true },
-				},
-			},
-		});
-
-		let containsSet: Set<string> | null = null;
-		if (trackId && playlists.length > 0) {
-			const matches = await prisma.playlistTrack.findMany({
-				where: {
-					trackId,
-					playlistId: { in: playlists.map((p) => p.id) },
-				},
-				select: { playlistId: true },
-			});
-			containsSet = new Set(matches.map((m) => m.playlistId));
-		}
-
-		// Flatten covers for the frontend
-		const result = playlists.map((pl) => ({
-			...pl,
-			covers: pl.tracks
-				.map((t) => t.coverUrl)
-				.filter(Boolean) as string[],
-			tracks: undefined,
-			...(containsSet ? { containsTrack: containsSet.has(pl.id) } : {}),
-		}));
-
+		const result = await listPlaylistsWithCovers(userId, trackId);
 		return ok(result);
 	} catch (e) {
 		return handleError(e);
@@ -64,13 +32,11 @@ export async function POST(request: NextRequest) {
 			return fail("MISSING_TITLE", "Playlist title is required.", 400);
 		}
 
-		const playlist = await prisma.playlist.create({
-			data: {
-				userId,
-				title: title.trim(),
-				description: description?.trim() || null,
-			},
-		});
+		const playlist = await createPlaylist(
+			userId,
+			title.trim(),
+			description?.trim() || null
+		);
 
 		return ok(playlist);
 	} catch (e) {

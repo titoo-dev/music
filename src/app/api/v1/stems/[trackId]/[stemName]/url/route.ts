@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser, ok, handleError } from "../../../../_lib/helpers";
 import { getPresignedUrl } from "@/lib/s3-stream";
+import { getStemFile } from "@/lib/repositories/stems";
 
 // GET /api/v1/stems/[trackId]/[stemName]/url — return a presigned S3 URL for
 // direct browser playback of a single stem. Mirrors /api/v1/stream-url:
@@ -18,9 +18,7 @@ export async function GET(
 
 		const { trackId, stemName } = await params;
 
-		const stored = await prisma.stemFile.findUnique({
-			where: { trackId_stemName: { trackId, stemName } },
-		});
+		const stored = await getStemFile(trackId, stemName);
 
 		if (!stored) {
 			return ok({ url: null, status: "not_cached" });

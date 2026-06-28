@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser, requireDeezer, ok, fail, handleError } from "../../_lib/helpers";
+import {
+	getSavedTrackMeta,
+	getRecentPlayMeta,
+} from "@/lib/repositories/trackMeta";
 
 interface LrcLibResponse {
 	id: number;
@@ -40,10 +43,7 @@ export async function GET(
 		let album: string | null = queryAlbum ?? null;
 
 		if (!title || !artist) {
-			const saved = await prisma.savedTrack.findUnique({
-				where: { userId_trackId: { userId: userResult.userId, trackId } },
-				select: { title: true, artist: true, album: true },
-			});
+			const saved = await getSavedTrackMeta(userResult.userId, trackId);
 			if (saved) {
 				title = title || saved.title;
 				artist = artist || saved.artist;
@@ -51,10 +51,7 @@ export async function GET(
 			}
 		}
 		if (!title || !artist) {
-			const recent = await prisma.recentPlay.findUnique({
-				where: { userId_trackId: { userId: userResult.userId, trackId } },
-				select: { title: true, artist: true, album: true },
-			});
+			const recent = await getRecentPlayMeta(userResult.userId, trackId);
 			if (recent) {
 				title = title || recent.title;
 				artist = artist || recent.artist;

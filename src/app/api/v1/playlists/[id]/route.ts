@@ -1,5 +1,9 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import {
+	getPlaylistWithTracks,
+	updatePlaylist,
+	deletePlaylist,
+} from "@/lib/repositories/playlists";
 import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
 
 // GET /api/v1/playlists/[id] — Get playlist with tracks
@@ -10,12 +14,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
 		const { id } = await ctx.params;
 
-		const playlist = await prisma.playlist.findFirst({
-			where: { id, userId },
-			include: {
-				tracks: { orderBy: { position: "asc" } },
-			},
-		});
+		const playlist = await getPlaylistWithTracks(id, userId);
 
 		if (!playlist) {
 			return fail("NOT_FOUND", "Playlist not found.", 404);
@@ -36,20 +35,15 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
 		const { id } = await ctx.params;
 		const { title, description } = await request.json();
 
-		const playlist = await prisma.playlist.findFirst({
-			where: { id, userId },
+		const updated = await updatePlaylist(id, userId, {
+			...(title !== undefined && { title: title.trim() }),
+			...(description !== undefined && {
+				description: description?.trim() || null,
+			}),
 		});
-		if (!playlist) {
+		if (!updated) {
 			return fail("NOT_FOUND", "Playlist not found.", 404);
 		}
-
-		const updated = await prisma.playlist.update({
-			where: { id },
-			data: {
-				...(title !== undefined && { title: title.trim() }),
-				...(description !== undefined && { description: description?.trim() || null }),
-			},
-		});
 
 		return ok(updated);
 	} catch (e) {
@@ -68,14 +62,10 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
 
 		const { id } = await ctx.params;
 
-		const playlist = await prisma.playlist.findFirst({
-			where: { id, userId },
-		});
-		if (!playlist) {
+		const deleted = await deletePlaylist(id, userId);
+		if (!deleted) {
 			return fail("NOT_FOUND", "Playlist not found.", 404);
 		}
-
-		await prisma.playlist.delete({ where: { id } });
 
 		return ok({ deleted: true });
 	} catch (e) {

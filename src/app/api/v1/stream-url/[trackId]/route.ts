@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser, ok, handleError } from "../../_lib/helpers";
 import { getPresignedUrl } from "@/lib/s3-stream";
+import { findHighestStored } from "@/lib/repositories/storedTracks";
 
 // GET /api/v1/stream-url/[trackId] — return a presigned S3 URL for direct
 // browser playback. Returns { url: null } when the track isn't cached so
@@ -26,10 +26,7 @@ export async function GET(
 			return ok({ url: null, status: "presigned_disabled" });
 		}
 
-		const stored = await prisma.storedTrack.findFirst({
-			where: { trackId },
-			orderBy: { bitrate: "desc" },
-		});
+		const stored = await findHighestStored(trackId);
 
 		if (!stored) {
 			return ok({ url: null, status: "not_cached" });

@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { prisma } from "@/lib/prisma";
+import { getSharePublicMeta } from "@/lib/repositories/shares";
 
 export const runtime = "nodejs";
 export const alt = "Shared track on deemix";
@@ -13,16 +13,7 @@ export default async function OgImage({
 }) {
 	const { shareId } = await params;
 
-	const shared = await prisma.sharedTrack.findUnique({
-		where: { shareId },
-		select: {
-			title: true,
-			artist: true,
-			album: true,
-			coverUrl: true,
-			user: { select: { name: true } },
-		},
-	});
+	const shared = await getSharePublicMeta(shareId);
 
 	if (!shared) {
 		return new ImageResponse(

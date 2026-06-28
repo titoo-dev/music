@@ -1,6 +1,6 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import { prisma } from "@/lib/prisma";
+import { getSharePublicMeta } from "@/lib/repositories/shares";
 import { notFound } from "next/navigation";
 import { SharePlayer } from "./SharePlayer";
 
@@ -8,21 +8,7 @@ interface Props {
 	params: Promise<{ shareId: string }>;
 }
 
-const getSharedTrack = cache((shareId: string) =>
-	prisma.sharedTrack.findUnique({
-		where: { shareId },
-		select: {
-			shareId: true,
-			title: true,
-			artist: true,
-			album: true,
-			coverUrl: true,
-			duration: true,
-			expiresAt: true,
-			user: { select: { name: true } },
-		},
-	})
-);
+const getSharedTrack = cache((shareId: string) => getSharePublicMeta(shareId));
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
 	const { shareId } = await params;
@@ -32,7 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 		return { title: "Track not found — deemix" };
 	}
 
-	if (shared.expiresAt && shared.expiresAt < new Date()) {
+	if (shared.expiresAt && shared.expiresAt < Date.now()) {
 		return { title: "This share link has expired — deemix" };
 	}
 
@@ -62,7 +48,7 @@ export default async function SharePage({ params }: Props) {
 		notFound();
 	}
 
-	if (shared.expiresAt && shared.expiresAt < new Date()) {
+	if (shared.expiresAt && shared.expiresAt < Date.now()) {
 		notFound();
 	}
 
