@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser, ok, fail, handleError } from "../../../_lib/helpers";
 import { unsaveAlbum } from "@/lib/library";
+import {
+	getSavedAlbumWithTracks,
+	getSavedAlbumDeezerId,
+} from "@/lib/repositories/albums";
 
 // GET /api/v1/library/albums/[albumId] — fetch saved album + its tracklist.
 // `albumId` is the internal Album.id (cuid), not the Deezer album id.
@@ -14,12 +17,7 @@ export async function GET(
 		if (userResult.error) return userResult.error;
 
 		const { albumId } = await params;
-		const album = await prisma.album.findFirst({
-			where: { id: albumId, userId: userResult.userId },
-			include: {
-				tracks: { orderBy: { trackNumber: "asc" } },
-			},
-		});
+		const album = await getSavedAlbumWithTracks(albumId, userResult.userId);
 		if (!album) return fail("NOT_FOUND", "Album not in your library.", 404);
 		return ok(album);
 	} catch (e) {
@@ -37,10 +35,7 @@ export async function DELETE(
 		if (userResult.error) return userResult.error;
 
 		const { albumId } = await params;
-		const album = await prisma.album.findFirst({
-			where: { id: albumId, userId: userResult.userId },
-			select: { deezerAlbumId: true },
-		});
+		const album = await getSavedAlbumDeezerId(albumId, userResult.userId);
 		if (!album) return fail("NOT_FOUND", "Album not in your library.", 404);
 
 		await unsaveAlbum(userResult.userId, album.deezerAlbumId);

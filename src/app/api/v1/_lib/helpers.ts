@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDeemixApp, getUserDz, setUserDz, getGuestDz } from "@/lib/server-state";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getDeezerCredential } from "@/lib/repositories/deezerCredentials";
 
 // ── Consistent response envelope ──
 
@@ -27,15 +26,20 @@ export function fail(code: string, message: string, status = 400) {
 
 // ── Better-auth session guard ──
 
-export async function requireUser(request: NextRequest) {
+export async function requireUser(_request: NextRequest) {
+	// Session via le composant Better Auth dans Convex (token + query).
 	try {
-		const session = await auth.api.getSession({
-			headers: request.headers,
-		});
-		if (!session?.user?.id) {
+		const { getToken, fetchAuthQuery } = await import("@/lib/auth-server");
+		const token = await getToken();
+		if (!token) {
 			return { userId: null as never, session: null as never, error: fail("NOT_AUTHENTICATED", "Please sign in to continue.", 401) };
 		}
-		return { userId: session.user.id, session, error: null };
+		const { api } = await import("@convex/_generated/api");
+		const user = await fetchAuthQuery(api.auth.getCurrentUser, {});
+		if (!user?._id) {
+			return { userId: null as never, session: null as never, error: fail("NOT_AUTHENTICATED", "Please sign in to continue.", 401) };
+		}
+		return { userId: user._id as string, session: { user } as never, error: null };
 	} catch {
 		return { userId: null as never, session: null as never, error: fail("AUTH_ERROR", "Failed to validate session.", 500) };
 	}
@@ -57,9 +61,7 @@ export async function requireDeezer(request: NextRequest) {
 
 	// Try to restore from stored ARL in database
 	try {
-		const cred = await prisma.deezerCredential.findUnique({
-			where: { userId },
-		});
+		const cred = await getDeezerCredential(userId);
 		if (!cred) {
 			return { userId: null as never, dz: null as never, error: fail("NO_DEEZER_ARL", "No Deezer account connected. Please add your ARL in Settings.", 403) };
 		}
@@ -114,25 +116,34 @@ export async function requireApp() {
 
 // ── Guest or user Deezer session (for search/browse routes) ──
 
+// Résout l'id utilisateur authentifié (null si invité) via l'auth Convex.
+async function resolveAuthedUserId(
+	_request: NextRequest
+): Promise<string | null> {
+	const { getToken, fetchAuthQuery } = await import("@/lib/auth-server");
+	if (!(await getToken())) return null;
+	const { api } = await import("@convex/_generated/api");
+	const user = await fetchAuthQuery(api.auth.getCurrentUser, {});
+	return (user?._id as string) ?? null;
+}
+
 export async function getGuestOrUserDz(request: NextRequest) {
 	// Try authenticated user first
 	try {
-		const session = await auth.api.getSession({ headers: request.headers });
-		if (session?.user?.id) {
-			const dz = getUserDz(session.user.id);
-			if (dz?.loggedIn) return { dz, userId: session.user.id };
+		const userId = await resolveAuthedUserId(request);
+		if (userId) {
+			const dz = getUserDz(userId);
+			if (dz?.loggedIn) return { dz, userId };
 
 			// Try to restore from DB
-			const cred = await prisma.deezerCredential.findUnique({
-				where: { userId: session.user.id },
-			});
+			const cred = await getDeezerCredential(userId);
 			if (cred) {
 				const { Deezer } = await import("@/lib/deezer");
 				const newDz = new Deezer();
 				const loggedIn = await newDz.loginViaArl(cred.arl);
 				if (loggedIn) {
-					setUserDz(session.user.id, newDz);
-					return { dz: newDz, userId: session.user.id };
+					setUserDz(userId, newDz);
+					return { dz: newDz, userId };
 				}
 			}
 		}

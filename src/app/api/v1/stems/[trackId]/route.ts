@@ -1,11 +1,16 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser, ok, fail, handleError } from "../../_lib/helpers";
 import {
 	enqueueSeparation,
 	getJobStatus,
 	type StemMode,
 } from "@/lib/queue/stems";
+import {
+	getSeparationWithFiles,
+	getSeparation,
+	upsertPendingSeparation,
+} from "@/lib/repositories/stems";
+import { findHighestStored } from "@/lib/repositories/storedTracks";
 
 const VALID_MODES: ReadonlyArray<StemMode> = ["two_stems", "six_stems"];
 
@@ -21,10 +26,7 @@ export async function GET(
 
 		const { trackId } = await params;
 
-		const separation = await prisma.stemSeparation.findUnique({
-			where: { trackId },
-			include: { files: true },
-		});
+		const separation = await getSeparationWithFiles(trackId);
 
 		if (!separation) {
 			return fail("NOT_FOUND", "No separation requested for this track.", 404);
@@ -83,10 +85,7 @@ export async function POST(
 
 		// Track must exist in the cache before we can separate it. Without this
 		// check the worker would pull a job it can't fulfill and fail noisily.
-		const stored = await prisma.storedTrack.findFirst({
-			where: { trackId },
-			orderBy: { bitrate: "desc" },
-		});
+		const stored = await findHighestStored(trackId);
 		if (!stored) {
 			return fail(
 				"TRACK_NOT_CACHED",
@@ -95,9 +94,7 @@ export async function POST(
 			);
 		}
 
-		const existing = await prisma.stemSeparation.findUnique({
-			where: { trackId },
-		});
+		const existing = await getSeparation(trackId);
 
 		// Already done or in progress — return current state without re-queueing.
 		if (existing && existing.status !== "failed") {
@@ -112,23 +109,7 @@ export async function POST(
 			);
 		}
 
-		const separation = await prisma.stemSeparation.upsert({
-			where: { trackId },
-			create: {
-				trackId,
-				status: "pending",
-				mode,
-				progress: 0,
-			},
-			update: {
-				status: "pending",
-				mode,
-				progress: 0,
-				errorMessage: null,
-				startedAt: null,
-				completedAt: null,
-			},
-		});
+		const separation = await upsertPendingSeparation(trackId, mode);
 
 		await enqueueSeparation(trackId, mode);
 

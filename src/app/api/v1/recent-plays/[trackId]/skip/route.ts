@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser, ok, handleError } from "../../../_lib/helpers";
 import { maybeEvictFile, getTrackRefCount } from "@/lib/library";
+import { hasRecentPlay } from "@/lib/repositories/recentPlays";
 
 // POST /api/v1/recent-plays/[trackId]/skip
 // Called when a track is skipped before reaching the 30s threshold. If this
@@ -20,10 +20,7 @@ export async function POST(
 		const { trackId } = await params;
 
 		// Did this user ever count a real play for this track?
-		const previously = await prisma.recentPlay.findUnique({
-			where: { userId_trackId: { userId, trackId } },
-			select: { id: true },
-		});
+		const previously = await hasRecentPlay(userId, trackId);
 		if (previously) {
 			return ok({ kept: true, reason: "already_played" });
 		}

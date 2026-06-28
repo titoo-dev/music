@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import { getDeemixApp, getUserDz, setUserDz } from "@/lib/server-state";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import {
+	getDeezerCredential,
+	upsertDeezerCredential,
+} from "@/lib/repositories/deezerCredentials";
 import { ok, handleError } from "../../_lib/helpers";
 
 export async function GET(request: NextRequest) {
@@ -20,44 +22,47 @@ export async function GET(request: NextRequest) {
 		let deezerLoggedIn = false;
 
 		try {
-			const session = await auth.api.getSession({
-				headers: request.headers,
-			});
+			const { getToken, fetchAuthQuery } = await import("@/lib/auth-server");
+			let user:
+				| { _id: string; name?: string; email?: string; image?: string }
+				| null = null;
+			if (await getToken()) {
+				const { api } = await import("@convex/_generated/api");
+				user = (await fetchAuthQuery(api.auth.getCurrentUser, {})) as typeof user;
+			}
 
-			if (session?.user) {
+			if (user) {
 				betterAuthUser = {
-					id: session.user.id,
-					name: session.user.name,
-					email: session.user.email,
-					image: session.user.image,
+					id: user._id,
+					name: user.name,
+					email: user.email,
+					image: user.image,
 				};
 
 				// Try to restore Deezer session from stored ARL or service ARL
-				let dz = getUserDz(session.user.id);
+				let dz = getUserDz(user._id);
 				if (!dz?.loggedIn) {
-					const cred = await prisma.deezerCredential.findUnique({
-						where: { userId: session.user.id },
-					});
+					const cred = await getDeezerCredential(user._id);
 					const arl = cred?.arl || process.env.DEEMIX_SERVICE_ARL;
 					if (arl) {
 						const { Deezer } = await import("@/lib/deezer");
 						dz = new Deezer();
 						const loggedIn = await dz.loginViaArl(arl);
 						if (loggedIn) {
-							setUserDz(session.user.id, dz);
+							setUserDz(user._id, dz);
 							// Persist service ARL as user credential if not already stored
 							if (!cred && process.env.DEEMIX_SERVICE_ARL) {
 								try {
-									await prisma.deezerCredential.create({
-										data: {
-											userId: session.user.id,
-											arl,
-											deezerUserId: String(dz.currentUser?.id || ""),
-											deezerUserName: dz.currentUser?.name || "",
-											deezerPicture: dz.currentUser?.picture || "",
-											canStreamHq: !!dz.currentUser?.can_stream_hq,
-											canStreamLossless: !!dz.currentUser?.can_stream_lossless,
-										},
+									await upsertDeezerCredential(user._id, {
+										arl,
+										deezerUserId:
+											dz.currentUser?.id != null
+												? Number(dz.currentUser.id)
+												: null,
+										deezerUserName: dz.currentUser?.name || null,
+										deezerPicture: dz.currentUser?.picture || null,
+										canStreamHq: !!dz.currentUser?.can_stream_hq,
+										canStreamLossless: !!dz.currentUser?.can_stream_lossless,
 									});
 								} catch {
 									// Ignore duplicate or write errors

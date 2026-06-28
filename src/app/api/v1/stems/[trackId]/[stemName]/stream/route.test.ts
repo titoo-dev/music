@@ -1,15 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
-import { authMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
+import { authServerMock, convexApiMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
 import { makeNextRequest, makeParams } from "@/test/helpers/nextRequest";
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/auth-server", () => authServerMock);
+vi.mock("@convex/_generated/api", () => convexApiMock);
+vi.mock("@/lib/repositories/stems", () => ({
+	getStemFile: vi.fn(),
+	deleteStemFileByName: vi.fn(),
+	getSeparationWithFiles: vi.fn(),
+	getSeparation: vi.fn(),
+	upsertPendingSeparation: vi.fn(),
+	deleteStemFiles: vi.fn(),
+}));
 vi.mock("@/lib/s3-stream", () => ({
 	streamObject: vi.fn(),
 }));
 
 import { GET } from "./route";
+import { getStemFile, deleteStemFileByName } from "@/lib/repositories/stems";
+const getStemFileMock = vi.mocked(getStemFile);
+const deleteStemFileByNameMock = vi.mocked(deleteStemFileByName);
 import { streamObject } from "@/lib/s3-stream";
 
 const streamObjectMock = vi.mocked(streamObject);
@@ -25,7 +35,8 @@ function fakeBody() {
 
 describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 	beforeEach(() => {
-		resetPrismaMock();
+		getStemFileMock.mockReset();
+		deleteStemFileByNameMock.mockReset();
 		clearSession();
 		streamObjectMock.mockReset();
 	});
@@ -40,7 +51,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 
 	it("returns 404 when the stem has not been generated", async () => {
 		setSessionUser("u1");
-		prismaMock.stemFile.findUnique.mockResolvedValue(null);
+		getStemFileMock.mockResolvedValue(null);
 
 		const res = await GET(
 			makeNextRequest(),
@@ -51,7 +62,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 
 	it("returns 400 when the stem is not on s3", async () => {
 		setSessionUser("u1");
-		prismaMock.stemFile.findUnique.mockResolvedValue({
+		getStemFileMock.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
 			storagePath: "/tmp/foo.mp3",
@@ -67,7 +78,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 
 	it("streams the full object when no range header is sent", async () => {
 		setSessionUser("u1");
-		prismaMock.stemFile.findUnique.mockResolvedValue({
+		getStemFileMock.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
 			storagePath: "deemix-music/stems/1/vocals.mp3",
@@ -93,7 +104,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 
 	it("forwards the range header and returns 206 with Content-Range", async () => {
 		setSessionUser("u1");
-		prismaMock.stemFile.findUnique.mockResolvedValue({
+		getStemFileMock.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
 			storagePath: "deemix-music/stems/1/vocals.mp3",
@@ -121,7 +132,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 
 	it("returns 404 STEM_FILE_GONE and clears the row when s3 reports missing", async () => {
 		setSessionUser("u1");
-		prismaMock.stemFile.findUnique.mockResolvedValue({
+		getStemFileMock.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
 			storagePath: "deemix-music/stems/1/vocals.mp3",
@@ -130,15 +141,12 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 		const err: any = new Error("Not found");
 		err.name = "NotFound";
 		streamObjectMock.mockRejectedValue(err);
-		prismaMock.stemFile.deleteMany.mockResolvedValue({ count: 1 } as any);
 
 		const res = await GET(
 			makeNextRequest(),
 			makeParams({ trackId: "1", stemName: "vocals" }),
 		);
 		expect(res.status).toBe(404);
-		expect(prismaMock.stemFile.deleteMany).toHaveBeenCalledWith({
-			where: { trackId: "1", stemName: "vocals" },
-		});
+		expect(deleteStemFileByNameMock).toHaveBeenCalledWith("1", "vocals");
 	});
 });

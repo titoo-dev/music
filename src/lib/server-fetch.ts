@@ -1,15 +1,16 @@
-import { cookies, headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { cookies } from "next/headers";
 
 /**
- * Get the authenticated session server-side.
+ * Get the authenticated session server-side (auth Convex Better Auth).
  * Works in server components and route handlers.
  */
 export async function getServerSession() {
-	const headersList = await headers();
 	try {
-		const session = await auth.api.getSession({ headers: headersList });
-		return session;
+		const { getToken, fetchAuthQuery } = await import("@/lib/auth-server");
+		if (!(await getToken())) return null;
+		const { api } = await import("@convex/_generated/api");
+		const user = await fetchAuthQuery(api.auth.getCurrentUser, {});
+		return user ? { user } : null;
 	} catch {
 		return null;
 	}

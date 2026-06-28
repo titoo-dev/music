@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
-import { authMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
+import { authServerMock, convexApiMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
 import { makeNextRequest, readJson } from "@/test/helpers/nextRequest";
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/auth-server", () => authServerMock);
+vi.mock("@convex/_generated/api", () => convexApiMock);
 vi.mock("@/lib/library", () => ({
 	saveAlbum: vi.fn(),
 	listSavedAlbums: vi.fn(),
@@ -17,7 +16,6 @@ const saveAlbumMock = vi.mocked(saveAlbum);
 const listSavedAlbumsMock = vi.mocked(listSavedAlbums);
 
 beforeEach(() => {
-	resetPrismaMock();
 	clearSession();
 	saveAlbumMock.mockReset();
 	listSavedAlbumsMock.mockReset();

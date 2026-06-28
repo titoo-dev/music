@@ -1,22 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
-import { authMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
+import { authServerMock, convexApiMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
 import { makeNextRequest, makeParams, readJson } from "@/test/helpers/nextRequest";
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/auth-server", () => authServerMock);
+vi.mock("@convex/_generated/api", () => convexApiMock);
+vi.mock("@/lib/repositories/stems", () => ({
+	getStemFile: vi.fn(),
+	deleteStemFileByName: vi.fn(),
+	getSeparationWithFiles: vi.fn(),
+	getSeparation: vi.fn(),
+	upsertPendingSeparation: vi.fn(),
+	deleteStemFiles: vi.fn(),
+}));
 vi.mock("@/lib/s3-stream", () => ({
 	getPresignedUrl: vi.fn(),
 }));
 
 import { GET } from "./route";
+import { getStemFile, deleteStemFileByName } from "@/lib/repositories/stems";
+const getStemFileMock = vi.mocked(getStemFile);
+const deleteStemFileByNameMock = vi.mocked(deleteStemFileByName);
 import { getPresignedUrl } from "@/lib/s3-stream";
 
 const getPresignedUrlMock = vi.mocked(getPresignedUrl);
 
 describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 	beforeEach(() => {
-		resetPrismaMock();
+		getStemFileMock.mockReset();
+		deleteStemFileByNameMock.mockReset();
 		clearSession();
 		getPresignedUrlMock.mockReset();
 		delete process.env.DEEMIX_DISABLE_PRESIGNED_URLS;
@@ -32,7 +43,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 
 	it("returns null url when the stem is not cached", async () => {
 		setSessionUser("u1");
-		prismaMock.stemFile.findUnique.mockResolvedValue(null);
+		getStemFileMock.mockResolvedValue(null);
 
 		const res = await GET(
 			makeNextRequest(),
@@ -51,7 +62,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 		// just no direct URL" (status=presigned_disabled → use /stream).
 		setSessionUser("u1");
 		process.env.DEEMIX_DISABLE_PRESIGNED_URLS = "1";
-		prismaMock.stemFile.findUnique.mockResolvedValue({
+		getStemFileMock.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
 			storagePath: "deemix-music/stems/1/vocals.mp3",
@@ -65,7 +76,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 		expect(res.status).toBe(200);
 		const body = await readJson<{ data: { url: null; status: string } }>(res);
 		expect(body?.data.status).toBe("presigned_disabled");
-		expect(prismaMock.stemFile.findUnique).toHaveBeenCalledTimes(1);
+		expect(getStemFileMock).toHaveBeenCalledTimes(1);
 	});
 
 	it("returns not_cached (not presigned_disabled) when the env-var is set but no stem row exists", async () => {
@@ -74,7 +85,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 		// falls back to original audio, even with presigned URLs disabled.
 		setSessionUser("u1");
 		process.env.DEEMIX_DISABLE_PRESIGNED_URLS = "1";
-		prismaMock.stemFile.findUnique.mockResolvedValue(null);
+		getStemFileMock.mockResolvedValue(null);
 
 		const res = await GET(
 			makeNextRequest(),
@@ -87,7 +98,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 
 	it("returns null url when the cached row is not on s3", async () => {
 		setSessionUser("u1");
-		prismaMock.stemFile.findUnique.mockResolvedValue({
+		getStemFileMock.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
 			storagePath: "/tmp/foo.mp3",
@@ -105,7 +116,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 
 	it("returns a presigned url when the stem is cached on s3", async () => {
 		setSessionUser("u1");
-		prismaMock.stemFile.findUnique.mockResolvedValue({
+		getStemFileMock.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
 			storagePath: "deemix-music/stems/1/vocals.mp3",
@@ -128,7 +139,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 
 	it("returns null url when s3 reports the file is missing", async () => {
 		setSessionUser("u1");
-		prismaMock.stemFile.findUnique.mockResolvedValue({
+		getStemFileMock.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
 			storagePath: "deemix-music/stems/1/vocals.mp3",

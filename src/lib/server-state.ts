@@ -59,10 +59,10 @@ export async function getOrLoginUserDz(userId: string): Promise<any | null> {
 	if (cached?.loggedIn) return cached;
 
 	try {
-		const { prisma } = await import("@/lib/prisma");
-		const cred = await prisma.deezerCredential.findUnique({
-			where: { userId },
-		});
+		const { getDeezerCredential } = await import(
+			"@/lib/repositories/deezerCredentials"
+		);
+		const cred = await getDeezerCredential(userId);
 		if (!cred) return null;
 
 		const { Deezer } = await import("@/lib/deezer");

@@ -4,6 +4,7 @@ import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
+import { MaybeConvexProvider } from "@/lib/convex/provider";
 
 const spaceGrotesk = Space_Grotesk({
 	subsets: ["latin"],
@@ -52,7 +53,12 @@ export default function RootLayout({
 		>
 			<body className="min-h-full font-sans bg-background text-foreground">
 				<ServiceWorkerRegistration />
-				<TooltipProvider>{children}</TooltipProvider>
+				{/* Provider Convex monté uniquement en mode AUTH_BACKEND=convex
+				    (no-op en mode prisma par défaut → rendu inchangé). Active les
+				    souscriptions réactives useQuery (Phase 5). */}
+				<MaybeConvexProvider>
+					<TooltipProvider>{children}</TooltipProvider>
+				</MaybeConvexProvider>
 			</body>
 		</html>
 	);

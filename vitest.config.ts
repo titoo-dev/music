@@ -8,6 +8,7 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@": path.resolve(dirname, "./src"),
+			"@convex": path.resolve(dirname, "./convex"),
 		},
 	},
 	test: {

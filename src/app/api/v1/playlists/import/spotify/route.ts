@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { addToPlaylist } from "@/lib/library";
+import { createPlaylist } from "@/lib/repositories/playlists";
 import {
 	parsePlaylistInput,
 	fetchPlaylist,
@@ -142,14 +142,12 @@ export async function POST(request: NextRequest) {
 			});
 		}
 
-		const playlist = await prisma.playlist.create({
-			data: {
-				userId,
-				title: spotify.title,
-				description: spotify.description || null,
-				coverUrl: spotify.coverUrl,
-			},
-		});
+		const playlist = await createPlaylist(
+			userId,
+			spotify.title,
+			spotify.description || null,
+			spotify.coverUrl
+		);
 
 		await addToPlaylist(playlist.id, matchedRows);
 

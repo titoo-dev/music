@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
-import { authMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
+import { authServerMock, convexApiMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
 import { makeNextRequest, makeParams, readJson } from "@/test/helpers/nextRequest";
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/auth-server", () => authServerMock);
+vi.mock("@convex/_generated/api", () => convexApiMock);
+vi.mock("@/lib/repositories/playlists", () => ({ isPlaylistOwned: vi.fn() }));
 vi.mock("@/lib/library", () => ({
 	addToPlaylist: vi.fn(),
 	removeFromPlaylist: vi.fn(),
@@ -13,11 +13,13 @@ vi.mock("@/lib/library", () => ({
 
 import { PATCH } from "./route";
 import { reorderPlaylist } from "@/lib/library";
+import { isPlaylistOwned } from "@/lib/repositories/playlists";
+const isPlaylistOwnedMock = vi.mocked(isPlaylistOwned);
 
 const reorderPlaylistMock = vi.mocked(reorderPlaylist);
 
 beforeEach(() => {
-	resetPrismaMock();
+	isPlaylistOwnedMock.mockReset();
 	clearSession();
 	reorderPlaylistMock.mockReset();
 });
@@ -34,7 +36,7 @@ describe("PATCH /api/v1/playlists/[id]/tracks", () => {
 
 	it("returns 404 when the playlist doesn't belong to the user", async () => {
 		setSessionUser("u1");
-		prismaMock.playlist.findFirst.mockResolvedValue(null);
+		isPlaylistOwnedMock.mockResolvedValue(false);
 
 		const res = await PATCH(
 			makeNextRequest({ method: "PATCH", body: { trackIds: ["a"] } }),
@@ -48,7 +50,7 @@ describe("PATCH /api/v1/playlists/[id]/tracks", () => {
 
 	it("returns 400 when trackIds is missing or not an array", async () => {
 		setSessionUser("u1");
-		prismaMock.playlist.findFirst.mockResolvedValue({ id: "pl1" } as any);
+		isPlaylistOwnedMock.mockResolvedValue(true);
 
 		const res = await PATCH(
 			makeNextRequest({ method: "PATCH", body: { trackIds: "not-an-array" } }),
@@ -61,7 +63,7 @@ describe("PATCH /api/v1/playlists/[id]/tracks", () => {
 
 	it("happy path: forwards stringified trackIds to reorderPlaylist and returns its result", async () => {
 		setSessionUser("u1");
-		prismaMock.playlist.findFirst.mockResolvedValue({ id: "pl1" } as any);
+		isPlaylistOwnedMock.mockResolvedValue(true);
 		reorderPlaylistMock.mockResolvedValue({ reordered: 3 });
 
 		const res = await PATCH(
@@ -79,7 +81,7 @@ describe("PATCH /api/v1/playlists/[id]/tracks", () => {
 
 	it("coerces non-string trackIds to strings before forwarding", async () => {
 		setSessionUser("u1");
-		prismaMock.playlist.findFirst.mockResolvedValue({ id: "pl1" } as any);
+		isPlaylistOwnedMock.mockResolvedValue(true);
 		reorderPlaylistMock.mockResolvedValue({ reordered: 2 });
 
 		await PATCH(
@@ -94,7 +96,7 @@ describe("PATCH /api/v1/playlists/[id]/tracks", () => {
 
 	it("maps REORDER_LENGTH_MISMATCH from the lib to a 400 with the same code", async () => {
 		setSessionUser("u1");
-		prismaMock.playlist.findFirst.mockResolvedValue({ id: "pl1" } as any);
+		isPlaylistOwnedMock.mockResolvedValue(true);
 		reorderPlaylistMock.mockRejectedValue(new Error("REORDER_LENGTH_MISMATCH"));
 
 		const res = await PATCH(
@@ -108,7 +110,7 @@ describe("PATCH /api/v1/playlists/[id]/tracks", () => {
 
 	it("maps REORDER_DUPLICATE_TRACK to a 400 with the same code", async () => {
 		setSessionUser("u1");
-		prismaMock.playlist.findFirst.mockResolvedValue({ id: "pl1" } as any);
+		isPlaylistOwnedMock.mockResolvedValue(true);
 		reorderPlaylistMock.mockRejectedValue(new Error("REORDER_DUPLICATE_TRACK"));
 
 		const res = await PATCH(
@@ -122,7 +124,7 @@ describe("PATCH /api/v1/playlists/[id]/tracks", () => {
 
 	it("maps REORDER_UNKNOWN_TRACK to a 400 with the same code", async () => {
 		setSessionUser("u1");
-		prismaMock.playlist.findFirst.mockResolvedValue({ id: "pl1" } as any);
+		isPlaylistOwnedMock.mockResolvedValue(true);
 		reorderPlaylistMock.mockRejectedValue(new Error("REORDER_UNKNOWN_TRACK"));
 
 		const res = await PATCH(
@@ -136,7 +138,7 @@ describe("PATCH /api/v1/playlists/[id]/tracks", () => {
 
 	it("returns 500 on any other thrown error", async () => {
 		setSessionUser("u1");
-		prismaMock.playlist.findFirst.mockResolvedValue({ id: "pl1" } as any);
+		isPlaylistOwnedMock.mockResolvedValue(true);
 		reorderPlaylistMock.mockRejectedValue(new Error("ECONNREFUSED"));
 
 		const res = await PATCH(

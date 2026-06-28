@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser, ok, fail, handleError } from "../_lib/helpers";
 import { shareTrack } from "@/lib/library";
+import { findExistingShare, listSharesByUser } from "@/lib/repositories/shares";
 
 // POST /api/v1/shares — create a public share link for a track.
 // No download requirement: the share creates with storedTrackId=null when
@@ -19,9 +19,7 @@ export async function POST(request: NextRequest) {
 		}
 
 		// Reuse an existing share by this user for the same track if any
-		const existing = await prisma.sharedTrack.findFirst({
-			where: { userId: userResult.userId, trackId },
-		});
+		const existing = await findExistingShare(userResult.userId, trackId);
 		if (existing) return ok(existing);
 
 		const expiresAt = body?.expiresIn
@@ -53,10 +51,7 @@ export async function GET(request: NextRequest) {
 		const userResult = await requireUser(request);
 		if (userResult.error) return userResult.error;
 
-		const shares = await prisma.sharedTrack.findMany({
-			where: { userId: userResult.userId },
-			orderBy: { createdAt: "desc" },
-		});
+		const shares = await listSharesByUser(userResult.userId);
 		return ok(shares);
 	} catch (e) {
 		return handleError(e);

@@ -1,10 +1,33 @@
+// @vitest-environment node
+// library.ts — Convex-only (Phase 6). On mocke le client Convex et getDeemixApp.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/server-state", () => ({
-	getDeemixApp: vi.fn(async () => null),
+const convex = { query: vi.fn(), mutation: vi.fn() };
+vi.mock("@/lib/convex/server", () => ({ getConvexClient: () => convex }));
+vi.mock("@convex/_generated/api", () => ({
+	api: {
+		savedTracks: { save: "s", unsave: "s", isSaved: "s", savedIds: "s", list: "s" },
+		albums: {
+			saveAlbum: "a",
+			unsaveAlbum: "a",
+			listSavedAlbums: "a",
+			savedAlbumIds: "a",
+		},
+		followedArtists: {
+			follow: "f",
+			unfollow: "f",
+			isFollowed: "f",
+			followedIds: "f",
+			list: "f",
+		},
+		playlists: { addTracks: "p", removeTracks: "p", reorder: "p" },
+		storedTracks: { refCount: "st", deleteByTrack: "st" },
+		shares: { shareTrack: "sh", resolveForPlayback: "sh" },
+		preferences: { get: "pr" },
+	},
 }));
+vi.mock("@/lib/server-state", () => ({ getDeemixApp: vi.fn(async () => null) }));
+import { getDeemixApp } from "@/lib/server-state";
 
 import {
 	saveTrack,
@@ -14,7 +37,6 @@ import {
 	listSavedTracks,
 	saveAlbum,
 	unsaveAlbum,
-	listSavedAlbums,
 	getSavedAlbumIds,
 	getTrackRefCount,
 	maybeEvictFile,
@@ -22,673 +44,164 @@ import {
 	isPreCacheEnabled,
 	reorderPlaylist,
 	followArtist,
-	unfollowArtist,
-	isArtistFollowed,
 	getFollowedArtistIds,
-	listFollowedArtists,
+	addToPlaylist,
+	removeFromPlaylist,
+	shareTrack,
+	resolveShareForPlayback,
 } from "./library";
-import { getDeemixApp } from "@/lib/server-state";
-
-const getDeemixAppMock = vi.mocked(getDeemixApp);
 
 beforeEach(() => {
-	resetPrismaMock();
-	getDeemixAppMock.mockReset();
-	getDeemixAppMock.mockResolvedValue(null as any);
+	convex.query.mockReset();
+	convex.mutation.mockReset();
+	vi.mocked(getDeemixApp).mockReset();
+	vi.mocked(getDeemixApp).mockResolvedValue(null as never);
 });
 
-describe("saveTrack", () => {
-	it("upserts on userId_trackId composite and returns the row", async () => {
-		const row = { id: "s1", userId: "u1", trackId: "t1" } as any;
-		prismaMock.savedTrack.upsert.mockResolvedValue(row);
-
-		const result = await saveTrack("u1", {
-			trackId: "t1",
-			title: "Hello",
-			artist: "Adele",
-			album: "25",
-			albumId: "a1",
-			coverUrl: "http://cover/1.jpg",
-			duration: 295,
-		});
-
-		expect(result).toBe(row);
-		expect(prismaMock.savedTrack.upsert).toHaveBeenCalledWith({
-			where: { userId_trackId: { userId: "u1", trackId: "t1" } },
-			update: {},
-			create: {
-				userId: "u1",
-				trackId: "t1",
-				title: "Hello",
-				artist: "Adele",
-				album: "25",
-				albumId: "a1",
-				coverUrl: "http://cover/1.jpg",
-				duration: 295,
-			},
-		});
-	});
-
-	it("defaults optional fields to null when omitted", async () => {
-		prismaMock.savedTrack.upsert.mockResolvedValue({} as any);
-		await saveTrack("u1", {
-			trackId: "t1",
-			title: "T",
-			artist: "A",
-		});
-		const args = prismaMock.savedTrack.upsert.mock.calls[0][0] as any;
-		expect(args.create).toMatchObject({
-			album: null,
-			albumId: null,
-			coverUrl: null,
-			duration: null,
-		});
-	});
-});
-
-describe("unsaveTrack", () => {
-	it("deletes the saved row for the user and attempts to evict", async () => {
-		prismaMock.savedTrack.deleteMany.mockResolvedValue({ count: 1 } as any);
-		// Force refs to all be 0 so maybeEvictFile -> forceEvictFile is called
-		prismaMock.savedTrack.count.mockResolvedValue(0 as any);
-		prismaMock.albumTrack.count.mockResolvedValue(0 as any);
-		prismaMock.sharedTrack.count.mockResolvedValue(0 as any);
-		prismaMock.recentPlay.count.mockResolvedValue(0 as any);
-		prismaMock.storedTrack.findMany.mockResolvedValue([] as any);
-
-		await unsaveTrack("u1", "t1");
-
-		expect(prismaMock.savedTrack.deleteMany).toHaveBeenCalledWith({
-			where: { userId: "u1", trackId: "t1" },
-		});
-	});
-
-	it("does not call forceEvictFile when there are still references", async () => {
-		prismaMock.savedTrack.deleteMany.mockResolvedValue({ count: 1 } as any);
-		prismaMock.savedTrack.count.mockResolvedValue(1 as any);
-		prismaMock.albumTrack.count.mockResolvedValue(0 as any);
-		prismaMock.sharedTrack.count.mockResolvedValue(0 as any);
-		prismaMock.recentPlay.count.mockResolvedValue(0 as any);
-
-		await unsaveTrack("u1", "t1");
-
-		expect(prismaMock.storedTrack.findMany).not.toHaveBeenCalled();
-		expect(prismaMock.storedTrack.deleteMany).not.toHaveBeenCalled();
-	});
-});
-
-describe("isTrackSaved", () => {
-	it("returns true when a row is found", async () => {
-		prismaMock.savedTrack.findUnique.mockResolvedValue({ id: "x" } as any);
-		const result = await isTrackSaved("u1", "t1");
-		expect(result).toBe(true);
-		expect(prismaMock.savedTrack.findUnique).toHaveBeenCalledWith({
-			where: { userId_trackId: { userId: "u1", trackId: "t1" } },
-			select: { id: true },
-		});
-	});
-
-	it("returns false when no row exists", async () => {
-		prismaMock.savedTrack.findUnique.mockResolvedValue(null);
-		const result = await isTrackSaved("u1", "t1");
-		expect(result).toBe(false);
-	});
-});
-
-describe("getSavedTrackIds", () => {
-	it("returns an empty Set without hitting Prisma when given no ids", async () => {
-		const result = await getSavedTrackIds("u1", []);
-		expect(result).toBeInstanceOf(Set);
-		expect(result.size).toBe(0);
-		expect(prismaMock.savedTrack.findMany).not.toHaveBeenCalled();
-	});
-
-	it("returns a Set of saved trackIds for the user", async () => {
-		prismaMock.savedTrack.findMany.mockResolvedValue([
-			{ trackId: "t1" },
-			{ trackId: "t3" },
-		] as any);
-
-		const result = await getSavedTrackIds("u1", ["t1", "t2", "t3"]);
-		expect(result).toBeInstanceOf(Set);
-		expect([...result].sort()).toEqual(["t1", "t3"]);
-		expect(prismaMock.savedTrack.findMany).toHaveBeenCalledWith({
-			where: { userId: "u1", trackId: { in: ["t1", "t2", "t3"] } },
-			select: { trackId: true },
-		});
-	});
-});
-
-describe("listSavedTracks", () => {
-	it("orders by savedAt desc and passes take/skip from opts", async () => {
-		const items = [{ id: "1" }, { id: "2" }] as any;
-		prismaMock.savedTrack.findMany.mockResolvedValue(items);
-
-		const result = await listSavedTracks("u1", { limit: 50, offset: 25 });
-		expect(result).toBe(items);
-		expect(prismaMock.savedTrack.findMany).toHaveBeenCalledWith({
-			where: { userId: "u1" },
-			orderBy: { savedAt: "desc" },
-			take: 50,
-			skip: 25,
-		});
-	});
-
-	it("passes undefined take/skip when no opts provided", async () => {
-		prismaMock.savedTrack.findMany.mockResolvedValue([] as any);
-		await listSavedTracks("u1");
-		expect(prismaMock.savedTrack.findMany).toHaveBeenCalledWith({
-			where: { userId: "u1" },
-			orderBy: { savedAt: "desc" },
-			take: undefined,
-			skip: undefined,
-		});
-	});
-});
-
-describe("saveAlbum", () => {
-	it("upserts the album, deletes existing tracks, and creates the new tracklist", async () => {
-		const saved = { id: "alb-internal-1" } as any;
-		prismaMock.album.upsert.mockResolvedValue(saved);
-		prismaMock.albumTrack.deleteMany.mockResolvedValue({ count: 0 } as any);
-		prismaMock.albumTrack.createMany.mockResolvedValue({ count: 2 } as any);
-
-		const result = await saveAlbum(
-			"u1",
-			{
-				deezerAlbumId: "deezer-abc",
-				title: "Album Title",
-				artist: "Artist",
-				coverUrl: "http://cover.jpg",
-			},
-			[
-				{
-					trackId: "t1",
-					title: "Track 1",
-					artist: "Artist",
-					duration: 200,
-					trackNumber: 1,
-				},
-				{
-					trackId: "t2",
-					title: "Track 2",
-					artist: "Artist",
-				},
-			]
+describe("savedTracks", () => {
+	it("saveTrack delegates to Convex", async () => {
+		convex.mutation.mockResolvedValue(null);
+		await saveTrack("u1", { trackId: "t1", title: "T", artist: "A" });
+		expect(convex.mutation).toHaveBeenCalledWith(
+			"s",
+			expect.objectContaining({ userId: "u1", trackId: "t1", album: null }),
 		);
-
-		expect(result).toBe(saved);
-
-		expect(prismaMock.album.upsert).toHaveBeenCalledWith({
-			where: {
-				userId_deezerAlbumId: { userId: "u1", deezerAlbumId: "deezer-abc" },
-			},
-			update: {
-				title: "Album Title",
-				artist: "Artist",
-				coverUrl: "http://cover.jpg",
-				trackCount: 2,
-			},
-			create: {
-				userId: "u1",
-				deezerAlbumId: "deezer-abc",
-				title: "Album Title",
-				artist: "Artist",
-				coverUrl: "http://cover.jpg",
-				trackCount: 2,
-			},
-		});
-
-		expect(prismaMock.albumTrack.deleteMany).toHaveBeenCalledWith({
-			where: { albumId: "alb-internal-1" },
-		});
-
-		expect(prismaMock.albumTrack.createMany).toHaveBeenCalledWith({
-			data: [
-				{
-					albumId: "alb-internal-1",
-					trackId: "t1",
-					title: "Track 1",
-					artist: "Artist",
-					coverUrl: null,
-					duration: 200,
-					trackNumber: 1,
-				},
-				{
-					albumId: "alb-internal-1",
-					trackId: "t2",
-					title: "Track 2",
-					artist: "Artist",
-					coverUrl: null,
-					duration: null,
-					trackNumber: null,
-				},
-			],
-			skipDuplicates: true,
-		});
 	});
 
-	it("does not call createMany when there are no tracks", async () => {
-		prismaMock.album.upsert.mockResolvedValue({ id: "alb-1" } as any);
-		prismaMock.albumTrack.deleteMany.mockResolvedValue({ count: 0 } as any);
+	it("isTrackSaved returns the Convex boolean", async () => {
+		convex.query.mockResolvedValue(true);
+		expect(await isTrackSaved("u1", "t1")).toBe(true);
+	});
 
-		await saveAlbum(
-			"u1",
-			{ deezerAlbumId: "d", title: "T", artist: "A" },
-			[]
+	it("getSavedTrackIds short-circuits empty and wraps in a Set", async () => {
+		expect((await getSavedTrackIds("u1", [])).size).toBe(0);
+		expect(convex.query).not.toHaveBeenCalled();
+		convex.query.mockResolvedValue(["t1", "t3"]);
+		const set = await getSavedTrackIds("u1", ["t1", "t2", "t3"]);
+		expect([...set].sort()).toEqual(["t1", "t3"]);
+	});
+
+	it("listSavedTracks delegates", async () => {
+		convex.query.mockResolvedValue([{ id: "1" }]);
+		expect(await listSavedTracks("u1")).toEqual([{ id: "1" }]);
+	});
+
+	it("unsaveTrack deletes then evicts (refs 0 → forceEvict)", async () => {
+		convex.mutation.mockResolvedValue(null); // unsave
+		convex.query.mockResolvedValue({ total: 0 }); // refCount
+		// forceEvictFile: deleteByTrack returns [] paths
+		convex.mutation.mockResolvedValueOnce(null).mockResolvedValueOnce([]);
+		await unsaveTrack("u1", "t1");
+		expect(convex.mutation).toHaveBeenCalled();
+	});
+});
+
+describe("albums", () => {
+	it("saveAlbum delegates and returns the album id", async () => {
+		convex.mutation.mockResolvedValue("alb-1");
+		expect(
+			await saveAlbum("u1", { deezerAlbumId: "d", title: "T", artist: "A" }, []),
+		).toBe("alb-1");
+	});
+
+	it("unsaveAlbum evicts each returned trackId", async () => {
+		convex.mutation
+			.mockResolvedValueOnce(["t1", "t2"]) // unsaveAlbum → trackIds
+			.mockResolvedValue([]); // forceEvict deleteByTrack
+		convex.query.mockResolvedValue({ total: 0 });
+		await unsaveAlbum("u1", "d");
+		expect(convex.mutation).toHaveBeenCalledWith(
+			"a",
+			expect.objectContaining({ userId: "u1", deezerAlbumId: "d" }),
 		);
+	});
 
-		expect(prismaMock.albumTrack.deleteMany).toHaveBeenCalledWith({
-			where: { albumId: "alb-1" },
-		});
-		expect(prismaMock.albumTrack.createMany).not.toHaveBeenCalled();
+	it("getSavedAlbumIds short-circuits empty", async () => {
+		expect((await getSavedAlbumIds("u1", [])).size).toBe(0);
 	});
 });
 
-describe("unsaveAlbum", () => {
-	it("returns early when the album doesn't exist", async () => {
-		prismaMock.album.findUnique.mockResolvedValue(null);
-		await unsaveAlbum("u1", "deezer-x");
-		expect(prismaMock.album.delete).not.toHaveBeenCalled();
+describe("followedArtists", () => {
+	it("followArtist delegates", async () => {
+		convex.mutation.mockResolvedValue(null);
+		await followArtist("u1", { deezerArtistId: "27", name: "X" });
+		expect(convex.mutation).toHaveBeenCalledWith(
+			"f",
+			expect.objectContaining({ deezerArtistId: "27", pictureUrl: null }),
+		);
 	});
 
-	it("deletes the album and tries to evict files for each track", async () => {
-		prismaMock.album.findUnique.mockResolvedValue({
-			id: "alb-1",
-			tracks: [{ trackId: "t1" }, { trackId: "t2" }],
-		} as any);
-		prismaMock.album.delete.mockResolvedValue({} as any);
-		prismaMock.savedTrack.count.mockResolvedValue(0 as any);
-		prismaMock.albumTrack.count.mockResolvedValue(0 as any);
-		prismaMock.sharedTrack.count.mockResolvedValue(0 as any);
-		prismaMock.recentPlay.count.mockResolvedValue(0 as any);
-		prismaMock.storedTrack.findMany.mockResolvedValue([] as any);
-
-		await unsaveAlbum("u1", "deezer-abc");
-
-		expect(prismaMock.album.delete).toHaveBeenCalledWith({
-			where: { id: "alb-1" },
-		});
-		// 2 tracks × 4 ref counts = 8 .count() calls
-		expect(prismaMock.savedTrack.count).toHaveBeenCalledTimes(2);
-		expect(prismaMock.albumTrack.count).toHaveBeenCalledTimes(2);
+	it("getFollowedArtistIds wraps in a Set", async () => {
+		convex.query.mockResolvedValue(["27"]);
+		expect([...(await getFollowedArtistIds("u1", ["27", "99"]))]).toEqual(["27"]);
 	});
 });
 
-describe("listSavedAlbums", () => {
-	it("returns albums ordered by savedAt desc", async () => {
-		const items = [{ id: "a1" }, { id: "a2" }] as any;
-		prismaMock.album.findMany.mockResolvedValue(items);
-
-		const result = await listSavedAlbums("u1");
-		expect(result).toBe(items);
-		expect(prismaMock.album.findMany).toHaveBeenCalledWith({
-			where: { userId: "u1" },
-			orderBy: { savedAt: "desc" },
-		});
+describe("playlists", () => {
+	it("addToPlaylist short-circuits empty", async () => {
+		expect(await addToPlaylist("p1", [])).toEqual({ added: 0 });
+	});
+	it("removeFromPlaylist short-circuits empty", async () => {
+		expect(await removeFromPlaylist("p1", [])).toEqual({ removed: 0 });
+	});
+	it("reorderPlaylist delegates", async () => {
+		convex.mutation.mockResolvedValue({ reordered: 2 });
+		expect(await reorderPlaylist("p1", ["a", "b"])).toEqual({ reordered: 2 });
 	});
 });
 
-describe("getSavedAlbumIds", () => {
-	it("returns an empty Set without hitting Prisma when given no ids", async () => {
-		const result = await getSavedAlbumIds("u1", []);
-		expect(result).toBeInstanceOf(Set);
-		expect(result.size).toBe(0);
-		expect(prismaMock.album.findMany).not.toHaveBeenCalled();
+describe("ref-counting + eviction", () => {
+	it("getTrackRefCount delegates", async () => {
+		convex.query.mockResolvedValue({ saved: 1, album: 0, shared: 0, recent: 0, total: 1 });
+		expect((await getTrackRefCount("t1")).total).toBe(1);
 	});
 
-	it("returns a Set of saved deezerAlbumIds for the user", async () => {
-		prismaMock.album.findMany.mockResolvedValue([
-			{ deezerAlbumId: "a1" },
-			{ deezerAlbumId: "a3" },
-		] as any);
-
-		const result = await getSavedAlbumIds("u1", ["a1", "a2", "a3"]);
-		expect([...result].sort()).toEqual(["a1", "a3"]);
-		expect(prismaMock.album.findMany).toHaveBeenCalledWith({
-			where: { userId: "u1", deezerAlbumId: { in: ["a1", "a2", "a3"] } },
-			select: { deezerAlbumId: true },
-		});
-	});
-});
-
-describe("getTrackRefCount", () => {
-	it("aggregates counts from all 4 ref tables", async () => {
-		prismaMock.savedTrack.count.mockResolvedValue(2 as any);
-		prismaMock.albumTrack.count.mockResolvedValue(3 as any);
-		prismaMock.sharedTrack.count.mockResolvedValue(1 as any);
-		prismaMock.recentPlay.count.mockResolvedValue(4 as any);
-
-		const result = await getTrackRefCount("t1");
-		expect(result).toEqual({
-			saved: 2,
-			album: 3,
-			shared: 1,
-			recent: 4,
-			total: 10,
-		});
-
-		expect(prismaMock.savedTrack.count).toHaveBeenCalledWith({
-			where: { trackId: "t1" },
-		});
-		expect(prismaMock.albumTrack.count).toHaveBeenCalledWith({
-			where: { trackId: "t1" },
-		});
-		expect(prismaMock.sharedTrack.count).toHaveBeenCalledWith({
-			where: { trackId: "t1" },
-		});
-		expect(prismaMock.recentPlay.count).toHaveBeenCalledWith({
-			where: { trackId: "t1" },
-		});
-	});
-});
-
-describe("forceEvictFile", () => {
-	it("returns 0 and skips work when no StoredTrack rows exist", async () => {
-		prismaMock.storedTrack.findMany.mockResolvedValue([] as any);
-		const result = await forceEvictFile("t1");
-		expect(result).toBe(0);
-		expect(prismaMock.storedTrack.deleteMany).not.toHaveBeenCalled();
-		expect(prismaMock.sharedTrack.updateMany).not.toHaveBeenCalled();
+	it("forceEvictFile returns 0 with no stored paths", async () => {
+		convex.mutation.mockResolvedValue([]);
+		expect(await forceEvictFile("t1")).toBe(0);
 	});
 
-	it("nulls SharedTrack.storedTrackId and deletes StoredTrack rows", async () => {
-		prismaMock.storedTrack.findMany.mockResolvedValue([
-			{ id: "st1", storagePath: "/p1" },
-			{ id: "st2", storagePath: "/p2" },
-		] as any);
-		prismaMock.sharedTrack.updateMany.mockResolvedValue({ count: 0 } as any);
-		prismaMock.storedTrack.deleteMany.mockResolvedValue({ count: 2 } as any);
-
-		// no storage provider => deleted counter stays 0
-		const result = await forceEvictFile("t1");
-		expect(result).toBe(0);
-
-		expect(prismaMock.sharedTrack.updateMany).toHaveBeenCalledWith({
-			where: { storedTrackId: { in: ["st1", "st2"] } },
-			data: { storedTrackId: null },
-		});
-		expect(prismaMock.storedTrack.deleteMany).toHaveBeenCalledWith({
-			where: { id: { in: ["st1", "st2"] } },
-		});
-	});
-
-	it("calls storageProvider.deleteFile for each row when one exists", async () => {
+	it("forceEvictFile deletes S3 files when a provider exists", async () => {
 		const deleteFile = vi.fn().mockResolvedValue(undefined);
-		getDeemixAppMock.mockResolvedValue({
-			storageProvider: { deleteFile },
-		} as any);
-		prismaMock.storedTrack.findMany.mockResolvedValue([
-			{ id: "st1", storagePath: "/p1" },
-			{ id: "st2", storagePath: "/p2" },
-		] as any);
-		prismaMock.sharedTrack.updateMany.mockResolvedValue({ count: 0 } as any);
-		prismaMock.storedTrack.deleteMany.mockResolvedValue({ count: 2 } as any);
-
-		const result = await forceEvictFile("t1");
-		expect(result).toBe(2);
+		vi.mocked(getDeemixApp).mockResolvedValue({ storageProvider: { deleteFile } } as never);
+		convex.mutation.mockResolvedValue(["/p1", "/p2"]);
+		expect(await forceEvictFile("t1")).toBe(2);
 		expect(deleteFile).toHaveBeenCalledTimes(2);
-		expect(deleteFile).toHaveBeenCalledWith("/p1");
-		expect(deleteFile).toHaveBeenCalledWith("/p2");
 	});
-});
 
-describe("maybeEvictFile", () => {
-	it("triggers forceEvictFile when total refs are 0", async () => {
-		prismaMock.savedTrack.count.mockResolvedValue(0 as any);
-		prismaMock.albumTrack.count.mockResolvedValue(0 as any);
-		prismaMock.sharedTrack.count.mockResolvedValue(0 as any);
-		prismaMock.recentPlay.count.mockResolvedValue(0 as any);
-		prismaMock.storedTrack.findMany.mockResolvedValue([] as any);
-
+	it("maybeEvictFile only evicts when total refs is 0", async () => {
+		convex.query.mockResolvedValue({ total: 2 });
 		await maybeEvictFile("t1");
-
-		expect(prismaMock.storedTrack.findMany).toHaveBeenCalledWith({
-			where: { trackId: "t1" },
-			select: { id: true, storagePath: true },
-		});
-	});
-
-	it("does not call forceEvictFile when refs > 0", async () => {
-		prismaMock.savedTrack.count.mockResolvedValue(0 as any);
-		prismaMock.albumTrack.count.mockResolvedValue(0 as any);
-		prismaMock.sharedTrack.count.mockResolvedValue(1 as any);
-		prismaMock.recentPlay.count.mockResolvedValue(0 as any);
-
-		await maybeEvictFile("t1");
-
-		expect(prismaMock.storedTrack.findMany).not.toHaveBeenCalled();
+		expect(convex.mutation).not.toHaveBeenCalled();
 	});
 });
 
-describe("isPreCacheEnabled", () => {
-	it("returns true when preferences.preCacheSaved is true", async () => {
-		prismaMock.userPreferences.findUnique.mockResolvedValue({
-			preferences: { preCacheSaved: true },
-		} as any);
-
-		const result = await isPreCacheEnabled("u1");
-		expect(result).toBe(true);
-		expect(prismaMock.userPreferences.findUnique).toHaveBeenCalledWith({
-			where: { userId: "u1" },
-			select: { preferences: true },
+describe("shares + prefs", () => {
+	it("shareTrack delegates", async () => {
+		convex.mutation.mockResolvedValue({ id: "x", shareId: "abc" });
+		expect(await shareTrack("u1", { trackId: "t1", title: "T", artist: "A" })).toEqual({
+			id: "x",
+			shareId: "abc",
 		});
 	});
 
-	it("returns false when preferences.preCacheSaved is missing/false", async () => {
-		prismaMock.userPreferences.findUnique.mockResolvedValue({
-			preferences: { other: true },
-		} as any);
+	it("resolveShareForPlayback maps the Convex shape", async () => {
+		convex.query.mockResolvedValue({
+			share: { shareId: "abc", trackId: "t1" },
+			storedTrack: null,
+			expired: false,
+		});
+		const r = await resolveShareForPlayback("abc");
+		expect(r?.share.shareId).toBe("abc");
+		expect(r?.expired).toBe(false);
+		convex.query.mockResolvedValue(null);
+		expect(await resolveShareForPlayback("nope")).toBeNull();
+	});
+
+	it("isPreCacheEnabled reads the pref flag", async () => {
+		convex.query.mockResolvedValue({ preCacheSaved: true });
+		expect(await isPreCacheEnabled("u1")).toBe(true);
+		convex.query.mockResolvedValue(null);
 		expect(await isPreCacheEnabled("u1")).toBe(false);
-
-		prismaMock.userPreferences.findUnique.mockResolvedValue({
-			preferences: { preCacheSaved: false },
-		} as any);
-		expect(await isPreCacheEnabled("u1")).toBe(false);
-	});
-
-	it("returns false when no UserPreferences row exists", async () => {
-		prismaMock.userPreferences.findUnique.mockResolvedValue(null);
-		expect(await isPreCacheEnabled("u1")).toBe(false);
-	});
-});
-
-describe("reorderPlaylist", () => {
-	it("rewrites positions 0..N-1 in the supplied order and bumps the playlist updatedAt", async () => {
-		prismaMock.playlistTrack.findMany.mockResolvedValue([
-			{ trackId: "a" },
-			{ trackId: "b" },
-			{ trackId: "c" },
-		] as any);
-		prismaMock.$transaction.mockResolvedValue([] as any);
-		prismaMock.playlist.update.mockResolvedValue({} as any);
-		// Each .update returns a thenable so the array we pass to $transaction is well-typed.
-		prismaMock.playlistTrack.update.mockResolvedValue({} as any);
-
-		const result = await reorderPlaylist("pl1", ["c", "a", "b"]);
-
-		expect(result).toEqual({ reordered: 3 });
-		expect(prismaMock.playlistTrack.findMany).toHaveBeenCalledWith({
-			where: { playlistId: "pl1" },
-			select: { trackId: true },
-		});
-		// Three updates queued, one per (trackId, newPosition).
-		expect(prismaMock.playlistTrack.update).toHaveBeenNthCalledWith(1, {
-			where: { playlistId_trackId: { playlistId: "pl1", trackId: "c" } },
-			data: { position: 0 },
-		});
-		expect(prismaMock.playlistTrack.update).toHaveBeenNthCalledWith(2, {
-			where: { playlistId_trackId: { playlistId: "pl1", trackId: "a" } },
-			data: { position: 1 },
-		});
-		expect(prismaMock.playlistTrack.update).toHaveBeenNthCalledWith(3, {
-			where: { playlistId_trackId: { playlistId: "pl1", trackId: "b" } },
-			data: { position: 2 },
-		});
-		expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
-		expect(prismaMock.playlist.update).toHaveBeenCalledWith({
-			where: { id: "pl1" },
-			data: { updatedAt: expect.any(Date) },
-		});
-	});
-
-	it("throws REORDER_LENGTH_MISMATCH when the supplied order has the wrong number of trackIds", async () => {
-		prismaMock.playlistTrack.findMany.mockResolvedValue([
-			{ trackId: "a" },
-			{ trackId: "b" },
-		] as any);
-
-		await expect(reorderPlaylist("pl1", ["a"])).rejects.toThrow("REORDER_LENGTH_MISMATCH");
-		await expect(reorderPlaylist("pl1", ["a", "b", "c"])).rejects.toThrow(
-			"REORDER_LENGTH_MISMATCH"
-		);
-		// No writes attempted when validation fails up front.
-		expect(prismaMock.$transaction).not.toHaveBeenCalled();
-		expect(prismaMock.playlistTrack.update).not.toHaveBeenCalled();
-	});
-
-	it("throws REORDER_DUPLICATE_TRACK when the supplied order repeats a trackId", async () => {
-		prismaMock.playlistTrack.findMany.mockResolvedValue([
-			{ trackId: "a" },
-			{ trackId: "b" },
-		] as any);
-
-		await expect(reorderPlaylist("pl1", ["a", "a"])).rejects.toThrow(
-			"REORDER_DUPLICATE_TRACK"
-		);
-		expect(prismaMock.$transaction).not.toHaveBeenCalled();
-	});
-
-	it("throws REORDER_UNKNOWN_TRACK when a supplied trackId is not part of the playlist", async () => {
-		prismaMock.playlistTrack.findMany.mockResolvedValue([
-			{ trackId: "a" },
-			{ trackId: "b" },
-		] as any);
-
-		await expect(reorderPlaylist("pl1", ["a", "z"])).rejects.toThrow(
-			"REORDER_UNKNOWN_TRACK"
-		);
-		expect(prismaMock.$transaction).not.toHaveBeenCalled();
-	});
-});
-
-describe("followArtist", () => {
-	it("upserts on userId_deezerArtistId composite and returns the row", async () => {
-		const row = { id: "f1", userId: "u1", deezerArtistId: "27" } as any;
-		prismaMock.followedArtist.upsert.mockResolvedValue(row);
-
-		const result = await followArtist("u1", {
-			deezerArtistId: "27",
-			name: "Daft Punk",
-			pictureUrl: "http://cdn/artist/27.jpg",
-		});
-
-		expect(result).toBe(row);
-		expect(prismaMock.followedArtist.upsert).toHaveBeenCalledWith({
-			where: { userId_deezerArtistId: { userId: "u1", deezerArtistId: "27" } },
-			update: {
-				name: "Daft Punk",
-				pictureUrl: "http://cdn/artist/27.jpg",
-			},
-			create: {
-				userId: "u1",
-				deezerArtistId: "27",
-				name: "Daft Punk",
-				pictureUrl: "http://cdn/artist/27.jpg",
-			},
-		});
-	});
-
-	it("normalizes a missing pictureUrl to null on both update and create branches", async () => {
-		prismaMock.followedArtist.upsert.mockResolvedValue({} as any);
-
-		await followArtist("u1", { deezerArtistId: "27", name: "Daft Punk" });
-
-		const call = prismaMock.followedArtist.upsert.mock.calls[0][0];
-		expect(call.update.pictureUrl).toBeNull();
-		expect(call.create.pictureUrl).toBeNull();
-	});
-});
-
-describe("unfollowArtist", () => {
-	it("removes the (userId, deezerArtistId) row when it exists", async () => {
-		prismaMock.followedArtist.deleteMany.mockResolvedValue({ count: 1 } as any);
-
-		await unfollowArtist("u1", "27");
-
-		expect(prismaMock.followedArtist.deleteMany).toHaveBeenCalledWith({
-			where: { userId: "u1", deezerArtistId: "27" },
-		});
-	});
-
-	it("is idempotent — deleteMany returning count:0 does not throw", async () => {
-		prismaMock.followedArtist.deleteMany.mockResolvedValue({ count: 0 } as any);
-		await expect(unfollowArtist("u1", "doesnotexist")).resolves.toBeUndefined();
-	});
-});
-
-describe("isArtistFollowed", () => {
-	it("returns true when the (userId, deezerArtistId) row exists", async () => {
-		prismaMock.followedArtist.findUnique.mockResolvedValue({ id: "f1" } as any);
-		expect(await isArtistFollowed("u1", "27")).toBe(true);
-	});
-
-	it("returns false when no row exists", async () => {
-		prismaMock.followedArtist.findUnique.mockResolvedValue(null);
-		expect(await isArtistFollowed("u1", "27")).toBe(false);
-	});
-});
-
-describe("getFollowedArtistIds", () => {
-	it("returns the set of deezerArtistIds the user follows from the supplied list", async () => {
-		prismaMock.followedArtist.findMany.mockResolvedValue([
-			{ deezerArtistId: "27" },
-			{ deezerArtistId: "55" },
-		] as any);
-
-		const result = await getFollowedArtistIds("u1", ["27", "55", "99"]);
-		expect(result).toEqual(new Set(["27", "55"]));
-		expect(prismaMock.followedArtist.findMany).toHaveBeenCalledWith({
-			where: { userId: "u1", deezerArtistId: { in: ["27", "55", "99"] } },
-			select: { deezerArtistId: true },
-		});
-	});
-
-	it("short-circuits on empty input — no DB call", async () => {
-		const result = await getFollowedArtistIds("u1", []);
-		expect(result).toEqual(new Set());
-		expect(prismaMock.followedArtist.findMany).not.toHaveBeenCalled();
-	});
-});
-
-describe("listFollowedArtists", () => {
-	it("returns the user's followed artists ordered by followedAt desc", async () => {
-		const rows = [
-			{ id: "f1", deezerArtistId: "27" },
-			{ id: "f2", deezerArtistId: "55" },
-		];
-		prismaMock.followedArtist.findMany.mockResolvedValue(rows as any);
-
-		const result = await listFollowedArtists("u1");
-		expect(result).toBe(rows);
-		expect(prismaMock.followedArtist.findMany).toHaveBeenCalledWith({
-			where: { userId: "u1" },
-			orderBy: { followedAt: "desc" },
-			take: undefined,
-			skip: undefined,
-		});
-	});
-
-	it("forwards limit + offset to Prisma when supplied", async () => {
-		prismaMock.followedArtist.findMany.mockResolvedValue([] as any);
-
-		await listFollowedArtists("u1", { limit: 20, offset: 40 });
-
-		expect(prismaMock.followedArtist.findMany).toHaveBeenCalledWith({
-			where: { userId: "u1" },
-			orderBy: { followedAt: "desc" },
-			take: 20,
-			skip: 40,
-		});
 	});
 });

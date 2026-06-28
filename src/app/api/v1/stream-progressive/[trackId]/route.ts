@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireDeezerAndApp, fail, handleError } from "../../_lib/helpers";
 import { startProgressiveStream } from "@/lib/deemix/progressive-stream";
+import {
+	findHighestStored,
+	deleteStoredRows,
+} from "@/lib/repositories/storedTracks";
 
 // GET /api/v1/stream-progressive/[trackId]
 // Spotify-like progressive playback: streams live from Deezer, decrypts
@@ -33,10 +36,7 @@ export async function GET(
 		// exists on S3 first; stale rows (file deleted, lifecycle policy,
 		// migration) would otherwise cause a redirect-then-404 loop and burn
 		// the audio element's retry budget.
-		const stored = await prisma.storedTrack.findFirst({
-			where: { trackId },
-			orderBy: { bitrate: "desc" },
-		});
+		const stored = await findHighestStored(trackId);
 		if (stored) {
 			let missing = false;
 			let unreachable = false;
@@ -69,7 +69,7 @@ export async function GET(
 			if (missing) {
 				// File is genuinely gone — drop every stale row so we don't
 				// keep redirecting to it on the next call.
-				await prisma.storedTrack.deleteMany({ where: { trackId } });
+				await deleteStoredRows(trackId);
 			}
 		}
 

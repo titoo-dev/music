@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import {
+	findHighestStored,
+	deleteStoredRows,
+} from "@/lib/repositories/storedTracks";
 import { requireUser, fail, handleError } from "../../_lib/helpers";
 import { streamObject } from "@/lib/s3-stream";
 
@@ -17,10 +20,7 @@ export async function GET(
 		if (userResult.error) return userResult.error;
 
 		// Pick the highest-quality cached version
-		const stored = await prisma.storedTrack.findFirst({
-			where: { trackId },
-			orderBy: { bitrate: "desc" },
-		});
+		const stored = await findHighestStored(trackId);
 		// Cache miss — bounce back to /stream-progressive so the live Deezer
 		// fallback runs. Returning 404 here would kill the <audio> element with
 		// no recovery path, even though the track is fully streamable live.
@@ -69,7 +69,7 @@ export async function GET(
 			// row for this trackId so the redirect below falls through to a
 			// live Deezer stream in /stream-progressive.
 			try {
-				await prisma.storedTrack.deleteMany({ where: { trackId } });
+				await deleteStoredRows(trackId);
 			} catch {}
 			return new Response(null, {
 				status: 302,

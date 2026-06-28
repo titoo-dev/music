@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import {
+	getUserPreferences,
+	upsertUserPreferences,
+} from "@/lib/repositories/userPreferences";
 import { ok, fail, handleError, requireUser } from "../_lib/helpers";
 
 export interface UserPrefsData {
@@ -16,11 +19,9 @@ export async function GET(request: NextRequest) {
 		const { userId, error } = await requireUser(request);
 		if (error) return error;
 
-		const record = await prisma.userPreferences.findUnique({
-			where: { userId },
-		});
+		const prefs = await getUserPreferences(userId);
 
-		return ok<UserPrefsData>((record?.preferences as UserPrefsData) ?? {});
+		return ok<UserPrefsData>((prefs as UserPrefsData) ?? {});
 	} catch (e) {
 		return handleError(e);
 	}
@@ -43,16 +44,12 @@ export async function PATCH(request: NextRequest) {
 			if (!allowed.includes(key)) return fail("INVALID_KEY", `Unknown preference key: ${key}`);
 		}
 
-		const existing = await prisma.userPreferences.findUnique({ where: { userId } });
-		const merged = { ...((existing?.preferences as object) ?? {}), ...updates };
+		const existing = await getUserPreferences(userId);
+		const merged = { ...((existing as object) ?? {}), ...updates };
 
-		const record = await prisma.userPreferences.upsert({
-			where: { userId },
-			update: { preferences: merged },
-			create: { userId, preferences: merged },
-		});
+		const saved = await upsertUserPreferences(userId, merged);
 
-		return ok<UserPrefsData>(record.preferences as UserPrefsData);
+		return ok<UserPrefsData>(saved as UserPrefsData);
 	} catch (e) {
 		return handleError(e);
 	}

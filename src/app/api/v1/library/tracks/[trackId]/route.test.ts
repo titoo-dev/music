@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
-import { authMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
+import { authServerMock, convexApiMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
 import { makeNextRequest, makeParams, readJson } from "@/test/helpers/nextRequest";
 
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/auth-server", () => authServerMock);
+vi.mock("@convex/_generated/api", () => convexApiMock);
 vi.mock("@/lib/library", () => ({
 	unsaveTrack: vi.fn(),
 	isTrackSaved: vi.fn(),
@@ -17,7 +16,6 @@ const unsaveTrackMock = vi.mocked(unsaveTrack);
 const isTrackSavedMock = vi.mocked(isTrackSaved);
 
 beforeEach(() => {
-	resetPrismaMock();
 	clearSession();
 	unsaveTrackMock.mockReset();
 	isTrackSavedMock.mockReset();

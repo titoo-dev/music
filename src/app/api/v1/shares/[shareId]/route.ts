@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
+import { getSharePublicMeta, deleteShare } from "@/lib/repositories/shares";
 
 // GET /api/v1/shares/[shareId] — Get shared track metadata (public, no auth required)
 export async function GET(
@@ -10,27 +10,13 @@ export async function GET(
 	try {
 		const { shareId } = await params;
 
-		const shared = await prisma.sharedTrack.findUnique({
-			where: { shareId },
-			select: {
-				shareId: true,
-				title: true,
-				artist: true,
-				album: true,
-				coverUrl: true,
-				duration: true,
-				plays: true,
-				createdAt: true,
-				expiresAt: true,
-				user: { select: { name: true, image: true } },
-			},
-		});
+		const shared = await getSharePublicMeta(shareId);
 
 		if (!shared) {
 			return fail("NOT_FOUND", "Shared track not found.", 404);
 		}
 
-		if (shared.expiresAt && shared.expiresAt < new Date()) {
+		if (shared.expiresAt && shared.expiresAt < Date.now()) {
 			return fail("EXPIRED", "This share link has expired.", 410);
 		}
 
@@ -51,19 +37,10 @@ export async function DELETE(
 
 		const { shareId } = await params;
 
-		const shared = await prisma.sharedTrack.findUnique({
-			where: { shareId },
-		});
-
-		if (!shared) {
+		const deleted = await deleteShare(userResult.userId, shareId);
+		if (!deleted) {
 			return fail("NOT_FOUND", "Shared track not found.", 404);
 		}
-
-		if (shared.userId !== userResult.userId) {
-			return fail("FORBIDDEN", "You can only revoke your own share links.", 403);
-		}
-
-		await prisma.sharedTrack.delete({ where: { shareId } });
 
 		return ok({ deleted: true });
 	} catch (e: unknown) {

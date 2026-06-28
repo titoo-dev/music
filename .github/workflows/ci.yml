@@ -35,9 +35,6 @@ jobs:
         # Windows-generated lock omits. Same fix as 87cefca for Docker.
         run: npm install --no-audit --no-fund --no-progress
 
-      - name: Generate Prisma client
-        run: npm run db:generate
-
       - name: Run tests with coverage
         run: npm run test:coverage
 
@@ -119,11 +116,14 @@ jobs:
         # Windows-generated lock omits. Same fix as 87cefca for Docker.
         run: npm install --no-audit --no-fund --no-progress
 
-      - name: Generate Prisma client
-        run: npm run db:generate
-
       - name: Type check
         run: npx tsc --noEmit
+
+      # Blocking subset of ESLint: Rules-of-Hooks only. The full `lint` job
+      # below is advisory (legacy `any` debt), but a conditional hook crashes
+      # the whole page at runtime (React #310), so this one rule must gate PRs.
+      - name: React Rules-of-Hooks
+        run: npm run lint:hooks
 
   lint:
     name: ESLint (advisory)
@@ -149,9 +149,6 @@ jobs:
         # specific optional deps (e.g. @emnapi/runtime via sharp) that the
         # Windows-generated lock omits. Same fix as 87cefca for Docker.
         run: npm install --no-audit --no-fund --no-progress
-
-      - name: Generate Prisma client
-        run: npm run db:generate
 
       - name: Lint
         run: npm run lint

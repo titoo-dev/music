@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getUserSettings, upsertUserSettings } from "@/lib/repositories/userSettings";
 import { ok, handleError, requireApp, requireUser } from "../_lib/helpers";
 
 // GET /api/v1/settings — Get settings (per-user if authenticated, defaults otherwise)
@@ -13,14 +13,12 @@ export async function GET(request: NextRequest) {
 		// Try to get per-user settings if authenticated
 		const userResult = await requireUser(request);
 		if (!userResult.error) {
-			const userSettings = await prisma.userSettings.findUnique({
-				where: { userId: userResult.userId },
-			});
-			if (userSettings?.settings) {
+			const userSettings = await getUserSettings(userResult.userId);
+			if (userSettings) {
 				return ok({
 					settings: {
 						...globalSettings.settings,
-						...(userSettings.settings as Record<string, any>),
+						...userSettings,
 					},
 					defaultSettings: globalSettings.defaultSettings,
 					spotifySettings: globalSettings.spotifySettings,
@@ -45,11 +43,7 @@ export async function POST(request: NextRequest) {
 		// Save per-user settings if authenticated
 		const userResult = await requireUser(request);
 		if (!userResult.error) {
-			await prisma.userSettings.upsert({
-				where: { userId: userResult.userId },
-				update: { settings: settings ?? {} },
-				create: { userId: userResult.userId, settings: settings ?? {} },
-			});
+			await upsertUserSettings(userResult.userId, settings ?? {});
 		}
 
 		// Always save Spotify settings globally (shared plugin config)

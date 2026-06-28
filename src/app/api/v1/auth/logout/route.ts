@@ -1,18 +1,13 @@
 import { NextRequest } from "next/server";
 import { removeUserDz } from "@/lib/server-state";
-import { auth } from "@/lib/auth";
-import { ok, handleError } from "../../_lib/helpers";
+import { ok, handleError, requireUser } from "../../_lib/helpers";
 
 export async function POST(request: NextRequest) {
 	try {
-		// Clear Deezer session for the authenticated user
-		const session = await auth.api.getSession({
-			headers: request.headers,
-		});
-
-		if (session?.user?.id) {
-			removeUserDz(session.user.id);
-		}
+		// Clear the in-memory Deezer session for the authenticated user (the
+		// Better Auth session itself is cleared client-side via /api/auth).
+		const { userId } = await requireUser(request);
+		if (userId) removeUserDz(userId);
 
 		return ok({ message: "Deezer session cleared." });
 	} catch (e) {

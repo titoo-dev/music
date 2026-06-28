@@ -1,17 +1,12 @@
 export type { ConfigStore } from "./ConfigStore";
-export { PostgresConfigStore } from "./PostgresConfigStore";
+export { ConvexConfigStore } from "./ConvexConfigStore";
 
 import type { ConfigStore } from "./ConfigStore";
-import { PostgresConfigStore } from "./PostgresConfigStore";
+import { ConvexConfigStore } from "./ConvexConfigStore";
 
+// Convex est le seul backend (Postgres supprimé, Phase 6).
 export async function createConfigStore(): Promise<ConfigStore> {
-	const databaseUrl = process.env.DATABASE_URL;
-	if (!databaseUrl) {
-		throw new Error(
-			"DATABASE_URL is required. PostgreSQL is needed for config storage."
-		);
-	}
-	const store = new PostgresConfigStore(databaseUrl);
+	const store = new ConvexConfigStore();
 	await store.init();
 	return store;
 }

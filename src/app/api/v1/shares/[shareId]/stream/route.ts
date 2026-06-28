@@ -1,8 +1,11 @@
 import { NextRequest, after } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { fail } from "../../../_lib/helpers";
 import { streamObject } from "@/lib/s3-stream";
 import { resolveShareForPlayback } from "@/lib/library";
+import {
+	incrementSharePlays,
+	detachShareStoredTrack,
+} from "@/lib/repositories/shares";
 import { startProgressiveStream } from "@/lib/deemix/progressive-stream";
 import { getDeemixApp, getOrLoginUserDz } from "@/lib/server-state";
 
@@ -26,9 +29,7 @@ export async function GET(
 
 		// Increment play count after the response is sent
 		after(() => {
-			prisma.sharedTrack
-				.update({ where: { shareId }, data: { plays: { increment: 1 } } })
-				.catch(() => {});
+			incrementSharePlays(shareId).catch(() => {});
 		});
 
 		// Fast path: file already cached in S3
@@ -42,9 +43,7 @@ export async function GET(
 					console.error("[shares/stream] S3 error, falling back:", e);
 				}
 				// Detach the stale storedTrackId — next visit goes straight to progressive
-				await prisma.sharedTrack
-					.update({ where: { id: share.id }, data: { storedTrackId: null } })
-					.catch(() => {});
+				await detachShareStoredTrack(shareId);
 			}
 		}
 
