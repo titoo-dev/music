@@ -137,6 +137,22 @@ describe("SeekRing", () => {
 		expect(screen.queryByTestId("seek-loading")).toBeNull();
 		expect(screen.getByRole("slider")).not.toHaveAttribute("aria-busy");
 	});
+
+	it("keeps the loading comet tight on the border (was: blurred 6px glow bleeding ~7px outside the pill)", () => {
+		setup({ loading: true });
+		const comet = screen.getByTestId("seek-loading");
+		// Clipped to the pill's outer border edge, so nothing spills outside.
+		const clipId = comet.getAttribute("clip-path")?.match(/^url\(#(.+)\)$/)?.[1];
+		expect(clipId).toBeTruthy();
+		const clip = document.getElementById(clipId!)!;
+		expect(clip.tagName.toLowerCase()).toBe("clippath");
+		// Outer edge of the 200×60 pill, offset by PAD 10: starts at top-center (110, 10).
+		expect(clip.querySelector("path")!.getAttribute("d")).toMatch(/^M110 10 /);
+		// No stroke thicker than 3px.
+		for (const p of comet.querySelectorAll("path")) {
+			expect(Number(p.getAttribute("stroke-width"))).toBeLessThanOrEqual(3);
+		}
+	});
 });
 
 describe("tooltipTranslate", () => {

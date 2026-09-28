@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/utils/format-time";
@@ -72,6 +72,10 @@ export function SeekRing({ currentTime, duration, buffered, loading, onSeek, cla
 	// The stroke sits on the 1px CSS border's center line.
 	const ring: RoundedRect = { w: Math.max(0, box.w - 1), h: Math.max(0, box.h - 1), r: Math.max(0, box.r - 0.5) };
 	const d = box.w > 0 ? roundedRectPath(ring, PAD + 0.5) : "";
+	// The pill's outer border edge — the loading comet is clipped to it so its
+	// glow only falls inward instead of haloing outside the player.
+	const clipD = box.w > 0 ? roundedRectPath(box, PAD) : "";
+	const clipId = `seek-clip-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 	const active = hover !== null || dragging || focused;
 
 	const ratioFromEvent = useCallback(
@@ -129,12 +133,19 @@ export function SeekRing({ currentTime, duration, buffered, loading, onSeek, cla
 						transition={{ pathLength: dragging ? { duration: 0 } : { duration: 0.25, ease: "linear" }, default: { duration: 0.2 } }}
 					/>
 
-					{/* Loading comet — a glowing segment orbiting the rim. */}
+					<defs>
+						<clipPath id={clipId}>
+							<path d={clipD} />
+						</clipPath>
+					</defs>
+
+					{/* Loading comet — a short, tight segment orbiting the border. */}
 					<AnimatePresence>
 						{loading && (
 							<motion.g
 								key="comet"
 								data-testid="seek-loading"
+								clipPath={`url(#${clipId})`}
 								initial={{ opacity: 0 }}
 								animate={{ opacity: 1 }}
 								exit={{ opacity: 0 }}
@@ -145,12 +156,12 @@ export function SeekRing({ currentTime, duration, buffered, loading, onSeek, cla
 									d={d}
 									fill="none"
 									stroke="currentColor"
-									strokeWidth={6}
+									strokeWidth={3}
 									strokeLinecap="round"
-									style={{ filter: "blur(4px)" }}
-									initial={{ pathLength: 0.16, pathSpacing: 0.84, pathOffset: 0, opacity: 0.55 }}
+									style={{ filter: "blur(1.5px)" }}
+									initial={{ pathLength: 0.1, pathSpacing: 0.9, pathOffset: 0, opacity: 0.5 }}
 									animate={{ pathOffset: [0, 1] }}
-									transition={{ repeat: Infinity, duration: 1.6, ease: "linear" }}
+									transition={{ repeat: Infinity, duration: 1.4, ease: "linear" }}
 								/>
 								<motion.path
 									d={d}
@@ -158,9 +169,9 @@ export function SeekRing({ currentTime, duration, buffered, loading, onSeek, cla
 									stroke="currentColor"
 									strokeWidth={2}
 									strokeLinecap="round"
-									initial={{ pathLength: 0.16, pathSpacing: 0.84, pathOffset: 0 }}
+									initial={{ pathLength: 0.1, pathSpacing: 0.9, pathOffset: 0 }}
 									animate={{ pathOffset: [0, 1] }}
-									transition={{ repeat: Infinity, duration: 1.6, ease: "linear" }}
+									transition={{ repeat: Infinity, duration: 1.4, ease: "linear" }}
 								/>
 								{/* Trailing echo, half a lap behind. */}
 								<motion.path
@@ -169,9 +180,9 @@ export function SeekRing({ currentTime, duration, buffered, loading, onSeek, cla
 									stroke="currentColor"
 									strokeWidth={1.5}
 									strokeLinecap="round"
-									initial={{ pathLength: 0.06, pathSpacing: 0.94, pathOffset: 0.5, opacity: 0.5 }}
+									initial={{ pathLength: 0.04, pathSpacing: 0.96, pathOffset: 0.5, opacity: 0.4 }}
 									animate={{ pathOffset: [0.5, 1.5] }}
-									transition={{ repeat: Infinity, duration: 1.6, ease: "linear" }}
+									transition={{ repeat: Infinity, duration: 1.4, ease: "linear" }}
 								/>
 							</motion.g>
 						)}
