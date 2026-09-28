@@ -54,6 +54,9 @@ export default defineConfig({
 				"src/components/command/CommandPalette.tsx",
 				"src/components/audio/SeekRing.tsx",
 				"src/lib/perimeter.ts",
+				"src/components/audio/WaveSeek.tsx",
+				"src/lib/wave.ts",
+				"src/lib/spectrum.ts",
 			],
 			exclude: [
 				"**/*.test.{ts,tsx}",

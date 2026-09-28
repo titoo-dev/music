@@ -5,8 +5,6 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useLyricsStore } from "@/stores/useLyricsStore";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Button } from "@/components/ui/button";
-import { SeekBar } from "./SeekBar";
 import {
 	Carousel,
 	CarouselContent,
@@ -26,9 +24,20 @@ import {
 import { AudioVisualizer } from "./AudioVisualizer";
 import { LyricsDisplay } from "./LyricsDisplay";
 import { KaraokeToggle } from "./KaraokeToggle";
-import { motion, AnimatePresence, useDragControls } from "motion/react";
-import { PlayPauseIcon, Spinner } from "@/components/motion/icons";
-import { formatTime } from "@/utils/format-time";
+import { WaveSeek } from "./WaveSeek";
+import { ImmersiveBackdrop } from "./ImmersiveBackdrop";
+import { motion, AnimatePresence, useDragControls, useTransform, type MotionValue } from "motion/react";
+import {
+	PlayPauseIcon,
+	Spinner,
+	ShuffleGlyph,
+	RepeatGlyph,
+	SkipGlyph,
+	VolumeGlyph,
+	SlideSwap,
+} from "@/components/motion/icons";
+import { useAudioLevel } from "@/hooks/useAudioLevel";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { PlayerTrack } from "@/stores/usePlayerStore";
 
@@ -36,6 +45,11 @@ function seek(time: number) {
 	usePlayerStore.getState().seek(time);
 }
 
+const SPRING = { type: "spring", stiffness: 380, damping: 30 } as const;
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+
+const iconBtn =
+	"inline-flex items-center justify-center rounded-full text-foreground/60 transition-colors hover:bg-foreground/10 hover:text-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30";
 
 /* ─── Cover Carousel ─── */
 /* Only re-renders when queue changes — immune to currentTime updates */
@@ -100,34 +114,66 @@ const CoverCarousel = memo(function CoverCarousel({
 	useEffect(() => () => cleanupRef.current?.(), []);
 
 	return (
-		<div className="flex-1 flex items-center justify-center min-h-0 px-6 py-6">
-			<Carousel
-				opts={carouselOpts}
-				setApi={onCarouselApi}
-				className="w-full max-w-[340px]"
-			>
-				<CarouselContent className="-ml-0">
-					{queue.map((track) => (
-						<CarouselItem key={track.trackId} className="pl-0">
-							<CoverImage
-								src={track.cover}
-								className="aspect-square w-full rounded-2xl shadow-float"
-							/>
-						</CarouselItem>
-					))}
-				</CarouselContent>
-			</Carousel>
-		</div>
+		<Carousel opts={carouselOpts} setApi={onCarouselApi} className="w-full">
+			<CarouselContent className="-ml-0">
+				{queue.map((track) => (
+					<CarouselItem key={track.trackId} className="pl-0">
+						<CoverImage
+							src={track.cover}
+							className="aspect-square w-full rounded-3xl ring-1 ring-foreground/10"
+						/>
+					</CarouselItem>
+				))}
+			</CarouselContent>
+		</Carousel>
 	);
 });
+
+/* ─── Cover Stage ─── */
+/* The artwork "breathes": it settles back when paused, pulses gently with the
+   bass while playing, and casts a coloured glow of itself underneath. */
+function CoverStage({ queue, level }: { queue: PlayerTrack[]; level: MotionValue<number> }) {
+	const isPlaying = usePlayerStore((s) => s.isPlaying);
+	const cover = usePlayerStore((s) => s.currentTrack?.cover);
+	const pulse = useTransform(level, [0, 1], [1, 1.03]);
+	const glowOpacity = useTransform(level, [0, 1], [0.5, 0.95]);
+	const glowScale = useTransform(level, [0, 1], [0.92, 1.06]);
+
+	return (
+		<div className="flex min-h-0 flex-1 items-center justify-center px-8 py-4 md:px-0">
+			<motion.div
+				data-testid="cover-stage"
+				data-playing={isPlaying || undefined}
+				className="relative w-full max-w-[min(360px,42vh)] md:max-w-[min(500px,62vh)]"
+				initial={false}
+				animate={{ scale: isPlaying ? 1 : 0.86, opacity: isPlaying ? 1 : 0.92 }}
+				transition={{ type: "spring", stiffness: 180, damping: 22 }}
+			>
+				{cover && (
+					<motion.div
+						aria-hidden
+						className="absolute inset-x-[6%] top-[10%] -bottom-[4%] -z-10 rounded-[32px] bg-cover bg-center blur-2xl saturate-150"
+						style={{ backgroundImage: `url("${cover}")`, opacity: glowOpacity, scale: glowScale }}
+					/>
+				)}
+				<motion.div
+					style={{ scale: pulse }}
+					className="rounded-3xl shadow-[0_30px_80px_-20px_rgb(0_0_0/0.45)]"
+				>
+					<CoverCarousel queue={queue} />
+				</motion.div>
+			</motion.div>
+		</div>
+	);
+}
 
 /* ─── Track Info ─── */
 function TrackInfo() {
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const openSheet = useTrackActionStore((s) => s.openSheet);
+	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
 
-	const handleContextMenu = useCallback((e: React.MouseEvent) => {
-		e.preventDefault();
+	const openActions = useCallback(() => {
 		if (!currentTrack) return;
 		openSheet({
 			id: currentTrack.trackId,
@@ -138,25 +184,49 @@ function TrackInfo() {
 		});
 	}, [currentTrack, openSheet]);
 
-	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
+	const handleContextMenu = useCallback((e: React.MouseEvent) => {
+		e.preventDefault();
+		openActions();
+	}, [openActions]);
 
 	if (!currentTrack) return null;
 	return (
-		<div className="shrink-0 px-8 pb-3" onContextMenu={handleContextMenu}>
-			<p className="truncate text-xl font-semibold tracking-tight">{currentTrack.title}</p>
-			<p className="mt-0.5 truncate text-sm text-muted-foreground">
-				{currentTrack.artistId ? (
-					<Link
-						href={`/artist?id=${currentTrack.artistId}`}
-						onClick={() => setFullscreenOpen(false)}
-						className="hover:underline hover:text-foreground transition-colors"
+		<div className="flex shrink-0 items-end gap-3 px-8 pb-5 md:px-0" onContextMenu={handleContextMenu}>
+			<div className="relative min-w-0 flex-1">
+				<AnimatePresence mode="popLayout" initial={false}>
+					<motion.div
+						key={currentTrack.trackId}
+						initial={{ opacity: 0, y: 14, filter: "blur(8px)" }}
+						animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+						exit={{ opacity: 0, y: -14, filter: "blur(8px)" }}
+						transition={{ duration: 0.45, ease: EASE_OUT }}
 					>
-						{currentTrack.artist}
-					</Link>
-				) : (
-					currentTrack.artist
-				)}
-			</p>
+						<p className="truncate text-2xl font-semibold tracking-tight text-balance md:text-4xl">
+							{currentTrack.title}
+						</p>
+						<p className="mt-1 truncate text-base text-foreground/60 md:text-lg">
+							{currentTrack.artistId ? (
+								<Link
+									href={`/artist?id=${currentTrack.artistId}`}
+									onClick={() => setFullscreenOpen(false)}
+									className="transition-colors hover:text-foreground hover:underline"
+								>
+									{currentTrack.artist}
+								</Link>
+							) : (
+								currentTrack.artist
+							)}
+						</p>
+					</motion.div>
+				</AnimatePresence>
+			</div>
+			<button type="button" aria-label="Track actions" onClick={openActions} className={cn(iconBtn, "size-10 shrink-0")}>
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+					<circle cx="5" cy="12" r="1.8" />
+					<circle cx="12" cy="12" r="1.8" />
+					<circle cx="19" cy="12" r="1.8" />
+				</svg>
+			</button>
 		</div>
 	);
 }
@@ -166,29 +236,28 @@ function SeekSection() {
 	const currentTime = usePlayerStore((s) => s.currentTime);
 	const duration = usePlayerStore((s) => s.duration);
 	const buffered = usePlayerStore((s) => s.buffered);
+	const playing = usePlayerStore((s) => s.isPlaying && !s.isBuffering);
 	return (
-		<div className="shrink-0 px-8">
-			<SeekBar
-				currentTime={currentTime}
-				duration={duration}
-				buffered={buffered}
-				onSeek={seek}
-				variant="large"
-			/>
-			<div className="flex justify-between -mt-1">
-				<span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-					{formatTime(currentTime)}
-				</span>
-				<span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-					{formatTime(duration)}
-				</span>
-			</div>
+		<div className="shrink-0 px-8 md:px-0">
+			<WaveSeek currentTime={currentTime} duration={duration} buffered={buffered} playing={playing} onSeek={seek} />
 		</div>
 	);
 }
 
 /* ─── Controls ─── */
-function Controls() {
+function ToggleDot({ on }: { on: boolean }) {
+	return (
+		<motion.span
+			aria-hidden
+			className="absolute bottom-1 size-1 rounded-full bg-highlight"
+			initial={false}
+			animate={{ scale: on ? 1 : 0, opacity: on ? 1 : 0 }}
+			transition={SPRING}
+		/>
+	);
+}
+
+function Controls({ level }: { level: MotionValue<number> }) {
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
 	const isBuffering = usePlayerStore((s) => s.isBuffering);
 	const shuffle = usePlayerStore((s) => s.shuffle);
@@ -201,109 +270,110 @@ function Controls() {
 	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 	const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
 
+	// The halo behind the play button swells with the music.
+	const haloScale = useTransform(level, [0, 1], [1, 1.45]);
+	const haloOpacity = useTransform(level, [0, 0.15, 1], [0, 0.25, 0.55]);
+
 	return (
-		<div className="flex shrink-0 items-center justify-between px-8 pt-4 pb-10">
-			<Button
-				variant="ghost"
-				size="icon"
+		<div className="flex shrink-0 items-center justify-between px-6 pt-4 pb-5 md:px-0">
+			<motion.button
+				type="button"
 				aria-label="Shuffle"
 				aria-pressed={shuffle}
-				className={`h-12 w-12 rounded-full ${
-					!hasQueue ? "opacity-30 pointer-events-none" : ""
-				} ${shuffle ? "text-highlight hover:text-highlight" : "text-muted-foreground"}`}
+				disabled={!hasQueue}
+				whileTap={{ scale: 0.85 }}
 				onClick={toggleShuffle}
+				className={cn(iconBtn, "relative size-12 disabled:pointer-events-none disabled:opacity-30", shuffle && "text-highlight hover:text-highlight")}
 			>
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-					<polyline points="16 3 21 3 21 8" />
-					<line x1="4" y1="20" x2="21" y2="3" />
-					<polyline points="21 16 21 21 16 21" />
-					<line x1="15" y1="15" x2="21" y2="21" />
-					<line x1="4" y1="4" x2="9" y2="9" />
-				</svg>
-			</Button>
+				<ShuffleGlyph active={shuffle} />
+				<ToggleDot on={shuffle} />
+			</motion.button>
 
-			<Button variant="ghost" size="icon" aria-label="Previous track" className="h-14 w-14 rounded-full text-foreground hover:text-foreground" onClick={prevTrack}>
-				<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" strokeLinejoin="round">
-					<rect x="3" y="5" width="2.5" height="14" rx="1.25" />
-					<path d="M20 5.5v13a1 1 0 0 1-1.53.85L8.5 13a1.2 1.2 0 0 1 0-2l9.97-6.35A1 1 0 0 1 20 5.5Z" />
-				</svg>
-			</Button>
+			<motion.button
+				type="button"
+				aria-label="Previous track"
+				whileTap={{ scale: 0.85, x: -4 }}
+				onClick={prevTrack}
+				className={cn(iconBtn, "size-14 text-foreground")}
+			>
+				<SkipGlyph dir="prev" className="size-7" />
+			</motion.button>
 
-			<Button variant="default" size="icon" aria-label={isPlaying ? "Pause" : "Play"} className="h-[72px] w-[72px] rounded-full shadow-float hover:bg-primary active:scale-95" onClick={toggle}>
-				{isPlaying && isBuffering ? (
-					<Spinner size={28} />
-				) : (
-					<PlayPauseIcon playing={isPlaying} className="size-8" />
-				)}
-			</Button>
+			<div className="relative">
+				<motion.span
+					aria-hidden
+					data-testid="play-halo"
+					className="absolute inset-0 rounded-full bg-foreground"
+					style={{ scale: haloScale, opacity: haloOpacity }}
+				/>
+				<motion.button
+					type="button"
+					aria-label={isPlaying ? "Pause" : "Play"}
+					whileHover={{ scale: 1.04 }}
+					whileTap={{ scale: 0.92 }}
+					transition={SPRING}
+					onClick={toggle}
+					className="relative inline-flex size-[76px] items-center justify-center rounded-full bg-foreground text-background shadow-[0_12px_40px_-8px_rgb(0_0_0/0.5)] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+				>
+					{isPlaying && isBuffering ? (
+						<Spinner size={28} />
+					) : (
+						<PlayPauseIcon playing={isPlaying} className="size-8" />
+					)}
+				</motion.button>
+			</div>
 
-			<Button variant="ghost" size="icon" aria-label="Next track" className="h-14 w-14 rounded-full text-foreground hover:text-foreground" onClick={next}>
-				<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" strokeLinejoin="round">
-					<rect x="18.5" y="5" width="2.5" height="14" rx="1.25" />
-					<path d="M4 5.5v13a1 1 0 0 0 1.53.85L15.5 13a1.2 1.2 0 0 0 0-2L5.53 4.65A1 1 0 0 0 4 5.5Z" />
-				</svg>
-			</Button>
+			<motion.button
+				type="button"
+				aria-label="Next track"
+				whileTap={{ scale: 0.85, x: 4 }}
+				onClick={next}
+				className={cn(iconBtn, "size-14 text-foreground")}
+			>
+				<SkipGlyph dir="next" className="size-7" />
+			</motion.button>
 
-			<Button
-				variant="ghost"
-				size="icon"
+			<motion.button
+				type="button"
 				aria-label={`Repeat ${repeat}`}
 				aria-pressed={repeat !== "off"}
-				className={`h-12 w-12 relative rounded-full ${
-					!hasQueue ? "opacity-30 pointer-events-none" : ""
-				} ${repeat !== "off" ? "text-highlight hover:text-highlight" : "text-muted-foreground"}`}
+				disabled={!hasQueue}
+				whileTap={{ scale: 0.85 }}
 				onClick={toggleRepeat}
+				className={cn(iconBtn, "relative size-12 disabled:pointer-events-none disabled:opacity-30", repeat !== "off" && "text-highlight hover:text-highlight")}
 			>
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-					<polyline points="17 1 21 5 17 9" />
-					<path d="M3 11V9a4 4 0 0 1 4-4h14" />
-					<polyline points="7 23 3 19 7 15" />
-					<path d="M21 13v2a4 4 0 0 1-4 4H3" />
-				</svg>
-				{repeat === "one" && (
-					<span className="absolute text-[9px] font-semibold">1</span>
-				)}
-			</Button>
+				<RepeatGlyph mode={repeat} />
+				<ToggleDot on={repeat !== "off"} />
+			</motion.button>
 		</div>
 	);
 }
 
-/* ─── Volume Section (with mute toggle) ─── */
+/* ─── Volume + audio settings ─── */
 function VolumeSection() {
 	const volume = usePlayerStore((s) => s.volume);
 	const setVolume = usePlayerStore((s) => s.setVolume);
 	const toggleMute = usePlayerStore((s) => s.toggleMute);
 	return (
-		<div className="shrink-0 flex items-center gap-3 px-8 pb-3">
+		<div className="flex min-w-0 flex-1 items-center gap-2">
 			<button
 				type="button"
 				onClick={toggleMute}
 				aria-label={volume === 0 ? "Unmute" : "Mute"}
 				aria-pressed={volume === 0}
-				className="shrink-0 rounded-md p-1 -ml-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
+				className={cn(iconBtn, "size-9 shrink-0")}
 			>
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-					<path d="M11 5L6 9H2v6h4l5 4V5z" />
-					{volume === 0 ? (
-						<>
-							<line x1="23" y1="9" x2="17" y2="15" />
-							<line x1="17" y1="9" x2="23" y2="15" />
-						</>
-					) : (
-						<>
-							{volume > 0 && <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
-							{volume > 50 && <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />}
-						</>
-					)}
-				</svg>
+				<VolumeGlyph volume={volume} />
 			</button>
 			<div className="group/vol relative flex h-6 flex-1 items-center">
-				<div className="relative h-1 w-full overflow-hidden rounded-full bg-border transition-[height] duration-150 group-hover/vol:h-1.5">
-					<div
-						className="absolute inset-y-0 left-0 rounded-full bg-foreground"
-						style={{ width: `${volume}%` }}
-					/>
+				<div className="relative h-1 w-full overflow-hidden rounded-full bg-foreground/15 transition-[height] duration-150 group-hover/vol:h-1.5">
+					<div className="absolute inset-y-0 left-0 rounded-full bg-foreground/80" style={{ width: `${volume}%` }} />
 				</div>
+				<span
+					aria-hidden
+					className="pointer-events-none absolute size-3 -translate-x-1/2 scale-0 rounded-full bg-foreground shadow-sm transition-transform duration-150 group-hover/vol:scale-100"
+					style={{ left: `${volume}%` }}
+				/>
 				<input
 					type="range"
 					min={0}
@@ -311,17 +381,13 @@ function VolumeSection() {
 					value={volume}
 					aria-label="Volume"
 					onChange={(e) => setVolume(parseInt(e.target.value))}
-					className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+					className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
 				/>
 			</div>
-			<span className="w-7 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
-				{volume}
-			</span>
 		</div>
 	);
 }
 
-/* ─── Extra Controls (crossfade + loudness norm) ─── */
 function ExtraControls() {
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
 	const setCrossfadeDuration = usePlayerStore((s) => s.setCrossfadeDuration);
@@ -329,47 +395,39 @@ function ExtraControls() {
 	const toggleNormalization = usePlayerStore((s) => s.toggleNormalization);
 
 	return (
-		<div className="shrink-0 flex items-center justify-end px-8 pb-2">
-			<DropdownMenu>
-				<DropdownMenuTrigger
-					aria-label="Audio settings"
-					className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
-				>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
-						<line x1="4" y1="21" x2="4" y2="14" />
-						<line x1="4" y1="10" x2="4" y2="3" />
-						<line x1="12" y1="21" x2="12" y2="12" />
-						<line x1="12" y1="8" x2="12" y2="3" />
-						<line x1="20" y1="21" x2="20" y2="16" />
-						<line x1="20" y1="12" x2="20" y2="3" />
-						<line x1="1" y1="14" x2="7" y2="14" />
-						<line x1="9" y1="8" x2="15" y2="8" />
-						<line x1="17" y1="16" x2="23" y2="16" />
-					</svg>
-				</DropdownMenuTrigger>
-				<DropdownMenuContent side="top" align="end">
-					<DropdownMenuGroup>
-						<DropdownMenuLabel>Crossfade</DropdownMenuLabel>
-						{([0, 1, 2, 3, 5, 8] as const).map((s) => (
-							<DropdownMenuItem
-								key={s}
-								onClick={() => setCrossfadeDuration(s)}
-								className={crossfadeDuration === s ? "font-medium text-foreground" : "text-muted-foreground"}
-							>
-								{s === 0 ? "Off" : `${s}s`}
-							</DropdownMenuItem>
-						))}
-					</DropdownMenuGroup>
-					<DropdownMenuSeparator />
-					<DropdownMenuCheckboxItem
-						checked={normalizationEnabled}
-						onClick={toggleNormalization}
-					>
-						Loudness norm
-					</DropdownMenuCheckboxItem>
-				</DropdownMenuContent>
-			</DropdownMenu>
-		</div>
+		<DropdownMenu>
+			<DropdownMenuTrigger aria-label="Audio settings" className={cn(iconBtn, "size-9 shrink-0")}>
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden>
+					<line x1="4" y1="21" x2="4" y2="14" />
+					<line x1="4" y1="10" x2="4" y2="3" />
+					<line x1="12" y1="21" x2="12" y2="12" />
+					<line x1="12" y1="8" x2="12" y2="3" />
+					<line x1="20" y1="21" x2="20" y2="16" />
+					<line x1="20" y1="12" x2="20" y2="3" />
+					<line x1="1" y1="14" x2="7" y2="14" />
+					<line x1="9" y1="8" x2="15" y2="8" />
+					<line x1="17" y1="16" x2="23" y2="16" />
+				</svg>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent side="top" align="end">
+				<DropdownMenuGroup>
+					<DropdownMenuLabel>Crossfade</DropdownMenuLabel>
+					{([0, 1, 2, 3, 5, 8] as const).map((s) => (
+						<DropdownMenuItem
+							key={s}
+							onClick={() => setCrossfadeDuration(s)}
+							className={crossfadeDuration === s ? "font-medium text-foreground" : "text-muted-foreground"}
+						>
+							{s === 0 ? "Off" : `${s}s`}
+						</DropdownMenuItem>
+					))}
+				</DropdownMenuGroup>
+				<DropdownMenuSeparator />
+				<DropdownMenuCheckboxItem checked={normalizationEnabled} onClick={toggleNormalization}>
+					Loudness norm
+				</DropdownMenuCheckboxItem>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }
 
@@ -381,11 +439,13 @@ export function FullscreenPlayer() {
 	const setQueuePanelOpen = usePlayerStore((s) => s.setQueuePanelOpen);
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const queue = usePlayerStore((s) => s.queue);
+	const audible = usePlayerStore((s) => s.isPlaying && !s.isBuffering);
 	const dragControls = useDragControls();
 	const lyricsVisible = useLyricsStore((s) => s.visible);
 	const toggleLyrics = useLyricsStore((s) => s.toggleVisible);
 	const setLyricsVisible = useLyricsStore((s) => s.setVisible);
 	const fetchLyrics = useLyricsStore((s) => s.fetchLyrics);
+	const level = useAudioLevel(fullscreenOpen && audible);
 
 	const hasQueue = queue.length > 1;
 
@@ -412,7 +472,7 @@ export function FullscreenPlayer() {
 	}, [lyricsVisible, currentTrack, fetchLyrics]);
 
 	const handleDragEnd = (
-		_: any,
+		_: unknown,
 		info: { offset: { y: number }; velocity: { y: number } }
 	) => {
 		if (info.offset.y > 100 || info.velocity.y > 500) {
@@ -437,75 +497,53 @@ export function FullscreenPlayer() {
 					onDragEnd={handleDragEnd}
 					role="dialog"
 					aria-label="Now playing"
-					className="fixed inset-0 z-[70] isolate flex flex-col overflow-hidden bg-background md:[&>*:not([aria-hidden])]:mx-auto md:[&>*:not([aria-hidden])]:w-full md:[&>*:not([aria-hidden])]:max-w-xl"
+					className="fixed inset-0 z-[70] isolate flex flex-col overflow-hidden text-foreground"
 				>
-					{/* Ambient backdrop — blurred copy of the cover, crossfades per track */}
-					<div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-						<AnimatePresence initial={false}>
-							{currentTrack.cover && (
-								<motion.div
-									key={currentTrack.cover}
-									initial={{ opacity: 0 }}
-									animate={{ opacity: 0.45 }}
-									exit={{ opacity: 0 }}
-									transition={{ duration: 0.8, ease: "easeOut" }}
-									className="absolute -inset-[20%] scale-110 bg-cover bg-center blur-3xl saturate-150"
-									style={{ backgroundImage: `url("${currentTrack.cover}")` }}
-								/>
-							)}
-						</AnimatePresence>
-						<div className="absolute inset-0 bg-gradient-to-b from-background/30 via-background/70 to-background" />
-					</div>
+					<ImmersiveBackdrop cover={currentTrack.cover} level={level} />
 
 					{/* Drag handle */}
 					<div
-						className="flex shrink-0 items-center justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing"
+						className="flex shrink-0 cursor-grab items-center justify-center pt-3 pb-1 active:cursor-grabbing"
 						onPointerDown={(e) => dragControls.start(e)}
 						role="button"
 						aria-label="Drag down to close"
 					>
 						<motion.div
-							className="h-1 w-10 rounded-full bg-foreground/20"
+							className="h-1 w-10 rounded-full bg-foreground/25"
 							animate={{ scaleX: [1, 1.15, 1] }}
-							transition={{
-								duration: 1.6,
-								repeat: Infinity,
-								repeatDelay: 1.4,
-								ease: "easeInOut",
-							}}
+							transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 1.4, ease: "easeInOut" }}
 						/>
 					</div>
 
 					{/* Header */}
-					<div className="flex shrink-0 items-center px-3 py-1">
-						<Button
-							variant="ghost"
-							size="icon-touch"
+					<div className="mx-auto flex w-full max-w-6xl shrink-0 items-center px-3 py-1 md:px-8">
+						<button
+							type="button"
 							aria-label="Close fullscreen player"
 							onClick={() => setFullscreenOpen(false)}
+							className={cn(iconBtn, "size-11")}
 						>
-							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
 								<polyline points="6 9 12 15 18 9" />
 							</svg>
-						</Button>
-						<span className="flex-1 text-center text-xs font-medium text-muted-foreground">
-							{lyricsVisible ? "Lyrics" : "Now Playing"}
+						</button>
+						<span className="flex flex-1 justify-center text-[11px] font-medium uppercase tracking-[0.18em] text-foreground/55">
+							<SlideSwap id={lyricsVisible ? "lyrics" : "playing"}>{lyricsVisible ? "Lyrics" : "Now Playing"}</SlideSwap>
 						</span>
 						<div className="flex items-center gap-0.5">
 							<KaraokeToggle className="h-11 w-11 px-0" iconSize={18} />
 							{hasQueue && (
-								<Button
-									variant="ghost"
-									size="icon-touch"
+								<button
+									type="button"
 									aria-label="Open queue"
-									className="text-muted-foreground"
+									className={cn(iconBtn, "size-11")}
 									onClick={() => {
 										setFullscreenOpen(false);
 										if (lyricsVisible) setLyricsVisible(false);
 										setQueuePanelOpen(true);
 									}}
 								>
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden>
 										<line x1="8" y1="6" x2="21" y2="6" />
 										<line x1="8" y1="12" x2="21" y2="12" />
 										<line x1="8" y1="18" x2="21" y2="18" />
@@ -513,43 +551,54 @@ export function FullscreenPlayer() {
 										<circle cx="3.5" cy="12" r="1.2" fill="currentColor" />
 										<circle cx="3.5" cy="18" r="1.2" fill="currentColor" />
 									</svg>
-								</Button>
+								</button>
 							)}
-							<Button
-								variant="ghost"
-								size="icon-touch"
+							<button
+								type="button"
 								aria-label="Toggle lyrics"
 								aria-pressed={lyricsVisible}
-								className={lyricsVisible ? "bg-accent text-foreground" : "text-muted-foreground"}
+								className={cn(iconBtn, "size-11", lyricsVisible && "bg-foreground/10 text-foreground")}
 								onClick={toggleLyrics}
 							>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
 									<path d="M9 18V5l12-2v13" />
 									<circle cx="6" cy="18" r="3" />
 									<circle cx="18" cy="16" r="3" />
 								</svg>
-							</Button>
+							</button>
 						</div>
 					</div>
 
-					{lyricsVisible ? (
-						<>
+					{/* Body — stacked on mobile, artwork | controls side by side on desktop */}
+					<div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] md:gap-12 md:px-12 md:pb-10 lg:gap-20 lg:px-16">
+						<div className="flex min-h-0 flex-1 flex-col md:h-full">
+							<AnimatePresence mode="wait" initial={false}>
+								<motion.div
+									key={lyricsVisible ? "lyrics" : "cover"}
+									initial={{ opacity: 0, scale: 0.97 }}
+									animate={{ opacity: 1, scale: 1 }}
+									exit={{ opacity: 0, scale: 0.97 }}
+									transition={{ duration: 0.25, ease: EASE_OUT }}
+									className="flex min-h-0 flex-1 flex-col"
+								>
+									{lyricsVisible ? <LyricsDisplay compact /> : <CoverStage queue={queue} level={level} />}
+								</motion.div>
+							</AnimatePresence>
+						</div>
+
+						<div className="flex shrink-0 flex-col md:self-center">
 							<TrackInfo />
-							<LyricsDisplay compact />
-						</>
-					) : (
-						<>
-							<CoverCarousel queue={queue} />
-							<TrackInfo />
-							<div className="shrink-0 h-8 px-8 overflow-hidden">
-								<AudioVisualizer barCount={32} className="w-full h-full text-foreground/60" />
+							<div className="mb-3 h-9 shrink-0 px-8 md:px-0">
+								<AudioVisualizer barCount={48} className="h-full text-foreground/70" />
 							</div>
-						</>
-					)}
-					<SeekSection />
-					<VolumeSection />
-					<ExtraControls />
-					<Controls />
+							<SeekSection />
+							<Controls level={level} />
+							<div className="flex shrink-0 items-center gap-2 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:px-0 md:pb-0">
+								<VolumeSection />
+								<ExtraControls />
+							</div>
+						</div>
+					</div>
 				</motion.div>
 			)}
 		</AnimatePresence>
