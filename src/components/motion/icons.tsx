@@ -326,3 +326,79 @@ export function SlideSwap({ id, children, className }: { id: string | number; ch
 		</span>
 	);
 }
+
+/** Shuffle arrows — the crossing strands redraw themselves when toggled. */
+export function ShuffleGlyph({ active, className }: { active: boolean; className?: string }) {
+	return (
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden className={cn("size-5", className)}>
+			<g key={String(active)}>
+				<motion.path d="M3 7h3.5c2.4 0 3.9 1.3 5.1 3.3l.8 1.4c1.2 2 2.7 3.3 5.1 3.3H21" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.45, ease: "easeOut" }} />
+				<motion.path d="M3 17h3.5c1.6 0 2.8-.6 3.8-1.6M13.7 8.6c1-1 2.2-1.6 3.8-1.6H21" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }} />
+			</g>
+			<path d="M18 4l3 3-3 3M18 14l3 3-3 3" />
+		</svg>
+	);
+}
+
+/** Repeat loop — spins half a turn on every mode change; "1" pops in for repeat-one. */
+export function RepeatGlyph({ mode, className }: { mode: "off" | "all" | "one"; className?: string }) {
+	const turns = { off: 0, all: 180, one: 360 }[mode];
+	return (
+		<span className={cn("relative inline-flex size-5", className)}>
+			<motion.svg
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth={1.75}
+				strokeLinecap="round"
+				strokeLinejoin="round"
+				aria-hidden
+				className="size-full"
+				initial={false}
+				animate={{ rotate: turns }}
+				transition={SPRING}
+			>
+				<path d="M17 2l3 3-3 3" />
+				<path d="M4 11V9a4 4 0 0 1 4-4h12" />
+				<path d="M7 22l-3-3 3-3" />
+				<path d="M20 13v2a4 4 0 0 1-4 4H4" />
+			</motion.svg>
+			<AnimatePresence>
+				{mode === "one" && (
+					<motion.span
+						initial={{ scale: 0 }}
+						animate={{ scale: 1 }}
+						exit={{ scale: 0 }}
+						transition={SPRING}
+						className="absolute inset-0 flex items-center justify-center text-[8px] font-bold leading-none"
+					>
+						1
+					</motion.span>
+				)}
+			</AnimatePresence>
+		</span>
+	);
+}
+
+/** Skip glyph — triangle + bar; `dir` mirrors it for previous. */
+export function SkipGlyph({ dir, className }: { dir: "prev" | "next"; className?: string }) {
+	return (
+		<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={cn("size-6", dir === "prev" && "-scale-x-100", className)}>
+			<path d="M3.5 6.2v11.6a1 1 0 0 0 1.52.85l8.9-5.8a1 1 0 0 0 0-1.7l-8.9-5.8A1 1 0 0 0 3.5 6.2Z" />
+			<rect x="16.5" y="5" width="2.6" height="14" rx="1.3" />
+		</svg>
+	);
+}
+
+/** Speaker whose sound waves draw in and out with the volume level. */
+export function VolumeGlyph({ volume, className }: { volume: number; className?: string }) {
+	const muted = volume === 0;
+	return (
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden className={cn("size-[18px]", className)}>
+			<path d="M11 5L6 9H2v6h4l5 4V5z" fill="currentColor" fillOpacity={0.15} />
+			<motion.path d="M15.5 8.5a5 5 0 0 1 0 7" initial={false} animate={{ pathLength: muted ? 0 : 1, opacity: muted ? 0 : 1 }} transition={SPRING} />
+			<motion.path d="M18.5 5.5a9.5 9.5 0 0 1 0 13" initial={false} animate={{ pathLength: volume > 50 ? 1 : 0, opacity: volume > 50 ? 1 : 0 }} transition={SPRING} />
+			<motion.path d="M16.5 9.5l5 5M21.5 9.5l-5 5" initial={false} animate={{ pathLength: muted ? 1 : 0, opacity: muted ? 1 : 0 }} transition={SPRING} />
+		</svg>
+	);
+}

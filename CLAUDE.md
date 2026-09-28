@@ -90,6 +90,8 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | ⌘K palette | `src/components/command/CommandPalette.tsx`, `src/stores/useCommandStore.ts` | `CommandPalette.test.tsx`, `useCommandStore.test.ts` |
 | Theme | `src/lib/theme.ts` | `theme.test.ts` |
 | Keyboard shortcuts | `src/hooks/useKeyboardShortcuts.ts` | `useKeyboardShortcuts.test.ts` |
+| Player seek ring | `src/components/audio/SeekRing.tsx`, `src/lib/perimeter.ts` | `SeekRing.test.tsx`, `perimeter.test.ts` |
+| Fullscreen wave seek | `src/components/audio/WaveSeek.tsx`, `src/lib/wave.ts`, `src/lib/spectrum.ts` | `WaveSeek.test.tsx`, `wave.test.ts`, `spectrum.test.ts` (+ `FullscreenPlayer.test.tsx`) |
 
 ### Fix-bug-once strategy (read this before fixing anything)
 

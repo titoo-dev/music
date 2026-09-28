@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { useReducedMotion } from "motion/react";
 import { getAnalyser } from "@/utils/audio-context";
+import { mirroredBars } from "@/lib/spectrum";
 
 interface Props {
 	/** Number of frequency bars to draw. */
@@ -9,88 +11,74 @@ interface Props {
 	className?: string;
 }
 
-function usePrefersReducedMotion(): boolean {
-	const [reduced, setReduced] = useState(false);
-	useEffect(() => {
-		if (typeof window === "undefined" || !window.matchMedia) return;
-		const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-		setReduced(mq.matches);
-		const listener = (e: MediaQueryListEvent) => setReduced(e.matches);
-		mq.addEventListener("change", listener);
-		return () => mq.removeEventListener("change", listener);
-	}, []);
-	return reduced;
-}
-
 /**
- * Draws a real-time frequency bar graph using the shared Web Audio AnalyserNode.
- * Shows nothing when the AnalyserNode isn't connected yet (before first play).
+ * Real-time, mirrored spectrum from the shared Web Audio AnalyserNode: bass in
+ * the middle, highs fanning out to both sides, bars growing up *and* down from
+ * a centre line. Silent / not-yet-connected audio rests as a row of dots.
  *
  * The canvas inherits `color` from Tailwind classes on the element, so you can
  * set `text-foreground` / `text-muted-foreground` to control bar colour.
  */
 export function AudioVisualizer({ barCount = 40, className = "" }: Props) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const reducedMotion = usePrefersReducedMotion();
+	const reducedMotion = useReducedMotion();
 
 	useEffect(() => {
-		if (reducedMotion) return;
 		const canvas = canvasRef.current;
 		if (!canvas) return;
 		const ctx2d = canvas.getContext("2d");
 		if (!ctx2d) return;
 
-		// Read CSS `color` from the canvas element for bar colour.
-		// Re-read on every resize in case the theme changes.
 		let fgColor = getComputedStyle(canvas).color;
-
+		const heights = new Float32Array(barCount);
+		let freq: Uint8Array<ArrayBuffer> | null = null;
 		let rafId = 0;
 		let active = true;
 
 		function draw() {
 			if (!active) return;
-			rafId = requestAnimationFrame(draw);
+			if (!reducedMotion) rafId = requestAnimationFrame(draw);
 
-			const analyser = getAnalyser();
+			const dpr = window.devicePixelRatio || 1;
 			const w = canvas!.offsetWidth;
 			const h = canvas!.offsetHeight;
 			if (w === 0 || h === 0) return;
 
-			// Keep canvas resolution in sync with its CSS size
-			if (canvas!.width !== w || canvas!.height !== h) {
-				canvas!.width = w;
-				canvas!.height = h;
+			// Keep canvas resolution in sync with its CSS size (crisp on HiDPI).
+			if (canvas!.width !== Math.round(w * dpr) || canvas!.height !== Math.round(h * dpr)) {
+				canvas!.width = Math.round(w * dpr);
+				canvas!.height = Math.round(h * dpr);
 				fgColor = getComputedStyle(canvas!).color;
 			}
-
+			ctx2d!.setTransform(dpr, 0, 0, dpr, 0, 0);
 			ctx2d!.clearRect(0, 0, w, h);
-			if (!analyser) return;
 
-			const freq = new Uint8Array(analyser.frequencyBinCount);
-			analyser.getByteFrequencyData(freq);
+			const analyser = reducedMotion ? null : getAnalyser();
+			let target: number[] = [];
+			if (analyser) {
+				if (!freq || freq.length !== analyser.frequencyBinCount) freq = new Uint8Array(analyser.frequencyBinCount);
+				analyser.getByteFrequencyData(freq);
+				target = mirroredBars(freq, barCount);
+			}
 
-			const gap = 2;
-			const barW = Math.max(1, Math.floor((w - (barCount - 1) * gap) / barCount));
-			const step = Math.floor(freq.length / barCount);
-
-			// Build rgba string from the computed rgb() colour
-			const base = fgColor.startsWith("rgb(")
-				? fgColor.replace("rgb(", "rgba(").replace(")", "")
-				: "rgba(128,128,128";
+			const gap = Math.max(2, Math.round(w / barCount / 3));
+			const barW = Math.max(2, (w - (barCount - 1) * gap) / barCount);
+			const mid = h / 2;
+			const base = fgColor.startsWith("rgb(") ? fgColor.replace("rgb(", "rgba(").replace(")", "") : "rgba(128,128,128";
 
 			for (let i = 0; i < barCount; i++) {
-				const v = freq[i * step] / 255;
-				if (v < 0.02) continue;
-				const bh = Math.max(1, v * h);
-				const alpha = 0.25 + v * 0.55; // 0.25 – 0.8
-				ctx2d!.fillStyle = `${base}, ${alpha})`;
+				// Rise fast, fall slow — keeps the motion fluid instead of jittery.
+				const t = target[i] ?? 0;
+				heights[i] += (t - heights[i]) * (t > heights[i] ? 0.5 : 0.12);
+				const v = heights[i];
+				const bh = Math.max(barW, v * h);
+				ctx2d!.fillStyle = `${base}, ${0.3 + v * 0.6})`;
 				const x = i * (barW + gap);
-				const r = Math.min(barW / 2, bh / 2, 2);
 				ctx2d!.beginPath();
 				if (typeof ctx2d!.roundRect === "function") {
-					ctx2d!.roundRect(x, h - bh, barW, bh, [r, r, 0, 0]);
+					ctx2d!.roundRect(x, mid - bh / 2, barW, bh, barW / 2);
 				} else {
-					ctx2d!.rect(x, h - bh, barW, bh);
+					ctx2d!.rect(x, mid - bh / 2, barW, bh);
 				}
 				ctx2d!.fill();
 			}
