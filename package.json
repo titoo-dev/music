@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "stack": "pwsh -NoProfile -File scripts/stack.ps1",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
