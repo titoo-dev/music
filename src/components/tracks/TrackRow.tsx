@@ -2,9 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { Play } from "lucide-react";
+import { toast } from "sonner";
 import { CoverImage } from "@/components/ui/cover-image";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
+import { DownloadGlyph, PlayPauseIcon } from "@/components/motion/icons";
+import { useDownloadStore } from "@/stores/useDownloadStore";
+import { useAuthStore } from "@/stores/useAuthStore";
 import { warmTrack } from "@/components/audio/AudioEngine";
 import { SaveButton } from "@/components/tracks/SaveButton";
 import { TrackActionMenu } from "@/components/tracks/TrackActionMenu";
@@ -134,6 +137,27 @@ export function TrackRow({
 		playerPlay(tapped);
 	};
 
+	const enqueueDownload = useDownloadStore((s) => s.enqueue);
+	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const handleDownload = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		if (!isAuthenticated) {
+			toast("Sign in to download");
+			return;
+		}
+		const n = enqueueDownload([
+			{
+				trackId: track.trackId,
+				title: track.title,
+				artist: track.artist,
+				album: track.album ?? null,
+				cover: track.cover,
+				duration: track.duration ?? null,
+			},
+		]);
+		toast(n ? `Downloading “${track.title}”` : "Already downloading");
+	};
+
 	const openSheet = useTrackActionStore((s) => s.openSheet);
 	const callbacks = onDelete ? { onDelete } : undefined;
 	const longPress = useLongPress(() => {
@@ -164,23 +188,23 @@ export function TrackRow({
 	if (hasNum) {
 		if (showBitrateCell && showDuration) {
 			gridClass =
-				"grid-cols-[28px_44px_1fr_auto_44px] sm:grid-cols-[28px_44px_1fr_auto_60px_64px]";
+				"grid-cols-[28px_44px_1fr_auto_44px] sm:grid-cols-[28px_44px_1fr_auto_60px_104px]";
 		} else if (showBitrateCell) {
-			gridClass = "grid-cols-[28px_44px_1fr_auto_44px] sm:grid-cols-[28px_44px_1fr_auto_64px]";
+			gridClass = "grid-cols-[28px_44px_1fr_auto_44px] sm:grid-cols-[28px_44px_1fr_auto_104px]";
 		} else if (showDuration) {
-			gridClass = "grid-cols-[28px_44px_1fr_44px] sm:grid-cols-[28px_44px_1fr_60px_64px]";
+			gridClass = "grid-cols-[28px_44px_1fr_44px] sm:grid-cols-[28px_44px_1fr_60px_104px]";
 		} else {
-			gridClass = "grid-cols-[28px_44px_1fr_44px] sm:grid-cols-[28px_44px_1fr_64px]";
+			gridClass = "grid-cols-[28px_44px_1fr_44px] sm:grid-cols-[28px_44px_1fr_104px]";
 		}
 	} else if (showBitrateCell && showDuration) {
 		gridClass =
-			"grid-cols-[44px_1fr_auto_44px] sm:grid-cols-[44px_1fr_auto_60px_64px]";
+			"grid-cols-[44px_1fr_auto_44px] sm:grid-cols-[44px_1fr_auto_60px_104px]";
 	} else if (showBitrateCell) {
-		gridClass = "grid-cols-[44px_1fr_auto_44px] sm:grid-cols-[44px_1fr_auto_64px]";
+		gridClass = "grid-cols-[44px_1fr_auto_44px] sm:grid-cols-[44px_1fr_auto_104px]";
 	} else if (showDuration) {
-		gridClass = "grid-cols-[44px_1fr_44px] sm:grid-cols-[44px_1fr_60px_64px]";
+		gridClass = "grid-cols-[44px_1fr_44px] sm:grid-cols-[44px_1fr_60px_104px]";
 	} else {
-		gridClass = "grid-cols-[44px_1fr_44px] sm:grid-cols-[44px_1fr_64px]";
+		gridClass = "grid-cols-[44px_1fr_44px] sm:grid-cols-[44px_1fr_104px]";
 	}
 
 	const handleHoverWarm = () => {
@@ -213,24 +237,24 @@ export function TrackRow({
 		return () => observer.disconnect();
 	}, [track.trackId, isPlayerLoaded]);
 
+	const activeRow = isActive || isPaused;
+
 	return (
 		<div
 			{...longPress}
 			ref={rowRef}
 			onMouseEnter={handleHoverWarm}
 			onFocus={handleHoverWarm}
-			className={`grid ${gridClass} gap-2 sm:gap-3 items-center px-2 sm:px-3 py-2 sm:py-2.5 overflow-hidden group transition-colors select-none border-b border-foreground/15 last:border-b-0 ${
-				isActive || isPaused ? "bg-accent" : "hover:bg-foreground/5"
+			className={`group relative grid ${gridClass} items-center gap-3 overflow-hidden rounded-lg px-2 py-1.5 transition-colors select-none ${
+				activeRow ? "bg-accent" : "hover:bg-accent/60"
 			}`}
 		>
 			{hasNum && (
-				<span className="text-right tabular-nums flex items-center justify-end">
-					{isActive || isPaused ? (
+				<span className="flex items-center justify-end text-right tabular-nums">
+					{activeRow ? (
 						<PlaybackIndicator paused={isPaused} />
 					) : (
-						<span className="text-[11px] text-muted-foreground font-mono font-bold">
-							{String(trackNumber).padStart(2, "0")}
-						</span>
+						<span className="font-mono text-xs text-muted-foreground">{trackNumber}</span>
 					)}
 				</span>
 			)}
@@ -238,34 +262,31 @@ export function TrackRow({
 				type="button"
 				onClick={handlePlay}
 				aria-label={isPlayerActive ? `Pause ${track.title}` : `Play ${track.title}`}
-				className="relative shrink-0 size-11 md:size-9 p-0 m-0 bg-transparent border-0 appearance-none cursor-pointer overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+				className="relative m-0 size-11 shrink-0 cursor-pointer appearance-none overflow-hidden rounded-md border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring md:size-10"
 			>
 				<CoverImage
 					src={track.cover || ""}
-					className={`size-11 md:size-9 border-0 block transition-opacity ${
-						isActive || isPaused ? "opacity-50" : "group-hover:opacity-60"
+					className={`size-11 transition-[opacity,transform] duration-200 md:size-10 ${
+						activeRow ? "opacity-60" : "group-hover:scale-105 group-hover:opacity-70"
 					}`}
 				/>
-				{isActive || isPaused ? (
-					<span className="absolute inset-0 flex items-center justify-center">
-						<PlaybackIndicator paused={isPaused} />
+				{activeRow ? (
+					<span className="absolute inset-0 flex items-center justify-center bg-black/25">
+						<PlaybackIndicator paused={isPaused} className="text-white" />
 					</span>
 				) : (
-					<span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/35">
-						<Play className="size-4 text-white fill-white" />
+					<span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white opacity-0 transition-opacity group-hover:opacity-100">
+						<PlayPauseIcon playing={false} className="size-4" />
 					</span>
 				)}
 			</button>
 			<div className="min-w-0">
-				<p className="text-[13px] font-bold tracking-[-0.005em] truncate leading-tight">
+				<p className={`truncate text-sm font-medium leading-tight ${activeRow ? "text-highlight" : "text-foreground"}`}>
 					{track.title}
 				</p>
-				<p className="text-[11px] text-muted-foreground truncate font-medium leading-tight mt-0.5">
+				<p className="mt-0.5 truncate text-xs leading-tight text-muted-foreground">
 					{track.artistId ? (
-						<Link
-							href={`/artist?id=${track.artistId}`}
-							className="hover:underline hover:text-foreground transition-colors"
-						>
+						<Link href={`/artist?id=${track.artistId}`} className="transition-colors hover:text-foreground hover:underline">
 							{track.artist}
 						</Link>
 					) : (
@@ -275,10 +296,7 @@ export function TrackRow({
 						<>
 							{" · "}
 							{track.albumId ? (
-								<Link
-									href={`/album?id=${track.albumId}`}
-									className="hover:underline hover:text-foreground transition-colors"
-								>
+								<Link href={`/album?id=${track.albumId}`} className="transition-colors hover:text-foreground hover:underline">
 									{track.album}
 								</Link>
 							) : (
@@ -292,19 +310,28 @@ export function TrackRow({
 			</div>
 			{showBitrateCell && (
 				<span
-					className={`font-mono text-[10px] font-black tracking-[0.05em] uppercase border-2 border-foreground px-1.5 py-0.5 ${
-						isFlac ? "bg-accent text-foreground" : "bg-card text-muted-foreground"
+					className={`rounded border border-border px-1.5 py-0.5 font-mono text-[10px] ${
+						isFlac ? "text-foreground" : "text-muted-foreground"
 					}`}
 				>
 					{bitrate}
 				</span>
 			)}
 			{showDuration && (
-				<span className="hidden sm:inline text-[11px] text-muted-foreground font-mono tabular-nums text-right">
+				<span className="hidden text-right font-mono text-xs tabular-nums text-muted-foreground sm:inline">
 					{track.duration ? convertDuration(track.duration) : ""}
 				</span>
 			)}
 			<div className="flex items-center justify-end gap-0.5">
+				<button
+					type="button"
+					aria-label={`Download ${track.title}`}
+					title="Download"
+					onClick={handleDownload}
+					className="hidden size-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 sm:inline-flex"
+				>
+					<DownloadGlyph />
+				</button>
 				{showSave && (
 					<SaveButton
 						track={{

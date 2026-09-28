@@ -15,17 +15,13 @@ import {
 	DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
-	Heart,
+	ArrowLeft,
 	ListEnd,
 	ListPlus,
 	ListStart,
-	Play,
-	Pause,
 	Trash2,
 	Disc3,
 	User,
-	CheckCircle2,
-	Loader2,
 	Share2,
 	Link as LinkIcon,
 	MoreHorizontal,
@@ -35,6 +31,7 @@ import {
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { DrawCheck, HeartGlyph, PlayPauseIcon, Spinner } from "@/components/motion/icons";
 
 export interface TrackActionTrack {
 	id: string;
@@ -162,10 +159,10 @@ function AddToPlaylistSubmenu({
 		<div className="flex flex-col">
 			{loading ? (
 				<div className="px-3 py-3 flex items-center justify-center">
-					<Loader2 className="size-4 animate-spin text-muted-foreground" />
+					<Spinner className="text-muted-foreground" />
 				</div>
 			) : playlists.length === 0 && !creating ? (
-				<div className="px-3 py-2 text-[11px] font-mono text-muted-foreground uppercase tracking-[0.05em]">
+				<div className="px-2 py-2 text-sm text-muted-foreground">
 					No playlists yet
 				</div>
 			) : (
@@ -179,11 +176,11 @@ function AddToPlaylistSubmenu({
 								onClick={() => handleAdd(p.id)}
 								className="flex items-center justify-between gap-3"
 							>
-								<span className="truncate text-[13px] font-bold">{p.title}</span>
+								<span className="truncate">{p.title}</span>
 								{inPlaylist ? (
-									<CheckCircle2 className="size-3.5 text-green-600 shrink-0" />
+									<DrawCheck className="size-4 text-success shrink-0" />
 								) : (
-									<span className="font-mono text-[10px] text-muted-foreground shrink-0">
+									<span className="font-mono text-xs tabular-nums text-muted-foreground shrink-0">
 										{p._count?.tracks ?? 0}
 									</span>
 								)}
@@ -202,7 +199,7 @@ function AddToPlaylistSubmenu({
 					onClick={(e) => e.stopPropagation()}
 					onKeyDown={(e) => e.stopPropagation()}
 					onKeyDownCapture={(e) => e.stopPropagation()}
-					className="flex items-center gap-2 px-2 py-2 border-t-2 border-foreground"
+					className="-mx-1 mt-1 flex items-center gap-2 border-t border-border px-2 pt-2 pb-1"
 				>
 					<Input
 						autoFocus
@@ -225,18 +222,21 @@ function AddToPlaylistSubmenu({
 						disabled={!newName.trim() || submitting}
 						className="h-8"
 					>
-						{submitting ? <Loader2 className="size-3.5 animate-spin" /> : "Create"}
+						{submitting ? <Spinner size={14} /> : "Create"}
 					</Button>
 				</form>
 			) : (
-				<DropdownMenuItem
-					closeOnClick={false}
-					onClick={() => setCreating(true)}
-					className="gap-2.5 border-t-2 border-foreground rounded-none"
-				>
-					<Plus className="size-4" />
-					<span className="font-bold">New playlist</span>
-				</DropdownMenuItem>
+				<>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem
+						closeOnClick={false}
+						onClick={() => setCreating(true)}
+						className="gap-2 text-muted-foreground"
+					>
+						<Plus className="size-4" />
+						<span>New playlist</span>
+					</DropdownMenuItem>
+				</>
 			)}
 		</div>
 	);
@@ -360,7 +360,7 @@ export function TrackActionMenu({
 							onMouseDown={(e) => e.stopPropagation()}
 							onPointerDown={(e) => e.stopPropagation()}
 							aria-label="Track actions"
-							className={`shrink-0 inline-flex items-center justify-center w-7 h-7 border-2 border-transparent text-muted-foreground hover:text-foreground hover:border-foreground hover:bg-card transition-colors ${className}`}
+							className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent data-popup-open:bg-accent data-popup-open:text-foreground transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 ${className}`}
 						/>
 					}
 				>
@@ -375,21 +375,18 @@ export function TrackActionMenu({
 					{view === "main" ? (
 						<div>
 							{/* Track header */}
-							<div className="px-3 py-3 bg-foreground text-background border-b-2 border-foreground">
-								<p className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-background/55 mb-1.5">
-									TRACK ACTIONS
-								</p>
-								<p className="text-[13px] font-extrabold tracking-[-0.01em] truncate leading-tight">
+							<div className="-mx-1 -mt-1 mb-1 border-b border-border px-3 py-2.5">
+								<p className="truncate text-sm font-medium leading-tight tracking-tight">
 									{track.title}
 								</p>
-								<p className="text-[10px] font-mono text-background/60 truncate uppercase tracking-[0.05em] mt-0.5">
+								<p className="mt-0.5 truncate text-xs text-muted-foreground">
 									{track.artist}
 								</p>
 							</div>
 
 							{track.previewUrl && (
 								<DropdownMenuItem onClick={handlePreview} className="gap-2.5">
-									{isPreviewActive ? <Pause className="size-4" /> : <Play className="size-4" />}
+									<PlayPauseIcon playing={isPreviewActive} />
 									{isPreviewActive ? "Pause preview" : "Play preview"}
 								</DropdownMenuItem>
 							)}
@@ -409,9 +406,7 @@ export function TrackActionMenu({
 
 							{isAuthenticated && (
 								<DropdownMenuItem onClick={handleSave} className="gap-2.5">
-									<Heart
-										className={`size-4 ${saved ? "fill-primary text-primary" : ""}`}
-									/>
+									<HeartGlyph filled={saved} className={saved ? "!text-foreground" : ""} />
 									{saved ? "Remove from library" : "Save to library"}
 								</DropdownMenuItem>
 							)}
@@ -430,7 +425,7 @@ export function TrackActionMenu({
 
 							{isAuthenticated && (
 								<DropdownMenuItem onClick={handleShare} className="gap-2.5">
-									{isShared ? <LinkIcon className="size-4 text-primary" /> : <Share2 className="size-4" />}
+									{isShared ? <LinkIcon className="size-4 !text-highlight" /> : <Share2 className="size-4" />}
 									{isShared ? "Manage share" : "Share track"}
 								</DropdownMenuItem>
 							)}
@@ -478,18 +473,19 @@ export function TrackActionMenu({
 						</div>
 					) : (
 						<div>
-							<div className="flex items-center justify-between bg-foreground text-background border-b-2 border-foreground">
+							<div className="-mx-1 -mt-1 mb-1 flex items-center justify-between border-b border-border">
 								<button
 									onClick={(e) => {
 										e.preventDefault();
 										setView("main");
 									}}
-									className="flex items-center gap-2 px-3 py-2.5 text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-background/70 hover:text-accent transition-colors"
+									className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors outline-none focus-visible:text-foreground"
 								>
-									← BACK
+									<ArrowLeft className="size-3.5" />
+									Back
 								</button>
-								<span className="px-3 text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-background/55">
-									ADD TO PLAYLIST
+								<span className="px-3 text-xs font-medium text-foreground">
+									Add to playlist
 								</span>
 							</div>
 							<AddToPlaylistSubmenu track={track} onClose={close} />

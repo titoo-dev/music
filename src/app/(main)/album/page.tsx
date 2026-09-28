@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { EntityHero } from "@/components/layout/EntityHero";
-import { Heart, Loader2, Play, Shuffle } from "lucide-react";
+import { EntityHero, HeroPlayButton } from "@/components/layout/EntityHero";
+import { Shuffle } from "lucide-react";
+import { EmptyState, HeartGlyph, Spinner } from "@/components/motion/icons";
 import { useSavedAlbums } from "@/hooks/useLibrary";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
@@ -31,16 +31,13 @@ function AlbumSaveButton({
 		<Button
 			onClick={onClick}
 			disabled={saving}
-			variant={saved ? "outline" : "secondary"}
+			variant="outline"
 			size="icon-touch"
+			className="rounded-full"
 			aria-label={saved ? "Remove from library" : "Save album"}
 			aria-pressed={saved}
 		>
-			{saving ? (
-				<Loader2 className="size-4 animate-spin" aria-hidden />
-			) : (
-				<Heart className={`size-4 ${saved ? "fill-primary text-primary" : ""}`} aria-hidden />
-			)}
+			{saving ? <Spinner /> : <HeartGlyph filled={saved} />}
 		</Button>
 	);
 }
@@ -119,16 +116,17 @@ function AlbumContent() {
 
 	if (loading)
 		return (
-			<div className="flex items-center justify-center min-h-[50vh]">
-				<Loader2 className="size-5 animate-spin text-muted-foreground" />
+			<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
+				<Spinner size={20} />
 			</div>
 		);
 	if (!album)
 		return (
-			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
-				<p className="text-sm font-bold uppercase text-muted-foreground">Album not found</p>
-				<p className="text-xs font-bold uppercase text-muted-foreground">The album you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
-			</div>
+			<EmptyState
+				className="mt-8"
+				title="Album not found"
+				description="The album you're looking for doesn't exist or is unavailable."
+			/>
 		);
 
 	// Handle both GW format (ALB_PICTURE, ALB_TITLE) and standard API format (cover_xl, title)
@@ -167,39 +165,38 @@ function AlbumContent() {
 	};
 
 	return (
-		<div className="space-y-8">
+		<div className="space-y-10">
 			<EntityHero
-				eyebrow={`${recordType.toUpperCase()}${releaseYear ? ` · ${releaseYear}` : ""}`}
+				eyebrow={`${recordType}${releaseYear ? ` · ${releaseYear}` : ""}`}
 				title={title}
 				subtitle={
 					artistId ? (
-						<Link href={`/artist?id=${artistId}`} className="font-bold text-foreground hover:underline">
+						<Link href={`/artist?id=${artistId}`} className="font-medium text-foreground hover:underline underline-offset-4">
 							{artistName}
 						</Link>
 					) : (
-						<span className="font-bold text-foreground">{artistName}</span>
+						<span className="font-medium text-foreground">{artistName}</span>
 					)
 				}
-				meta={nbTracks ? `${nbTracks} TRACKS${releaseDate ? ` · ${releaseDate}` : ""}` : releaseDate}
+				meta={nbTracks ? `${nbTracks} tracks${releaseDate ? ` · ${releaseDate}` : ""}` : releaseDate}
 				coverSrc={cover}
 				coverAlt={title}
 				primaryAction={
-					<Button
-						onClick={handlePlayAll}
+					<HeroPlayButton
+						onPlay={handlePlayAll}
+						trackIds={playableTracks.map((t) => t.trackId)}
 						disabled={playableTracks.length === 0}
-						className="h-12 md:h-10 w-full md:w-auto px-6 gap-2"
-					>
-						<Play className="size-4" aria-hidden />
-						PLAY
-					</Button>
+						label="Play album"
+					/>
 				}
 				secondaryActions={
 					<>
 						<Button
 							onClick={handleShuffleAll}
 							disabled={playableTracks.length === 0}
-							variant="ghost"
+							variant="outline"
 							size="icon-touch"
+							className="rounded-full"
 							aria-label="Shuffle album"
 						>
 							<Shuffle className="size-4" aria-hidden />
@@ -213,29 +210,19 @@ function AlbumContent() {
 				}
 			/>
 
-			<Separator />
-
 			{/* Tracklist */}
-			<div>
-				<h2 className="text-xs font-black text-foreground uppercase tracking-[0.15em] mb-4">
-					Tracklist
-				</h2>
+			<section>
+				<div className="mb-3 flex items-baseline gap-2">
+					<h2 className="text-sm font-medium m-0">Tracklist</h2>
+					<span className="text-xs text-muted-foreground tabular-nums">{tracks.length}</span>
+				</div>
 				{tracks.length === 0 ? (
-					<div className="flex flex-col items-center justify-center py-16 gap-2">
-						<p className="text-sm font-bold uppercase text-muted-foreground">No tracks</p>
-						<p className="text-xs font-bold uppercase text-muted-foreground">The tracklist for this album is unavailable.</p>
-					</div>
+					<EmptyState
+						title="No tracks"
+						description="The tracklist for this album is unavailable."
+					/>
 				) : (
-				<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
-					{/* Column header */}
-					<div className="hidden sm:grid grid-cols-[28px_40px_1fr_auto_60px_64px] gap-3 items-center px-3 py-2 border-b-[2px] border-foreground font-mono text-[10px] font-bold tracking-[0.14em] uppercase text-muted-foreground">
-						<span className="text-right">#</span>
-						<span />
-						<span>TITLE / ARTIST</span>
-						<span>FORMAT</span>
-						<span className="text-right">TIME</span>
-						<span />
-					</div>
+				<div className="divide-y divide-border border-y border-border">
 					{(() => {
 						const normalizedTracks = tracks.map((t: any) => trackFromDeezerRaw(t));
 						return tracks.map((track: any, idx: number) => {
@@ -254,7 +241,7 @@ function AlbumContent() {
 					})()}
 				</div>
 				)}
-			</div>
+			</section>
 		</div>
 	);
 }
@@ -263,8 +250,8 @@ export default function AlbumPage() {
 	return (
 		<Suspense
 			fallback={
-				<div className="flex items-center justify-center min-h-[50vh]">
-					<Loader2 className="size-5 animate-spin text-muted-foreground" />
+				<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
+					<Spinner size={20} />
 				</div>
 			}
 		>

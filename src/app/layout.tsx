@@ -1,24 +1,26 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
+import { THEME_SCRIPT } from "@/lib/theme";
 
-const spaceGrotesk = Space_Grotesk({
+const geistSans = Geist({
 	subsets: ["latin"],
-	variable: "--font-sans",
-	weight: ["300", "400", "500", "600", "700"],
+	variable: "--font-geist-sans",
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const geistMono = Geist_Mono({
 	subsets: ["latin"],
-	variable: "--font-mono",
-	weight: ["400", "500", "700"],
+	variable: "--font-geist-mono",
 });
 
 export const viewport: Viewport = {
-	themeColor: "#18181B",
+	themeColor: [
+		{ media: "(prefers-color-scheme: light)", color: "#ffffff" },
+		{ media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+	],
 	width: "device-width",
 	initialScale: 1,
 	maximumScale: 1,
@@ -48,8 +50,13 @@ export default function RootLayout({
 	return (
 		<html
 			lang="en"
-			className={cn("h-full", spaceGrotesk.variable, jetbrainsMono.variable)}
+			suppressHydrationWarning
+			className={cn("h-full", geistSans.variable, geistMono.variable)}
 		>
+			<head>
+				{/* Resolve the theme before first paint to avoid a light flash. */}
+				<script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+			</head>
 			<body className="min-h-full font-sans bg-background text-foreground">
 				<ServiceWorkerRegistration />
 				<TooltipProvider>{children}</TooltipProvider>

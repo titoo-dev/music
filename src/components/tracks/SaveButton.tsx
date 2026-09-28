@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart } from "lucide-react";
+import { HeartGlyph } from "@/components/motion/icons";
 import { useSavedTracks, type SaveTrackInput } from "@/hooks/useLibrary";
 
 /**
@@ -40,13 +40,11 @@ export function SaveButton({
 			onPointerDown={(e) => e.stopPropagation()}
 			aria-label={saved ? "Remove from library" : "Save to library"}
 			title={saved ? "Remove from library" : "Save to library"}
-			className={`shrink-0 inline-flex items-center justify-center size-7 text-muted-foreground hover:text-foreground transition-colors ${className}`}
+			className={`shrink-0 inline-flex items-center justify-center size-7 rounded-md transition-colors hover:bg-accent outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 ${
+				saved ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+			} ${className}`}
 		>
-			<Heart
-				className={`size-4 transition-all ${
-					saved ? "fill-primary text-primary" : ""
-				}`}
-			/>
+			<HeartGlyph filled={saved} />
 		</button>
 	);
 }

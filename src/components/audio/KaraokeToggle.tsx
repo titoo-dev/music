@@ -4,7 +4,8 @@ import { useEffect, useRef } from "react";
 import { useStems } from "@/hooks/useStems";
 import { useTrackCached } from "@/hooks/useTrackCached";
 import { usePlayerStore } from "@/stores/usePlayerStore";
-import { Mic, MicOff, Loader2, AlertCircle } from "lucide-react";
+import { Mic, MicOff, AlertCircle } from "lucide-react";
+import { Spinner } from "@/components/motion/icons";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -123,7 +124,7 @@ export function KaraokeToggle({ className, iconSize = 14 }: KaraokeToggleProps =
 
 	const iconStyle = { width: iconSize, height: iconSize };
 	const icon = (() => {
-		if (isPreparing) return <Loader2 style={iconStyle} className="animate-spin" />;
+		if (isPreparing) return <Spinner size={iconSize} />;
 		if (isFailed) return <AlertCircle style={iconStyle} />;
 		return karaokeMode ? <MicOff style={iconStyle} /> : <Mic style={iconStyle} />;
 	})();
@@ -145,18 +146,18 @@ export function KaraokeToggle({ className, iconSize = 14 }: KaraokeToggleProps =
 						aria-pressed={karaokeMode}
 						data-testid="karaoke-toggle"
 						className={cn(
-							"inline-flex h-7",
+							"inline-flex h-7 rounded-md",
 							showText ? "px-2 gap-1.5" : "w-7 px-0",
-							"font-mono text-[10px] font-black tracking-[0.1em] border-[2px]",
+							"font-mono text-[11px] font-medium tabular-nums",
 							isFailed
-								? "bg-destructive/10 text-destructive border-destructive"
+								? "bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
 								: isActive
-									? "bg-primary text-white border-foreground"
+									? "bg-foreground text-background hover:bg-foreground/85 hover:text-background"
 									: isPreparing
-										? "bg-accent text-foreground border-foreground"
+										? "bg-accent text-foreground"
 										: karaokeMode
-											? "bg-accent text-foreground border-foreground"
-											: "border-transparent text-muted-foreground hover:border-foreground hover:text-foreground",
+											? "bg-accent text-foreground"
+											: "text-muted-foreground hover:text-foreground",
 							className
 						)}
 						onClick={handleClick}

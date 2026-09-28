@@ -47,6 +47,11 @@ export default defineConfig({
 				"src/hooks/useTrackCached.ts",
 				"src/stores/useStemsStore.ts",
 				"src/components/audio/KaraokeToggle.tsx",
+				"src/stores/useDownloadStore.ts",
+				"src/stores/useCommandStore.ts",
+				"src/lib/download.ts",
+				"src/lib/theme.ts",
+				"src/components/command/CommandPalette.tsx",
 			],
 			exclude: [
 				"**/*.test.{ts,tsx}",

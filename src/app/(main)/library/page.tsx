@@ -3,11 +3,16 @@
 import { useEffect, useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { motion } from "motion/react";
 import { fetchData } from "@/utils/api";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { useCommandStore } from "@/stores/useCommandStore";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2, Music, Disc3, Heart, Clock, User as UserIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Music, Disc3, User as UserIcon } from "lucide-react";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
+import { EmptyState, Spinner } from "@/components/motion/icons";
+import { cn } from "@/lib/utils";
 
 interface UserPlaylist {
 	id: string;
@@ -63,33 +68,31 @@ interface FollowedArtistItem {
 type Tab = "recent" | "tracks" | "albums" | "playlists" | "following";
 
 const TABS: { key: Tab; label: string }[] = [
-	{ key: "recent", label: "RECENT" },
-	{ key: "tracks", label: "TRACKS" },
-	{ key: "albums", label: "ALBUMS" },
-	{ key: "playlists", label: "PLAYLISTS" },
-	{ key: "following", label: "FOLLOWING" },
+	{ key: "recent", label: "Recent" },
+	{ key: "tracks", label: "Tracks" },
+	{ key: "albums", label: "Albums" },
+	{ key: "playlists", label: "Playlists" },
+	{ key: "following", label: "Following" },
 ];
 
 function fmtRelative(dateStr: string): string {
 	const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
 	const min = Math.floor(diff / 60_000);
-	if (min < 1) return "JUST NOW";
-	if (min < 60) return `${min}M AGO`;
+	if (min < 1) return "Just now";
+	if (min < 60) return `${min}m ago`;
 	const hr = Math.floor(min / 60);
-	if (hr < 24) return `${hr}H AGO`;
+	if (hr < 24) return `${hr}h ago`;
 	const day = Math.floor(hr / 24);
-	if (day < 7) return `${day}D AGO`;
-	return new Date(dateStr)
-		.toLocaleDateString(undefined, { month: "short", day: "numeric" })
-		.toUpperCase();
+	if (day < 7) return `${day}d ago`;
+	return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function PlaylistCover({ covers, title }: { covers?: string[]; title: string }) {
 	const imgs = covers?.slice(0, 4) || [];
 	if (imgs.length === 0) {
 		return (
-			<div className="w-full aspect-square bg-muted flex items-center justify-center">
-				<Music className="size-12 text-muted-foreground/30" />
+			<div className="w-full aspect-square rounded-lg bg-muted flex items-center justify-center">
+				<Music className="size-10 text-muted-foreground/30" />
 			</div>
 		);
 	}
@@ -99,18 +102,57 @@ function PlaylistCover({ covers, title }: { covers?: string[]; title: string }) 
 				src={imgs[0]}
 				alt={title}
 				loading="lazy"
-				className="w-full aspect-square border-0"
+				className="w-full aspect-square rounded-lg transition-transform duration-300 group-hover:scale-[1.02]"
 			/>
 		);
 	}
 	return (
-		<div className="w-full aspect-square grid grid-cols-2 grid-rows-2 overflow-hidden">
+		<div className="w-full aspect-square grid grid-cols-2 grid-rows-2 overflow-hidden rounded-lg transition-transform duration-300 group-hover:scale-[1.02]">
 			{imgs.map((src, i) => (
-				<CoverImage key={i} src={src} alt="" loading="lazy" className="w-full h-full border-0" />
+				<CoverImage key={i} src={src} alt="" loading="lazy" className="w-full h-full rounded-none" />
 			))}
 		</div>
 	);
 }
+
+/** Grid card: cover on top, title + meta underneath. */
+function GridCard({
+	href,
+	index,
+	cover,
+	title,
+	meta,
+	round = false,
+}: {
+	href: string;
+	index: number;
+	cover: React.ReactNode;
+	title: string;
+	meta: React.ReactNode;
+	round?: boolean;
+}) {
+	return (
+		<motion.div
+			initial={{ opacity: 0, y: 8 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ duration: 0.25, delay: Math.min(index, 12) * 0.03, ease: "easeOut" }}
+			className="min-w-0"
+		>
+			<Link href={href} className={cn("group block no-underline", round && "text-center")}>
+				<div className={cn("overflow-hidden ring-1 ring-border", round ? "rounded-full" : "rounded-lg")}>
+					{cover}
+				</div>
+				<div className="mt-2 min-w-0">
+					<p className="text-sm font-medium truncate text-foreground">{title}</p>
+					<div className="text-xs text-muted-foreground truncate tabular-nums">{meta}</div>
+				</div>
+			</Link>
+		</motion.div>
+	);
+}
+
+const GRID = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-6";
+const LIST = "divide-y divide-border border-y border-border";
 
 function LibraryContent() {
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -161,51 +203,56 @@ function LibraryContent() {
 
 	if (!isAuthenticated) {
 		return (
-			<div>
-				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-					LIBRARY
-				</p>
-				<h1 className="text-brutal-xl m-0">
-					SIGN IN TO<br />
-					<span className="text-primary">SEE YOUR LIBRARY.</span>
-				</h1>
-				<Link href="/login" className="inline-block mt-6 no-underline">
-					<button className="px-5 py-3 border-2 sm:border-[3px] border-foreground bg-primary text-white font-mono text-sm font-black tracking-[0.12em] uppercase shadow-[var(--shadow-brutal)] hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] transition-all">
-						SIGN IN
-					</button>
-				</Link>
-			</div>
+			<motion.div
+				initial={{ opacity: 0, y: 8 }}
+				animate={{ opacity: 1, y: 0 }}
+				className="pt-2"
+			>
+				<h1 className="text-2xl sm:text-3xl font-semibold tracking-tight m-0">Library</h1>
+				<EmptyState
+					className="mt-8"
+					title="Sign in to see your library"
+					description="Saved tracks, albums, playlists and followed artists live here."
+					action={
+						<Link href="/login" className="no-underline">
+							<Button>Sign in</Button>
+						</Link>
+					}
+				/>
+			</motion.div>
 		);
 	}
 
 	if (loading) {
 		return (
-			<div className="flex items-center justify-center min-h-[50vh]">
-				<Loader2 className="size-5 animate-spin text-muted-foreground" />
+			<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
+				<Spinner size={20} />
 			</div>
 		);
 	}
 
 	return (
-		<div>
+		<div className="pt-2">
 			{/* Page header */}
-			<div className="mb-7">
-				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-					LIBRARY
+			<motion.div
+				initial={{ opacity: 0, y: 8 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ duration: 0.3, ease: "easeOut" }}
+				className="mb-6"
+			>
+				<h1 className="text-2xl sm:text-3xl font-semibold tracking-tight m-0">Library</h1>
+				<p className="mt-1 text-sm text-muted-foreground tabular-nums">
+					{playlists.length} playlist{playlists.length !== 1 ? "s" : ""} · {albums.length} album{albums.length !== 1 ? "s" : ""} · {totalTracks} tracks · {followedArtists.length} artist{followedArtists.length !== 1 ? "s" : ""}
 				</p>
-				<div className="min-w-0">
-					<h1 className="text-brutal-xl m-0">
-						MY <span className="text-primary">COLLECTION.</span>
-					</h1>
-					<p className="mt-3 text-sm font-bold uppercase tracking-[0.04em] text-muted-foreground">
-						{playlists.length} PLAYLIST{playlists.length !== 1 ? "S" : ""} · {albums.length} ALBUM{albums.length !== 1 ? "S" : ""} · {totalTracks} TRACKS · {followedArtists.length} ARTIST{followedArtists.length !== 1 ? "S" : ""}
-					</p>
-				</div>
-			</div>
+			</motion.div>
 
 			{/* Tabs */}
-			<div className="flex border-b-[2px] border-foreground -mx-1 sm:mx-0 overflow-x-auto scrollbar-hide mb-6">
-				{TABS.map((t, i) => {
+			<div
+				role="tablist"
+				aria-label="Library sections"
+				className="mb-6 inline-flex max-w-full overflow-x-auto scrollbar-hide rounded-lg border border-border bg-muted/50 p-0.5"
+			>
+				{TABS.map((t) => {
 					const active = tab === t.key;
 					const count =
 						t.key === "playlists"
@@ -220,32 +267,47 @@ function LibraryContent() {
 					return (
 						<button
 							key={t.key}
+							type="button"
+							role="tab"
+							aria-selected={active}
 							onClick={() => setTab(t.key)}
-							className={`shrink-0 min-h-11 md:min-h-9 px-5 py-2.5 font-mono text-[11px] font-bold tracking-[0.14em] uppercase cursor-pointer transition-colors ${
-								i < TABS.length - 1 ? "border-r-[2px] border-foreground" : ""
-							} ${active ? "bg-foreground text-background" : "bg-transparent text-foreground active:bg-accent/40 [@media(hover:hover)]:hover:bg-accent/40"}`}
+							className={cn(
+								"relative shrink-0 h-9 md:h-7 rounded-md px-3 text-sm whitespace-nowrap cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+								active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+							)}
 						>
-							{t.label}
-							<span className={`ml-1.5 ${active ? "opacity-70" : "text-muted-foreground"}`}>
-								({count})
+							{active && (
+								<motion.span
+									layoutId="library-tab-indicator"
+									className="absolute inset-0 rounded-md bg-background shadow-sm"
+									transition={{ type: "spring", stiffness: 500, damping: 38 }}
+								/>
+							)}
+							<span className="relative">
+								{t.label}
+								<span className="ml-1.5 text-xs text-muted-foreground tabular-nums">{count}</span>
 							</span>
 						</button>
 					);
 				})}
 			</div>
 
+			<motion.div
+				key={tab}
+				initial={{ opacity: 0, y: 8 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ duration: 0.25, ease: "easeOut" }}
+			>
 			{/* Recent plays list */}
 			{tab === "recent" && (
 				recentPlays.length === 0 ? (
-					<EmptyState
-						icon={<Clock className="size-7" />}
-						title="NOTHING YET"
+					<LibraryEmpty
+						title="Nothing yet"
 						hint="Play a track for at least 30 seconds and it'll show up here."
-						actionHref="/search"
-						actionLabel="OPEN SEARCH"
+						actionLabel="Open search"
 					/>
 				) : (
-					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
+					<div className={LIST}>
 						{(() => {
 							const normalized: TrackRowTrack[] = recentPlays.map((item) => ({
 								trackId: item.trackId,
@@ -265,7 +327,7 @@ function LibraryContent() {
 										showDuration={false}
 										queue={normalized}
 									/>
-									<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground pointer-events-none tabular-nums">
+									<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none tabular-nums">
 										{fmtRelative(item.playedAt)}
 									</span>
 								</div>
@@ -278,34 +340,28 @@ function LibraryContent() {
 			{/* Playlists grid */}
 			{tab === "playlists" && (
 				playlists.length === 0 ? (
-					<EmptyState
-						icon={<Music className="size-7" />}
-						title="NO PLAYLISTS"
+					<LibraryEmpty
+						title="No playlists"
 						hint="Create one to organize your music."
 						actionHref="/my-playlists"
-						actionLabel="MANAGE"
+						actionLabel="Manage playlists"
 					/>
 				) : (
-					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-						{playlists.map((pl) => (
-							<Link
+					<div className={GRID}>
+						{playlists.map((pl, i) => (
+							<GridCard
 								key={pl.id}
+								index={i}
 								href={`/my-playlists/${pl.id}`}
-								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[2px] [@media(hover:hover)]:hover:-translate-y-[2px] transition-all"
-							>
-								<PlaylistCover covers={pl.covers} title={pl.title} />
-								<div className="p-2.5 border-t-[2px] border-foreground">
-									<p className="text-[12px] font-extrabold uppercase tracking-[-0.01em] truncate leading-[1.15]">
-										{pl.title}
-									</p>
-									<div className="flex justify-between items-baseline mt-1 font-mono text-[10px] text-muted-foreground tabular-nums">
-										<span>{pl._count.tracks} TR</span>
-										<span>
-											{new Date(pl.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()}
-										</span>
-									</div>
-								</div>
-							</Link>
+								cover={<PlaylistCover covers={pl.covers} title={pl.title} />}
+								title={pl.title}
+								meta={
+									<>
+										{pl._count.tracks} track{pl._count.tracks !== 1 ? "s" : ""} ·{" "}
+										{new Date(pl.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+									</>
+								}
+							/>
 						))}
 					</div>
 				)
@@ -314,43 +370,35 @@ function LibraryContent() {
 			{/* Albums grid */}
 			{tab === "albums" && (
 				albums.length === 0 ? (
-					<EmptyState
-						icon={<Disc3 className="size-7" />}
-						title="NO SAVED ALBUMS"
+					<LibraryEmpty
+						title="No saved albums"
 						hint="Save an album from search to start your collection."
-						actionHref="/search"
-						actionLabel="OPEN SEARCH"
+						actionLabel="Open search"
 					/>
 				) : (
-					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-						{albums.map((album) => (
-							<Link
+					<div className={GRID}>
+						{albums.map((album, i) => (
+							<GridCard
 								key={album.id}
+								index={i}
 								href={`/album?id=${album.deezerAlbumId}`}
-								className="group border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[2px] [@media(hover:hover)]:hover:-translate-y-[2px] transition-all"
-							>
-								<div className="w-full aspect-square bg-muted flex items-center justify-center">
-									{album.coverUrl ? (
+								cover={
+									album.coverUrl ? (
 										<CoverImage
 											src={album.coverUrl}
 											alt={album.title}
 											loading="lazy"
-											className="w-full aspect-square border-0"
+											className="w-full aspect-square rounded-lg transition-transform duration-300 group-hover:scale-[1.02]"
 										/>
 									) : (
-										<Disc3 className="size-12 text-muted-foreground/30" />
-									)}
-								</div>
-								<div className="p-2.5 border-t-[2px] border-foreground">
-									<p className="text-[12px] font-extrabold uppercase tracking-[-0.01em] truncate leading-[1.15]">
-										{album.title}
-									</p>
-									<div className="flex justify-between items-baseline mt-1 gap-2 font-mono text-[10px] text-muted-foreground">
-										<span className="truncate">{album.artist}</span>
-										<span className="tabular-nums shrink-0">{album.trackCount} TR</span>
-									</div>
-								</div>
-							</Link>
+										<div className="w-full aspect-square rounded-lg bg-muted flex items-center justify-center">
+											<Disc3 className="size-10 text-muted-foreground/30" />
+										</div>
+									)
+								}
+								title={album.title}
+								meta={<>{album.artist} · {album.trackCount} tracks</>}
+							/>
 						))}
 					</div>
 				)
@@ -359,42 +407,36 @@ function LibraryContent() {
 			{/* Followed artists grid */}
 			{tab === "following" && (
 				followedArtists.length === 0 ? (
-					<EmptyState
-						icon={<UserIcon className="size-7" />}
-						title="NO FOLLOWED ARTISTS"
+					<LibraryEmpty
+						title="No followed artists"
 						hint="Tap the heart on an artist page to start following them."
-						actionHref="/search"
-						actionLabel="OPEN SEARCH"
+						actionLabel="Open search"
 					/>
 				) : (
-					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-						{followedArtists.map((artist) => (
-							<Link
+					<div className={GRID}>
+						{followedArtists.map((artist, i) => (
+							<GridCard
 								key={artist.id}
+								index={i}
+								round
 								href={`/artist?id=${artist.deezerArtistId}`}
-								className="group text-center border-2 sm:border-[3px] border-foreground bg-card overflow-hidden no-underline shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[2px] [@media(hover:hover)]:hover:-translate-y-[2px] transition-all"
-							>
-								<div className="w-full aspect-square bg-muted flex items-center justify-center">
-									{artist.pictureUrl ? (
+								cover={
+									artist.pictureUrl ? (
 										<CoverImage
 											src={artist.pictureUrl}
 											alt={artist.name}
 											loading="lazy"
-											className="w-full aspect-square border-0"
+											className="w-full aspect-square rounded-full transition-transform duration-300 group-hover:scale-[1.02]"
 										/>
 									) : (
-										<UserIcon className="size-12 text-muted-foreground/30" aria-hidden />
-									)}
-								</div>
-								<div className="p-2.5 border-t-[2px] border-foreground">
-									<p className="text-[12px] font-extrabold uppercase tracking-[-0.01em] truncate leading-[1.15]">
-										{artist.name}
-									</p>
-									<p className="mt-1 font-mono text-[10px] text-muted-foreground tabular-nums">
-										FOLLOWED {fmtRelative(artist.followedAt)}
-									</p>
-								</div>
-							</Link>
+										<div className="w-full aspect-square rounded-full bg-muted flex items-center justify-center">
+											<UserIcon className="size-10 text-muted-foreground/30" aria-hidden />
+										</div>
+									)
+								}
+								title={artist.name}
+								meta={<>Followed {fmtRelative(artist.followedAt).toLowerCase()}</>}
+							/>
 						))}
 					</div>
 				)
@@ -403,15 +445,13 @@ function LibraryContent() {
 			{/* Saved tracks list ("Liked Songs") */}
 			{tab === "tracks" && (
 				tracks.length === 0 ? (
-					<EmptyState
-						icon={<Heart className="size-7" />}
-						title="NO SAVED TRACKS"
+					<LibraryEmpty
+						title="No saved tracks"
 						hint="Tap the heart icon on any track to save it to your library."
-						actionHref="/search"
-						actionLabel="OPEN SEARCH"
+						actionLabel="Open search"
 					/>
 				) : (
-					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
+					<div className={LIST}>
 						{(() => {
 							const normalized: TrackRowTrack[] = tracks.map((item) => ({
 								trackId: item.trackId,
@@ -432,7 +472,7 @@ function LibraryContent() {
 										showDuration={false}
 										queue={normalized}
 									/>
-									<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground pointer-events-none tabular-nums">
+									<span className="hidden md:block absolute right-[88px] top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none tabular-nums">
 										{fmtRelative(item.savedAt)}
 									</span>
 								</div>
@@ -441,6 +481,7 @@ function LibraryContent() {
 					</div>
 				)
 			)}
+			</motion.div>
 		</div>
 	);
 }
@@ -449,8 +490,8 @@ export default function LibraryPage() {
 	return (
 		<Suspense
 			fallback={
-				<div className="flex items-center justify-center min-h-[50vh]">
-					<Loader2 className="size-5 animate-spin text-muted-foreground" />
+				<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
+					<Spinner size={20} />
 				</div>
 			}
 		>
@@ -459,33 +500,33 @@ export default function LibraryPage() {
 	);
 }
 
-function EmptyState({
-	icon,
+/** Empty tab. Without `actionHref` the CTA opens the ⌘K search palette. */
+function LibraryEmpty({
 	title,
 	hint,
 	actionHref,
 	actionLabel,
 }: {
-	icon: React.ReactNode;
 	title: string;
 	hint: string;
-	actionHref: string;
+	actionHref?: string;
 	actionLabel: string;
 }) {
 	return (
-		<div className="border-2 sm:border-[3px] border-foreground bg-card flex flex-col items-center justify-center py-16 px-6 gap-3 shadow-[var(--shadow-brutal)]">
-			<div className="flex items-center justify-center w-14 h-14 border-[3px] border-foreground bg-muted">
-				{icon}
-			</div>
-			<p className="text-sm font-black uppercase tracking-[0.14em]">{title}</p>
-			<p className="text-[11px] text-muted-foreground font-mono uppercase tracking-[0.05em] text-center max-w-xs">
-				{hint}
-			</p>
-			<Link href={actionHref} className="no-underline mt-2">
-				<button className="px-4 py-2 border-2 border-foreground bg-card text-foreground font-mono text-[11px] font-bold tracking-[0.1em] uppercase shadow-[var(--shadow-brutal-sm)] hover:bg-accent active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] transition-all">
-					{actionLabel}
-				</button>
-			</Link>
-		</div>
+		<EmptyState
+			title={title}
+			description={hint}
+			action={
+				actionHref ? (
+					<Link href={actionHref} className="no-underline">
+						<Button variant="outline" size="sm">{actionLabel}</Button>
+					</Link>
+				) : (
+					<Button variant="outline" size="sm" onClick={() => useCommandStore.getState().open()}>
+						{actionLabel}
+					</Button>
+				)
+			}
+		/>
 	);
 }

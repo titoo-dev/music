@@ -19,7 +19,8 @@ import {
 	DialogTitle,
 	DialogFooter,
 } from "@/components/ui/dialog";
-import { ListPlus, Plus, Loader2, Check } from "lucide-react";
+import { ListPlus, Plus } from "lucide-react";
+import { DrawCheck, Spinner } from "@/components/motion/icons";
 import { useAuthStore } from "@/stores/useAuthStore";
 
 export interface TrackInfo {
@@ -141,7 +142,7 @@ export function AddToPlaylist({
 					<DropdownMenuSeparator />
 					{loading ? (
 						<div className="flex items-center justify-center py-3">
-							<Loader2 className="size-4 animate-spin text-muted-foreground" />
+							<Spinner className="text-muted-foreground" />
 						</div>
 					) : playlists.length === 0 ? (
 						<div className="px-2 py-3 text-xs text-muted-foreground text-center">
@@ -156,14 +157,14 @@ export function AddToPlaylist({
 							>
 								<span className="truncate">{p.title}</span>
 								{addedTo.has(p.id) && (
-									<Check className="size-3.5 text-foreground shrink-0" />
+									<DrawCheck className="size-4 text-success shrink-0" />
 								)}
 							</DropdownMenuItem>
 						))
 					)}
 					<DropdownMenuSeparator />
 					<DropdownMenuItem
-						className="gap-1.5 text-muted-foreground"
+						className="gap-2 text-muted-foreground"
 						onClick={() => setDialogOpen(true)}
 					>
 						<Plus className="size-3.5" />
@@ -201,7 +202,7 @@ export function AddToPlaylist({
 								Cancel
 							</Button>
 							<Button type="submit" disabled={!newName.trim() || submitting}>
-								{submitting && <Loader2 className="size-3.5 animate-spin mr-1.5" />}
+								{submitting && <Spinner size={14} />}
 								Create & add
 							</Button>
 						</DialogFooter>

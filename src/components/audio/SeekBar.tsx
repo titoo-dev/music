@@ -131,11 +131,11 @@ export function SeekBar({
 			aria-valuetext={ariaValueText}
 			aria-disabled={disabled}
 			tabIndex={disabled ? -1 : 0}
-			className={`relative flex items-center w-full select-none ${
+			className={`group/seekbar relative flex items-center w-full select-none rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 ${
 				isThin
 					? "h-8 before:absolute before:inset-x-0 before:-inset-y-3 before:content-['']"
-					: "h-10 before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']"
-			} ${disabled ? "cursor-default opacity-50 pointer-events-none" : "cursor-pointer"}`}
+					: "h-8 before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']"
+			} ${disabled ? "cursor-default opacity-40 pointer-events-none" : "cursor-pointer"}`}
 			style={{ touchAction: "none" }}
 			onTouchStart={handleTouchStart}
 			onTouchMove={handleTouchMove}
@@ -155,7 +155,7 @@ export function SeekBar({
 			{/* Time tooltip during drag */}
 			{dragProgress !== null && (
 				<div
-					className="absolute -top-9 z-10 border-2 border-foreground bg-foreground px-2 py-0.5 text-xs font-black uppercase tabular-nums text-background shadow-[var(--shadow-brutal-sm)] -translate-x-1/2 pointer-events-none"
+					className="absolute -top-8 z-10 -translate-x-1/2 rounded-md bg-foreground px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums text-background shadow-float pointer-events-none"
 					style={{ left: `${displayProgress * 100}%` }}
 				>
 					{formatTime(displayProgress * duration)}
@@ -164,24 +164,22 @@ export function SeekBar({
 
 			{/* Visual track */}
 			<div
-				className={`relative w-full bg-muted ${
+				className={`relative w-full overflow-hidden rounded-full bg-border ${
 					isThin
-						? "h-1 group-hover/seekbar:h-[6px]"
-						: "h-2.5 border-2 border-foreground"
-				} transition-all`}
+						? "h-[3px] group-hover/seekbar:h-[5px]"
+						: "h-1 group-hover/seekbar:h-1.5"
+				} ${dragProgress !== null ? (isThin ? "h-[5px]" : "h-1.5") : ""} transition-[height] duration-150 ease-out`}
 			>
 				{/* Buffered (behind progress) */}
 				{bufferProgress > baseProgress && (
 					<div
-						className="absolute inset-y-0 left-0 bg-foreground/25"
+						className="absolute inset-y-0 left-0 rounded-full bg-foreground/20"
 						style={{ width: `${bufferProgress * 100}%` }}
 					/>
 				)}
 				{/* Progress */}
 				<div
-					className={`absolute inset-y-0 left-0 bg-foreground transition-[width] ${
-						!isThin && dragProgress !== null ? "bg-primary" : ""
-					}`}
+					className="absolute inset-y-0 left-0 rounded-full bg-foreground transition-[width] ease-linear"
 					style={{
 						width: `${displayProgress * 100}%`,
 						transitionDuration: dragProgress !== null ? "0ms" : "100ms",
@@ -192,11 +190,13 @@ export function SeekBar({
 			{/* Thumb */}
 			{!disabled && (
 				<div
-					className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 bg-foreground border-2 border-foreground transition-opacity ${
-						isThin
-							? "h-3.5 w-3.5 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/seekbar:opacity-100"
-							: "h-5 w-5 shadow-[var(--shadow-brutal-sm)]"
-					} ${dragProgress !== null ? "!opacity-100 scale-110 !bg-primary" : ""}`}
+					className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground shadow-[0_0_0_3px_var(--background)] transition-[opacity,transform] duration-150 ease-out ${
+						isThin ? "size-2.5" : "size-3"
+					} ${
+						dragProgress !== null
+							? "opacity-100 scale-125"
+							: "opacity-100 scale-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:scale-50 [@media(hover:hover)]:group-hover/seekbar:opacity-100 [@media(hover:hover)]:group-hover/seekbar:scale-100 group-focus-visible/seekbar:opacity-100 group-focus-visible/seekbar:scale-100"
+					}`}
 					style={{ left: `${displayProgress * 100}%` }}
 				/>
 			)}

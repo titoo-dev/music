@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { getCacheStats, clearCache, setCacheLimit, getCacheLimit } from "@/lib/audio-cache";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Trash2, HardDrive } from "lucide-react";
+import { Trash2, HardDrive } from "lucide-react";
+import { Spinner } from "@/components/motion/icons";
 
 function formatBytes(bytes: number): string {
 	if (bytes === 0) return "0 B";
@@ -74,26 +75,26 @@ export function AudioCacheManager() {
 		<Card>
 			<CardHeader>
 				<CardTitle className="flex items-center gap-2">
-					<HardDrive className="size-4" />
+					<HardDrive className="size-4 text-muted-foreground" />
 					Audio Cache
 				</CardTitle>
 			</CardHeader>
 			<CardContent className="space-y-4">
 				{!stats ? (
 					<div className="flex justify-center py-4">
-						<Loader2 className="size-4 animate-spin text-muted-foreground" />
+						<Spinner className="text-muted-foreground" />
 					</div>
 				) : (
 					<>
 						{/* Usage bar */}
 						<div className="space-y-2">
-							<div className="flex justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider">
+							<div className="flex justify-between text-xs text-muted-foreground">
 								<span>{stats.trackCount} track{stats.trackCount !== 1 ? "s" : ""} cached</span>
-								<span>{formatBytes(stats.totalBytes)} / {formatBytes(currentLimit)}</span>
+								<span className="font-mono tabular-nums">{formatBytes(stats.totalBytes)} / {formatBytes(currentLimit)}</span>
 							</div>
-							<div className="h-3 w-full bg-muted border-2 border-foreground overflow-hidden">
+							<div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
 								<div
-									className="h-full bg-primary transition-all duration-500"
+									className="h-full rounded-full bg-foreground transition-all duration-500 ease-out"
 									style={{ width: `${usagePercent}%` }}
 								/>
 							</div>
@@ -101,7 +102,7 @@ export function AudioCacheManager() {
 
 						{/* Cache limit selector */}
 						<div className="space-y-1.5">
-							<p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+							<p className="text-xs font-medium text-muted-foreground">
 								Max cache size
 							</p>
 							<div className="flex gap-1.5 flex-wrap">
@@ -110,7 +111,7 @@ export function AudioCacheManager() {
 										key={opt.bytes}
 										variant={currentLimit === opt.bytes ? "default" : "outline"}
 										size="sm"
-										className="text-xs font-mono"
+										className="font-mono text-xs tabular-nums"
 										onClick={() => handleLimitChange(opt.bytes)}
 									>
 										{opt.label}
@@ -123,12 +124,12 @@ export function AudioCacheManager() {
 						<Button
 							variant="outline"
 							size="sm"
-							className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive"
+							className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/40"
 							onClick={handleClear}
 							disabled={clearing || stats.trackCount === 0}
 						>
 							{clearing ? (
-								<Loader2 className="size-3.5 animate-spin" />
+								<Spinner size={14} />
 							) : (
 								<Trash2 className="size-3.5" />
 							)}

@@ -2,9 +2,13 @@
 
 import { useEffect } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { useCommandStore } from "@/stores/useCommandStore";
 
 /**
- * Global keyboard shortcuts for the audio player.
+ * Global keyboard shortcuts.
+ * - ⌘K / Ctrl+K: toggle the command palette (search + downloads)
+ * - /: open the command palette
+ * Audio player:
  * - Space: play/pause
  * - ArrowRight: next track
  * - ArrowLeft: previous track
@@ -17,6 +21,15 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
 export function useKeyboardShortcuts() {
 	useEffect(() => {
 		function handleKeyDown(e: KeyboardEvent) {
+			// ⌘K / Ctrl+K toggles the command palette from anywhere, even inputs.
+			if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+				e.preventDefault();
+				useCommandStore.getState().toggle();
+				return;
+			}
+			// Palette owns the keyboard while it's open.
+			if (useCommandStore.getState().isOpen) return;
+
 			const target = e.target as HTMLElement | null;
 			// Skip if user is typing in an input/textarea/contenteditable
 			const tag = target?.tagName;
@@ -45,9 +58,16 @@ export function useKeyboardShortcuts() {
 				return;
 			}
 
+			if (e.metaKey || e.ctrlKey || e.altKey) return;
+
 			const state = usePlayerStore.getState();
 
 			switch (e.key) {
+				case "/": {
+					e.preventDefault();
+					useCommandStore.getState().open();
+					break;
+				}
 				case " ": {
 					e.preventDefault();
 					if (!state.currentTrack) return;

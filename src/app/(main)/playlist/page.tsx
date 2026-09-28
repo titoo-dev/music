@@ -4,8 +4,9 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import { Button } from "@/components/ui/button";
-import { Loader2, Play, Shuffle } from "lucide-react";
-import { EntityHero } from "@/components/layout/EntityHero";
+import { Shuffle } from "lucide-react";
+import { EntityHero, HeroPlayButton } from "@/components/layout/EntityHero";
+import { EmptyState, Spinner } from "@/components/motion/icons";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 
@@ -43,16 +44,17 @@ function PlaylistContent() {
 
 	if (loading)
 		return (
-			<div className="flex items-center justify-center min-h-[50vh]">
-				<Loader2 className="size-5 animate-spin text-muted-foreground" />
+			<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
+				<Spinner size={20} />
 			</div>
 		);
 	if (!playlist)
 		return (
-			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
-				<p className="text-sm font-bold uppercase text-muted-foreground">Playlist not found</p>
-				<p className="text-xs font-bold uppercase text-muted-foreground">The playlist you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
-			</div>
+			<EmptyState
+				className="mt-8"
+				title="Playlist not found"
+				description="The playlist you're looking for doesn't exist or is unavailable."
+			/>
 		);
 
 	const playlistCover =
@@ -92,34 +94,33 @@ function PlaylistContent() {
 	return (
 		<div className="space-y-10">
 			<EntityHero
-				eyebrow={`PLAYLIST${creatorName ? ` · BY ${String(creatorName).toUpperCase()}` : " · PERSONAL"}`}
+				eyebrow="Playlist"
 				title={playlistTitle}
 				subtitle={
 					creatorName ? (
-						<span className="font-bold">
-							BY <span className="text-primary">{creatorName}</span>
+						<span>
+							By <span className="font-medium text-foreground">{creatorName}</span>
 						</span>
 					) : undefined
 				}
-				meta={`${playlist.nb_tracks || tracks.length} TRACKS`}
+				meta={`${playlist.nb_tracks || tracks.length} tracks`}
 				coverSrc={playlistCover}
 				coverAlt={playlistTitle}
 				primaryAction={
-					<Button
-						onClick={handlePlayAll}
+					<HeroPlayButton
+						onPlay={handlePlayAll}
+						trackIds={playableTracks.map((t) => t.trackId)}
 						disabled={playableTracks.length === 0}
-						className="h-12 md:h-10 w-full md:w-auto px-6 gap-2"
-					>
-						<Play className="size-4" aria-hidden />
-						PLAY
-					</Button>
+						label="Play playlist"
+					/>
 				}
 				secondaryActions={
 					<Button
 						onClick={handleShuffleAll}
 						disabled={playableTracks.length === 0}
-						variant="ghost"
+						variant="outline"
 						size="icon-touch"
+						className="rounded-full"
 						aria-label="Shuffle playlist"
 					>
 						<Shuffle className="size-4" aria-hidden />
@@ -128,33 +129,18 @@ function PlaylistContent() {
 			/>
 
 			{/* Tracklist */}
-			<div>
-				<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
-					<div className="flex items-baseline gap-3">
-						<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
-							TRACKLIST
-						</h2>
-						<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
-							{tracks.length} TRACK{tracks.length !== 1 ? "S" : ""}
-						</span>
-					</div>
+			<section>
+				<div className="mb-3 flex items-baseline gap-2">
+					<h2 className="text-sm font-medium m-0">Tracklist</h2>
+					<span className="text-xs text-muted-foreground tabular-nums">{tracks.length}</span>
 				</div>
 				{tracks.length === 0 ? (
-					<div className="flex flex-col items-center justify-center py-16 gap-2">
-						<p className="text-sm font-bold uppercase text-muted-foreground">No tracks</p>
-						<p className="text-xs font-bold uppercase text-muted-foreground">The tracklist for this playlist is unavailable.</p>
-					</div>
+					<EmptyState
+						title="No tracks"
+						description="The tracklist for this playlist is unavailable."
+					/>
 				) : (
-				<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
-					{/* Column header */}
-					<div className="hidden sm:grid grid-cols-[28px_40px_1fr_auto_60px_64px] gap-3 items-center px-3 py-2 border-b-[2px] border-foreground font-mono text-[10px] font-bold tracking-[0.14em] uppercase text-muted-foreground">
-						<span className="text-right">#</span>
-						<span />
-						<span>TITLE / ARTIST</span>
-						<span>FORMAT</span>
-						<span className="text-right">TIME</span>
-						<span />
-					</div>
+				<div className="divide-y divide-border border-y border-border">
 					{(() => {
 						const normalizedTracks = tracks.map((t: any) => trackFromDeezerRaw(t));
 						return tracks.map((track: any, idx: number) => {
@@ -172,7 +158,7 @@ function PlaylistContent() {
 					})()}
 				</div>
 				)}
-			</div>
+			</section>
 		</div>
 	);
 }
@@ -181,8 +167,8 @@ export default function PlaylistPage() {
 	return (
 		<Suspense
 			fallback={
-				<div className="flex items-center justify-center min-h-[50vh]">
-					<Loader2 className="size-5 animate-spin text-muted-foreground" />
+				<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
+					<Spinner size={20} />
 				</div>
 			}
 		>

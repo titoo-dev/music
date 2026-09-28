@@ -10,14 +10,13 @@ import {
 	DialogDescription,
 } from "@/components/ui/dialog";
 import {
-	Loader2,
-	Link as LinkIcon,
 	Clock,
 	Infinity as InfinityIcon,
 	Copy,
 	Trash2,
 } from "lucide-react";
 import { useShareStore } from "@/stores/useShareStore";
+import { DrawCheck, Spinner } from "@/components/motion/icons";
 
 const EXPIRY_OPTIONS = [
 	{ label: "24 hours", hours: 24 },
@@ -160,17 +159,21 @@ export function ShareDialog({
 
 				{state === "done" ? (
 					<div className="flex flex-col items-center gap-3 py-4">
-						<LinkIcon className="size-8 text-foreground bg-accent border-2 border-foreground p-1" />
-						<p className="text-sm font-bold">Link copied!</p>
+						<span className="flex size-10 items-center justify-center rounded-full bg-success/10 text-success">
+							<DrawCheck className="size-5" />
+						</span>
+						<p className="text-sm font-medium">Link copied!</p>
 					</div>
 				) : state === "revoked" ? (
 					<div className="flex flex-col items-center gap-3 py-4">
-						<Trash2 className="size-8 text-muted-foreground" />
-						<p className="text-sm font-bold">Link revoked</p>
+						<span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+							<Trash2 className="size-5" />
+						</span>
+						<p className="text-sm font-medium">Link revoked</p>
 					</div>
 				) : state === "error" ? (
 					<div className="flex flex-col items-center gap-3 py-4">
-						<p className="text-sm font-bold text-destructive">{errorMsg}</p>
+						<p className="text-sm font-medium text-destructive">{errorMsg}</p>
 						<Button
 							variant="outline"
 							size="sm"
@@ -184,22 +187,22 @@ export function ShareDialog({
 					<div className="flex flex-col gap-2">
 						<button
 							onClick={handleCopy}
-							className="flex items-center gap-3 px-3 py-3 text-left border-2 border-foreground bg-background hover:bg-accent/20 active:shadow-[var(--shadow-brutal-active)] active:translate-x-[1px] active:translate-y-[1px] shadow-[var(--shadow-brutal-sm)] transition-all"
+							className="flex items-center gap-3 rounded-lg border border-border bg-transparent px-3 py-2.5 text-left transition-colors hover:bg-accent active:scale-[0.99] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:opacity-50 disabled:pointer-events-none"
 						>
-							<Copy className="size-4 shrink-0" />
-							<span className="text-sm font-bold">Copy link</span>
+							<Copy className="size-4 shrink-0 text-muted-foreground" />
+							<span className="text-sm font-medium">Copy link</span>
 						</button>
 						<button
 							onClick={handleRevoke}
 							disabled={state === "revoking"}
-							className="flex items-center gap-3 px-3 py-3 text-left border-2 border-destructive text-destructive bg-background hover:bg-destructive/10 active:shadow-[var(--shadow-brutal-active)] active:translate-x-[1px] active:translate-y-[1px] shadow-[2px_2px_0px_var(--destructive)] transition-all disabled:opacity-50"
+							className="flex items-center gap-3 rounded-lg border border-destructive/25 bg-transparent px-3 py-2.5 text-left text-destructive transition-colors hover:bg-destructive/10 active:scale-[0.99] outline-none focus-visible:ring-[3px] focus-visible:ring-destructive/20 disabled:opacity-50"
 						>
 							{state === "revoking" ? (
-								<Loader2 className="size-4 shrink-0 animate-spin" />
+								<Spinner className="shrink-0" />
 							) : (
 								<Trash2 className="size-4 shrink-0" />
 							)}
-							<span className="text-sm font-bold">
+							<span className="text-sm font-medium">
 								{state === "revoking" ? "Revoking..." : "Revoke link"}
 							</span>
 						</button>
@@ -215,18 +218,18 @@ export function ShareDialog({
 									key={opt.label}
 									onClick={() => handleCreate(opt.hours)}
 									disabled={isDisabled}
-									className="flex items-center gap-3 px-3 py-3 text-left border-2 border-foreground bg-background hover:bg-accent/20 active:shadow-[var(--shadow-brutal-active)] active:translate-x-[1px] active:translate-y-[1px] shadow-[var(--shadow-brutal-sm)] transition-all disabled:opacity-50"
+									className="flex items-center gap-3 rounded-lg border border-border bg-transparent px-3 py-2.5 text-left transition-colors hover:bg-accent active:scale-[0.99] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:opacity-50 disabled:pointer-events-none"
 								>
-									<span className="shrink-0">
+									<span className="shrink-0 text-muted-foreground">
 										{isLoading ? (
-											<Loader2 className="size-4 animate-spin" />
+											<Spinner />
 										) : opt.hours === null ? (
 											<InfinityIcon className="size-4" />
 										) : (
 											<Clock className="size-4" />
 										)}
 									</span>
-									<span className="text-sm font-bold">{opt.label}</span>
+									<span className="text-sm font-medium">{opt.label}</span>
 								</button>
 							);
 						})}

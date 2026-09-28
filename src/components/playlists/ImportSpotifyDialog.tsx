@@ -2,7 +2,8 @@
 
 import { useState, type ReactElement } from "react";
 import Link from "next/link";
-import { Loader2, Download, ExternalLink, AlertTriangle, Check } from "lucide-react";
+import { Download, ExternalLink, AlertTriangle } from "lucide-react";
+import { DrawCheck, Spinner } from "@/components/motion/icons";
 import { toast } from "sonner";
 import { postToServer } from "@/utils/api";
 import { Button } from "@/components/ui/button";
@@ -154,7 +155,7 @@ export function ImportSpotifyDialog({
 							>
 								{loading ? (
 									<>
-										<Loader2 className="size-4 animate-spin" />
+										<Spinner />
 										Matching tracks…
 									</>
 								) : (
@@ -201,12 +202,16 @@ function ImportReportView({
 				<DialogTitle className="flex items-center gap-2">
 					{playlist ? (
 						<>
-							<Check className="size-5" />
+							<span className="flex size-6 items-center justify-center rounded-full bg-success/10 text-success">
+								<DrawCheck className="size-3.5" />
+							</span>
 							Import complete
 						</>
 					) : (
 						<>
-							<AlertTriangle className="size-5" />
+							<span className="flex size-6 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+								<AlertTriangle className="size-3.5" />
+							</span>
 							No matches
 						</>
 					)}
@@ -214,8 +219,8 @@ function ImportReportView({
 				<DialogDescription>
 					{playlist ? (
 						<>
-							Matched <strong>{report.matched}</strong> of{" "}
-							<strong>{report.processed}</strong> tracks from Spotify
+							Matched <strong className="font-medium text-foreground tabular-nums">{report.matched}</strong> of{" "}
+							<strong className="font-medium text-foreground tabular-nums">{report.processed}</strong> tracks from Spotify
 							{report.truncated && (
 								<>
 									{" "}
@@ -233,17 +238,17 @@ function ImportReportView({
 
 			{report.notFound.length > 0 && (
 				<div className="space-y-2">
-					<p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+					<p className="text-xs font-medium text-muted-foreground">
 						{report.notFound.length} not found
 					</p>
-					<ul className="border-2 border-foreground divide-y-2 divide-foreground bg-card max-h-64 overflow-y-auto">
+					<ul className="max-h-64 overflow-y-auto rounded-lg border border-border divide-y divide-border">
 						{missesShown.map((m) => (
 							<li
 								key={m.spotifyId}
 								className="px-3 py-2 flex items-start justify-between gap-2"
 							>
 								<div className="min-w-0">
-									<p className="text-sm font-bold truncate">{m.title}</p>
+									<p className="text-sm font-medium truncate">{m.title}</p>
 									<p className="text-xs text-muted-foreground truncate">
 										{m.artist}
 										{m.album ? ` — ${m.album}` : ""}
@@ -251,7 +256,7 @@ function ImportReportView({
 								</div>
 								<Link
 									href={`/search?term=${encodeURIComponent(`${m.title} ${m.artist}`)}`}
-									className="shrink-0 text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1 hover:underline"
+									className="shrink-0 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 									onClick={onClose}
 								>
 									Search

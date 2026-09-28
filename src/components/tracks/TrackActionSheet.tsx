@@ -19,24 +19,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CoverImage } from "@/components/ui/cover-image";
 import {
-	Heart,
 	ListEnd,
 	ListPlus,
 	ListStart,
-	Play,
-	Pause,
 	Trash2,
 	Disc3,
 	User,
-	CheckCircle2,
-	Loader2,
 	ArrowLeft,
 	Plus,
-	Check,
 	Share2,
 	Link as LinkIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { DrawCheck, HeartGlyph, PlayPauseIcon, Spinner } from "@/components/motion/icons";
 
 function formatDuration(seconds?: number | null) {
 	if (!seconds) return null;
@@ -79,9 +74,7 @@ function SaveActionRow({
 	return (
 		<ActionRow
 			icon={
-				<Heart
-					className={`size-4 ${saved ? "fill-primary text-primary" : ""}`}
-				/>
+				<HeartGlyph filled={saved} className={saved ? "text-foreground" : ""} />
 			}
 			label={saved ? "Remove from library" : "Save to library"}
 			onClick={handle}
@@ -194,41 +187,41 @@ function PlaylistPicker({
 		<div className="flex flex-col">
 			<button
 				onClick={onBack}
-				className="flex items-center gap-2 px-4 py-3 text-sm font-bold text-muted-foreground active:bg-accent/20"
+				className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground active:bg-accent"
 			>
 				<ArrowLeft className="size-4" />
 				Back
 			</button>
 
-			<div className="border-t-[2px] border-foreground">
+			<div className="border-t border-border">
 				{loading ? (
 					<div className="flex items-center justify-center py-8">
-						<Loader2 className="size-5 animate-spin text-muted-foreground" />
+						<Spinner size={20} className="text-muted-foreground" />
 					</div>
 				) : playlists.length === 0 && !creating ? (
 					<div className="px-4 py-8 text-center">
-						<p className="text-sm text-muted-foreground font-bold">
+						<p className="text-sm text-muted-foreground">
 							No playlists yet
 						</p>
 					</div>
 				) : (
-					<div className="max-h-[40vh] overflow-y-auto">
+					<div className="max-h-[40vh] overflow-y-auto px-2 py-1">
 						{playlists.map((p) => (
 							<button
 								key={p.id}
 								onClick={() => handleAdd(p.id)}
-								className="flex items-center justify-between w-full px-4 py-3 text-left active:bg-accent/20 border-b border-foreground/10 last:border-b-0"
+								className="flex items-center justify-between w-full rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-accent active:bg-accent"
 							>
 								<div className="min-w-0">
-									<p className="text-sm font-bold truncate">{p.title}</p>
+									<p className="text-sm font-medium truncate">{p.title}</p>
 									{p._count?.tracks != null && (
-										<p className="text-[11px] text-muted-foreground font-mono">
+										<p className="text-xs text-muted-foreground tabular-nums">
 											{p._count.tracks} tracks
 										</p>
 									)}
 								</div>
 								{addedTo.has(p.id) && (
-									<Check className="size-4 text-green-600 shrink-0" />
+									<DrawCheck className="size-4 text-success shrink-0" />
 								)}
 							</button>
 						))}
@@ -242,7 +235,7 @@ function PlaylistPicker({
 							e.preventDefault();
 							handleCreate();
 						}}
-						className="flex items-center gap-2 px-4 py-3 border-t-[2px] border-foreground"
+						className="flex items-center gap-2 px-4 py-3 border-t border-border"
 					>
 						<Input
 							autoFocus
@@ -257,7 +250,7 @@ function PlaylistPicker({
 							disabled={!newName.trim() || submitting}
 						>
 							{submitting ? (
-								<Loader2 className="size-3.5 animate-spin" />
+								<Spinner size={14} />
 							) : (
 								"Create"
 							)}
@@ -266,7 +259,7 @@ function PlaylistPicker({
 				) : (
 					<button
 						onClick={() => setCreating(true)}
-						className="flex items-center gap-2 w-full px-4 py-3 text-sm font-bold text-muted-foreground active:bg-accent/20 border-t-[2px] border-foreground"
+						className="flex items-center gap-2 w-full px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground active:bg-accent border-t border-border"
 					>
 						<Plus className="size-4" />
 						New playlist
@@ -363,14 +356,15 @@ export function TrackActionSheet() {
 			<SheetContent
 				side="bottom"
 				showCloseButton={false}
-				className="pb-[env(safe-area-inset-bottom)] max-h-[85vh] md:hidden"
+				className="gap-0 pb-[env(safe-area-inset-bottom)] max-h-[85vh] md:hidden"
 			>
+				<div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-foreground/15" />
 				{/* Track Header */}
-				<SheetHeader className="border-b-[2px] border-foreground">
+				<SheetHeader className="border-b border-border">
 					<div className="flex items-center gap-3">
 						<CoverImage
 							src={track.cover}
-							className="size-12 shrink-0 rounded-sm"
+							className="size-12 shrink-0 rounded-md"
 						/>
 						<div className="min-w-0 flex-1">
 							<SheetTitle className="truncate text-sm">
@@ -385,16 +379,12 @@ export function TrackActionSheet() {
 				</SheetHeader>
 
 				{view === "actions" ? (
-					<div className="flex flex-col pb-2">
+					<div className="flex flex-col px-2 py-2">
 						{/* Preview */}
 						{track.previewUrl && (
 							<ActionRow
 								icon={
-									isPreviewActive ? (
-										<Pause className="size-4" />
-									) : (
-										<Play className="size-4" />
-									)
+									<PlayPauseIcon playing={!!isPreviewActive} />
 								}
 								label={isPreviewActive ? "Pause preview" : "Play preview"}
 								onClick={handlePreview}
@@ -439,7 +429,7 @@ export function TrackActionSheet() {
 							<ActionRow
 								icon={
 									isShared ? (
-										<LinkIcon className="size-4 text-primary" />
+										<LinkIcon className="size-4 text-highlight" />
 									) : (
 										<Share2 className="size-4" />
 									)
@@ -530,15 +520,15 @@ function ActionRow({
 	return (
 		<button
 			onClick={onClick}
-			className={`flex items-center gap-3 px-4 py-3.5 w-full text-left active:bg-accent/20 transition-colors ${
-				destructive ? "text-destructive" : "text-foreground"
+			className={`flex items-center gap-3 rounded-lg px-2.5 py-3 w-full text-left transition-colors hover:bg-accent active:bg-accent ${
+				destructive ? "text-destructive hover:bg-destructive/10 active:bg-destructive/10" : "text-foreground"
 			}`}
 		>
-			<span className="shrink-0">{icon}</span>
+			<span className={`shrink-0 ${destructive ? "" : "text-muted-foreground"}`}>{icon}</span>
 			<div className="flex-1 min-w-0">
-				<p className="text-sm font-bold truncate">{label}</p>
+				<p className="text-sm font-medium truncate">{label}</p>
 				{sublabel && (
-					<p className="text-[11px] text-muted-foreground truncate">
+					<p className="text-xs text-muted-foreground truncate">
 						{sublabel}
 					</p>
 				)}
@@ -550,7 +540,9 @@ function ActionRow({
 					viewBox="0 0 24 24"
 					fill="none"
 					stroke="currentColor"
-					strokeWidth="2"
+					strokeWidth="1.75"
+					strokeLinecap="round"
+					strokeLinejoin="round"
 					className="shrink-0 text-muted-foreground"
 				>
 					<polyline points="9 18 15 12 9 6" />

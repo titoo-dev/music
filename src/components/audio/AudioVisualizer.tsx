@@ -69,7 +69,7 @@ export function AudioVisualizer({ barCount = 40, className = "" }: Props) {
 			const freq = new Uint8Array(analyser.frequencyBinCount);
 			analyser.getByteFrequencyData(freq);
 
-			const gap = 1;
+			const gap = 2;
 			const barW = Math.max(1, Math.floor((w - (barCount - 1) * gap) / barCount));
 			const step = Math.floor(freq.length / barCount);
 
@@ -82,9 +82,17 @@ export function AudioVisualizer({ barCount = 40, className = "" }: Props) {
 				const v = freq[i * step] / 255;
 				if (v < 0.02) continue;
 				const bh = Math.max(1, v * h);
-				const alpha = 0.3 + v * 0.55; // 0.3 – 0.85
+				const alpha = 0.25 + v * 0.55; // 0.25 – 0.8
 				ctx2d!.fillStyle = `${base}, ${alpha})`;
-				ctx2d!.fillRect(i * (barW + gap), h - bh, barW, bh);
+				const x = i * (barW + gap);
+				const r = Math.min(barW / 2, bh / 2, 2);
+				ctx2d!.beginPath();
+				if (typeof ctx2d!.roundRect === "function") {
+					ctx2d!.roundRect(x, h - bh, barW, bh, [r, r, 0, 0]);
+				} else {
+					ctx2d!.rect(x, h - bh, barW, bh);
+				}
+				ctx2d!.fill();
 			}
 		}
 

@@ -4,12 +4,14 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchData } from "@/utils/api";
 import Link from "next/link";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle2, Play, Shuffle, Heart, ChevronDown } from "lucide-react";
+import { Check, Shuffle, ChevronDown } from "lucide-react";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
 import { CoverImage } from "@/components/ui/cover-image";
-import { EntityHero } from "@/components/layout/EntityHero";
+import { EntityHero, HeroPlayButton } from "@/components/layout/EntityHero";
+import { EmptyState, HeartGlyph, Spinner } from "@/components/motion/icons";
+import { cn } from "@/lib/utils";
 import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -43,13 +45,9 @@ function ArtistBio({ bio }: { bio: string }) {
 
 	return (
 		<section>
-			<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
-				<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
-					ABOUT
-				</h2>
-			</div>
-			<div className="border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] p-5">
-				<p className="text-[13px] leading-[1.55] text-foreground whitespace-pre-line">
+			<SectionHeader title="About" />
+			<div className="rounded-xl border border-border bg-card p-5">
+				<p className="max-w-prose text-sm leading-relaxed text-muted-foreground whitespace-pre-line">
 					{visible}
 				</p>
 				{isLong && (
@@ -57,7 +55,7 @@ function ArtistBio({ bio }: { bio: string }) {
 						type="button"
 						onClick={() => setExpanded((v) => !v)}
 						aria-expanded={expanded}
-						className="mt-3 inline-flex items-center gap-1.5 min-h-11 md:min-h-9 px-3 -ml-3 font-mono text-[11px] font-bold tracking-[0.1em] uppercase text-muted-foreground [@media(hover:hover)]:hover:text-foreground transition-colors"
+						className="mt-2 inline-flex items-center gap-1 min-h-11 md:min-h-8 rounded-md px-2 -ml-2 text-sm font-medium text-foreground [@media(hover:hover)]:hover:bg-accent transition-colors"
 					>
 						<ChevronDown
 							className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
@@ -81,6 +79,151 @@ function getArtistUrl(hash: string, size = 500) {
 	if (!hash) return "";
 	if (hash.startsWith("http")) return hash;
 	return `https://e-cdns-images.dzcdn.net/images/artist/${hash}/${size}x${size}-000000-80-0-0.jpg`;
+}
+
+function SectionHeader({ title, count }: { title: string; count?: number }) {
+	return (
+		<div className="mb-3 flex items-baseline gap-2">
+			<h2 className="text-sm font-medium m-0">{title}</h2>
+			{count != null && (
+				<span className="text-xs text-muted-foreground tabular-nums">{count}</span>
+			)}
+		</div>
+	);
+}
+
+/** Segmented pill control with a motion-animated active indicator. */
+function Segmented<T extends string>({
+	id,
+	value,
+	options,
+	onChange,
+}: {
+	id: string;
+	value: T;
+	options: { value: T; label: React.ReactNode }[];
+	onChange: (v: T) => void;
+}) {
+	return (
+		<div
+			role="tablist"
+			className="inline-flex max-w-full overflow-x-auto scrollbar-hide rounded-lg border border-border bg-muted/50 p-0.5"
+		>
+			{options.map((opt) => {
+				const active = opt.value === value;
+				return (
+					<button
+						key={opt.value}
+						type="button"
+						role="tab"
+						aria-selected={active}
+						onClick={() => onChange(opt.value)}
+						className={cn(
+							"relative h-7 shrink-0 rounded-md px-3 text-sm whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+							active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+						)}
+					>
+						{active && (
+							<motion.span
+								layoutId={`${id}-indicator`}
+								className="absolute inset-0 rounded-md bg-background shadow-sm"
+								transition={{ type: "spring", stiffness: 500, damping: 38 }}
+							/>
+						)}
+						<span className="relative">{opt.label}</span>
+					</button>
+				);
+			})}
+		</div>
+	);
+}
+
+function DiscographyTabs({
+	tabKeys,
+	tabLabels,
+	discography,
+	albumMap,
+}: {
+	tabKeys: string[];
+	tabLabels: Record<string, string>;
+	discography: Record<string, any[]>;
+	albumMap: Map<string, string>;
+}) {
+	const [selected, setSelected] = useState(tabKeys[0]);
+	const active = tabKeys.includes(selected) ? selected : tabKeys[0];
+
+	return (
+		<div>
+			<Segmented
+				id="artist-discography"
+				value={active}
+				onChange={setSelected}
+				options={tabKeys.map((key) => ({
+					value: key,
+					label: (
+						<>
+							{tabLabels[key] || key}
+							<span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+								{discography[key].length}
+							</span>
+						</>
+					),
+				}))}
+			/>
+			<motion.div
+				key={active}
+				initial={{ opacity: 0, y: 8 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ duration: 0.25, ease: "easeOut" }}
+				className="mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-6"
+			>
+				{discography[active].map((album) => {
+					const albumId = album.id || album.ALB_ID;
+					const albumTitle = album.title || album.ALB_TITLE;
+					const albumCover =
+						album.cover_medium ||
+						album.cover_big ||
+						getCoverUrl(album.ALB_PICTURE || album.md5_image, 250) ||
+						"/placeholder.jpg";
+					const myAlbumId = albumMap.get(String(albumId));
+					const albumHref = `/album?id=${albumId}`;
+
+					return (
+						<div key={albumId} className="group min-w-0">
+							<div className="relative overflow-hidden rounded-lg bg-muted ring-1 ring-border">
+								<Link href={albumHref}>
+									<CoverImage
+										src={albumCover}
+										alt={albumTitle}
+										loading="lazy"
+										className="w-full aspect-square rounded-lg transition-transform duration-300 group-hover:scale-[1.02]"
+									/>
+								</Link>
+								{myAlbumId && (
+									<span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full border border-border bg-background/90 px-2 py-0.5 text-[11px] font-medium text-foreground backdrop-blur">
+										<Check className="size-3" aria-hidden />
+										Saved
+									</span>
+								)}
+							</div>
+							<div className="mt-2">
+								<Link
+									href={albumHref}
+									className="block truncate text-sm font-medium text-foreground hover:underline underline-offset-4"
+								>
+									{albumTitle}
+								</Link>
+								<p className="truncate text-xs text-muted-foreground tabular-nums">
+									{album.release_date || album.PHYSICAL_RELEASE_DATE}
+									{album.nb_tracks ? ` · ${album.nb_tracks} tracks` : ""}
+								</p>
+							</div>
+						</div>
+					);
+				})}
+			</motion.div>
+		</div>
+	);
 }
 
 function ArtistContent() {
@@ -145,16 +288,17 @@ function ArtistContent() {
 
 	if (loading)
 		return (
-			<div className="flex items-center justify-center min-h-[50vh]">
-				<Loader2 className="size-5 animate-spin text-muted-foreground" />
+			<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
+				<Spinner size={20} />
 			</div>
 		);
 	if (!artist)
 		return (
-			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
-				<p className="text-sm font-bold uppercase text-muted-foreground">Artist not found</p>
-				<p className="text-xs font-bold uppercase text-muted-foreground">The artist you&apos;re looking for doesn&apos;t exist or is unavailable.</p>
-			</div>
+			<EmptyState
+				className="mt-8"
+				title="Artist not found"
+				description="The artist you're looking for doesn't exist or is unavailable."
+			/>
 		);
 
 	const artistPicture =
@@ -235,22 +379,21 @@ function ArtistContent() {
 	const artistBio = extractArtistBio(artist);
 
 	return (
-		<div className="space-y-10">
+		<div className="space-y-12">
 			<EntityHero
-				eyebrow={`ARTIST${nbFan != null ? ` · ${Number(nbFan).toLocaleString()} FANS` : ""}`}
+				eyebrow="Artist"
 				title={artistName}
 				coverSrc={artistPicture}
 				coverAlt={artistName}
-				meta={nbFan != null ? `${Number(nbFan).toLocaleString()} FANS · DEEZER` : null}
+				coverShape="circle"
+				meta={nbFan != null ? `${Number(nbFan).toLocaleString()} fans on Deezer` : null}
 				primaryAction={
 					playableTopTracks.length > 0 ? (
-						<Button
-							onClick={handlePlayTop}
-							className="h-12 md:h-10 w-full md:w-auto px-6 gap-2"
-						>
-							<Play className="size-4" aria-hidden />
-							PLAY TOP TRACKS
-						</Button>
+						<HeroPlayButton
+							onPlay={handlePlayTop}
+							trackIds={playableTopTracks.map((t) => t.trackId)}
+							label="Play top tracks"
+						/>
 					) : undefined
 				}
 				secondaryActions={
@@ -259,26 +402,21 @@ function ArtistContent() {
 							<Button
 								onClick={handleToggleFollow}
 								disabled={followBusy}
-								variant={isFollowed ? "outline" : "secondary"}
+								variant="outline"
 								size="icon-touch"
+								className="rounded-full"
 								aria-label={isFollowed ? "Unfollow artist" : "Follow artist"}
 								aria-pressed={isFollowed}
 							>
-								{followBusy ? (
-									<Loader2 className="size-4 animate-spin" aria-hidden />
-								) : (
-									<Heart
-										className={`size-4 ${isFollowed ? "fill-primary text-primary" : ""}`}
-										aria-hidden
-									/>
-								)}
+								{followBusy ? <Spinner /> : <HeartGlyph filled={isFollowed} />}
 							</Button>
 						)}
 						{playableTopTracks.length > 0 && (
 							<Button
 								onClick={handleShuffleTop}
-								variant="ghost"
+								variant="outline"
 								size="icon-touch"
+								className="rounded-full"
 								aria-label="Shuffle top tracks"
 							>
 								<Shuffle className="size-4" aria-hidden />
@@ -294,26 +432,8 @@ function ArtistContent() {
 			{/* Top Tracks */}
 			{topTracks.length > 0 && (
 				<section>
-					<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
-						<div className="flex items-baseline gap-3">
-							<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
-								TOP TRACKS
-							</h2>
-							<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
-								{Math.min(10, topTracks.length)} RESULTS
-							</span>
-						</div>
-					</div>
-					<div className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden">
-						{/* Column header */}
-						<div className="hidden sm:grid grid-cols-[28px_40px_1fr_auto_60px_64px] gap-3 items-center px-3 py-2 border-b-[2px] border-foreground font-mono text-[10px] font-bold tracking-[0.14em] uppercase text-muted-foreground">
-							<span className="text-right">#</span>
-							<span />
-							<span>TITLE / ALBUM</span>
-							<span>FORMAT</span>
-							<span className="text-right">TIME</span>
-							<span />
-						</div>
+					<SectionHeader title="Top tracks" count={Math.min(10, topTracks.length)} />
+					<div className="divide-y divide-border border-y border-border">
 						{(() => {
 							const top = topTracks.slice(0, 10);
 							const normalizedTop = top.map((t: any) => trackFromDeezerRaw(t));
@@ -337,85 +457,26 @@ function ArtistContent() {
 			{/* Discography Tabs */}
 			{tabKeys.length > 0 && (
 				<section>
-					<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">
-						<div className="flex items-baseline gap-3">
-							<h2 className="text-base sm:text-lg font-black uppercase tracking-[0.05em] m-0">
-								DISCOGRAPHY
-							</h2>
-							<span className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
-								{tabKeys.reduce((sum, k) => sum + (discography[k]?.length || 0), 0)} TOTAL
-							</span>
-						</div>
-					</div>
-					<Tabs defaultValue={tabKeys[0]}>
-						<TabsList>
-							{tabKeys.map((key) => (
-								<TabsTrigger key={key} value={key}>
-									{tabLabels[key] || key} ({discography[key].length})
-								</TabsTrigger>
-							))}
-						</TabsList>
-
-						{tabKeys.map((key) => (
-							<TabsContent key={key} value={key} className="mt-6">
-								<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
-									{discography[key].map((album: any) => {
-										const albumId = album.id || album.ALB_ID;
-										const albumTitle = album.title || album.ALB_TITLE;
-										const albumCover =
-											album.cover_medium ||
-											album.cover_big ||
-											getCoverUrl(album.ALB_PICTURE || album.md5_image, 250) ||
-											"/placeholder.jpg";
-										const myAlbumId = albumMap.get(String(albumId));
-										const albumHref = `/album?id=${albumId}`;
-
-										return (
-											<div key={albumId} className="group space-y-2">
-												<div className="relative overflow-hidden border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card">
-													<Link href={albumHref}>
-														<CoverImage
-															src={albumCover}
-															alt={albumTitle}
-															loading="lazy"
-															className="w-full aspect-square border-0"
-														/>
-													</Link>
-													{myAlbumId && (
-														<span className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-accent text-foreground text-[10px] font-bold uppercase px-1.5 py-0.5 border-2 border-foreground">
-															<CheckCircle2 className="size-3" />
-															Saved
-														</span>
-													)}
-												</div>
-												<div>
-													<Link
-														href={albumHref}
-														className="text-sm font-medium truncate block text-foreground hover:underline"
-													>
-														{albumTitle}
-													</Link>
-													<p className="text-xs text-muted-foreground font-mono">
-														{album.release_date || album.PHYSICAL_RELEASE_DATE}
-														{album.nb_tracks ? ` · ${album.nb_tracks} tracks` : ""}
-													</p>
-												</div>
-											</div>
-										);
-									})}
-								</div>
-							</TabsContent>
-						))}
-					</Tabs>
+					<SectionHeader
+						title="Discography"
+						count={tabKeys.reduce((sum, k) => sum + (discography[k]?.length || 0), 0)}
+					/>
+					<DiscographyTabs
+						key={id ?? ""}
+						tabKeys={tabKeys}
+						tabLabels={tabLabels}
+						discography={discography}
+						albumMap={albumMap}
+					/>
 				</section>
 			)}
 
 			{/* Fallback if nothing */}
 			{topTracks.length === 0 && tabKeys.length === 0 && (
-				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<p className="text-sm font-bold uppercase text-muted-foreground">No content</p>
-					<p className="text-xs font-bold uppercase text-muted-foreground">No tracks or discography found for this artist.</p>
-				</div>
+				<EmptyState
+					title="No content"
+					description="No tracks or discography found for this artist."
+				/>
 			)}
 		</div>
 	);
@@ -425,8 +486,8 @@ export default function ArtistPage() {
 	return (
 		<Suspense
 			fallback={
-				<div className="flex items-center justify-center min-h-[50vh]">
-					<Loader2 className="size-5 animate-spin text-muted-foreground" />
+				<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
+					<Spinner size={20} />
 				</div>
 			}
 		>

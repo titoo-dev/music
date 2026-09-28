@@ -1,0 +1,860 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence, LayoutGroup } from "motion/react";
+import { toast } from "sonner";
+import {
+	ArrowRight,
+	CornerDownLeft,
+	Disc3,
+	Home,
+	Info,
+	Library,
+	ListMusic,
+	ListPlus,
+	Moon,
+	RotateCw,
+	Settings,
+	Sun,
+	User as UserIcon,
+	X,
+	type LucideIcon,
+} from "lucide-react";
+import { fetchData } from "@/utils/api";
+import { cn } from "@/lib/utils";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useCommandStore, type CommandView } from "@/stores/useCommandStore";
+import {
+	useDownloadStore,
+	selectActiveCount,
+	selectOverallProgress,
+	type DownloadItem,
+} from "@/stores/useDownloadStore";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { parseDeezerLink, fetchCollection, type DeezerLink, type CollectionInfo } from "@/lib/collection-tracks";
+import { applyThemePreference } from "@/lib/theme";
+import type { DownloadableTrack } from "@/lib/download";
+import type { SuggestAlbum, SuggestArtist, SuggestTrack } from "@/lib/deezer/suggest";
+import { CoverImage } from "@/components/ui/cover-image";
+import {
+	DownloadGlyph,
+	DrawCheck,
+	ProgressRing,
+	SearchGlyph,
+	SlideSwap,
+	Spinner,
+	WaveLine,
+} from "@/components/motion/icons";
+
+const MIN_QUERY = 2;
+
+const noopSubscribe = () => () => {};
+/** false during SSR + hydration, true after — without a setState-in-effect. */
+const useIsClient = () => useSyncExternalStore(noopSubscribe, () => true, () => false);
+
+interface SuggestResponse {
+	tracks: SuggestTrack[];
+	albums: SuggestAlbum[];
+	artists: SuggestArtist[];
+}
+
+interface Row {
+	key: string;
+	group: string;
+	title: string;
+	subtitle?: string | null;
+	cover?: string | null;
+	icon?: LucideIcon;
+	round?: boolean;
+	/** Enter */
+	onSelect: () => void;
+	/** Shift+Enter — only for downloadable rows. */
+	onDownload?: () => void;
+	onQueue?: () => void;
+	hint?: string;
+}
+
+const PAGES: { href: string; label: string; icon: LucideIcon; auth?: boolean; keywords: string }[] = [
+	{ href: "/", label: "All music", icon: Home, keywords: "home all music tracks" },
+	{ href: "/library", label: "Library", icon: Library, auth: true, keywords: "library saved liked recent following" },
+	{ href: "/my-playlists", label: "My playlists", icon: ListMusic, auth: true, keywords: "playlists" },
+	{ href: "/settings", label: "Settings", icon: Settings, keywords: "settings preferences quality" },
+	{ href: "/about", label: "About", icon: Info, keywords: "about" },
+];
+
+function toPlayerTrack(t: SuggestTrack): PlayerTrack {
+	return {
+		trackId: t.deezerTrackId,
+		title: t.title,
+		artist: t.artists.join(", "),
+		artistId: t.artistId,
+		cover: t.coverUrl,
+		duration: t.durationMs ? Math.round(t.durationMs / 1000) : null,
+	};
+}
+
+function toDownloadable(t: SuggestTrack): DownloadableTrack {
+	return {
+		trackId: t.deezerTrackId,
+		title: t.title,
+		artist: t.artists.join(", "),
+		album: t.album,
+		cover: t.coverUrl,
+		duration: t.durationMs ? Math.round(t.durationMs / 1000) : null,
+	};
+}
+
+export function CommandPalette() {
+	const isOpen = useCommandStore((s) => s.isOpen);
+	const close = useCommandStore((s) => s.close);
+	const mounted = useIsClient();
+
+	// Lock page scroll while open.
+	useEffect(() => {
+		if (!isOpen) return;
+		const prev = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
+		return () => {
+			document.body.style.overflow = prev;
+		};
+	}, [isOpen]);
+
+	if (!mounted) return null;
+	return createPortal(
+		<AnimatePresence>
+			{isOpen && (
+				<div className="fixed inset-0 z-[70] flex items-start justify-center px-3 pt-[12vh] sm:pt-[14vh]">
+					<motion.div
+						key="overlay"
+						className="absolute inset-0 bg-background/60 backdrop-blur-[3px]"
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						exit={{ opacity: 0 }}
+						transition={{ duration: 0.15 }}
+						onClick={close}
+					/>
+					<motion.div
+						key="panel"
+						role="dialog"
+						aria-modal="true"
+						aria-label="Command palette"
+						initial={{ opacity: 0, scale: 0.97, y: -8 }}
+						animate={{ opacity: 1, scale: 1, y: 0 }}
+						exit={{ opacity: 0, scale: 0.98, y: -4 }}
+						transition={{ type: "spring", stiffness: 500, damping: 36 }}
+						className="relative flex max-h-[70vh] w-full max-w-[640px] flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-popover"
+					>
+						<PaletteBody />
+					</motion.div>
+				</div>
+			)}
+		</AnimatePresence>,
+		document.body
+	);
+}
+
+function PaletteBody() {
+	const router = useRouter();
+	const query = useCommandStore((s) => s.query);
+	const setQuery = useCommandStore((s) => s.setQuery);
+	const view = useCommandStore((s) => s.view);
+	const setView = useCommandStore((s) => s.setView);
+	const close = useCommandStore((s) => s.close);
+	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const items = useDownloadStore((s) => s.items);
+	const enqueue = useDownloadStore((s) => s.enqueue);
+	const play = usePlayerStore((s) => s.play);
+	const playQueue = usePlayerStore((s) => s.playQueue);
+	const addToQueue = usePlayerStore((s) => s.addToQueue);
+
+	const inputRef = useRef<HTMLInputElement>(null);
+	const listRef = useRef<HTMLDivElement>(null);
+	const [active, setActive] = useState(0);
+	const [data, setData] = useState<SuggestResponse | null>(null);
+	const [loading, setLoading] = useState(false);
+	const [collection, setCollection] = useState<{ link: DeezerLink; info: CollectionInfo | null; error?: string } | null>(null);
+
+	const trimmed = query.trim();
+	const link = useMemo(() => parseDeezerLink(trimmed), [trimmed]);
+	const debounced = useDebouncedValue(trimmed, 180);
+	const activeCount = selectActiveCount(items);
+	const overall = selectOverallProgress(items);
+
+	useEffect(() => {
+		inputRef.current?.focus();
+		inputRef.current?.select();
+	}, [view]);
+
+	// Suggestions
+	useEffect(() => {
+		if (view !== "search" || link || debounced.length < MIN_QUERY) {
+			setData(null);
+			setLoading(false);
+			return;
+		}
+		let cancelled = false;
+		setLoading(true);
+		fetchData("search/suggest", { term: debounced })
+			.then((res: SuggestResponse) => !cancelled && setData(res))
+			.catch(() => !cancelled && setData(null))
+			.finally(() => !cancelled && setLoading(false));
+		return () => {
+			cancelled = true;
+		};
+	}, [debounced, link, view]);
+
+	// Pasted Deezer link → preview the collection
+	useEffect(() => {
+		if (!link || (link.type !== "album" && link.type !== "playlist")) {
+			setCollection(link ? { link, info: null } : null);
+			return;
+		}
+		let cancelled = false;
+		setCollection({ link, info: null });
+		fetchCollection(link.type, link.id)
+			.then((info) => !cancelled && setCollection({ link, info }))
+			.catch((e) => !cancelled && setCollection({ link, info: null, error: e instanceof Error ? e.message : "Not found" }));
+		return () => {
+			cancelled = true;
+		};
+	}, [link]);
+
+	const requireAuth = useCallback(() => {
+		if (isAuthenticated) return true;
+		toast("Sign in to download", {
+			action: { label: "Sign in", onClick: () => router.push("/login") },
+		});
+		return false;
+	}, [isAuthenticated, router]);
+
+	const download = useCallback(
+		(tracks: DownloadableTrack[], group: string | null = null) => {
+			if (!requireAuth()) return;
+			const n = enqueue(tracks, group);
+			if (n === 0) {
+				toast("Already in your downloads");
+				return;
+			}
+			toast.success(n === 1 ? `Downloading “${tracks[0].title}”` : `Downloading ${n} tracks`, {
+				description: group ?? undefined,
+			});
+		},
+		[enqueue, requireAuth]
+	);
+
+	const go = useCallback(
+		(href: string) => {
+			close();
+			router.push(href);
+		},
+		[close, router]
+	);
+
+	const downloadCollection = useCallback(
+		async (type: "album" | "playlist", id: string, label: string) => {
+			if (!requireAuth()) return;
+			const t = toast.loading(`Fetching ${type}…`);
+			try {
+				const info = await fetchCollection(type, id);
+				toast.dismiss(t);
+				download(info.tracks, `${type === "album" ? "Album" : "Playlist"} · ${info.title || label}`);
+			} catch {
+				toast.error(`Couldn't load this ${type}`, { id: t });
+			}
+		},
+		[download, requireAuth]
+	);
+
+	const rows = useMemo<Row[]>(() => {
+		if (view !== "search") return [];
+		const out: Row[] = [];
+
+		if (collection) {
+			const { link: l, info } = collection;
+			if ((l.type === "album" || l.type === "playlist") && info) {
+				const group = `${l.type === "album" ? "Album" : "Playlist"} · ${info.title}`;
+				out.push({
+					key: "link-download",
+					group: "Deezer link",
+					title: `Download ${info.tracks.length} tracks`,
+					subtitle: `${info.title}${info.subtitle ? ` — ${info.subtitle}` : ""}`,
+					cover: info.cover,
+					onSelect: () => download(info.tracks, group),
+					hint: "Download",
+				});
+				out.push({
+					key: "link-play",
+					group: "Deezer link",
+					title: `Play ${l.type}`,
+					subtitle: info.title,
+					icon: ArrowRight,
+					onSelect: () => {
+						const q = info.tracks.map((t) => ({ trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, cover: t.cover, duration: t.duration ?? null }));
+						if (q.length) playQueue(q, 0);
+						close();
+					},
+				});
+			}
+			out.push({
+				key: "link-open",
+				group: "Deezer link",
+				title: `Open ${l.type}`,
+				subtitle: collection.error ?? `deezer.com/${l.type}/${l.id}`,
+				icon: l.type === "artist" ? UserIcon : Disc3,
+				onSelect: () => go(l.type === "track" ? `/search?term=${encodeURIComponent(trimmed)}` : `/${l.type}?id=${l.id}`),
+			});
+			return out;
+		}
+
+		if (trimmed.length >= MIN_QUERY && data) {
+			for (const t of data.tracks) {
+				out.push({
+					key: `t-${t.sourceId}`,
+					group: "Tracks",
+					title: t.title,
+					subtitle: `${t.artists.join(", ")}${t.album ? ` · ${t.album}` : ""}`,
+					cover: t.coverUrl,
+					onSelect: () => {
+						play(toPlayerTrack(t));
+						close();
+					},
+					onQueue: () => {
+						addToQueue(toPlayerTrack(t));
+						toast(`Added “${t.title}” to queue`);
+					},
+					onDownload: () => download([toDownloadable(t)]),
+					hint: "Play",
+				});
+			}
+			for (const a of data.albums) {
+				out.push({
+					key: `a-${a.sourceId}`,
+					group: "Albums",
+					title: a.title,
+					subtitle: a.artists.join(", "),
+					cover: a.coverUrl,
+					onSelect: () => go(`/album?id=${a.deezerAlbumId}`),
+					onDownload: () => void downloadCollection("album", a.deezerAlbumId, a.title),
+					hint: "Open",
+				});
+			}
+			for (const a of data.artists) {
+				out.push({
+					key: `r-${a.sourceId}`,
+					group: "Artists",
+					title: a.name,
+					cover: a.imageUrl,
+					round: true,
+					onSelect: () => go(`/artist?id=${a.deezerArtistId}`),
+					hint: "Open",
+				});
+			}
+		}
+
+		if (trimmed.length >= MIN_QUERY) {
+			out.push({
+				key: "all-results",
+				group: "Search",
+				title: `See all results for “${trimmed}”`,
+				icon: ArrowRight,
+				onSelect: () => go(`/search?term=${encodeURIComponent(trimmed)}`),
+			});
+		}
+
+		const q = trimmed.toLowerCase();
+		const pages = PAGES.filter((p) => (!p.auth || isAuthenticated) && (!q || p.label.toLowerCase().includes(q) || p.keywords.includes(q)));
+		for (const p of pages) {
+			out.push({ key: `p-${p.href}`, group: "Go to", title: p.label, icon: p.icon, onSelect: () => go(p.href) });
+		}
+		if (!q || "theme dark light mode".includes(q)) {
+			out.push({
+				key: "theme",
+				group: "Preferences",
+				title: "Toggle theme",
+				icon: typeof document !== "undefined" && document.documentElement.classList.contains("dark") ? Sun : Moon,
+				onSelect: () => {
+					const dark = document.documentElement.classList.contains("dark");
+					applyThemePreference(dark ? "light" : "dark");
+				},
+			});
+		}
+		return out;
+	}, [view, collection, trimmed, data, isAuthenticated, download, downloadCollection, go, play, playQueue, addToQueue, close]);
+
+	useEffect(() => setActive(0), [rows.length, trimmed, view]);
+
+	// Keep the active row in view.
+	useEffect(() => {
+		listRef.current?.querySelector<HTMLElement>(`[data-row="${active}"]`)?.scrollIntoView({ block: "nearest" });
+	}, [active]);
+
+	const onKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === "Escape") {
+			e.preventDefault();
+			close();
+			return;
+		}
+		if (e.key === "Tab") {
+			e.preventDefault();
+			setView(view === "search" ? "downloads" : "search");
+			return;
+		}
+		if (view !== "search" || rows.length === 0) return;
+		if (e.key === "ArrowDown") {
+			e.preventDefault();
+			setActive((i) => (i + 1) % rows.length);
+		} else if (e.key === "ArrowUp") {
+			e.preventDefault();
+			setActive((i) => (i <= 0 ? rows.length - 1 : i - 1));
+		} else if (e.key === "Enter") {
+			e.preventDefault();
+			const row = rows[active];
+			if (!row) return;
+			if (e.shiftKey && row.onDownload) row.onDownload();
+			else if ((e.metaKey || e.ctrlKey) && row.onQueue) row.onQueue();
+			else row.onSelect();
+		}
+	};
+
+	const busy = loading || (!!collection && !collection.info && !collection.error && (collection.link.type === "album" || collection.link.type === "playlist"));
+
+	return (
+		<div className="flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
+			{/* Input */}
+			<div className="flex items-center gap-3 border-b border-border px-4">
+				<SearchGlyph busy={busy} className="size-[18px] text-muted-foreground" />
+				<input
+					ref={inputRef}
+					value={query}
+					onChange={(e) => {
+						setQuery(e.target.value);
+						if (view !== "search") setView("search");
+					}}
+					placeholder="Search tracks, albums, artists — or paste a Deezer link"
+					aria-label="Search"
+					autoComplete="off"
+					autoCorrect="off"
+					spellCheck={false}
+					className="h-14 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground/70"
+				/>
+				{query && (
+					<button
+						type="button"
+						aria-label="Clear"
+						onClick={() => {
+							setQuery("");
+							inputRef.current?.focus();
+						}}
+						className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+					>
+						<X className="size-4" />
+					</button>
+				)}
+				<kbd className="kbd hidden sm:inline-flex">esc</kbd>
+			</div>
+
+			{/* View switch */}
+			<LayoutGroup id="palette-views">
+				<div className="flex items-center gap-1 border-b border-border px-2 py-1.5">
+					{(["search", "downloads"] as CommandView[]).map((v) => (
+						<button
+							key={v}
+							type="button"
+							onClick={() => setView(v)}
+							className={cn(
+								"relative flex h-7 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors",
+								view === v ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+							)}
+						>
+							{view === v && (
+								<motion.span layoutId="palette-view-pill" className="absolute inset-0 rounded-md bg-accent" transition={{ type: "spring", stiffness: 500, damping: 38 }} />
+							)}
+							<span className="relative flex items-center gap-2">
+								{v === "search" ? "Search" : "Downloads"}
+								{v === "downloads" && activeCount > 0 && (
+									<ProgressRing value={overall ?? 0} size={16} stroke={2} className="text-highlight" />
+								)}
+								{v === "downloads" && items.length > 0 && (
+									<span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+										<SlideSwap id={items.length}>{items.length}</SlideSwap>
+									</span>
+								)}
+							</span>
+						</button>
+					))}
+					<span className="ml-auto hidden items-center gap-1.5 pr-2 text-[11px] text-muted-foreground sm:flex">
+						<kbd className="kbd">tab</kbd> switch
+					</span>
+				</div>
+			</LayoutGroup>
+
+			<div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+				<AnimatePresence mode="wait" initial={false}>
+					{view === "search" ? (
+						<motion.div key="search" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.12 }}>
+							<SearchRows rows={rows} active={active} setActive={setActive} loading={loading} query={trimmed} hasData={!!data} />
+						</motion.div>
+					) : (
+						<motion.div key="downloads" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.12 }}>
+							<DownloadsView items={items} />
+						</motion.div>
+					)}
+				</AnimatePresence>
+			</div>
+
+			{/* Footer */}
+			<div className="hidden items-center gap-4 border-t border-border bg-muted/40 px-4 py-2 text-[11px] text-muted-foreground sm:flex">
+				<span className="flex items-center gap-1.5">
+					<kbd className="kbd">↑</kbd>
+					<kbd className="kbd">↓</kbd> navigate
+				</span>
+				<span className="flex items-center gap-1.5">
+					<kbd className="kbd">
+						<CornerDownLeft className="size-3" />
+					</kbd>
+					select
+				</span>
+				<span className="flex items-center gap-1.5">
+					<kbd className="kbd">⇧</kbd>
+					<kbd className="kbd">
+						<CornerDownLeft className="size-3" />
+					</kbd>
+					download
+				</span>
+				<span className="flex items-center gap-1.5">
+					<ModKey />
+					<kbd className="kbd">
+						<CornerDownLeft className="size-3" />
+					</kbd>
+					queue
+				</span>
+			</div>
+		</div>
+	);
+}
+
+function SearchRows({
+	rows,
+	active,
+	setActive,
+	loading,
+	query,
+	hasData,
+}: {
+	rows: Row[];
+	active: number;
+	setActive: (i: number) => void;
+	loading: boolean;
+	query: string;
+	hasData: boolean;
+}) {
+	const showSkeleton = loading && !hasData && query.length >= MIN_QUERY;
+
+	return (
+		<div className="p-2">
+			{showSkeleton && (
+				<div className="space-y-1 p-1">
+					{Array.from({ length: 4 }).map((_, i) => (
+						<div key={i} className="flex items-center gap-3 px-2 py-2">
+							<div className="size-9 animate-pulse rounded-md bg-muted" />
+							<div className="flex-1 space-y-1.5">
+								<div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+								<div className="h-2.5 w-1/3 animate-pulse rounded bg-muted" />
+							</div>
+						</div>
+					))}
+				</div>
+			)}
+			{!showSkeleton && query.length >= MIN_QUERY && hasData && !rows.some((r) => ["Tracks", "Albums", "Artists"].includes(r.group)) && (
+				<p className="px-3 py-6 text-center text-sm text-muted-foreground">No matches on Deezer.</p>
+			)}
+			{query.length < MIN_QUERY && (
+				<div className="px-3 pb-1 pt-3 text-muted-foreground/60">
+					<WaveLine className="h-6" amplitude={6} />
+				</div>
+			)}
+			{rows.map((row, i) => {
+				const header = i === 0 || rows[i - 1].group !== row.group ? row.group : null;
+				return (
+					<div key={row.key}>
+						{header && <div className="px-2.5 pb-1 pt-3 text-[11px] font-medium text-muted-foreground first:pt-1">{header}</div>}
+						<PaletteRow row={row} index={i} active={i === active} onHover={() => setActive(i)} />
+					</div>
+				);
+			})}
+		</div>
+	);
+}
+
+function PaletteRow({ row, index, active, onHover }: { row: Row; index: number; active: boolean; onHover: () => void }) {
+	const Icon = row.icon;
+	return (
+		<div
+			data-row={index}
+			role="option"
+			aria-selected={active}
+			onMouseMove={onHover}
+			onClick={row.onSelect}
+			className="relative flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2"
+		>
+			{active && (
+				<motion.span layoutId="palette-active-row" className="absolute inset-0 rounded-lg bg-accent" transition={{ type: "spring", stiffness: 600, damping: 42 }} />
+			)}
+			<span className="relative shrink-0">
+				{row.cover !== undefined ? (
+					<CoverImage src={row.cover} className={cn("size-9", row.round && "rounded-full")} />
+				) : Icon ? (
+					<span className="flex size-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
+						<Icon className="size-4" />
+					</span>
+				) : null}
+			</span>
+			<span className="relative min-w-0 flex-1">
+				<span className="block truncate text-sm text-foreground">{row.title}</span>
+				{row.subtitle && <span className="block truncate text-xs text-muted-foreground">{row.subtitle}</span>}
+			</span>
+			<span className="relative flex shrink-0 items-center gap-0.5">
+				{row.onQueue && (
+					<RowAction label="Add to queue" onClick={row.onQueue} visible={active}>
+						<ListPlus className="size-4" />
+					</RowAction>
+				)}
+				{row.onDownload && (
+					<RowAction label="Download" onClick={row.onDownload} visible={active}>
+						<DownloadGlyph />
+					</RowAction>
+				)}
+				{active && row.hint && (
+					<motion.span initial={{ opacity: 0, x: 4 }} animate={{ opacity: 1, x: 0 }} className="ml-1 hidden items-center gap-1 text-[11px] text-muted-foreground sm:flex">
+						{row.hint}
+						<CornerDownLeft className="size-3" />
+					</motion.span>
+				)}
+			</span>
+		</div>
+	);
+}
+
+function RowAction({ label, onClick, visible, children }: { label: string; onClick: () => void; visible: boolean; children: React.ReactNode }) {
+	return (
+		<button
+			type="button"
+			aria-label={label}
+			title={label}
+			onClick={(e) => {
+				e.stopPropagation();
+				onClick();
+			}}
+			className={cn(
+				"flex size-8 items-center justify-center rounded-md text-muted-foreground transition-opacity hover:bg-background hover:text-foreground",
+				visible ? "opacity-100" : "opacity-100 sm:opacity-0"
+			)}
+		>
+			{children}
+		</button>
+	);
+}
+
+// ─── Downloads view ─────────────────────────────────────────────────────────
+
+function DownloadsView({ items }: { items: DownloadItem[] }) {
+	const clearFinished = useDownloadStore((s) => s.clearFinished);
+	const hasFinished = items.some((i) => i.status !== "queued" && i.status !== "downloading");
+
+	if (items.length === 0) {
+		return (
+			<div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+				<motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex size-12 items-center justify-center rounded-full border border-border text-muted-foreground">
+					<DownloadGlyph className="size-5" />
+				</motion.div>
+				<div>
+					<p className="text-sm font-medium">No downloads yet</p>
+					<p className="mt-1 text-sm text-muted-foreground">
+						Search a track and press <kbd className="kbd">⇧</kbd> <kbd className="kbd">↵</kbd>, or paste an album link.
+					</p>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="p-2">
+			<div className="flex items-center justify-between px-2.5 pb-1 pt-1">
+				<span className="text-[11px] font-medium text-muted-foreground">{items.length} item{items.length === 1 ? "" : "s"}</span>
+				{hasFinished && (
+					<button type="button" onClick={clearFinished} className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground">
+						Clear finished
+					</button>
+				)}
+			</div>
+			<motion.ul layout className="space-y-0.5">
+				<AnimatePresence initial={false}>
+					{items.map((item) => (
+						<DownloadRow key={item.id} item={item} />
+					))}
+				</AnimatePresence>
+			</motion.ul>
+		</div>
+	);
+}
+
+function formatBytes(n: number) {
+	if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
+	return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function DownloadRow({ item }: { item: DownloadItem }) {
+	const cancel = useDownloadStore((s) => s.cancel);
+	const retry = useDownloadStore((s) => s.retry);
+	const remove = useDownloadStore((s) => s.remove);
+	const pct = item.total ? item.loaded / item.total : 0;
+
+	let status: React.ReactNode;
+	switch (item.status) {
+		case "queued":
+			status = "Queued";
+			break;
+		case "downloading":
+			status = item.total ? `${Math.round(pct * 100)}% · ${formatBytes(item.loaded)} of ${formatBytes(item.total)}` : item.loaded ? formatBytes(item.loaded) : "Starting…";
+			break;
+		case "done":
+			status = <span className="text-success">Saved to your device</span>;
+			break;
+		case "error":
+			status = <span className="text-destructive">{item.error ?? "Failed"}</span>;
+			break;
+		case "canceled":
+			status = "Canceled";
+			break;
+	}
+
+	return (
+		<motion.li
+			layout
+			initial={{ opacity: 0, height: 0 }}
+			animate={{ opacity: 1, height: "auto" }}
+			exit={{ opacity: 0, height: 0 }}
+			transition={{ type: "spring", stiffness: 500, damping: 40 }}
+			className="group flex items-center gap-3 overflow-hidden rounded-lg px-2.5 py-2 hover:bg-accent/60"
+		>
+			<span className="relative shrink-0">
+				<CoverImage src={item.cover ?? null} className="size-9" />
+				<span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full border border-border bg-popover">
+					{item.status === "downloading" ? (
+						item.total ? (
+							<ProgressRing value={pct} size={16} stroke={2} className="text-highlight" />
+						) : (
+							<Spinner size={12} className="text-highlight" />
+						)
+					) : item.status === "done" ? (
+						<DrawCheck className="size-3 text-success" />
+					) : item.status === "queued" ? (
+						<span className="size-1.5 rounded-full bg-muted-foreground/50" />
+					) : (
+						<X className="size-3 text-destructive" />
+					)}
+				</span>
+			</span>
+			<span className="min-w-0 flex-1">
+				<span className="block truncate text-sm">{item.title}</span>
+				<span className="block truncate text-xs text-muted-foreground">
+					{item.artist}
+					{item.group ? ` · ${item.group}` : ""}
+				</span>
+				<span className="block truncate font-mono text-[11px] tabular-nums text-muted-foreground">{status}</span>
+				{item.status === "downloading" && (
+					<span className="mt-1 block h-[2px] overflow-hidden rounded-full bg-border">
+						<motion.span
+							className="block h-full rounded-full bg-highlight"
+							initial={false}
+							animate={item.total ? { width: `${pct * 100}%`, x: 0 } : { width: "30%", x: ["-100%", "330%"] }}
+							transition={item.total ? { type: "spring", stiffness: 120, damping: 24 } : { repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+						/>
+					</span>
+				)}
+			</span>
+			<span className="flex shrink-0 items-center gap-0.5">
+				{(item.status === "error" || item.status === "canceled") && (
+					<IconBtn label="Retry" onClick={() => retry(item.id)}>
+						<RotateCw className="size-3.5" />
+					</IconBtn>
+				)}
+				{item.status === "queued" || item.status === "downloading" ? (
+					<IconBtn label="Cancel" onClick={() => cancel(item.id)}>
+						<X className="size-3.5" />
+					</IconBtn>
+				) : (
+					<IconBtn label="Remove" onClick={() => remove(item.id)}>
+						<X className="size-3.5" />
+					</IconBtn>
+				)}
+			</span>
+		</motion.li>
+	);
+}
+
+function IconBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+	return (
+		<button type="button" aria-label={label} title={label} onClick={onClick} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground">
+			{children}
+		</button>
+	);
+}
+
+/** Header trigger — looks like a search field, opens the palette. */
+export function CommandTrigger({ className }: { className?: string }) {
+	const open = useCommandStore((s) => s.open);
+	const items = useDownloadStore((s) => s.items);
+	const activeCount = selectActiveCount(items);
+	const overall = selectOverallProgress(items);
+
+	return (
+		<div className={cn("flex items-center gap-2", className)}>
+			<button
+				type="button"
+				onClick={() => open()}
+				aria-label="Search and download (Command K)"
+				className="group flex h-9 w-full items-center gap-2.5 rounded-lg border border-border bg-muted/40 px-3 text-sm text-muted-foreground transition-colors hover:border-ring/40 hover:bg-muted sm:w-72"
+			>
+				<SearchGlyph className="size-4" />
+				<span className="flex-1 truncate text-left">Search or paste a link…</span>
+				<span className="hidden items-center gap-0.5 sm:flex">
+					<ModKey />
+					<kbd className="kbd">K</kbd>
+				</span>
+			</button>
+			<AnimatePresence>
+				{items.length > 0 && (
+					<motion.button
+						type="button"
+						initial={{ opacity: 0, scale: 0.6, width: 0 }}
+						animate={{ opacity: 1, scale: 1, width: 36 }}
+						exit={{ opacity: 0, scale: 0.6, width: 0 }}
+						onClick={() => open(undefined, "downloads")}
+						aria-label={activeCount > 0 ? `${activeCount} downloads in progress` : "Downloads"}
+						title="Downloads"
+						className="relative flex h-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+					>
+						{activeCount > 0 ? (
+							<ProgressRing value={overall ?? 0} size={22} stroke={2} className="text-highlight">
+								<DownloadGlyph active className="size-3 text-foreground" />
+							</ProgressRing>
+						) : (
+							<DownloadGlyph className="size-4" />
+						)}
+					</motion.button>
+				)}
+			</AnimatePresence>
+		</div>
+	);
+}
+
+
+/** ⌘ on Apple platforms, Ctrl elsewhere (⌘ during SSR, corrected after hydration). */
+export function ModKey() {
+	const isMac = useSyncExternalStore(noopSubscribe, () => /Mac|iPhone|iPad/.test(navigator.platform), () => true);
+	return <kbd className="kbd">{isMac ? "⌘" : "Ctrl"}</kbd>;
+}

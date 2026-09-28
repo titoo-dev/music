@@ -3,7 +3,7 @@
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react";
+import { PlayPauseIcon, Spinner } from "@/components/motion/icons";
 
 interface PreviewButtonProps {
 	track: {
@@ -40,8 +40,8 @@ export function PreviewButton({ track, size = "sm", className }: PreviewButtonPr
 				sizeClasses[size],
 				"rounded-full shrink-0",
 				isThisPlaying
-					? "bg-primary text-primary-foreground hover:bg-primary/90"
-					: "hover:bg-muted",
+					? "bg-primary text-primary-foreground hover:bg-primary/85 hover:text-primary-foreground"
+					: "text-foreground hover:bg-accent",
 				className
 			)}
 			onClick={(e) => {
@@ -56,16 +56,9 @@ export function PreviewButton({ track, size = "sm", className }: PreviewButtonPr
 			}}
 		>
 			{isThisBuffering ? (
-				<Loader2 className="h-3 w-3 animate-spin" />
-			) : isThisPlaying ? (
-				<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-					<rect x="1" y="1" width="3.5" height="10" rx="0.5" />
-					<rect x="7.5" y="1" width="3.5" height="10" rx="0.5" />
-				</svg>
+				<Spinner size={12} />
 			) : (
-				<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-					<path d="M2.5 1.5L10.5 6L2.5 10.5V1.5Z" />
-				</svg>
+				<PlayPauseIcon playing={isThisPlaying} className={size === "lg" ? "size-4" : "size-3.5"} />
 			)}
 		</Button>
 	);

@@ -15,8 +15,10 @@ import {
 	DialogFooter,
 	DialogClose,
 } from "@/components/ui/dialog";
-import { Loader2, Plus, Music, Trash2, Download } from "lucide-react";
+import { Plus, Music, Trash2, Download } from "lucide-react";
 import Link from "next/link";
+import { motion } from "motion/react";
+import { EmptyState, Spinner } from "@/components/motion/icons";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { CoverImage } from "@/components/ui/cover-image";
 import { ImportSpotifyDialog } from "@/components/playlists/ImportSpotifyDialog";
@@ -36,7 +38,7 @@ function PlaylistCover({ covers, title }: { covers?: string[]; title: string }) 
 
 	if (imgs.length === 0) {
 		return (
-			<div className="aspect-square bg-muted flex items-center justify-center border-b-[2px] border-foreground">
+			<div className="aspect-square w-full rounded-lg bg-muted flex items-center justify-center">
 				<Music className="size-8 text-muted-foreground/40" />
 			</div>
 		);
@@ -47,19 +49,19 @@ function PlaylistCover({ covers, title }: { covers?: string[]; title: string }) 
 			<CoverImage
 				src={imgs[0]}
 				alt={title}
-				className="aspect-square w-full border-0 border-b-[2px] border-foreground"
+				className="aspect-square w-full rounded-lg transition-transform duration-300 group-hover:scale-[1.02]"
 			/>
 		);
 	}
 
 	return (
-		<div className="aspect-square grid grid-cols-2 grid-rows-2 border-b-[2px] border-foreground overflow-hidden">
+		<div className="aspect-square w-full grid grid-cols-2 grid-rows-2 overflow-hidden rounded-lg transition-transform duration-300 group-hover:scale-[1.02]">
 			{imgs.map((src, i) => (
 				<CoverImage
 					key={i}
 					src={src}
 					alt=""
-					className="w-full h-full border-0"
+					className="w-full h-full rounded-none"
 				/>
 			))}
 		</div>
@@ -124,29 +126,38 @@ export default function MyPlaylistsPage() {
 
 	if (!isAuthenticated) {
 		return (
-			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-				<p className="text-sm text-muted-foreground">Sign in to manage your playlists.</p>
-				<Link href="/login">
-					<Button>Sign in</Button>
-				</Link>
-			</div>
+			<EmptyState
+				className="mt-8"
+				title="Sign in to manage your playlists"
+				description="Your playlists sync across devices once you're signed in."
+				action={
+					<Link href="/login">
+						<Button>Sign in</Button>
+					</Link>
+				}
+			/>
 		);
 	}
 
 	if (loading) {
 		return (
-			<div className="flex items-center justify-center min-h-[50vh]">
-				<Loader2 className="size-5 animate-spin text-muted-foreground" />
+			<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
+				<Spinner size={20} />
 			</div>
 		);
 	}
 
 	return (
-		<div className="space-y-6">
-			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+		<div className="space-y-8 pt-2">
+			<motion.div
+				initial={{ opacity: 0, y: 8 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ duration: 0.3, ease: "easeOut" }}
+				className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+			>
 				<div>
-					<h1 className="text-brutal-lg">My Playlists</h1>
-					<p className="text-sm text-muted-foreground mt-1 uppercase tracking-wider font-bold">
+					<h1 className="text-2xl sm:text-3xl font-semibold tracking-tight m-0">My playlists</h1>
+					<p className="text-sm text-muted-foreground mt-1 tabular-nums">
 						{playlists.length} playlist{playlists.length !== 1 ? "s" : ""}
 					</p>
 				</div>
@@ -154,8 +165,8 @@ export default function MyPlaylistsPage() {
 				<div className="flex items-center gap-2 flex-wrap">
 					<ImportSpotifyDialog
 						trigger={
-							<Button size="sm" variant="outline" className="gap-1.5 min-h-11 sm:min-h-9">
-								<Download className="size-4" aria-hidden />
+							<Button size="sm" variant="outline" className="min-h-11 sm:min-h-8">
+								<Download aria-hidden />
 								Import from Spotify
 							</Button>
 						}
@@ -165,15 +176,15 @@ export default function MyPlaylistsPage() {
 					<Dialog>
 						<DialogTrigger
 							render={
-								<Button size="sm" className="gap-1.5 min-h-11 sm:min-h-9">
-									<Plus className="size-4" aria-hidden />
-									New Playlist
+								<Button size="sm" className="min-h-11 sm:min-h-8">
+									<Plus aria-hidden />
+									New playlist
 								</Button>
 							}
 						/>
 						<DialogContent>
 							<DialogHeader>
-								<DialogTitle>Create Playlist</DialogTitle>
+								<DialogTitle>Create playlist</DialogTitle>
 								<DialogDescription>
 									Give your playlist a name to get started.
 								</DialogDescription>
@@ -187,43 +198,45 @@ export default function MyPlaylistsPage() {
 							<DialogFooter>
 								<DialogClose render={<Button variant="outline">Cancel</Button>} />
 								<Button onClick={handleCreate} disabled={creating || !newTitle.trim()}>
-									{creating ? <Loader2 className="size-4 animate-spin" /> : "Create"}
+									{creating ? <Spinner /> : "Create"}
 								</Button>
 							</DialogFooter>
 						</DialogContent>
 					</Dialog>
 				</div>
-			</div>
+			</motion.div>
 
 			{playlists.length === 0 ? (
-				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<Music className="size-8 text-muted-foreground/50" />
-					<p className="text-sm text-muted-foreground font-bold uppercase">No playlists yet</p>
-					<p className="text-xs text-muted-foreground font-bold uppercase">
-						Create your first playlist to start organizing your music.
-					</p>
-				</div>
+				<EmptyState
+					title="No playlists yet"
+					description="Create your first playlist to start organizing your music."
+				/>
 			) : (
-				<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
-					{playlists.map((pl) => (
-						<div
+				<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-6">
+					{playlists.map((pl, i) => (
+						<motion.div
 							key={pl.id}
-							className="group relative border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px] transition-all bg-card overflow-hidden"
+							initial={{ opacity: 0, y: 8 }}
+							animate={{ opacity: 1, y: 0 }}
+							transition={{ duration: 0.25, delay: Math.min(i, 12) * 0.03, ease: "easeOut" }}
+							className="group relative min-w-0"
 						>
-							<Link href={`/my-playlists/${pl.id}`} className="no-underline">
-								<PlaylistCover covers={pl.covers} title={pl.title} />
-								<div className="px-2 py-2">
-									<p className="text-sm font-bold truncate">{pl.title}</p>
-									<p className="text-[11px] text-muted-foreground font-mono truncate">
+							<Link href={`/my-playlists/${pl.id}`} className="block no-underline">
+								<div className="overflow-hidden rounded-lg ring-1 ring-border">
+									<PlaylistCover covers={pl.covers} title={pl.title} />
+								</div>
+								<div className="mt-2 min-w-0">
+									<p className="text-sm font-medium truncate text-foreground">{pl.title}</p>
+									<p className="text-xs text-muted-foreground truncate tabular-nums">
 										{pl._count.tracks} track{pl._count.tracks !== 1 ? "s" : ""}
 									</p>
 								</div>
 							</Link>
 							<Button
-								variant="ghost"
+								variant="outline"
 								size="icon-touch"
 								aria-label={`Delete ${pl.title}`}
-								className="absolute top-1.5 right-1.5 bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-destructive md:opacity-0 md:[@media(hover:hover)]:group-hover:opacity-100 transition-opacity"
+								className="absolute top-2 right-2 rounded-full bg-background/90 backdrop-blur-sm text-muted-foreground hover:text-destructive md:opacity-0 md:[@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
 								onClick={(e) => {
 									e.preventDefault();
 									setDeleteTarget(pl);
@@ -231,7 +244,7 @@ export default function MyPlaylistsPage() {
 							>
 								<Trash2 className="size-3.5" aria-hidden />
 							</Button>
-						</div>
+						</motion.div>
 					))}
 				</div>
 			)}
@@ -252,7 +265,7 @@ export default function MyPlaylistsPage() {
 							Cancel
 						</Button>
 						<Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-							{deleting && <Loader2 className="size-3.5 animate-spin mr-1.5" />}
+							{deleting && <Spinner size={14} />}
 							Delete
 						</Button>
 					</DialogFooter>

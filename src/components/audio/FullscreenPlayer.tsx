@@ -27,7 +27,7 @@ import { AudioVisualizer } from "./AudioVisualizer";
 import { LyricsDisplay } from "./LyricsDisplay";
 import { KaraokeToggle } from "./KaraokeToggle";
 import { motion, AnimatePresence, useDragControls } from "motion/react";
-import { Loader2 } from "lucide-react";
+import { PlayPauseIcon, Spinner } from "@/components/motion/icons";
 import { formatTime } from "@/utils/format-time";
 import Link from "next/link";
 import type { PlayerTrack } from "@/stores/usePlayerStore";
@@ -100,7 +100,7 @@ const CoverCarousel = memo(function CoverCarousel({
 	useEffect(() => () => cleanupRef.current?.(), []);
 
 	return (
-		<div className="flex-1 flex items-center justify-center min-h-0 px-4 py-6">
+		<div className="flex-1 flex items-center justify-center min-h-0 px-6 py-6">
 			<Carousel
 				opts={carouselOpts}
 				setApi={onCarouselApi}
@@ -111,7 +111,7 @@ const CoverCarousel = memo(function CoverCarousel({
 						<CarouselItem key={track.trackId} className="pl-0">
 							<CoverImage
 								src={track.cover}
-								className="aspect-square w-full border-[3px] border-foreground shadow-[var(--shadow-brutal)]"
+								className="aspect-square w-full rounded-2xl shadow-float"
 							/>
 						</CarouselItem>
 					))}
@@ -143,8 +143,8 @@ function TrackInfo() {
 	if (!currentTrack) return null;
 	return (
 		<div className="shrink-0 px-8 pb-3" onContextMenu={handleContextMenu}>
-			<p className="truncate text-brutal-md">{currentTrack.title}</p>
-			<p className="truncate text-sm font-bold uppercase tracking-wide text-muted-foreground">
+			<p className="truncate text-xl font-semibold tracking-tight">{currentTrack.title}</p>
+			<p className="mt-0.5 truncate text-sm text-muted-foreground">
 				{currentTrack.artistId ? (
 					<Link
 						href={`/artist?id=${currentTrack.artistId}`}
@@ -167,7 +167,7 @@ function SeekSection() {
 	const duration = usePlayerStore((s) => s.duration);
 	const buffered = usePlayerStore((s) => s.buffered);
 	return (
-		<div className="shrink-0 px-8 group/seekbar">
+		<div className="shrink-0 px-8">
 			<SeekBar
 				currentTime={currentTime}
 				duration={duration}
@@ -176,10 +176,10 @@ function SeekSection() {
 				variant="large"
 			/>
 			<div className="flex justify-between -mt-1">
-				<span className="brutal-label text-muted-foreground tabular-nums">
+				<span className="font-mono text-[11px] tabular-nums text-muted-foreground">
 					{formatTime(currentTime)}
 				</span>
-				<span className="brutal-label text-muted-foreground tabular-nums">
+				<span className="font-mono text-[11px] tabular-nums text-muted-foreground">
 					{formatTime(duration)}
 				</span>
 			</div>
@@ -202,18 +202,18 @@ function Controls() {
 	const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
 
 	return (
-		<div className="flex shrink-0 items-center justify-between px-8 py-6 pb-10">
+		<div className="flex shrink-0 items-center justify-between px-8 pt-4 pb-10">
 			<Button
 				variant="ghost"
 				size="icon"
 				aria-label="Shuffle"
 				aria-pressed={shuffle}
-				className={`h-12 w-12 ${
+				className={`h-12 w-12 rounded-full ${
 					!hasQueue ? "opacity-30 pointer-events-none" : ""
-				} ${shuffle ? "text-primary" : "text-muted-foreground"}`}
+				} ${shuffle ? "text-highlight hover:text-highlight" : "text-muted-foreground"}`}
 				onClick={toggleShuffle}
 			>
-				<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
 					<polyline points="16 3 21 3 21 8" />
 					<line x1="4" y1="20" x2="21" y2="3" />
 					<polyline points="21 16 21 21 16 21" />
@@ -222,32 +222,25 @@ function Controls() {
 				</svg>
 			</Button>
 
-			<Button variant="ghost" size="icon" aria-label="Previous track" className="h-14 w-14 text-foreground" onClick={prevTrack}>
-				<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-					<rect x="2" y="4" width="3" height="16" rx="0" />
-					<path d="M22 4L9 12L22 20V4Z" />
+			<Button variant="ghost" size="icon" aria-label="Previous track" className="h-14 w-14 rounded-full text-foreground hover:text-foreground" onClick={prevTrack}>
+				<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" strokeLinejoin="round">
+					<rect x="3" y="5" width="2.5" height="14" rx="1.25" />
+					<path d="M20 5.5v13a1 1 0 0 1-1.53.85L8.5 13a1.2 1.2 0 0 1 0-2l9.97-6.35A1 1 0 0 1 20 5.5Z" />
 				</svg>
 			</Button>
 
-			<Button variant="secondary" size="icon" aria-label={isPlaying ? "Pause" : "Play"} className="h-[72px] w-[72px] border-[3px]" onClick={toggle}>
+			<Button variant="default" size="icon" aria-label={isPlaying ? "Pause" : "Play"} className="h-[72px] w-[72px] rounded-full shadow-float hover:bg-primary active:scale-95" onClick={toggle}>
 				{isPlaying && isBuffering ? (
-					<Loader2 className="h-8 w-8 animate-spin" />
-				) : isPlaying ? (
-					<svg width="30" height="30" viewBox="0 0 12 12" fill="currentColor">
-						<rect x="1" y="1" width="3.5" height="10" rx="0" />
-						<rect x="7.5" y="1" width="3.5" height="10" rx="0" />
-					</svg>
+					<Spinner size={28} />
 				) : (
-					<svg width="30" height="30" viewBox="0 0 12 12" fill="currentColor">
-						<path d="M2.5 1.5L10.5 6L2.5 10.5V1.5Z" />
-					</svg>
+					<PlayPauseIcon playing={isPlaying} className="size-8" />
 				)}
 			</Button>
 
-			<Button variant="ghost" size="icon" aria-label="Next track" className="h-14 w-14 text-foreground" onClick={next}>
-				<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-					<rect x="19" y="4" width="3" height="16" rx="0" />
-					<path d="M2 4L15 12L2 20V4Z" />
+			<Button variant="ghost" size="icon" aria-label="Next track" className="h-14 w-14 rounded-full text-foreground hover:text-foreground" onClick={next}>
+				<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" strokeLinejoin="round">
+					<rect x="18.5" y="5" width="2.5" height="14" rx="1.25" />
+					<path d="M4 5.5v13a1 1 0 0 0 1.53.85L15.5 13a1.2 1.2 0 0 0 0-2L5.53 4.65A1 1 0 0 0 4 5.5Z" />
 				</svg>
 			</Button>
 
@@ -256,19 +249,19 @@ function Controls() {
 				size="icon"
 				aria-label={`Repeat ${repeat}`}
 				aria-pressed={repeat !== "off"}
-				className={`h-12 w-12 relative ${
+				className={`h-12 w-12 relative rounded-full ${
 					!hasQueue ? "opacity-30 pointer-events-none" : ""
-				} ${repeat !== "off" ? "text-primary" : "text-muted-foreground"}`}
+				} ${repeat !== "off" ? "text-highlight hover:text-highlight" : "text-muted-foreground"}`}
 				onClick={toggleRepeat}
 			>
-				<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
 					<polyline points="17 1 21 5 17 9" />
 					<path d="M3 11V9a4 4 0 0 1 4-4h14" />
 					<polyline points="7 23 3 19 7 15" />
 					<path d="M21 13v2a4 4 0 0 1-4 4H3" />
 				</svg>
 				{repeat === "one" && (
-					<span className="absolute text-[9px] font-black">1</span>
+					<span className="absolute text-[9px] font-semibold">1</span>
 				)}
 			</Button>
 		</div>
@@ -287,9 +280,9 @@ function VolumeSection() {
 				onClick={toggleMute}
 				aria-label={volume === 0 ? "Unmute" : "Mute"}
 				aria-pressed={volume === 0}
-				className="shrink-0 text-foreground hover:text-primary p-1 -ml-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+				className="shrink-0 rounded-md p-1 -ml-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
 			>
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
 					<path d="M11 5L6 9H2v6h4l5 4V5z" />
 					{volume === 0 ? (
 						<>
@@ -304,11 +297,13 @@ function VolumeSection() {
 					)}
 				</svg>
 			</button>
-			<div className="relative flex-1 h-2.5 border-2 border-foreground bg-background">
-				<div
-					className="absolute inset-y-0 left-0 bg-foreground"
-					style={{ width: `${volume}%` }}
-				/>
+			<div className="group/vol relative flex h-6 flex-1 items-center">
+				<div className="relative h-1 w-full overflow-hidden rounded-full bg-border transition-[height] duration-150 group-hover/vol:h-1.5">
+					<div
+						className="absolute inset-y-0 left-0 rounded-full bg-foreground"
+						style={{ width: `${volume}%` }}
+					/>
+				</div>
 				<input
 					type="range"
 					min={0}
@@ -319,7 +314,7 @@ function VolumeSection() {
 					className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
 				/>
 			</div>
-			<span className="text-[10px] font-mono font-bold tabular-nums text-muted-foreground tracking-wider w-7 text-right">
+			<span className="w-7 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
 				{volume}
 			</span>
 		</div>
@@ -338,9 +333,9 @@ function ExtraControls() {
 			<DropdownMenu>
 				<DropdownMenuTrigger
 					aria-label="Audio settings"
-					className="inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+					className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
 				>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
 						<line x1="4" y1="21" x2="4" y2="14" />
 						<line x1="4" y1="10" x2="4" y2="3" />
 						<line x1="12" y1="21" x2="12" y2="12" />
@@ -359,7 +354,7 @@ function ExtraControls() {
 							<DropdownMenuItem
 								key={s}
 								onClick={() => setCrossfadeDuration(s)}
-								className={crossfadeDuration === s ? "font-semibold" : ""}
+								className={crossfadeDuration === s ? "font-medium text-foreground" : "text-muted-foreground"}
 							>
 								{s === 0 ? "Off" : `${s}s`}
 							</DropdownMenuItem>
@@ -442,8 +437,26 @@ export function FullscreenPlayer() {
 					onDragEnd={handleDragEnd}
 					role="dialog"
 					aria-label="Now playing"
-					className="fixed inset-0 z-[70] flex flex-col bg-background md:hidden"
+					className="fixed inset-0 z-[70] isolate flex flex-col overflow-hidden bg-background md:[&>*:not([aria-hidden])]:mx-auto md:[&>*:not([aria-hidden])]:w-full md:[&>*:not([aria-hidden])]:max-w-xl"
 				>
+					{/* Ambient backdrop — blurred copy of the cover, crossfades per track */}
+					<div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+						<AnimatePresence initial={false}>
+							{currentTrack.cover && (
+								<motion.div
+									key={currentTrack.cover}
+									initial={{ opacity: 0 }}
+									animate={{ opacity: 0.45 }}
+									exit={{ opacity: 0 }}
+									transition={{ duration: 0.8, ease: "easeOut" }}
+									className="absolute -inset-[20%] scale-110 bg-cover bg-center blur-3xl saturate-150"
+									style={{ backgroundImage: `url("${currentTrack.cover}")` }}
+								/>
+							)}
+						</AnimatePresence>
+						<div className="absolute inset-0 bg-gradient-to-b from-background/30 via-background/70 to-background" />
+					</div>
+
 					{/* Drag handle */}
 					<div
 						className="flex shrink-0 items-center justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing"
@@ -452,7 +465,7 @@ export function FullscreenPlayer() {
 						aria-label="Drag down to close"
 					>
 						<motion.div
-							className="h-1.5 w-12 bg-foreground rounded-sm"
+							className="h-1 w-10 rounded-full bg-foreground/20"
 							animate={{ scaleX: [1, 1.15, 1] }}
 							transition={{
 								duration: 1.6,
@@ -464,18 +477,18 @@ export function FullscreenPlayer() {
 					</div>
 
 					{/* Header */}
-					<div className="flex shrink-0 items-center border-b-2 border-foreground px-3 py-2">
+					<div className="flex shrink-0 items-center px-3 py-1">
 						<Button
 							variant="ghost"
 							size="icon-touch"
 							aria-label="Close fullscreen player"
 							onClick={() => setFullscreenOpen(false)}
 						>
-							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
 								<polyline points="6 9 12 15 18 9" />
 							</svg>
 						</Button>
-						<span className="brutal-label flex-1 text-center text-muted-foreground">
+						<span className="flex-1 text-center text-xs font-medium text-muted-foreground">
 							{lyricsVisible ? "Lyrics" : "Now Playing"}
 						</span>
 						<div className="flex items-center gap-0.5">
@@ -492,7 +505,7 @@ export function FullscreenPlayer() {
 										setQueuePanelOpen(true);
 									}}
 								>
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
 										<line x1="8" y1="6" x2="21" y2="6" />
 										<line x1="8" y1="12" x2="21" y2="12" />
 										<line x1="8" y1="18" x2="21" y2="18" />
@@ -507,10 +520,10 @@ export function FullscreenPlayer() {
 								size="icon-touch"
 								aria-label="Toggle lyrics"
 								aria-pressed={lyricsVisible}
-								className={lyricsVisible ? "text-primary" : "text-muted-foreground"}
+								className={lyricsVisible ? "bg-accent text-foreground" : "text-muted-foreground"}
 								onClick={toggleLyrics}
 							>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
 									<path d="M9 18V5l12-2v13" />
 									<circle cx="6" cy="18" r="3" />
 									<circle cx="18" cy="16" r="3" />
@@ -529,7 +542,7 @@ export function FullscreenPlayer() {
 							<CoverCarousel queue={queue} />
 							<TrackInfo />
 							<div className="shrink-0 h-8 px-8 overflow-hidden">
-								<AudioVisualizer barCount={32} className="w-full h-full text-foreground" />
+								<AudioVisualizer barCount={32} className="w-full h-full text-foreground/60" />
 							</div>
 						</>
 					)}

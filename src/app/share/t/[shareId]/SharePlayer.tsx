@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Play, Pause, Download, Share2, ExternalLink, Check } from "lucide-react";
+import { motion } from "motion/react";
+import { Download, Share2, ExternalLink, ArrowRight } from "lucide-react";
+import { DrawCheck, Equalizer, LogoMark, PlayPauseIcon, SlideSwap, Spinner } from "@/components/motion/icons";
 
 function formatTime(seconds: number) {
 	if (!seconds || !isFinite(seconds)) return "0:00";
@@ -160,110 +162,115 @@ export function SharePlayer({
 	const progressPct = duration > 0 ? currentTime / duration : 0;
 
 	const sharedByLabel = `@${sharedBy.toLowerCase().replace(/\s+/g, "")}`;
-	const year = "—";
 
 	return (
-		<div className="min-h-dvh bg-background">
-			{/* Header strip */}
-			<header className="border-b-[2px] sm:border-b-[3px] border-foreground bg-background sticky top-0 z-10">
-				<div className="max-w-6xl mx-auto px-5 sm:px-10 py-4 flex items-center justify-between gap-4">
-					<Link href="/" className="flex items-center gap-2.5 no-underline">
-						<div className="h-6 w-6 border-[2px] border-foreground bg-primary shrink-0" />
-						<span className="text-xl font-black tracking-[-0.03em] text-foreground uppercase">
-							DEEMIX
-						</span>
+		<div className="relative min-h-dvh overflow-hidden bg-background">
+			<div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-grid" />
+
+			{/* Header */}
+			<header className="glass sticky top-0 z-10 border-b border-border">
+				<div className="max-w-5xl mx-auto h-14 px-4 sm:px-6 flex items-center justify-between gap-4">
+					<Link href="/" className="flex items-center gap-2 no-underline text-foreground">
+						<LogoMark className="size-6 shrink-0" />
+						<span className="text-sm font-semibold tracking-tight">deemix</span>
 					</Link>
 					<Link
 						href="/"
-						className="inline-flex items-center gap-2 min-h-11 md:min-h-9 px-4 py-2 border-2 border-foreground bg-card font-mono text-[11px] font-bold tracking-[0.1em] uppercase shadow-[var(--shadow-brutal-sm)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] [@media(hover:hover)]:hover:bg-accent transition-colors no-underline"
+						className="inline-flex items-center gap-1.5 h-9 md:h-8 px-3 rounded-md border border-border bg-background text-sm font-medium text-foreground transition-colors no-underline [@media(hover:hover)]:hover:bg-accent"
 					>
-						OPEN IN APP <ExternalLink className="size-3" aria-hidden />
+						Open in app <ExternalLink className="size-3.5" aria-hidden />
 					</Link>
 				</div>
 			</header>
 
-			<main className="max-w-6xl mx-auto px-5 sm:px-10 py-10 sm:py-14">
+			<main className="relative max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
 				{/* Hero */}
-				<div className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-14 items-start md:items-center mb-12">
-					{/* Cover with sticker */}
-					<div className="relative w-full max-w-[420px] mx-auto md:mx-0">
+				<motion.div
+					initial={{ opacity: 0, y: 12 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+					className="grid grid-cols-1 md:grid-cols-[minmax(0,360px)_1fr] gap-8 md:gap-12 items-center mb-10"
+				>
+					<div className="relative w-full max-w-[360px] mx-auto md:mx-0">
 						<CoverImage
 							src={coverUrl}
-							className="w-full aspect-square border-[3px] sm:border-[4px] border-foreground shadow-[10px_10px_0_var(--foreground)]"
+							alt={album ? `${album} cover` : `${title} cover`}
+							className="w-full aspect-square rounded-xl ring-1 ring-border shadow-[0_24px_60px_-20px_rgb(0_0_0/0.35)]"
 						/>
-						<div
-							className="absolute -top-4 -right-4 sm:-top-5 sm:-right-5 bg-accent border-[3px] border-foreground px-3 py-2 font-mono text-[11px] font-black tracking-[0.12em] uppercase shadow-[4px_4px_0_var(--foreground)]"
-							style={{ transform: "rotate(4deg)" }}
-						>
-							SHARED WITH YOU
-						</div>
 					</div>
 
-					{/* Info */}
-					<div className="min-w-0">
-						<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-							TRACK · FLAC{duration > 0 ? ` · ${formatTime(duration)}` : ""}
-						</p>
-						<h1 className="text-brutal-xl m-0 mb-3">
+					<div className="min-w-0 text-center md:text-left">
+						<span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-0.5 text-xs text-muted-foreground">
+							<Equalizer playing={isPlaying} bars={3} className="h-3" />
+							Shared with you
+						</span>
+						<h1 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-balance break-words m-0">
 							{title}
-							<span className="text-primary">.</span>
 						</h1>
-						<p className="text-lg sm:text-xl font-bold mb-5">
-							BY <span className="text-primary">{artist}</span>
+						<p className="mt-2 text-lg text-muted-foreground">
+							<span className="font-medium text-foreground">{artist}</span>
+							{album && (
+								<>
+									{" · "}
+									<span>{album}</span>
+								</>
+							)}
 						</p>
-						{album && (
-							<p className="text-sm font-medium text-muted-foreground mb-7 max-w-[40ch]">
-								FROM THE ALBUM <strong className="text-foreground">{album}</strong>
-							</p>
-						)}
 
-						{/* Action buttons — stack full-width on mobile, inline on tablet+ */}
-						<div className="flex flex-col sm:flex-row sm:flex-wrap gap-2.5 mb-7">
+						{/* Actions */}
+						<div className="mt-7 flex flex-wrap items-center justify-center md:justify-start gap-2">
 							<button
 								onClick={handleToggle}
 								disabled={!loaded}
-								className="inline-flex items-center justify-center sm:justify-start gap-2 min-h-12 sm:min-h-11 px-5 py-3 border-2 sm:border-[3px] border-foreground bg-primary text-white font-mono text-sm font-black tracking-[0.12em] uppercase shadow-[var(--shadow-brutal)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] disabled:opacity-40 transition-all [@media(hover:hover)]:hover:bg-primary/90"
+								className="inline-flex items-center gap-2 h-11 pl-4 pr-5 rounded-full bg-primary text-primary-foreground text-sm font-medium outline-none transition-[background-color,transform] duration-150 [@media(hover:hover)]:hover:bg-primary/85 focus-visible:ring-[3px] focus-visible:ring-ring/40 active:scale-[0.98] disabled:opacity-50"
 							>
-								{isPlaying ? <Pause className="size-4" aria-hidden /> : <Play className="size-4" aria-hidden />}
-								{isPlaying ? "PAUSE" : "PLAY"}
+								<PlayPauseIcon playing={isPlaying} className="size-4" />
+								{isPlaying ? "Pause" : "Play"}
 							</button>
 							<Link
 								href="/"
-								className="inline-flex items-center justify-center sm:justify-start gap-2 min-h-12 sm:min-h-11 px-5 py-3 border-2 sm:border-[3px] border-foreground bg-card text-foreground font-mono text-sm font-black tracking-[0.12em] uppercase shadow-[var(--shadow-brutal)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] transition-all no-underline [@media(hover:hover)]:hover:bg-accent"
+								className="inline-flex items-center gap-2 h-11 px-4 rounded-full border border-border bg-background text-sm font-medium text-foreground transition-colors no-underline [@media(hover:hover)]:hover:bg-accent"
 							>
 								<Download className="size-4" aria-hidden />
-								GET IT
+								Get it
 							</Link>
 							<button
 								onClick={handleCopyLink}
-								className="inline-flex items-center justify-center sm:justify-start gap-2 min-h-12 sm:min-h-11 px-5 py-3 border-2 sm:border-[3px] border-transparent text-foreground font-mono text-sm font-black tracking-[0.12em] uppercase transition-colors [@media(hover:hover)]:hover:border-foreground [@media(hover:hover)]:hover:bg-card"
+								className="inline-flex items-center gap-2 h-11 px-4 rounded-full text-sm font-medium text-muted-foreground transition-colors [@media(hover:hover)]:hover:bg-accent [@media(hover:hover)]:hover:text-foreground"
 							>
-								{linkCopied ? <Check className="size-4 text-foreground" strokeWidth={3} aria-hidden /> : <Share2 className="size-4" aria-hidden />}
-								{linkCopied ? "COPIED" : "COPY LINK"}
+								{linkCopied ? <DrawCheck className="size-4 text-success" /> : <Share2 className="size-4" aria-hidden />}
+								<SlideSwap id={linkCopied ? "copied" : "copy"}>
+									{linkCopied ? "Copied" : "Copy link"}
+								</SlideSwap>
 							</button>
 						</div>
 
-						<p className="font-mono text-[11px] tracking-[0.1em] uppercase text-muted-foreground">
-							← SHARED BY <strong className="text-foreground">{sharedByLabel}</strong>
+						<p className="mt-6 text-sm text-muted-foreground">
+							Shared by <span className="font-medium text-foreground">{sharedByLabel}</span>
 						</p>
 					</div>
-				</div>
+				</motion.div>
 
 				{/* Waveform card */}
-				<div className="border-2 sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] p-4 sm:p-6 mb-10">
+				<motion.div
+					initial={{ opacity: 0, y: 8 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
+					className="rounded-xl border border-border bg-card p-4 sm:p-5 mb-10"
+				>
 					<div className="flex items-center gap-4">
 						<button
 							onClick={handleToggle}
 							disabled={!loaded}
 							aria-label={isPlaying ? "Pause" : "Play"}
-							className="shrink-0 inline-flex items-center justify-center w-14 h-14 border-2 sm:border-[3px] border-foreground bg-primary text-white shadow-[var(--shadow-brutal-sm)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[var(--shadow-brutal-active)] disabled:opacity-40 transition-all"
+							className="shrink-0 inline-flex items-center justify-center size-12 rounded-full bg-primary text-primary-foreground outline-none transition-[background-color,transform] duration-150 [@media(hover:hover)]:hover:bg-primary/85 focus-visible:ring-[3px] focus-visible:ring-ring/40 active:scale-95 disabled:opacity-50"
 						>
-							{isPlaying ? <Pause className="size-5" /> : <Play className="size-5" />}
+							{loaded ? <PlayPauseIcon playing={isPlaying} className="size-5" /> : <Spinner size={18} />}
 						</button>
 						<div className="flex-1 min-w-0">
 							{/* Bars */}
 							<div
-								className="h-14 flex items-center gap-[2px] cursor-pointer"
+								className="h-12 flex items-center gap-[2px] cursor-pointer"
 								onClick={(e) => {
 									const rect = e.currentTarget.getBoundingClientRect();
 									const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
@@ -276,74 +283,61 @@ export function SharePlayer({
 									return (
 										<div
 											key={i}
-											className={`flex-1 transition-colors ${filled ? "bg-primary" : "bg-muted"}`}
+											className={`flex-1 rounded-full transition-colors ${filled ? "bg-highlight" : "bg-muted-foreground/25"}`}
 											style={{ height: `${h}%` }}
 										/>
 									);
 								})}
 							</div>
 							{/* Time line */}
-							<div className="flex justify-between mt-1.5 font-mono text-[10px] uppercase tracking-[0.05em] text-muted-foreground">
-								<span className="tabular-nums">
+							<div className="flex justify-between gap-3 mt-2 text-xs text-muted-foreground">
+								<span className="font-mono tabular-nums">
 									{formatTime(currentTime)} / {formatTime(duration)}
 								</span>
-								<span>FULL TRACK · GET APP FOR DOWNLOAD</span>
+								<span className="truncate">Full track · get the app to download</span>
 							</div>
 						</div>
 					</div>
-				</div>
+				</motion.div>
 
 				{/* Stats strip */}
-				<div className="grid grid-cols-2 sm:grid-cols-4 mb-10">
+				<dl className="grid grid-cols-3 rounded-xl border border-border bg-card divide-x divide-border mb-10 overflow-hidden">
 					{[
-						{ k: "FORMAT", v: "FLAC" },
-						{ k: "DURATION", v: duration > 0 ? formatTime(duration) : "—" },
-						{ k: "YEAR", v: year },
-						{ k: "SHARED", v: "PUBLIC" },
-					].map((s, i) => (
-						<div
-							key={s.k}
-							className={`p-5 border-t-2 border-b-2 border-foreground ${
-								i === 0 ? "border-l-2" : ""
-							} ${
-								i < 3 ? "border-r-2" : "sm:border-r-2"
-							} ${i % 2 === 0 ? "bg-card" : "bg-background"}`}
-						>
-							<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1.5">
-								{s.k}
-							</p>
-							<p className="text-2xl sm:text-3xl font-black tracking-[-0.02em]">{s.v}</p>
+						{ k: "Format", v: "FLAC" },
+						{ k: "Duration", v: duration > 0 ? formatTime(duration) : "—" },
+						{ k: "Access", v: "Public" },
+					].map((s) => (
+						<div key={s.k} className="px-4 py-4 sm:px-5">
+							<dt className="text-xs text-muted-foreground">{s.k}</dt>
+							<dd className="m-0 mt-1 text-lg sm:text-xl font-semibold tracking-tight tabular-nums">{s.v}</dd>
 						</div>
 					))}
-				</div>
+				</dl>
 
-				{/* Massive CTA */}
-				<div className="border-2 sm:border-[3px] border-foreground bg-foreground text-background p-7 sm:p-10 shadow-[8px_8px_0_var(--primary)] mb-12">
+				{/* CTA */}
+				<div className="rounded-xl border border-border bg-card p-6 sm:p-8 mb-12">
 					<div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-center">
 						<div>
-							<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-accent mb-3">
-								SELF-HOSTED · OPEN-SOURCE · FLAC
-							</p>
-							<h2 className="text-brutal-lg m-0 mb-3">
-								DOWNLOAD YOUR<br />
-								<span className="text-accent">LIBRARY.</span>
+							<h2 className="text-xl sm:text-2xl font-semibold tracking-tight m-0">
+								Download your library
 							</h2>
-							<p className="text-base font-medium opacity-80 max-w-[52ch]">
-								DEEMIX IS A WEB APP FOR DOWNLOADING HIGH-QUALITY MUSIC FROM DEEZER. NO ACCOUNTS. NO ADS. YOUR FILES, YOUR DISK.
+							<p className="mt-2 text-sm text-muted-foreground max-w-[52ch]">
+								deemix is a self-hosted, open-source web app for downloading high-quality music from Deezer. No ads — your files, your disk.
 							</p>
 						</div>
 						<Link
 							href="/"
-							className="inline-flex items-center justify-center gap-2 px-7 py-4 border-2 sm:border-[3px] border-background bg-accent text-foreground font-mono text-base font-black tracking-[0.12em] uppercase shadow-[4px_4px_0_var(--background)] hover:bg-accent/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0_var(--background)] transition-all no-underline whitespace-nowrap"
+							className="inline-flex items-center justify-center gap-2 h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-medium transition-colors no-underline whitespace-nowrap [@media(hover:hover)]:hover:bg-primary/85"
 						>
-							GET DEEMIX →
+							Get deemix
+							<ArrowRight className="size-4" aria-hidden />
 						</Link>
 					</div>
 				</div>
 
 				{/* Footer */}
-				<p className="text-center font-mono text-[10px] font-bold tracking-[0.14em] uppercase text-muted-foreground py-6">
-					DEEMIX.APP / SHARED / {shareId.slice(0, 8).toUpperCase()} · NOT AFFILIATED WITH DEEZER
+				<p className="text-center text-xs text-muted-foreground py-6">
+					<span className="font-mono">{shareId.slice(0, 8)}</span> · Not affiliated with Deezer
 				</p>
 			</main>
 		</div>

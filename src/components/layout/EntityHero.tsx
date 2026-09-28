@@ -1,33 +1,38 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { motion } from "motion/react";
 import { CoverImage } from "@/components/ui/cover-image";
+import { PlayPauseIcon } from "@/components/motion/icons";
+import { usePlayerStore } from "@/stores/usePlayerStore";
 import { cn } from "@/lib/utils";
 
 interface EntityHeroProps {
-	/** Mono uppercase eyebrow line above the title. e.g. "ALBUM · 2024" or "ARTIST · 1.2M FANS". */
+	/** Small muted type label above the title. e.g. "Album · 2024" or "Artist". */
 	eyebrow?: ReactNode;
-	/** Main title, rendered with text-brutal-lg. */
+	/** Main title. */
 	title: string;
 	/** Inline subtitle node — typically the artist link or extra metadata. */
 	subtitle?: ReactNode;
-	/** Mono small footer line under title. e.g. "12 TRACKS · 48 MIN". */
+	/** Small muted footer line under the subtitle. e.g. "12 tracks · 48 min". */
 	meta?: ReactNode;
-	/** Cover image src. Optional — entity heroes without artwork (errors, etc.) just skip it. */
+	/** Cover image src. Optional — entity heroes without artwork just skip it. */
 	coverSrc?: string | null;
 	/** Cover alt text. Defaults to title. */
 	coverAlt?: string;
-	/** Primary CTA — passed as-is. Caller is responsible for sizing (recommend h-12 md:h-10, w-full md:w-auto for brutalist primary). */
+	/** Cover shape — artists render as a circle. */
+	coverShape?: "square" | "circle";
+	/** Primary CTA — typically a `<HeroPlayButton />`. */
 	primaryAction?: ReactNode;
-	/** Row of secondary icon buttons — passed as-is. Each should use `size="icon-touch"`. */
+	/** Row of secondary actions — outline icon buttons. */
 	secondaryActions?: ReactNode;
 }
 
 /**
  * Shared hero scaffold for entity pages (Album, Artist, Playlist detail).
  *
- * Mobile (<md): cover centered above text, primary action stacked above secondaries.
- * Desktop (≥md): cover left, text right, primary + secondaries inline below text.
+ * Mobile (<md): cover centered above text, actions centered below.
+ * Desktop (≥md): cover left, meta right, actions inline below the text.
  *
  * Caller decides PLAY/FOLLOW/SAVE — this only provides the layout shell.
  */
@@ -38,51 +43,85 @@ export function EntityHero({
 	meta,
 	coverSrc,
 	coverAlt,
+	coverShape = "square",
 	primaryAction,
 	secondaryActions,
 }: EntityHeroProps) {
 	return (
-		<div>
-			{eyebrow && (
-				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-					{eyebrow}
-				</p>
+		<motion.div
+			initial={{ opacity: 0, y: 8 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ duration: 0.3, ease: "easeOut" }}
+			className="flex flex-col items-center gap-6 pt-2 md:flex-row md:items-end md:gap-8"
+		>
+			{coverSrc && (
+				<CoverImage
+					src={coverSrc}
+					alt={coverAlt ?? title}
+					className={cn(
+						"shrink-0 size-40 sm:size-48 md:size-52 lg:size-56",
+						"shadow-[0_8px_30px_rgb(0_0_0/0.12)] ring-1 ring-border",
+						coverShape === "circle" ? "rounded-full" : "rounded-xl"
+					)}
+				/>
 			)}
-			<div className="flex flex-col gap-5 md:flex-row md:gap-8 md:items-end">
-				{coverSrc && (
-					<CoverImage
-						src={coverSrc}
-						alt={coverAlt ?? title}
-						className={cn(
-							"shrink-0 border-2 sm:border-[3px] border-foreground shadow-[var(--shadow-brutal)]",
-							"w-44 h-44 sm:w-52 sm:h-52 mx-auto md:mx-0"
-						)}
-					/>
+			<div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center md:items-start md:text-left">
+				{eyebrow && (
+					<p className="text-xs font-medium text-muted-foreground">{eyebrow}</p>
 				)}
-				<div className="flex flex-col gap-2 min-w-0 flex-1 text-center md:text-left">
-					<h1 className="text-brutal-lg m-0 break-words">{title}</h1>
-					{subtitle && (
-						<div className="text-sm font-medium text-muted-foreground">
-							{subtitle}
-						</div>
-					)}
-					{meta && (
-						<p className="text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-muted-foreground">
-							{meta}
-						</p>
-					)}
-					{(primaryAction || secondaryActions) && (
-						<div className="flex flex-col gap-3 mt-2 md:flex-row md:items-center md:gap-3">
-							{primaryAction && <div className="md:shrink-0">{primaryAction}</div>}
-							{secondaryActions && (
-								<div className="flex items-center gap-1 flex-wrap justify-center md:justify-start">
-									{secondaryActions}
-								</div>
-							)}
-						</div>
-					)}
-				</div>
+				<h1 className="m-0 max-w-full break-words text-3xl font-semibold tracking-tight text-balance sm:text-4xl lg:text-5xl">
+					{title}
+				</h1>
+				{subtitle && (
+					<div className="mt-1 text-sm text-muted-foreground">{subtitle}</div>
+				)}
+				{meta && (
+					<p className="text-xs text-muted-foreground tabular-nums">{meta}</p>
+				)}
+				{(primaryAction || secondaryActions) && (
+					<div className="mt-4 flex flex-wrap items-center justify-center gap-2 md:justify-start">
+						{primaryAction && <div className="shrink-0">{primaryAction}</div>}
+						{secondaryActions && (
+							<div className="flex flex-wrap items-center gap-2">{secondaryActions}</div>
+						)}
+					</div>
+				)}
 			</div>
-		</div>
+		</motion.div>
+	);
+}
+
+/**
+ * Round primary play button for entity heroes. Shows a morphing play/pause
+ * glyph: when the current player track belongs to `trackIds`, clicking toggles
+ * playback; otherwise it calls `onPlay` (start from the top).
+ */
+export function HeroPlayButton({
+	onPlay,
+	trackIds,
+	label = "Play",
+	disabled,
+}: {
+	onPlay: () => void;
+	trackIds: string[];
+	label?: string;
+	disabled?: boolean;
+}) {
+	const currentTrackId = usePlayerStore((s) => s.currentTrack?.trackId ?? null);
+	const isPlaying = usePlayerStore((s) => s.isPlaying);
+	const toggle = usePlayerStore((s) => s.toggle);
+	const isCurrent = currentTrackId != null && trackIds.includes(currentTrackId);
+	const playing = isCurrent && isPlaying;
+
+	return (
+		<button
+			type="button"
+			onClick={isCurrent ? toggle : onPlay}
+			disabled={disabled}
+			aria-label={playing ? "Pause" : label}
+			className="inline-flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm outline-none transition-[background-color,transform] duration-150 hover:bg-primary/85 focus-visible:ring-[3px] focus-visible:ring-ring/40 active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+		>
+			<PlayPauseIcon playing={playing} className="size-5" />
+		</button>
 	);
 }

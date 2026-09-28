@@ -26,9 +26,11 @@ src/
 │   │   └── _lib/helpers.ts  # Shared helpers (ok, fail, handleError, requireDeezerAndApp)
 │   └── share/t/[shareId]/   # Public share player + OG image
 ├── components/
-│   ├── audio/               # Player, MiniPlayer, FullscreenPlayer, SeekBar, PlayButton
-│   ├── downloads/           # DownloadPanel, QueueItem, progress tracking
-│   ├── layout/              # Sidebar, SearchBar
+│   ├── audio/               # Player (floating pill, bottom-center), MiniPlayer (preview pill), FullscreenPlayer, SeekBar
+│   ├── layout/              # AppHeader (nav + ⌘K trigger), EntityHero
+│   ├── command/             # CommandPalette — ⌘K search + downloads (single entry point)
+│   ├── cards/               # MediaCard grid cards (hover play / download)
+│   ├── motion/              # Motion-driven SVG primitives (PlayPauseIcon, ProgressRing, …)
 │   ├── playlists/           # AddToPlaylist
 │   ├── tracks/              # ShareButton, ShareDialog, TrackActionSheet
 │   └── ui/                  # shadcn primitives (IGNORED — generated, rarely modified)
@@ -84,6 +86,10 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Library routes | `src/app/api/v1/library/*` | `route.test.ts` (50 tests) |
 | Recent plays | `src/app/api/v1/recent-plays/**` | `route.test.ts` (26 tests) |
 | Preferences | `src/app/api/v1/preferences/route.ts` | `route.test.ts` (11 tests) |
+| Download queue | `src/stores/useDownloadStore.ts`, `src/lib/download.ts` | `useDownloadStore.test.ts`, `download.test.ts` |
+| ⌘K palette | `src/components/command/CommandPalette.tsx`, `src/stores/useCommandStore.ts` | `CommandPalette.test.tsx`, `useCommandStore.test.ts` |
+| Theme | `src/lib/theme.ts` | `theme.test.ts` |
+| Keyboard shortcuts | `src/hooks/useKeyboardShortcuts.ts` | `useKeyboardShortcuts.test.ts` |
 
 ### Fix-bug-once strategy (read this before fixing anything)
 

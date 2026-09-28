@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
-import { GripVertical, X, Trash2, ListMusic } from "lucide-react";
+import { GripVertical, X, Trash2 } from "lucide-react";
+import { EmptyState } from "@/components/motion/icons";
 import { PlaybackIndicator } from "./PlaybackIndicator";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -86,18 +87,19 @@ export function QueuePanel() {
 		totalCount === 0
 			? ""
 			: totalCount === 1
-				? "1 TRACK"
-				: `${totalCount} TRACKS`;
+				? "1 track"
+				: `${totalCount} tracks`;
 
 	return (
 		<AnimatePresence>
 			{open && (
 				<motion.aside
 					key="queue-panel"
-					initial={isDesktop ? { x: 440, opacity: 0 } : { y: "100%", opacity: 0 }}
-					animate={isDesktop ? { x: 0, opacity: 1 } : { y: 0, opacity: 1 }}
-					exit={isDesktop ? { x: 440, opacity: 0 } : { y: "100%", opacity: 0 }}
-					transition={{ type: "spring", damping: 28, stiffness: 280 }}
+					initial={isDesktop ? { x: 24, opacity: 0, scale: 0.98 } : { y: "100%", opacity: 0 }}
+					animate={isDesktop ? { x: 0, opacity: 1, scale: 1 } : { y: 0, opacity: 1 }}
+					exit={isDesktop ? { x: 24, opacity: 0, scale: 0.98 } : { y: "100%", opacity: 0 }}
+					transition={{ type: "spring", damping: 32, stiffness: 360 }}
+					style={{ transformOrigin: "right center" }}
 					drag={isDesktop ? false : "y"}
 					dragControls={dragControls}
 					dragListener={false}
@@ -106,9 +108,9 @@ export function QueuePanel() {
 					onDragEnd={handleDragEnd}
 					role="region"
 					aria-label="Queue"
-					className="fixed z-[60] flex flex-col bg-card border-foreground shadow-[-8px_0_0_rgba(13,13,13,0.06)]
-						inset-x-0 bottom-[calc(var(--bottom-nav-h)+var(--mini-player-h)+8px)] top-[calc(env(safe-area-inset-top,0px)+4px)] border-l-0 border-t-[3px]
-						md:inset-auto md:top-0 md:right-0 md:bottom-[96px] md:w-[420px] md:border-l-[3px] md:border-t-0"
+					className="fixed z-[60] flex flex-col overflow-hidden rounded-2xl border border-border bg-popover/95 glass text-popover-foreground shadow-popover
+						inset-x-2 top-[calc(env(safe-area-inset-top,0px)+8px)] bottom-[calc(var(--player-h)+var(--player-offset)+8px)]
+						md:inset-x-auto md:right-4 md:top-[calc(var(--header-h)+12px)] md:bottom-[calc(var(--player-h)+var(--player-offset)+12px)] md:w-[360px] md:rounded-xl"
 				>
 					{/* Drag handle (mobile only) — scoped drag surface, also signals "swipeable" */}
 					{!isDesktop && (
@@ -118,41 +120,19 @@ export function QueuePanel() {
 							aria-label="Drag down to close queue"
 							className="flex shrink-0 items-center justify-center pt-2.5 pb-1.5 cursor-grab active:cursor-grabbing touch-none"
 						>
-							<div className="h-1.5 w-12 bg-foreground/40 rounded-sm" />
+							<div className="h-1 w-10 rounded-full bg-foreground/20" />
 						</div>
 					)}
 
 					{/* Header */}
-					<div className="flex items-center gap-3 px-[18px] py-3.5 border-b-[3px] border-foreground bg-background">
-						<div className="flex h-11 w-11 shrink-0 items-center justify-center border-2 border-foreground bg-primary text-white">
-							<ListMusic className="h-5 w-5" />
-						</div>
+					<div className="flex items-center gap-2 border-b border-border px-4 py-3">
 						<div className="flex-1 min-w-0">
-							<p className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-muted-foreground">
-								UP NEXT · QUEUE
-							</p>
-							<p className="text-[14px] font-extrabold tracking-[-0.01em] truncate leading-tight mt-0.5">
-								{currentTrack.title}
-							</p>
-							<p className="text-[11px] font-mono text-muted-foreground truncate mt-0.5">
-								{currentTrack.artist}
+							<p className="text-sm font-semibold tracking-tight">Queue</p>
+							<p className="mt-0.5 truncate text-xs text-muted-foreground">
+								{subtitle}
+								{shuffle && " · Shuffled"}
 							</p>
 						</div>
-						<button
-							onClick={() => setOpen(false)}
-							aria-label="Close queue"
-							className="w-11 h-11 md:w-9 md:h-9 border-2 border-foreground bg-card hover:bg-accent flex items-center justify-center font-mono text-lg md:text-base font-extrabold leading-none shrink-0 transition-colors"
-						>
-							×
-						</button>
-					</div>
-
-					{/* Stats strip — matches LyricsPanel "progress strip" */}
-					<div className="flex justify-between items-center px-[18px] py-2 border-b-2 border-foreground bg-card font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-						<span>
-							{subtitle}
-							{shuffle && " · SHUFFLED"}
-						</span>
 						{queue.length > 1 && (
 							<button
 								type="button"
@@ -164,18 +144,27 @@ export function QueuePanel() {
 										{ duration: 3000 }
 									);
 								}}
-								className="flex items-center gap-1 hover:text-destructive transition-colors"
+								className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
 								aria-label="Clear queue"
 							>
-								<Trash2 className="h-3 w-3" />
-								CLEAR
+								<Trash2 className="h-3.5 w-3.5" />
+								Clear
 							</button>
 						)}
+						<Button
+							variant="ghost"
+							size="icon-touch"
+							onClick={() => setOpen(false)}
+							aria-label="Close queue"
+							className="-mr-1.5 rounded-full"
+						>
+							<X className="h-4 w-4" />
+						</Button>
 					</div>
 
 					{/* Body */}
-					<ScrollArea className="flex-1 min-h-0 bg-card">
-						<div className="px-3 py-4 space-y-5">
+					<ScrollArea className="flex-1 min-h-0">
+						<div className="px-2 py-3 space-y-5">
 							{current && (
 								<section>
 									<SectionLabel>Now Playing</SectionLabel>
@@ -192,7 +181,7 @@ export function QueuePanel() {
 									<SectionLabel>
 										Up Next
 										{shuffle && (
-											<span className="ml-2 text-[9px] text-muted-foreground tracking-normal normal-case font-normal">
+											<span className="ml-1 font-normal text-muted-foreground/70">
 												· playback in shuffled order
 											</span>
 										)}
@@ -201,7 +190,7 @@ export function QueuePanel() {
 										axis="y"
 										values={upNext.map((t) => t.trackId)}
 										onReorder={handleReorder}
-										className="flex flex-col gap-1"
+										className="flex flex-col gap-0.5"
 									>
 										{upNext.map((track, i) => (
 											<Reorder.Item
@@ -223,10 +212,10 @@ export function QueuePanel() {
 
 							{played.length > 0 && (
 								<section>
-									<SectionLabel className="text-muted-foreground">
+									<SectionLabel>
 										Played
 									</SectionLabel>
-									<div className="flex flex-col gap-1">
+									<div className="flex flex-col gap-0.5">
 										{played.map((track, i) => (
 											<QueueRow
 												key={`played-${i}-${track.trackId}`}
@@ -240,25 +229,21 @@ export function QueuePanel() {
 							)}
 
 							{queue.length <= 1 && (
-								<div className="text-center py-12 text-sm text-muted-foreground">
-									<ListMusic className="h-8 w-8 mx-auto mb-3 opacity-30" />
-									<p className="font-bold uppercase tracking-wider text-[11px]">
-										Nothing up next
-									</p>
-									<p className="mt-1 text-[11px]">
-										Add tracks to fill your queue.
-									</p>
-								</div>
+								<EmptyState
+									title="Nothing up next"
+									description="Add tracks to fill your queue."
+									className="mx-2 border-none py-10"
+								/>
 							)}
 						</div>
 					</ScrollArea>
 
 					{/* Footer — mirrors LyricsPanel */}
-					<div className="px-[18px] py-2.5 border-t-2 border-foreground bg-foreground text-background flex justify-between items-center font-mono text-[10px] font-bold uppercase tracking-[0.14em]">
-						<span>
-							{upNext.length} UP · {played.length} PLAYED
+					<div className="flex items-center justify-between border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+						<span className="tabular-nums">
+							{upNext.length} up next · {played.length} played
 						</span>
-						<span className="opacity-70">DRAG TO REORDER</span>
+						<span className="text-muted-foreground/70">Drag to reorder</span>
 					</div>
 				</motion.aside>
 			)}
@@ -276,7 +261,7 @@ function SectionLabel({
 	return (
 		<h3
 			className={cn(
-				"mb-2 px-2 text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-foreground",
+				"mb-1.5 px-2 text-xs font-medium text-muted-foreground",
 				className
 			)}
 		>
@@ -321,17 +306,15 @@ function QueueRow({
 					: undefined
 			}
 			className={cn(
-				"group flex items-center gap-2 rounded-sm px-2 py-2 transition-colors select-none",
-				active
-					? "bg-accent border-2 border-foreground shadow-[var(--shadow-brutal-sm)]"
-					: "border-2 border-transparent hover:bg-accent/50",
+				"group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors select-none",
+				active ? "bg-accent" : "hover:bg-accent/60",
 				muted && "opacity-60",
-				interactive && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+				interactive && "cursor-pointer focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
 			)}
 		>
 			{showHandle && (
 				<div
-					className="text-muted-foreground/40 group-hover:text-muted-foreground touch-none shrink-0"
+					className="-mx-1 text-muted-foreground/30 transition-colors group-hover:text-muted-foreground touch-none shrink-0"
 					aria-hidden
 				>
 					<GripVertical className="h-4 w-4" />
@@ -341,10 +324,10 @@ function QueueRow({
 			<div className="relative shrink-0">
 				<CoverImage
 					src={track.cover}
-					className="h-10 w-10 border-2 border-foreground"
+					className="h-10 w-10 rounded-md"
 				/>
 				{active && (
-					<div className="absolute inset-0 flex items-center justify-center bg-foreground/40">
+					<div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/45 text-white">
 						<PlaybackIndicator paused={!isPlaying} />
 					</div>
 				)}
@@ -353,13 +336,13 @@ function QueueRow({
 			<div className="min-w-0 flex-1">
 				<p
 					className={cn(
-						"truncate text-[13px] font-bold leading-tight",
-						active && "text-primary"
+						"truncate text-sm font-medium leading-tight",
+						active && "text-foreground"
 					)}
 				>
 					{track.title}
 				</p>
-				<p className="truncate text-[11px] text-muted-foreground leading-tight font-medium mt-0.5">
+				<p className="truncate text-xs text-muted-foreground leading-tight mt-0.5">
 					{track.artist}
 				</p>
 			</div>
@@ -369,7 +352,7 @@ function QueueRow({
 					variant="ghost"
 					size="icon"
 					aria-label={`Remove ${track.title} from queue`}
-					className="h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
+					className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:bg-destructive/10 hover:text-destructive shrink-0"
 					onClick={(e) => {
 						e.stopPropagation();
 						onRemove();

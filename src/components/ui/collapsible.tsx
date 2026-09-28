@@ -22,7 +22,7 @@ function CollapsibleTrigger({
 			{...props}
 		>
 			{children}
-			<ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform duration-200" />
+			<ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out" />
 		</CollapsiblePrimitive.Trigger>
 	);
 }

@@ -6,34 +6,34 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center border-2 sm:border-[3px] border-foreground bg-clip-padding text-sm font-bold whitespace-nowrap transition-all outline-none select-none focus-visible:ring-2 focus-visible:ring-ring active:translate-x-[1px] active:translate-y-[1px] active:!shadow-[var(--shadow-brutal-active)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 uppercase tracking-wide",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-[background-color,border-color,color,box-shadow,transform] duration-150 outline-none select-none focus-visible:ring-[3px] focus-visible:ring-ring/40 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px]",
+        default: "bg-primary text-primary-foreground hover:bg-primary/85",
         outline:
-          "bg-background text-foreground shadow-[var(--shadow-brutal)] hover:bg-accent [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px]",
+          "border-border bg-background text-foreground hover:bg-accent hover:border-ring/40",
         secondary:
-          "bg-foreground text-background shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px]",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/70",
         ghost:
-          "border-transparent shadow-none hover:bg-muted hover:border-foreground hover:shadow-[var(--shadow-brutal-sm)]",
+          "text-muted-foreground hover:bg-accent hover:text-foreground",
         destructive:
-          "bg-destructive text-white shadow-[var(--shadow-brutal)] [@media(hover:hover)]:hover:shadow-[var(--shadow-brutal-hover)] [@media(hover:hover)]:hover:-translate-x-[1px] [@media(hover:hover)]:hover:-translate-y-[1px]",
-        link: "border-transparent shadow-none text-primary underline-offset-4 hover:underline uppercase",
+          "bg-destructive/10 text-destructive hover:bg-destructive/20",
+        link: "text-foreground underline-offset-4 hover:underline",
       },
       size: {
         default:
-          "h-9 gap-1.5 px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        xs: "h-6 gap-1 px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1 px-3 text-[0.8rem] [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-10 gap-1.5 px-5 text-base has-data-[icon=inline-end]:pr-4 has-data-[icon=inline-start]:pl-4",
+          "h-9 gap-1.5 px-3.5 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        xs: "h-6 gap-1 rounded-sm px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-8 gap-1.5 px-3 text-[0.8rem] [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-10 gap-2 px-5 has-data-[icon=inline-end]:pr-4 has-data-[icon=inline-start]:pl-4",
         icon: "size-9",
         "icon-xs":
-          "size-6 [&_svg:not([class*='size-'])]:size-3",
+          "size-6 rounded-sm [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
           "size-8",
         "icon-lg": "size-10",
-        // Touch-first: 44×44 mobile (DESIGN.md §5), shrinks to 36×36 desktop.
+        // Touch-first: 44×44 mobile, shrinks to 36×36 desktop.
         "icon-touch": "size-11 md:size-9",
       },
     },

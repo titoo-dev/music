@@ -1,94 +1,101 @@
 "use client";
 
+import { motion } from "motion/react";
 import { useAppStore } from "@/stores/useAppStore";
+import { LogoMark } from "@/components/motion/icons";
+
+const STACK: { k: string; v: string }[] = [
+	{ k: "Runtime", v: "Next.js 16" },
+	{ k: "Database", v: "Postgres · Prisma 7" },
+	{ k: "UI", v: "React 19 · Tailwind 4" },
+	{ k: "Fork of", v: "bambanah/deemix" },
+];
+
+function Row({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
+	return (
+		<div className="flex items-center justify-between gap-5 px-4 py-4">
+			<div className="flex-1 min-w-0">
+				<p className="text-sm font-medium">{label}</p>
+				<p className="text-sm text-muted-foreground mt-0.5">{hint}</p>
+			</div>
+			{children}
+		</div>
+	);
+}
 
 export default function AboutPage() {
 	const { currentVersion, latestVersion, updateAvailable } = useAppStore();
 
 	return (
-		<div className="max-w-2xl mx-auto">
+		<motion.div
+			initial={{ opacity: 0, y: 8 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ duration: 0.3, ease: "easeOut" }}
+			className="max-w-2xl mx-auto pt-2"
+		>
 			{/* Page header */}
-			<div className="mb-10">
-				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-					ABOUT · DEEMIX
-				</p>
-				<div className="flex items-end gap-5 flex-wrap">
-					<div className="flex h-16 w-16 items-center justify-center border-[3px] border-foreground bg-primary text-2xl font-black text-white shadow-[var(--shadow-brutal)] shrink-0">
-						D
-					</div>
-					<div className="min-w-0 flex-1">
-						<h1 className="text-brutal-xl m-0">
-							DEEMIX <span className="text-primary">NEXT.</span>
-						</h1>
-						<p className="mt-2 text-sm font-bold text-muted-foreground uppercase tracking-[0.05em]">
-							Self-hosted music downloader · Web edition
-						</p>
-					</div>
+			<div className="mb-10 flex items-center gap-4">
+				<LogoMark animated className="size-12 shrink-0" />
+				<div className="min-w-0 flex-1">
+					<h1 className="text-2xl sm:text-3xl font-semibold tracking-tight m-0">deemix next</h1>
+					<p className="mt-1 text-sm text-muted-foreground">
+						Self-hosted music downloader, web edition.
+					</p>
 				</div>
 			</div>
 
 			{/* Version */}
-			<section className="mb-9">
-				<div className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] pb-2 border-b-[2px] border-foreground">
-					VERSION
-				</div>
-				<div className="border-l-[2px] border-r-[2px] border-b-[2px] border-foreground bg-card divide-y-[1px] divide-foreground/15">
+			<section className="mb-10">
+				<h2 className="mb-3 text-sm font-medium">Version</h2>
+				<div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
 					{currentVersion && (
-						<div className="flex items-center justify-between gap-5 px-4 py-3.5">
-							<div className="flex-1 min-w-0">
-								<p className="text-[13px] font-bold tracking-[0.02em]">CURRENT BUILD</p>
-								<p className="text-[11px] text-muted-foreground font-medium mt-0.5">Currently installed version of deemix-next.</p>
-							</div>
-							<span className="text-sm font-mono font-bold tabular-nums">{currentVersion}</span>
-						</div>
+						<Row label="Current build" hint="Currently installed version of deemix-next.">
+							<span className="text-sm font-mono tabular-nums">{currentVersion}</span>
+						</Row>
 					)}
 					{latestVersion && (
-						<div className="flex items-center justify-between gap-5 px-4 py-3.5">
-							<div className="flex-1 min-w-0">
-								<p className="text-[13px] font-bold tracking-[0.02em]">LATEST RELEASE</p>
-								<p className="text-[11px] text-muted-foreground font-medium mt-0.5">Most recent published version on the registry.</p>
-							</div>
-							<span className="text-sm font-mono font-bold tabular-nums">{latestVersion}</span>
-						</div>
+						<Row label="Latest release" hint="Most recent published version on the registry.">
+							<span className="text-sm font-mono tabular-nums">{latestVersion}</span>
+						</Row>
 					)}
 					{updateAvailable && (
-						<div className="flex items-center justify-between gap-5 px-4 py-3.5 bg-destructive/10">
+						<div className="flex items-center justify-between gap-5 px-4 py-4 bg-highlight/5">
 							<div className="flex-1 min-w-0">
-								<p className="text-[13px] font-bold tracking-[0.02em] text-destructive">UPDATE AVAILABLE</p>
-								<p className="text-[11px] text-muted-foreground font-medium mt-0.5">A newer build is published. Pull to refresh.</p>
+								<p className="text-sm font-medium text-highlight">Update available</p>
+								<p className="text-sm text-muted-foreground mt-0.5">A newer build is published. Pull to refresh.</p>
 							</div>
-							<span className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] border-[2px] border-destructive bg-destructive text-white px-2 py-1">NEW</span>
+							<span className="rounded-full bg-highlight/10 px-2.5 py-0.5 text-xs font-medium text-highlight">New</span>
 						</div>
 					)}
 				</div>
 			</section>
 
-			{/* Receipt-style credits */}
-			<div className="border-[2px] sm:border-[3px] border-foreground bg-card shadow-[var(--shadow-brutal)] px-6 py-5 font-mono">
-				<div className="text-center border-b-[2px] border-dashed border-foreground pb-3 mb-3">
-					<div className="font-black text-base tracking-[0.2em]">DEEMIX</div>
-					<div className="text-[10px] mt-0.5">── ABOUT / CREDITS ──</div>
+			{/* Credits */}
+			<section>
+				<h2 className="mb-3 text-sm font-medium">Credits</h2>
+				<div className="rounded-xl border border-border bg-card">
+					<dl className="divide-y divide-border">
+						{STACK.map((s) => (
+							<div key={s.k} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
+								<dt className="text-muted-foreground">{s.k}</dt>
+								<dd className="m-0 font-medium">{s.v}</dd>
+							</div>
+						))}
+					</dl>
+					<p className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
+						Original project by{" "}
+						<a
+							href="https://github.com/bambanah/deemix"
+							target="_blank"
+							rel="noreferrer"
+							className="font-medium text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground transition-colors"
+						>
+							bambanah
+						</a>
+						. Thank you.
+					</p>
 				</div>
-				<div className="text-[11px] leading-relaxed text-foreground space-y-1">
-					<div className="flex justify-between"><span>RUNTIME</span><span className="font-bold">NEXT.JS 16</span></div>
-					<div className="flex justify-between"><span>DATABASE</span><span className="font-bold">POSTGRES · PRISMA 7</span></div>
-					<div className="flex justify-between"><span>UI</span><span className="font-bold">REACT 19 · TAILWIND 4</span></div>
-					<div className="flex justify-between"><span>FORK OF</span><span className="font-bold">BAMBANAH/DEEMIX</span></div>
-				</div>
-				<div className="text-center border-t-[2px] border-dashed border-foreground pt-3 mt-4 text-[10px] text-muted-foreground">
-					ORIGINAL PROJECT BY{" "}
-					<a
-						href="https://github.com/bambanah/deemix"
-						target="_blank"
-						rel="noreferrer"
-						className="font-black text-foreground underline underline-offset-2"
-					>
-						BAMBANAH
-					</a>
-					<br />
-					*** THANK YOU ***
-				</div>
-			</div>
-		</div>
+			</section>
+		</motion.div>
 	);
 }

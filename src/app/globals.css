@@ -2,59 +2,119 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* Dark mode = `.dark` on <html>, set before first paint by the theme script in app/layout.tsx. */
+@custom-variant dark (&:where(.dark, .dark *));
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * Design language — "Geist minimal"
+ * Monochrome surfaces, hairline borders, generous whitespace, one accent
+ * (blue) reserved for focus / progress. Motion does the talking.
+ * ───────────────────────────────────────────────────────────────────────── */
 :root {
-	--radius: 0px;
-	/* ─── BRUTALIST PALETTE ─── */
-	--background: #F0EBE3;
-	--foreground: #0D0D0D;
-	--card: #FFFFFF;
-	--card-foreground: #0D0D0D;
-	--popover: #FFFFFF;
-	--popover-foreground: #0D0D0D;
-	--primary: #FF2E00;
-	--primary-foreground: #FFFFFF;
-	--secondary: #0D0D0D;
-	--secondary-foreground: #F0EBE3;
-	--muted: #DDD8CF;
-	--muted-foreground: #6B6560;
-	--accent: #C8FF00;
-	--accent-foreground: #0D0D0D;
-	--destructive: #FF0044;
-	--border: #0D0D0D;
-	--input: #0D0D0D;
-	--ring: #FF2E00;
-	--chart-1: #FF2E00;
-	--chart-2: #0500FF;
-	--chart-3: #C8FF00;
-	--chart-4: #FF00E5;
-	--chart-5: #00FFD1;
-	--sidebar: #FFFFFF;
-	--sidebar-foreground: #0D0D0D;
-	--sidebar-primary: #FF2E00;
-	--sidebar-primary-foreground: #FFFFFF;
-	--sidebar-accent: #F0EBE3;
-	--sidebar-accent-foreground: #0D0D0D;
-	--sidebar-border: #0D0D0D;
-	--sidebar-ring: #FF2E00;
+	--radius: 0.625rem;
 
-	/* ─── BRUTALIST TOKENS ─── */
-	--border-w: 2px;
-	--shadow-brutal: 3px 3px 0px #0D0D0D;
-	--shadow-brutal-sm: 2px 2px 0px #0D0D0D;
-	--shadow-brutal-hover: 4px 4px 0px #0D0D0D;
-	--shadow-brutal-active: 1px 1px 0px #0D0D0D;
+	--background: #ffffff;
+	--foreground: #0a0a0a;
+	--card: #ffffff;
+	--card-foreground: #0a0a0a;
+	--popover: #ffffff;
+	--popover-foreground: #0a0a0a;
+	--primary: #0a0a0a;
+	--primary-foreground: #fafafa;
+	--secondary: #f4f4f5;
+	--secondary-foreground: #0a0a0a;
+	--muted: #f4f4f5;
+	--muted-foreground: #71717a;
+	--accent: #f4f4f5;
+	--accent-foreground: #0a0a0a;
+	--destructive: #e5484d;
+	--border: #e8e8ea;
+	--input: #e4e4e7;
+	--ring: #a1a1aa;
+	--highlight: #0070f3;
+	--success: #16a34a;
+	--chart-1: #0a0a0a;
+	--chart-2: #0070f3;
+	--chart-3: #71717a;
+	--chart-4: #a1a1aa;
+	--chart-5: #d4d4d8;
+	--sidebar: #fafafa;
+	--sidebar-foreground: #0a0a0a;
+	--sidebar-primary: #0a0a0a;
+	--sidebar-primary-foreground: #fafafa;
+	--sidebar-accent: #f4f4f5;
+	--sidebar-accent-foreground: #0a0a0a;
+	--sidebar-border: #e8e8ea;
+	--sidebar-ring: #a1a1aa;
 
-	/* ─── MOBILE-FIRST CHROME TOKENS ─── */
-	--mini-player-h: 64px;
-	--bottom-nav-h: calc(64px + env(safe-area-inset-bottom));
+	--surface-glass: rgb(255 255 255 / 0.72);
+	--grid-line: rgb(0 0 0 / 0.05);
+
+	/* Legacy tokens — kept so older markup degrades to soft, flat styling. */
+	--border-w: 1px;
+	--shadow-brutal: 0 1px 2px rgb(0 0 0 / 0.04);
+	--shadow-brutal-sm: 0 1px 2px rgb(0 0 0 / 0.04);
+	--shadow-brutal-hover: 0 8px 30px rgb(0 0 0 / 0.08);
+	--shadow-brutal-active: none;
+
+	--shadow-float: 0 0 0 1px rgb(0 0 0 / 0.06), 0 12px 40px -8px rgb(0 0 0 / 0.18);
+	--shadow-popover: 0 0 0 1px rgb(0 0 0 / 0.06), 0 24px 64px -12px rgb(0 0 0 / 0.25);
+
+	/* ─── CHROME TOKENS ─── */
+	--header-h: 56px;
+	--player-h: 64px;
+	--player-offset: calc(16px + env(safe-area-inset-bottom));
+	/* Kept for components that still reference it (no bottom nav anymore). */
+	--mini-player-h: var(--player-h);
+	--bottom-nav-h: 0px;
+}
+
+html.dark {
+	& {
+		--background: #0a0a0a;
+		--foreground: #ededed;
+		--card: #111111;
+		--card-foreground: #ededed;
+		--popover: #111111;
+		--popover-foreground: #ededed;
+		--primary: #ededed;
+		--primary-foreground: #0a0a0a;
+		--secondary: #1a1a1a;
+		--secondary-foreground: #ededed;
+		--muted: #1a1a1a;
+		--muted-foreground: #a1a1a1;
+		--accent: #1f1f1f;
+		--accent-foreground: #ededed;
+		--destructive: #ff6166;
+		--border: #232323;
+		--input: #2a2a2a;
+		--ring: #525252;
+		--highlight: #3291ff;
+		--success: #3ecf8e;
+		--chart-1: #ededed;
+		--chart-2: #3291ff;
+		--sidebar: #0a0a0a;
+		--sidebar-foreground: #ededed;
+		--sidebar-primary: #ededed;
+		--sidebar-primary-foreground: #0a0a0a;
+		--sidebar-accent: #1a1a1a;
+		--sidebar-accent-foreground: #ededed;
+		--sidebar-border: #232323;
+		--sidebar-ring: #525252;
+
+		--surface-glass: rgb(17 17 17 / 0.72);
+		--grid-line: rgb(255 255 255 / 0.045);
+
+		--shadow-brutal-hover: 0 8px 30px rgb(0 0 0 / 0.5);
+		--shadow-float: 0 0 0 1px rgb(255 255 255 / 0.08), 0 16px 48px -8px rgb(0 0 0 / 0.7);
+		--shadow-popover: 0 0 0 1px rgb(255 255 255 / 0.08), 0 32px 80px -12px rgb(0 0 0 / 0.8);
+	}
 }
 
 @theme inline {
-	--font-heading: var(--font-sans);
-	--font-sans: var(--font-sans);
-	--font-mono: var(--font-mono);
+	--font-heading: var(--font-geist-sans);
+	--font-sans: var(--font-geist-sans);
+	--font-mono: var(--font-geist-mono);
 	--color-sidebar-ring: var(--sidebar-ring);
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -86,13 +146,17 @@
 	--color-card: var(--card);
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
-	--radius-sm: 0px;
-	--radius-md: 0px;
-	--radius-lg: 0px;
-	--radius-xl: 0px;
-	--radius-2xl: 0px;
-	--radius-3xl: 0px;
-	--radius-4xl: 0px;
+	--color-highlight: var(--highlight);
+	--color-success: var(--success);
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+	--radius-2xl: calc(var(--radius) + 8px);
+	--radius-3xl: calc(var(--radius) + 12px);
+	--radius-4xl: calc(var(--radius) + 16px);
+	--shadow-float: var(--shadow-float);
+	--shadow-popover: var(--shadow-popover);
 }
 
 @layer base {
@@ -100,117 +164,116 @@
 		@apply border-border outline-ring/50;
 	}
 	html {
-		@apply font-sans;
+		@apply font-sans antialiased;
+		color-scheme: light dark;
 	}
 	body {
 		@apply bg-background text-foreground;
+		font-feature-settings: "ss01", "cv11";
 	}
 }
 
-@media (min-width: 640px) {
-	:root {
-		--border-w: 3px;
-		--shadow-brutal: 4px 4px 0px #0D0D0D;
-		--shadow-brutal-hover: 6px 6px 0px #0D0D0D;
-	}
-}
-
-/* ─── BRUTALIST UTILITIES ─── */
 @layer utilities {
+	/* Faint engineering grid, fades out towards the bottom. */
+	.bg-grid {
+		background-image:
+			linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+			linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+		background-size: 48px 48px;
+		mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+	}
+	.glass {
+		background: var(--surface-glass);
+		backdrop-filter: saturate(180%) blur(16px);
+		-webkit-backdrop-filter: saturate(180%) blur(16px);
+	}
+	.text-balance {
+		text-wrap: balance;
+	}
+	.kbd {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.25rem;
+		height: 1.25rem;
+		padding: 0 0.3rem;
+		border: 1px solid var(--border);
+		border-radius: 0.3rem;
+		background: var(--muted);
+		font-family: var(--font-geist-mono);
+		font-size: 0.6875rem;
+		line-height: 1;
+		color: var(--muted-foreground);
+	}
+
+	/* ─── Legacy class names, remapped to the minimal language ─── */
 	.brutal-border {
-		border: var(--border-w) solid var(--border);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
 	}
-	.brutal-shadow {
-		box-shadow: var(--shadow-brutal);
-	}
-	.brutal-shadow-sm {
-		box-shadow: var(--shadow-brutal-sm);
-	}
-	.brutal-shadow-hover {
-		box-shadow: var(--shadow-brutal-hover);
-	}
+	.brutal-shadow,
+	.brutal-shadow-sm,
+	.brutal-shadow-hover,
 	.brutal-shadow-active {
-		box-shadow: var(--shadow-brutal-active);
+		box-shadow: none;
 	}
 	.brutal-card {
-		border: var(--border-w) solid var(--border);
-		box-shadow: var(--shadow-brutal);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
 		background: var(--card);
 	}
 	.brutal-card-hover {
-		transition: box-shadow 0.1s, transform 0.1s;
+		transition: border-color 0.15s, background-color 0.15s;
 	}
 	@media (hover: hover) {
 		.brutal-card-hover:hover {
-			box-shadow: var(--shadow-brutal-hover);
-			transform: translate(-2px, -2px);
+			border-color: var(--ring);
 		}
-	}
-	.brutal-card-hover:active {
-		box-shadow: var(--shadow-brutal-active);
-		transform: translate(2px, 2px);
 	}
 	.brutal-input {
-		border: var(--border-w) solid var(--border);
-		background: white;
+		border: 1px solid var(--input);
+		border-radius: calc(var(--radius) - 2px);
+		background: transparent;
 	}
 	.brutal-input:focus {
-		box-shadow: var(--shadow-brutal-sm);
 		outline: none;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 35%, transparent);
 	}
 	.brutal-divider {
-		border-top: var(--border-w) solid var(--border);
+		border-top: 1px solid var(--border);
 	}
 	.text-brutal-xl {
-		font-size: clamp(2rem, 5vw, 4rem);
-		font-weight: 900;
-		line-height: 0.95;
-		letter-spacing: -0.03em;
+		font-size: clamp(2rem, 5vw, 3.5rem);
+		font-weight: 600;
+		line-height: 1.05;
+		letter-spacing: -0.04em;
 		overflow-wrap: break-word;
-		word-break: break-word;
 	}
 	.text-brutal-lg {
-		font-size: clamp(1.5rem, 3vw, 2.5rem);
-		font-weight: 800;
-		line-height: 1;
-		letter-spacing: -0.02em;
+		font-size: clamp(1.5rem, 3vw, 2.25rem);
+		font-weight: 600;
+		line-height: 1.1;
+		letter-spacing: -0.035em;
 		overflow-wrap: break-word;
-		word-break: break-word;
 	}
 	.text-brutal-md {
-		font-size: clamp(1.125rem, 2vw, 1.5rem);
-		font-weight: 700;
-		line-height: 1.1;
-		letter-spacing: -0.01em;
+		font-size: clamp(1.125rem, 2vw, 1.375rem);
+		font-weight: 600;
+		line-height: 1.2;
+		letter-spacing: -0.02em;
 		overflow-wrap: break-word;
-		word-break: break-word;
 	}
 	.brutal-label {
-		font-size: 0.65rem;
-		font-weight: 700;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-	}
-	.brutal-stripe {
-		background: repeating-linear-gradient(
-			-45deg,
-			transparent,
-			transparent 4px,
-			var(--border) 4px,
-			var(--border) 5px
-		);
+		font-size: 0.6875rem;
+		font-weight: 500;
+		letter-spacing: 0.02em;
+		color: var(--muted-foreground);
 	}
 
-	/* ─── MOBILE-FIRST CHROME PADDING ───
-	 * Reserves space for bottom nav (mobile) + floating MiniPlayer.
-	 * Apply on the scroll container of every page that sits inside (main)/layout. */
+	/* ─── CHROME PADDING ───
+	 * Reserves room under page content for the floating player pill. */
 	.pb-app-chrome {
-		padding-bottom: calc(var(--bottom-nav-h) + var(--mini-player-h) + 16px);
-	}
-	@media (min-width: 768px) {
-		.pb-app-chrome {
-			padding-bottom: calc(var(--mini-player-h) + 24px);
-		}
+		padding-bottom: calc(var(--player-h) + var(--player-offset) + 32px);
 	}
 }
 
@@ -224,25 +287,28 @@
 	100% { transform: translateX(-50%); }
 }
 
-
-/* ─── BRUTALIST SCROLLBAR ─── */
+/* ─── SCROLLBAR ─── */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--border) transparent;
+}
 ::-webkit-scrollbar {
-	width: 8px;
+	width: 10px;
+	height: 10px;
 }
 ::-webkit-scrollbar-track {
-	background: var(--background);
-	border-left: var(--border-w) solid var(--border);
+	background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-	background: var(--foreground);
+	background: var(--border);
+	border-radius: 999px;
+	border: 3px solid var(--background);
 }
 
-/* ─── SCROLLBAR HIDE (lyrics panel) ─── */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* ─── SELECTION ─── */
 ::selection {
-	background: var(--accent);
+	background: color-mix(in srgb, var(--highlight) 25%, transparent);
 	color: var(--foreground);
 }

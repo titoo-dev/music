@@ -2,60 +2,66 @@
 
 import { useCallback } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "motion/react";
+import { X } from "lucide-react";
 import { usePreviewStore } from "@/stores/usePreviewStore";
+import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Button } from "@/components/ui/button";
-import { motion, AnimatePresence } from "motion/react";
-import { Loader2 } from "lucide-react";
+import { PlayPauseIcon, ProgressRing } from "@/components/motion/icons";
+import { cn } from "@/lib/utils";
 
+/**
+ * 30-second preview pill. Floats bottom-center like the main player; when the
+ * main player is visible it stacks just above it.
+ */
 export function MiniPlayer() {
-	const { currentTrack, isPlaying, isBuffering, toggle, stop, volume, setVolume } =
-		usePreviewStore();
+	const { currentTrack, isPlaying, isBuffering, toggle, stop, volume, setVolume } = usePreviewStore();
+	const playerVisible = usePlayerStore((s) => !!s.currentTrack);
 	const openSheet = useTrackActionStore((s) => s.openSheet);
 
-	const handleContextMenu = useCallback((e: React.MouseEvent) => {
-		e.preventDefault();
-		if (!currentTrack) return;
-		openSheet({
-			id: String(currentTrack.id),
-			title: currentTrack.title,
-			artist: currentTrack.artist,
-			cover: currentTrack.cover,
-			previewUrl: currentTrack.previewUrl,
-		});
-	}, [currentTrack, openSheet]);
+	const handleContextMenu = useCallback(
+		(e: React.MouseEvent) => {
+			e.preventDefault();
+			if (!currentTrack) return;
+			openSheet({
+				id: String(currentTrack.id),
+				title: currentTrack.title,
+				artist: currentTrack.artist,
+				cover: currentTrack.cover,
+				previewUrl: currentTrack.previewUrl,
+			});
+		},
+		[currentTrack, openSheet]
+	);
 
 	return (
 		<AnimatePresence>
 			{currentTrack && (
 				<motion.div
 					key="mini-player"
-					initial={{ y: 80, opacity: 0 }}
-					animate={{ y: 0, opacity: 1 }}
-					exit={{ y: 80, opacity: 0 }}
-					transition={{ type: "spring", damping: 25, stiffness: 300 }}
+					layout
+					initial={{ y: 60, opacity: 0, scale: 0.95 }}
+					animate={{ y: 0, opacity: 1, scale: 1 }}
+					exit={{ y: 60, opacity: 0, scale: 0.95 }}
+					transition={{ type: "spring", damping: 28, stiffness: 320 }}
 					role="region"
 					aria-label="Preview player"
-					className="fixed bottom-[calc(var(--bottom-nav-h)+8px)] right-3 md:bottom-5 md:right-5 z-[45] flex items-center gap-3 border-2 sm:border-[3px] border-foreground bg-background px-4 py-3 shadow-[var(--shadow-brutal-hover)]"
+					className={cn(
+						"glass fixed inset-x-0 z-[46] mx-auto flex w-fit max-w-[calc(100%-24px)] items-center gap-3 rounded-full border border-border py-1.5 pl-1.5 pr-2 shadow-float",
+						playerVisible
+							? "bottom-[calc(var(--player-offset)+var(--player-h)+10px)]"
+							: "bottom-[var(--player-offset)]"
+					)}
 				>
-					{/* Cover */}
-					<CoverImage
-						src={currentTrack.cover}
-						className="h-10 w-10"
-					/>
+					<CoverImage src={currentTrack.cover} className="size-9 rounded-full" />
 
-					{/* Track info */}
-					<div className="min-w-0 max-w-[140px]" onContextMenu={handleContextMenu}>
-						<p className="truncate text-sm font-bold leading-tight">
-							{currentTrack.title}
-						</p>
-						<p className="truncate text-xs text-muted-foreground leading-tight font-medium">
+					<div className="min-w-0 max-w-[160px]" onContextMenu={handleContextMenu}>
+						<p className="truncate text-[13px] font-medium leading-tight">{currentTrack.title}</p>
+						<p className="truncate text-[11px] leading-tight text-muted-foreground">
+							<span className="mr-1 rounded-sm bg-muted px-1 py-px text-[10px] text-muted-foreground">Preview</span>
 							{currentTrack.artistId ? (
-								<Link
-									href={`/artist?id=${currentTrack.artistId}`}
-									className="hover:underline hover:text-foreground transition-colors"
-								>
+								<Link href={`/artist?id=${currentTrack.artistId}`} className="hover:text-foreground hover:underline">
 									{currentTrack.artist}
 								</Link>
 							) : (
@@ -64,86 +70,36 @@ export function MiniPlayer() {
 						</p>
 					</div>
 
-					{/* Volume — always visible, compact on mobile */}
-					<div className="flex items-center gap-1.5">
-						<svg
-							width="13"
-							height="13"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-							className="shrink-0 text-foreground hidden sm:block"
-						>
-							<path d="M11 5L6 9H2v6h4l5 4V5z" />
-							{volume > 0 && (
-								<path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-							)}
-							{volume > 50 && (
-								<path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-							)}
-						</svg>
-						<input
-							type="range"
-							min={0}
-							max={100}
-							value={volume}
-							aria-label="Preview volume"
-							onChange={(e) => setVolume(parseInt(e.target.value))}
-							className="w-12 sm:w-16 h-1 accent-primary cursor-pointer"
-						/>
-					</div>
+					<input
+						type="range"
+						min={0}
+						max={100}
+						value={volume}
+						aria-label="Preview volume"
+						onChange={(e) => setVolume(parseInt(e.target.value))}
+						className="hidden h-1 w-16 cursor-pointer accent-foreground sm:block"
+					/>
 
-					{/* Play/Pause */}
-					<Button
-						variant="ghost"
-						size="icon-touch"
+					<button
+						type="button"
 						aria-label={isPlaying ? "Pause preview" : "Play preview"}
-						className="border-[2px] border-foreground"
+						className="relative flex size-9 items-center justify-center rounded-full bg-foreground text-background"
 						onClick={() => toggle(currentTrack)}
 					>
-						{isBuffering ? (
-							<Loader2 className="h-4 w-4 animate-spin" />
-						) : isPlaying ? (
-							<svg
-								width="15"
-								height="15"
-								viewBox="0 0 12 12"
-								fill="currentColor"
-							>
-								<rect x="1" y="1" width="3.5" height="10" />
-								<rect x="7.5" y="1" width="3.5" height="10" />
-							</svg>
-						) : (
-							<svg
-								width="15"
-								height="15"
-								viewBox="0 0 12 12"
-								fill="currentColor"
-							>
-								<path d="M2.5 1.5L10.5 6L2.5 10.5V1.5Z" />
-							</svg>
+						{isBuffering && (
+							<ProgressRing indeterminate size={36} stroke={2} className="absolute inset-0 text-highlight" trackClassName="text-transparent" />
 						)}
-					</Button>
+						<PlayPauseIcon playing={isPlaying} className="size-4" />
+					</button>
 
-					{/* Close */}
-					<Button
-						variant="ghost"
-						size="icon-touch"
+					<button
+						type="button"
 						aria-label="Close preview"
 						onClick={stop}
+						className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
 					>
-						<svg
-							width="12"
-							height="12"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2.5"
-						>
-							<path d="M18 6L6 18M6 6l12 12" />
-						</svg>
-					</Button>
+						<X className="size-4" />
+					</button>
 				</motion.div>
 			)}
 		</AnimatePresence>

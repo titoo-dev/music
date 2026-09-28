@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, memo } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useLyricsStore, type LyricLine } from "@/stores/useLyricsStore";
-import { Loader2 } from "lucide-react";
+import { Spinner } from "@/components/motion/icons";
 
 function getActiveIndex(lines: LyricLine[], time: number): number {
 	let idx = -1;
@@ -56,11 +56,9 @@ const SyncedLyrics = memo(function SyncedLyrics({
 
 	return (
 		<div className="relative flex-1 min-h-0">
-			<div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-gradient-to-b from-card to-transparent" />
-			<div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16 bg-gradient-to-t from-card to-transparent" />
 			<div
 				ref={containerRef}
-				className={`h-full overflow-y-auto overscroll-contain scrollbar-hide ${
+				className={`h-full overflow-y-auto overscroll-contain scrollbar-hide [mask-image:linear-gradient(to_bottom,transparent,black_4rem,black_calc(100%-4rem),transparent)] ${
 					compact ? "px-6 py-[40%]" : "px-8 py-[40%]"
 				}`}
 			>
@@ -69,16 +67,16 @@ const SyncedLyrics = memo(function SyncedLyrics({
 						key={i}
 						data-state="future"
 						onClick={() => handleClick(line)}
-						className={`group relative cursor-pointer leading-[1.35] tracking-[-0.005em] py-1.5 transition-all duration-300 ease-out
-							text-foreground font-semibold opacity-65
-							data-[state=past]:opacity-40 data-[state=past]:text-muted-foreground
-							data-[state=active]:opacity-100 data-[state=active]:font-extrabold data-[state=active]:tracking-[-0.015em]
+						className={`group relative cursor-pointer leading-[1.35] tracking-tight py-1.5 transition-all duration-300 ease-out
+							text-foreground font-semibold opacity-40 hover:opacity-70
+							data-[state=past]:opacity-30 data-[state=past]:text-muted-foreground
+							data-[state=active]:opacity-100 data-[state=active]:tracking-[-0.02em]
 							${compact ? "text-[17px] data-[state=active]:text-[20px]" : "text-[18px] data-[state=active]:text-[22px]"}
 							${line.text === "" ? "h-3.5" : ""}
 						`}
 					>
 						{line.text && (
-							<span className="absolute left-[-12px] top-1/2 -translate-y-1/2 w-[4px] h-[22px] bg-primary opacity-0 group-data-[state=active]:opacity-100 transition-opacity" />
+							<span className="absolute left-[-12px] top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-highlight opacity-0 scale-y-50 group-data-[state=active]:opacity-100 group-data-[state=active]:scale-y-100 transition-[opacity,transform] duration-300" />
 						)}
 						{line.text || " "}
 					</p>
@@ -97,17 +95,13 @@ const PlainLyrics = memo(function PlainLyrics({
 }) {
 	return (
 		<div className="relative flex-1 min-h-0">
-			<div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-12 bg-gradient-to-b from-card to-transparent" />
-			<div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-12 bg-gradient-to-t from-card to-transparent" />
 			<div
-				className={`h-full overflow-y-auto overscroll-contain scrollbar-hide ${
+				className={`h-full overflow-y-auto overscroll-contain scrollbar-hide [mask-image:linear-gradient(to_bottom,transparent,black_3rem,black_calc(100%-3rem),transparent)] ${
 					compact ? "px-6 py-8" : "px-8 py-8"
 				}`}
 			>
 				<pre
-					className={`whitespace-pre-wrap font-sans leading-relaxed text-foreground/80 ${
-						compact ? "text-base font-medium" : "text-base font-medium"
-					}`}
+					className="whitespace-pre-wrap font-sans text-base font-medium leading-relaxed text-foreground/80"
 				>
 					{text}
 				</pre>
@@ -118,7 +112,7 @@ const PlainLyrics = memo(function PlainLyrics({
 
 function MusicOffIcon({ className }: { className?: string }) {
 	return (
-		<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
+		<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
 			<path d="M9 18V5l12-2v13" />
 			<circle cx="6" cy="18" r="3" />
 			<circle cx="18" cy="16" r="3" />
@@ -147,7 +141,7 @@ export function LyricsDisplay({ compact = false }: { compact?: boolean }) {
 	if (isLoading) {
 		return (
 			<div className="flex-1 flex items-center justify-center">
-				<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+				<Spinner size={20} className="text-muted-foreground" />
 			</div>
 		);
 	}
@@ -156,7 +150,7 @@ export function LyricsDisplay({ compact = false }: { compact?: boolean }) {
 		return (
 			<div className="flex-1 flex flex-col items-center justify-center gap-3 px-8">
 				<MusicOffIcon className="text-muted-foreground/40" />
-				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground text-center">
+				<p className="text-sm text-muted-foreground text-center">
 					{error}
 				</p>
 			</div>
@@ -167,8 +161,8 @@ export function LyricsDisplay({ compact = false }: { compact?: boolean }) {
 		return (
 			<div className="flex-1 flex flex-col items-center justify-center gap-3 px-8">
 				<MusicIcon className="text-muted-foreground/50" />
-				<p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
-					INSTRUMENTAL
+				<p className="text-sm text-muted-foreground">
+					Instrumental
 				</p>
 			</div>
 		);

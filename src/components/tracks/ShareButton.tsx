@@ -35,7 +35,7 @@ export function ShareButton({ trackId, duration, className }: ShareButtonProps) 
 					}
 				>
 					{isShared ? (
-						<LinkIcon className="size-3.5 text-primary" />
+						<LinkIcon className="size-3.5 text-highlight" />
 					) : (
 						<Share2 className="size-3.5" />
 					)}

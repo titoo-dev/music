@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useLyricsStore, type LyricLine } from "@/stores/useLyricsStore";
 import { CoverImage } from "@/components/ui/cover-image";
-import { Loader2 } from "lucide-react";
+import { X } from "lucide-react";
+import { Spinner } from "@/components/motion/icons";
 import { formatTime } from "@/utils/format-time";
 
 function getActiveIndex(lines: LyricLine[], time: number): number {
@@ -56,7 +57,7 @@ const ImmersiveLines = memo(function ImmersiveLines({ lines }: { lines: LyricLin
 	return (
 		<div
 			ref={containerRef}
-			className="h-full overflow-y-auto overscroll-contain scrollbar-hide px-[8vw] py-[35vh]"
+			className="h-full overflow-y-auto overscroll-contain scrollbar-hide px-[8vw] py-[35vh] [mask-image:linear-gradient(to_bottom,transparent,black_20%,black_80%,transparent)]"
 		>
 			{lines.map((line, i) => (
 				<p
@@ -64,10 +65,10 @@ const ImmersiveLines = memo(function ImmersiveLines({ lines }: { lines: LyricLin
 					data-state="future"
 					data-distance="5"
 					onClick={() => handleClick(line)}
-					className={`cursor-pointer leading-[1.18] tracking-[-0.02em] py-3 text-balance text-background transition-all duration-[380ms] ease-out
-						font-semibold text-[clamp(2rem,4.5vw,2.4rem)] opacity-55
-						data-[state=past]:opacity-[0.22]
-						data-[state=active]:opacity-100 data-[state=active]:font-extrabold data-[state=active]:text-[clamp(2.6rem,6vw,3.5rem)] data-[state=active]:!text-accent
+					className={`cursor-pointer leading-[1.18] tracking-[-0.03em] py-3 text-balance text-foreground transition-all duration-[380ms] ease-out
+						font-semibold text-[clamp(2rem,4.5vw,2.4rem)] opacity-35 hover:opacity-60
+						data-[state=past]:opacity-[0.18]
+						data-[state=active]:opacity-100 data-[state=active]:text-[clamp(2.6rem,6vw,3.5rem)]
 						data-[distance='3']:blur-[1px] data-[distance='4']:blur-[2px] data-[distance='5']:blur-[4px] data-[state=active]:!blur-0
 						${line.text === "" ? "h-6 py-0" : ""}
 					`}
@@ -143,45 +144,44 @@ export function LyricsImmersive() {
 					transition={{ duration: 0.25 }}
 					role="dialog"
 					aria-label="Lyrics fullscreen"
-					className="fixed inset-0 z-[71] bg-foreground text-background overflow-hidden"
+					className="fixed inset-0 z-[71] isolate bg-background text-foreground overflow-hidden"
 				>
 					{/* Atmospheric backdrop */}
 					{currentTrack.cover && (
 						<>
-							<div className="absolute -inset-[10%] opacity-55">
+							<div className="absolute -inset-[10%] opacity-40" aria-hidden>
 								<CoverImage
 									src={currentTrack.cover}
-									className="w-full h-full border-0 blur-[120px] saturate-[1.4] scale-110"
+									className="w-full h-full rounded-none blur-[120px] saturate-150 scale-110"
 								/>
 							</div>
-							<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(13,13,13,0)_0%,rgba(13,13,13,0.85)_80%)]" />
+							<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,var(--background)_85%)]" aria-hidden />
 						</>
 					)}
 
 					{/* Top bar */}
-					<div className="absolute top-0 left-0 right-0 z-10 flex items-center gap-4 px-5 sm:px-8 py-4 sm:py-5 border-b border-background/10">
+					<div className="absolute top-0 left-0 right-0 z-10 flex items-center gap-4 px-5 sm:px-8 py-4 sm:py-5">
 						<CoverImage
 							src={currentTrack.cover}
-							className="h-11 w-11 shrink-0 border-2 border-background"
+							className="h-11 w-11 shrink-0 rounded-md shadow-float"
 						/>
 						<div className="flex-1 min-w-0">
-							<p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-background/55">
-								LYRICS · THEATRE MODE
-							</p>
-							<p className="text-[14px] font-extrabold tracking-[-0.01em] truncate mt-0.5">
+							<p className="truncate text-sm font-semibold tracking-tight">
 								{currentTrack.title}
-								<span className="opacity-50 font-medium ml-2">— {currentTrack.artist}</span>
+							</p>
+							<p className="mt-0.5 truncate text-xs text-muted-foreground">
+								{currentTrack.artist}
 							</p>
 						</div>
-						<div className="hidden sm:block px-3 py-1.5 border border-background/25 font-mono text-[11px] font-bold tracking-[0.12em] text-background/70">
+						<div className="hidden sm:block rounded-full border border-border bg-background/60 px-3 py-1 font-mono text-xs tabular-nums text-muted-foreground">
 							{formatTime(currentTime)} / {formatTime(totalDuration)}
 						</div>
 						<button
 							onClick={() => setOpen(false)}
 							aria-label="Close lyrics"
-							className="w-11 h-11 border-2 border-background bg-transparent text-background hover:bg-background hover:text-foreground transition-colors font-mono text-xl font-extrabold leading-none flex items-center justify-center"
+							className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background/60 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
 						>
-							×
+							<X className="h-4 w-4" />
 						</button>
 					</div>
 
@@ -189,11 +189,11 @@ export function LyricsImmersive() {
 					<div className="absolute inset-x-0 top-[88px] bottom-[88px] overflow-hidden">
 						{isLoading ? (
 							<div className="flex h-full items-center justify-center">
-								<Loader2 className="h-8 w-8 animate-spin text-background/50" />
+								<Spinner size={24} className="text-muted-foreground" />
 							</div>
 						) : error ? (
 							<div className="flex h-full items-center justify-center px-8">
-								<p className="text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-background/50 text-center">
+								<p className="text-sm text-muted-foreground text-center">
 									{error}
 								</p>
 							</div>
@@ -201,45 +201,45 @@ export function LyricsImmersive() {
 							<ImmersiveLines lines={syncedLines} />
 						) : plainLyrics ? (
 							<div className="h-full overflow-y-auto overscroll-contain scrollbar-hide px-[8vw] py-[20vh]">
-								<pre className="whitespace-pre-wrap font-sans text-[clamp(1.25rem,2.5vw,1.6rem)] font-medium leading-relaxed text-background/80 text-balance">
+								<pre className="whitespace-pre-wrap font-sans text-[clamp(1.25rem,2.5vw,1.6rem)] font-medium leading-relaxed text-foreground/80 text-balance">
 									{plainLyrics}
 								</pre>
 							</div>
 						) : (
 							<div className="flex h-full items-center justify-center px-8">
-								<p className="text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-background/50">
-									NO LYRICS
+								<p className="text-sm text-muted-foreground">
+									No lyrics
 								</p>
 							</div>
 						)}
 					</div>
 
 					{/* Bottom progress */}
-					<div className="absolute bottom-0 left-0 right-0 z-10 px-5 sm:px-8 pt-6 pb-5 bg-gradient-to-t from-foreground via-foreground/80 to-transparent">
+					<div className="absolute bottom-0 left-0 right-0 z-10 px-5 sm:px-8 pt-6 pb-5 bg-gradient-to-t from-background via-background/80 to-transparent">
 						<div className="flex items-center gap-4 mb-3">
 							{source && (
-								<span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-background/50">
-									SOURCE · {source.toUpperCase()}
+								<span className="text-xs text-muted-foreground">
+									Source · {source}
 								</span>
 							)}
-							<span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-background/50 ml-auto">
-								ESC TO EXIT
+							<span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+								<kbd className="kbd">Esc</kbd> to exit
 							</span>
 						</div>
 						<div
-							className="relative h-[3px] bg-background/15 cursor-pointer group"
+							className="group relative h-1 cursor-pointer rounded-full bg-border transition-[height] hover:h-1.5 before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']"
 							onClick={handleSeek}
 						>
 							<div
-								className="absolute top-0 left-0 h-full bg-primary transition-[width] duration-100"
+								className="absolute top-0 left-0 h-full rounded-full bg-foreground transition-[width] duration-100"
 								style={{ width: `${progress}%` }}
 							/>
 							<div
-								className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[11px] h-[11px] bg-primary border-2 border-background opacity-0 group-hover:opacity-100 transition-opacity"
+								className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 size-3 rounded-full bg-foreground shadow-[0_0_0_3px_var(--background)] opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100 transition-[opacity,transform]"
 								style={{ left: `${progress}%` }}
 							/>
 						</div>
-						<div className="flex justify-between mt-2 font-mono text-[10px] font-bold tracking-[0.12em] text-background/60">
+						<div className="flex justify-between mt-2 font-mono text-[11px] tabular-nums text-muted-foreground">
 							<span>{formatTime(currentTime)}</span>
 							<span>{formatTime(totalDuration)}</span>
 						</div>

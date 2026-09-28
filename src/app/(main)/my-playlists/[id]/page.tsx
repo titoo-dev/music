@@ -5,11 +5,12 @@ import { useParams, useRouter } from "next/navigation";
 import { Reorder, useDragControls } from "motion/react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, ArrowDownUp, Play, Shuffle, GripVertical } from "lucide-react";
+import { ArrowLeft, ArrowDownUp, Shuffle, GripVertical } from "lucide-react";
 import Link from "next/link";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
-import { EntityHero } from "@/components/layout/EntityHero";
+import { EntityHero, HeroPlayButton } from "@/components/layout/EntityHero";
+import { EmptyState, Spinner } from "@/components/motion/icons";
 import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { usePrefetch } from "@/hooks/usePrefetch";
@@ -145,8 +146,8 @@ export default function PlaylistDetailPage() {
 
 	if (loading) {
 		return (
-			<div className="flex items-center justify-center min-h-[50vh]">
-				<Loader2 className="size-5 animate-spin text-muted-foreground" />
+			<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
+				<Spinner size={20} />
 			</div>
 		);
 	}
@@ -159,12 +160,16 @@ export default function PlaylistDetailPage() {
 
 	if (!playlist) {
 		return (
-			<div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-				<p className="text-sm text-muted-foreground font-bold">Playlist not found.</p>
-				<Link href="/my-playlists">
-					<Button variant="outline">Back to playlists</Button>
-				</Link>
-			</div>
+			<EmptyState
+				className="mt-8"
+				title="Playlist not found"
+				description="It may have been deleted, or you don't have access to it."
+				action={
+					<Link href="/my-playlists">
+						<Button variant="outline">Back to playlists</Button>
+					</Link>
+				}
+			/>
 		);
 	}
 
@@ -205,82 +210,80 @@ export default function PlaylistDetailPage() {
 	const reorderEnabled = sortOrder === "asc" && sortedTracks.length > 1;
 
 	return (
-		<div className="space-y-6">
-			<div className="flex items-start gap-3 min-w-0">
+		<div className="space-y-10">
+			<div className="space-y-2">
 				<Button
 					variant="ghost"
-					size="icon-touch"
-					className="shrink-0"
+					size="sm"
+					className="-ml-2 min-h-11 md:min-h-8"
 					aria-label="Back"
 					onClick={() => router.back()}
 				>
-					<ArrowLeft className="size-4" aria-hidden />
+					<ArrowLeft aria-hidden />
+					Back
 				</Button>
-				<div className="flex-1 min-w-0">
-					<EntityHero
-						eyebrow="MY PLAYLIST"
-						title={playlist.title}
-						subtitle={
-							playlist.description ? (
-								<span className="text-sm text-muted-foreground">{playlist.description}</span>
-							) : undefined
-						}
-						meta={`${playlist.tracks.length} TRACK${playlist.tracks.length !== 1 ? "S" : ""}`}
-						primaryAction={
-							playlist.tracks.length > 0 ? (
+				<EntityHero
+					eyebrow="Playlist"
+					title={playlist.title}
+					subtitle={
+						playlist.description ? (
+							<span>{playlist.description}</span>
+						) : undefined
+					}
+					meta={`${playlist.tracks.length} track${playlist.tracks.length !== 1 ? "s" : ""}`}
+					coverSrc={playlist.tracks.find((t) => t.coverUrl)?.coverUrl ?? null}
+					coverAlt={playlist.title}
+					primaryAction={
+						playlist.tracks.length > 0 ? (
+							<HeroPlayButton
+								onPlay={handlePlayAll}
+								trackIds={playablePlaylistTracks.map((t) => t.trackId)}
+								label="Play playlist"
+							/>
+						) : undefined
+					}
+					secondaryActions={
+						playlist.tracks.length > 0 ? (
+							<>
 								<Button
-									onClick={handlePlayAll}
-									className="h-12 md:h-10 w-full md:w-auto px-6 gap-2"
+									onClick={handleShuffleAll}
+									variant="outline"
+									size="icon-touch"
+									className="rounded-full"
+									aria-label="Shuffle playlist"
 								>
-									<Play className="size-4" aria-hidden />
-									PLAY
+									<Shuffle className="size-4" aria-hidden />
 								</Button>
-							) : undefined
-						}
-						secondaryActions={
-							playlist.tracks.length > 0 ? (
-								<>
+								{playlist.tracks.length > 1 && (
 									<Button
-										onClick={handleShuffleAll}
-										variant="ghost"
-										size="icon-touch"
-										aria-label="Shuffle playlist"
+										variant="outline"
+										size="sm"
+										className="rounded-full min-h-11 md:min-h-9 px-3.5"
+										onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+										aria-label="Toggle sort order"
 									>
-										<Shuffle className="size-4" aria-hidden />
+										<ArrowDownUp aria-hidden />
+										{sortOrder === "asc" ? "Oldest" : "Newest"}
 									</Button>
-									{playlist.tracks.length > 1 && (
-										<Button
-											variant="outline"
-											size="sm"
-											className="gap-1.5 min-h-11 md:min-h-9"
-											onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-											aria-label="Toggle sort order"
-										>
-											<ArrowDownUp className="size-3.5" aria-hidden />
-											{sortOrder === "asc" ? "Oldest" : "Newest"}
-										</Button>
-									)}
-								</>
-							) : undefined
-						}
-					/>
-				</div>
+								)}
+							</>
+						) : undefined
+					}
+				/>
 			</div>
 
 			{playlist.tracks.length === 0 ? (
-				<div className="flex flex-col items-center justify-center py-24 gap-2">
-					<p className="text-sm text-muted-foreground font-bold uppercase">This playlist is empty.</p>
-					<p className="text-xs text-muted-foreground font-bold uppercase">
-						Add tracks from search results or album pages.
-					</p>
-				</div>
+				<EmptyState
+					title="This playlist is empty"
+					description="Add tracks from search results or album pages."
+				/>
 			) : (
 				<Reorder.Group
 					as="div"
 					axis="y"
 					values={sortedTracks.map((t) => t.trackId)}
 					onReorder={handleReorder}
-					className="border-2 sm:border-[3px] border-foreground bg-card overflow-hidden"
+					className="border-y border-border"
 				>
 					{sortedTracks.map((track, idx) => (
 						<DraggableRow
@@ -326,7 +329,7 @@ function DraggableRow({
 			value={trackId}
 			dragListener={false}
 			dragControls={dragControls}
-			className="flex items-stretch border-b border-foreground/15 last:border-b-0 bg-card data-[dragging=true]:shadow-[var(--shadow-brutal-hover)] data-[dragging=true]:bg-accent/10"
+			className="relative flex items-stretch border-b border-border last:border-b-0 bg-background data-[dragging=true]:z-10 data-[dragging=true]:rounded-lg data-[dragging=true]:shadow-float"
 		>
 			{canDrag && (
 				<button

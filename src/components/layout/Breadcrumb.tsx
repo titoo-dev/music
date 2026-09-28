@@ -4,18 +4,18 @@ import { useMemo } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-const ROOT = "~/DEEMIX";
+const ROOT = "Home";
 
 const SEGMENT_LABELS: Record<string, string> = {
-	library: "LIBRARY",
-	"my-playlists": "PLAYLISTS",
-	settings: "SETTINGS",
-	about: "ABOUT",
-	search: "SEARCH",
-	album: "ALBUM",
-	artist: "ARTIST",
-	playlist: "PLAYLIST",
-	errors: "ERRORS",
+	library: "Library",
+	"my-playlists": "Playlists",
+	settings: "Settings",
+	about: "About",
+	search: "Search",
+	album: "Album",
+	artist: "Artist",
+	playlist: "Playlist",
+	errors: "Errors",
 };
 
 export function Breadcrumb() {
@@ -23,7 +23,7 @@ export function Breadcrumb() {
 	const searchParams = useSearchParams();
 
 	const crumbs = useMemo(() => {
-		if (!pathname || pathname === "/") return [{ label: "HOME", href: "/" }];
+		if (!pathname || pathname === "/") return [];
 
 		const parts = pathname.split("/").filter(Boolean);
 		const result: { label: string; href: string }[] = [];
@@ -31,7 +31,7 @@ export function Breadcrumb() {
 		let acc = "";
 		for (const part of parts) {
 			acc += `/${part}`;
-			const label = SEGMENT_LABELS[part] || part.toUpperCase();
+			const label = SEGMENT_LABELS[part] || part;
 			result.push({ label, href: acc });
 		}
 
@@ -40,12 +40,8 @@ export function Breadcrumb() {
 		const term = searchParams.get("term");
 		const tail = id || term;
 		if (tail && result.length > 0) {
-			result[result.length - 1] = {
-				...result[result.length - 1],
-				label: result[result.length - 1].label,
-			};
 			result.push({
-				label: String(tail).toUpperCase().slice(0, 24),
+				label: String(tail).slice(0, 24),
 				href: pathname + "?" + searchParams.toString(),
 			});
 		}
@@ -56,27 +52,27 @@ export function Breadcrumb() {
 	return (
 		<nav
 			aria-label="Breadcrumb"
-			className="font-mono text-[11px] tracking-[0.12em] text-muted-foreground flex items-center gap-1.5 overflow-hidden min-w-0"
+			className="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm text-muted-foreground"
 		>
 			<Link
 				href="/"
-				className="font-bold hover:text-foreground transition-colors no-underline shrink-0"
+				className="shrink-0 no-underline transition-colors hover:text-foreground"
 			>
 				{ROOT}
 			</Link>
 			{crumbs.map((c, i) => {
 				const isLast = i === crumbs.length - 1;
 				return (
-					<span key={c.href} className="flex items-center gap-1.5 min-w-0 shrink-0 last:shrink last:min-w-0">
-						<span aria-hidden className="opacity-60">/</span>
+					<span key={c.href} className="flex min-w-0 shrink-0 items-center gap-1.5 last:min-w-0 last:shrink">
+						<span aria-hidden className="text-muted-foreground/50">/</span>
 						{isLast ? (
-							<span className="font-bold text-foreground truncate max-w-[16ch] sm:max-w-[24ch]">
+							<span aria-current="page" className="max-w-[16ch] truncate text-foreground sm:max-w-[24ch]">
 								{c.label}
 							</span>
 						) : (
 							<Link
 								href={c.href}
-								className="font-bold hover:text-foreground transition-colors no-underline truncate max-w-[12ch]"
+								className="max-w-[12ch] truncate no-underline transition-colors hover:text-foreground"
 							>
 								{c.label}
 							</Link>

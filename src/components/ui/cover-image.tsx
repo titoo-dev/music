@@ -25,7 +25,7 @@ export function CoverImage({
 		return (
 			<div
 				className={cn(
-					"flex items-center justify-center border-[1.5px] sm:border-2 border-foreground bg-muted text-muted-foreground",
+					"flex items-center justify-center rounded-md bg-muted text-muted-foreground",
 					className
 				)}
 			>
@@ -42,7 +42,7 @@ export function CoverImage({
 			src={hiRes}
 			alt={alt}
 			loading={loading}
-			className={cn("object-cover border-[1.5px] sm:border-2 border-foreground", className)}
+			className={cn("object-cover rounded-md bg-muted", className)}
 			onError={() => setError(true)}
 		/>
 	);

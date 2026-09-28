@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 /** Skeleton for a single track row (used in album/playlist detail pages) */
 export function TrackRowSkeleton() {
 	return (
-		<div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 border-b-[2px] border-foreground last:border-b-0">
+		<div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 border-b border-border last:border-b-0">
 			<Skeleton className="size-7 shrink-0" />
 			<Skeleton className="size-9 sm:size-10 shrink-0" />
 			<div className="flex-1 min-w-0 space-y-1.5">
@@ -31,16 +31,16 @@ export function AlbumHeaderSkeleton() {
 	return (
 		<div className="flex flex-col md:flex-row gap-8">
 			<div className="flex items-start gap-3">
-				<Skeleton className="size-9 shrink-0" />
-				<Skeleton className="w-32 h-32 sm:w-48 sm:h-48 shrink-0" />
+				<Skeleton className="size-9 shrink-0 rounded-full" />
+				<Skeleton className="w-32 h-32 sm:w-48 sm:h-48 shrink-0 rounded-xl" />
 			</div>
 			<div className="flex flex-col justify-end gap-3">
-				<Skeleton className="h-5 w-16" />
+				<Skeleton className="h-5 w-16 rounded-full" />
 				<Skeleton className="h-8 w-48" />
 				<Skeleton className="h-4 w-32" />
 				<div className="flex gap-2 mt-1">
-					<Skeleton className="h-8 w-24" />
-					<Skeleton className="h-8 w-28" />
+					<Skeleton className="h-9 w-24 rounded-full" />
+					<Skeleton className="h-9 w-28 rounded-full" />
 				</div>
 			</div>
 		</div>
@@ -52,7 +52,7 @@ export function AlbumDetailSkeleton() {
 	return (
 		<div className="space-y-8">
 			<AlbumHeaderSkeleton />
-			<div className="h-[2px] bg-foreground/10" />
+			<div className="h-px bg-border" />
 			<div>
 				<Skeleton className="h-4 w-24 mb-4" />
 				<TrackListSkeleton count={10} />
@@ -66,7 +66,7 @@ export function PlaylistDetailSkeleton() {
 	return (
 		<div className="space-y-6">
 			<div className="flex items-center gap-3">
-				<Skeleton className="size-9 shrink-0" />
+				<Skeleton className="size-9 shrink-0 rounded-full" />
 				<div className="flex-1 space-y-2">
 					<Skeleton className="h-7 w-48" />
 					<Skeleton className="h-3 w-24" />
@@ -121,7 +121,7 @@ export function SearchResultsSkeleton() {
 		<div className="space-y-4">
 			<div className="flex gap-2">
 				{Array.from({ length: 5 }).map((_, i) => (
-					<Skeleton key={i} className="h-8 w-20" />
+					<Skeleton key={i} className="h-8 w-20 rounded-full" />
 				))}
 			</div>
 			<TrackListSkeleton count={10} />
@@ -150,13 +150,13 @@ export function DownloadHistorySkeleton() {
 		<div className="space-y-4">
 			<Skeleton className="h-6 w-40" />
 			{Array.from({ length: 10 }).map((_, i) => (
-				<div key={i} className="flex items-center gap-3 py-2 border-b-[2px] border-foreground last:border-b-0">
+				<div key={i} className="flex items-center gap-3 py-2 border-b border-border last:border-b-0">
 					<Skeleton className="size-10 shrink-0" />
 					<div className="flex-1 space-y-1.5">
 						<Skeleton className="h-3.5 w-2/3" />
 						<Skeleton className="h-3 w-1/3" />
 					</div>
-					<Skeleton className="h-5 w-16" />
+					<Skeleton className="h-5 w-16 rounded-full" />
 				</div>
 			))}
 		</div>
