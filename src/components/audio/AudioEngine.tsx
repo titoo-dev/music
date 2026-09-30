@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { usePlayerStore } from "@/stores/usePlayerStore";
+import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { adjustVolume } from "@/utils/adjust-volume";
 import {
@@ -20,6 +20,8 @@ import {
 	setCacheLimit,
 } from "@/lib/audio-cache";
 import { toast } from "sonner";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-failure";
 
 // Restore cache limit from localStorage
 if (typeof window !== "undefined") {
@@ -1328,9 +1330,14 @@ export function AudioEngine() {
 			return;
 		}
 
+		// A signed-out session gets the same 401 on every retry — go straight
+		// to the diagnosis instead of burning the retry budget.
+		const { isAuthenticated, isLoading: authLoading } = useAuthStore.getState();
+		const knownGuest = !authLoading && !isAuthenticated;
+
 		// Retry up to MAX_RETRIES times
 		retryCountRef.current++;
-		if (retryCountRef.current <= MAX_RETRIES) {
+		if (!knownGuest && retryCountRef.current <= MAX_RETRIES) {
 			setTimeout(() => {
 				if (audioRef.current && currentTrack) {
 					audioRef.current.src = `/api/v1/stream-progressive/${currentTrack.trackId}`;
@@ -1341,47 +1348,54 @@ export function AudioEngine() {
 		}
 
 		// All retries exhausted — fetch the route once with credentials so we
-		// can surface the server's actual error code/message in the console.
-		// Useful in prod where server-side logs aren't accessible.
-		const failingTrackId = currentTrack.trackId;
-		void fetch(`/api/v1/stream-progressive/${failingTrackId}`, {
-			credentials: "include",
-		})
-			.then(async (res) => {
-				if (res.ok) {
-					// Don't drain a successful audio stream
-					res.body?.cancel().catch(() => {});
-					return;
-				}
-				const body = await res.text().catch(() => "");
-				let errorCode: string | undefined;
-				let errorMessage: string | undefined;
-				try {
-					const parsed = JSON.parse(body);
-					errorCode = parsed?.error?.code;
-					errorMessage = parsed?.error?.message;
-				} catch {
-					// Non-JSON body — keep raw body slice in the log
-				}
-				console.error(
-					`[AudioEngine] giving up — server says ${res.status} ${res.statusText || ""}`.trim(),
-					{
-						trackId: failingTrackId,
-						finalUrl: res.url,
-						errorCode,
-						errorMessage,
-						body: body.slice(0, 500),
-					}
-				);
-			})
-			.catch((e) =>
-				console.error("[AudioEngine] giving up — fetch failed", e)
-			);
-
-		// All retries exhausted — count this as a queue-wide failure
-		consecutiveFailuresRef.current++;
-
+		// can surface the server's actual error (the <audio> element only sees
+		// "Format error") and react to account-wide failures.
 		const failingTrack = currentTrack;
+		void diagnoseStreamFailure(`/api/v1/stream-progressive/${failingTrack.trackId}`).then(
+			(diagnosis) => {
+				if (diagnosis.error) {
+					console.error("[AudioEngine] giving up — fetch failed", diagnosis.error);
+				} else if (diagnosis.status && diagnosis.status >= 400) {
+					console.error(`[AudioEngine] giving up — server says ${diagnosis.status}`, {
+						trackId: failingTrack.trackId,
+						finalUrl: diagnosis.url,
+						errorCode: diagnosis.code,
+						errorMessage: diagnosis.message,
+						body: diagnosis.body,
+					});
+				}
+				// The user moved on while we were probing — nothing to report.
+				if (usePlayerStore.getState().currentTrack?.trackId !== failingTrack.trackId) return;
+				handleGiveUp(failingTrack, diagnosis.kind);
+			}
+		);
+	};
+
+	const handleGiveUp = (failingTrack: PlayerTrack, kind: StreamFailureKind) => {
+		// Auth / Deezer problems fail every track the same way: stop here
+		// instead of skipping through the queue with "Can't play".
+		if (kind === "auth" || kind === "deezer") {
+			consecutiveFailuresRef.current = 0;
+			pause();
+			const signIn = kind === "auth";
+			const title = signIn ? "Sign in to play full tracks" : "Connect your Deezer account";
+			setError(title);
+			toast.error(title, {
+				id: "stream-account-error",
+				description: signIn
+					? "Your session has expired or you're not signed in."
+					: "Add a valid Deezer ARL in Settings to stream tracks.",
+				duration: 10000,
+				action: {
+					label: signIn ? "Sign in" : "Settings",
+					onClick: () => window.location.assign(signIn ? "/login" : "/settings"),
+				},
+			});
+			return;
+		}
+
+		// Count this as a queue-wide failure
+		consecutiveFailuresRef.current++;
 
 		if (consecutiveFailuresRef.current >= MAX_CONSECUTIVE_FAILURES) {
 			// Multiple tracks failing back-to-back almost always means a

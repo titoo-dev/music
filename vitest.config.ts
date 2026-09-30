@@ -57,6 +57,7 @@ export default defineConfig({
 				"src/components/audio/WaveSeek.tsx",
 				"src/lib/wave.ts",
 				"src/lib/spectrum.ts",
+				"src/lib/stream-failure.ts",
 			],
 			exclude: [
 				"**/*.test.{ts,tsx}",
