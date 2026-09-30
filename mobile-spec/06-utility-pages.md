@@ -92,9 +92,9 @@ Total in scope: 1,458 LOC.
 - **L297–318** Stats strip 4-up: `grid-cols-2 sm:grid-cols-4`. On mobile it stacks 2x2. Each cell `p-5` with `text-2xl` value. On 360px, "DURATION" cell can be ≈ 170px wide; FLAC/PUBLIC/— values fit but if duration is e.g. "12:34" it's fine. OK.
 - **L297–318** Borders use ad-hoc `border-l-2 border-r-2` per index → fragile and not token-driven. Refactor to a single 4-cell grid with consistent `border-2`.
 - **L321–342** Massive CTA card uses `shadow-[8px_8px_0_var(--primary)]` → custom shadow offset, not in DESIGN §6 table. Per DESIGN §6 "Do not invent new shadow offsets." Use `--shadow-brutal-hover` (4-6px). Or, if a hero shadow is wanted, propose adding a `--shadow-brutal-xl` token.
-- **L344–347** Footer says "DEEMIX.APP / SHARED / {shareId}" — `{shareId}` slice is 8 chars uppercase. Mono label. OK.
+- **L344–347** Footer says "WAVELET.APP / SHARED / {shareId}" — `{shareId}` slice is 8 chars uppercase. Mono label. OK.
 - **OG image**: `opengraph-image.tsx` exists and is well-built (1200×630, brutal styling, fetches Space Grotesk, includes cover, title, artist, "Shared by"). ✓ no gap. One nit: the font fetch happens on every OG render — cache hint via `export const revalidate = 86400` could help if pages.
-- **No "TRY DEEMIX" CTA in the top bar.** Existing "OPEN IN APP" works as the equivalent but copy is weaker. Stronger CTA copy: "GET DEEMIX →" (matches the bottom CTA).
+- **No "TRY WAVELET" CTA in the top bar.** Existing "OPEN IN APP" works as the equivalent but copy is weaker. Stronger CTA copy: "GET WAVELET →" (matches the bottom CTA).
 
 ## 3. Login page — `/login`
 
@@ -102,7 +102,7 @@ Total in scope: 1,458 LOC.
 
 ```
 ┌──────────────────────────────┐  ← min-h-dvh, bg-background
-│  [■]  DEEMIX           v0.1  │  ← brutal mini-bar (no border-b — auth has no top bar)
+│  [■]  WAVELET           v0.1  │  ← brutal mini-bar (no border-b — auth has no top bar)
 │                              │     `pt-6 px-3` w/ logo + version-mono
 ├──────────────────────────────┤
 │                              │
@@ -147,7 +147,7 @@ Total in scope: 1,458 LOC.
 ### Layout (≥md, desktop)
 
 - 2-column grid kept (`lg:grid-cols-2`).
-- Left collage panel (already brutal: huge "OWN YOUR LIBRARY." headline, 5 feature pills, repeating DEEMIX bg).
+- Left collage panel (already brutal: huge "OWN YOUR LIBRARY." headline, 5 feature pills, repeating WAVELET bg).
 - Right column: same login card, centered, `max-w-md` (448px).
 
 ### Concrete changes (file:line)
@@ -238,7 +238,7 @@ PASSWORD                           ← mono label
 │  │              [CLEAR]  │   │
 │  └──────────────────────┘   │
 │                              │
-│  DEEMIX-NEXT · v0.1.0        │  ← footer mono
+│  WAVELET · v0.1.0        │  ← footer mono
 │                              │
 └──────────────────────────────┘
    pb-32 (clears MiniPlayer + bottom nav)
@@ -284,16 +284,16 @@ PASSWORD                           ← mono label
 ┌──────────────────────────────┐
 │   TOP BAR (z-30)             │
 ├──────────────────────────────┤
-│  ABOUT · DEEMIX              │  ← mono eyebrow
+│  ABOUT · WAVELET              │  ← mono eyebrow
 │  ┌─┐                         │
-│  │D│  DEEMIX NEXT.           │  ← logo + h1 stacked on mobile
+│  │D│  WAVELET.           │  ← logo + h1 stacked on mobile
 │  └─┘                         │
 │  Self-hosted music...         │
 │                              │
 │  ┌──────────────────────┐   │
 │  │ WHAT IS THIS?        │   │  ← brutal-card
 │  ├──────────────────────┤   │
-│  │ DEEMIX is a self-     │   │
+│  │ WAVELET is a self-     │   │
 │  │ hosted music...       │   │
 │  └──────────────────────┘   │
 │                              │
@@ -433,7 +433,7 @@ PASSWORD                           ← mono label
 
 ```
 ┌──────────────────────────────┐  ← sticky, border-b-[2px], z-30
-│  [■] DEEMIX        [TRY IT→]  │  ← `PublicTopBar` (px-3 py-3, h-14)
+│  [■] WAVELET        [TRY IT→]  │  ← `PublicTopBar` (px-3 py-3, h-14)
 ├──────────────────────────────┤
 │  TRACK · FLAC · 4:23         │  ← mono eyebrow
 │                              │
@@ -469,12 +469,12 @@ PASSWORD                           ← mono label
 │  ┌──────────────────────┐   │
 │  │ DOWNLOAD YOUR        │   │
 │  │ LIBRARY.             │   │  ← massive CTA
-│  │ deemix is...         │   │
+│  │ wavelet is...         │   │
 │  │                      │   │
-│  │      [GET DEEMIX →]  │   │  ← full-width on mobile, 56px
+│  │      [GET WAVELET →]  │   │  ← full-width on mobile, 56px
 │  └──────────────────────┘   │
 │                              │
-│  DEEMIX.APP / SHARED / ABCD  │  ← mono footer
+│  WAVELET.APP / SHARED / ABCD  │  ← mono footer
 └──────────────────────────────┘
    pb-[env(safe-area-inset-bottom)+24px]
 ```
@@ -500,7 +500,7 @@ PASSWORD                           ← mono label
 | L166 | `min-h-screen` | `min-h-dvh` |
 | L168 | `sticky top-0 z-10` | `sticky top-0 z-30` (DESIGN §7) |
 | L169 | `px-5 sm:px-10` | `px-3 sm:px-6 lg:px-8` (match DESIGN §4) |
-| L176–181 | "OPEN IN APP" `px-3 py-2` (≈36px tall) | "GET DEEMIX →" `h-11` mobile / `h-9` desktop, stronger CTA copy |
+| L176–181 | "OPEN IN APP" `px-3 py-2` (≈36px tall) | "GET WAVELET →" `h-11` mobile / `h-9` desktop, stronger CTA copy |
 | L185 | `max-w-6xl` | `max-w-xl mx-auto lg:max-w-2xl` (single track, narrower) |
 | L185 | `px-5 sm:px-10 py-10 sm:py-14` | `px-3 sm:px-6 py-6 sm:py-12` |
 | L189 | `max-w-[420px] mx-auto md:mx-0` | `max-w-[85vw] mx-auto md:max-w-[420px] md:mx-0` |
@@ -512,7 +512,7 @@ PASSWORD                           ← mono label
 | L255–262 | Standalone play in waveform card duplicates hero PLAY | Drop the standalone (waveform card has play+seek inline) OR drop the hero PLAY (keep waveform's). Pick the hero one — bigger, more thumb-friendly. |
 | L297–318 | Stats strip ad-hoc per-cell borders | Use a single grid + `border-2 [&>*]:border-r-2 [&>*:last-child]:border-r-0` pattern |
 | L321–342 | Massive CTA `shadow-[8px_8px_0_var(--primary)]` (off-token) | Use `var(--shadow-brutal-hover)` (4-6px) or propose new `--shadow-brutal-xl` token |
-| L335–340 | "GET DEEMIX →" inline button | Full-width on mobile (`w-full md:w-auto`), 56px tall mobile |
+| L335–340 | "GET WAVELET →" inline button | Full-width on mobile (`w-full md:w-auto`), 56px tall mobile |
 | (footer) | No safe-area | Wrap outer `<div>` with `pb-[env(safe-area-inset-bottom)]` |
 
 ### ASCII wireframe (already above)

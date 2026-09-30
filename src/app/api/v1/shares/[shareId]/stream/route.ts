@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { fail } from "../../../_lib/helpers";
 import { streamObject } from "@/lib/s3-stream";
 import { resolveShareForPlayback } from "@/lib/library";
-import { startProgressiveStream } from "@/lib/deemix/progressive-stream";
-import { getDeemixApp, getOrLoginUserDz } from "@/lib/server-state";
+import { startProgressiveStream } from "@/lib/wavelet/progressive-stream";
+import { getWaveletApp, getOrLoginUserDz } from "@/lib/server-state";
 
 // GET /api/v1/shares/[shareId]/stream
 // Public, no auth. Resolves the share, then either:
@@ -95,7 +95,7 @@ async function streamProgressive(share: { trackId: string; userId: string }) {
 		);
 	}
 
-	const app = await getDeemixApp();
+	const app = await getWaveletApp();
 	if (!app?.storageProvider) {
 		return fail("STORAGE_UNAVAILABLE", "Storage provider not initialized.", 500);
 	}

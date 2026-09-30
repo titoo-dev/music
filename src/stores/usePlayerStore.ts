@@ -484,7 +484,7 @@ export const usePlayerStore = create<PlayerState>()(
 			},
 		}),
 		{
-			name: "deemix-player",
+			name: "wavelet-player",
 			partialize: (state) => ({
 				volume: state.volume,
 				_lastNonZeroVolume: state._lastNonZeroVolume,

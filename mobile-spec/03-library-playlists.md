@@ -166,7 +166,7 @@ The most complex page. Already has 4 tabs; redesign keeps tabs but adds:
 
 ```
 ┌──────────────────────────────────┐
-│ ☰ ⌂ deemix          [👤]        │  64px top bar (z-30)
+│ ☰ ⌂ wavelet          [👤]        │  64px top bar (z-30)
 ├──────────────────────────────────┤
 │ LIBRARY                          │
 │                                  │
@@ -327,7 +327,7 @@ The most complex page. Already has 4 tabs; redesign keeps tabs but adds:
 - Same `<CollectionHeader>` pattern. Cover from Deezer (`picture_xl`).
 - **No edit** affordance.
 - **"Save / Follow" CTA**: prominent. On mobile this is the primary action — replace "PLAY ALL" with a **two-button** row: PLAY ALL (60%) + SAVE (40%, shows ♥ filled when saved). Implementation: import any tracks from this playlist into a new local playlist or just save them as individual tracks (project decision).
-- **Share**: secondary icon button (44×44) — copies the public Deezer URL or generates a deemix-next share URL via existing `<ShareDialog>`.
+- **Share**: secondary icon button (44×44) — copies the public Deezer URL or generates a wavelet share URL via existing `<ShareDialog>`.
 
 #### ASCII wireframe — `/playlist` (mobile)
 

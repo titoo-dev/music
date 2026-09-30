@@ -26,7 +26,7 @@ import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-fail
 // Restore cache limit from localStorage
 if (typeof window !== "undefined") {
 	try {
-		const saved = localStorage.getItem("deemix-cache-limit");
+		const saved = localStorage.getItem("wavelet-cache-limit");
 		if (saved) {
 			const bytes = parseInt(saved, 10);
 			if (!isNaN(bytes) && bytes > 0) setCacheLimit(bytes);
@@ -97,7 +97,7 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 // the track was processed in a different mode that didn't produce no_vocals).
 // Caller falls back to the original track URL on null.
 //
-// When DEEMIX_DISABLE_PRESIGNED_URLS=1 the server returns
+// When WAVELET_DISABLE_PRESIGNED_URLS=1 the server returns
 // status=presigned_disabled (after confirming the stem is cached). The
 // client must use the /stream proxy in that case — returning null would
 // fall through to the original track and silently break karaoke.
@@ -502,7 +502,7 @@ async function cacheCurrentTrackInBackground(trackId: string) {
  * Pre-buffers adjacent tracks in the queue for instant playback.
  * Also manages the Media Session API for OS-level media controls.
  */
-const RESUME_KEY = "deemix-resume";
+const RESUME_KEY = "wavelet-resume";
 const RESUME_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function AudioEngine() {

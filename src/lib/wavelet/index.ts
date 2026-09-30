@@ -1,4 +1,4 @@
-// Public surface of the deemix library — limited to what the progressive
+// Public surface of the wavelet library — limited to what the progressive
 // streaming engine + library domain layer need. The legacy queue worker
 // (Downloader, DownloadObject, plugins/spotify, link-parsing) was removed.
 

@@ -34,7 +34,7 @@ export async function GET(
 		// "no stem yet" (status=not_cached → fall through to original audio)
 		// from "stem exists, just no direct URL" (status=presigned_disabled →
 		// use the /stream proxy instead).
-		if (process.env.DEEMIX_DISABLE_PRESIGNED_URLS === "1") {
+		if (process.env.WAVELET_DISABLE_PRESIGNED_URLS === "1") {
 			return ok({ url: null, status: "presigned_disabled" });
 		}
 

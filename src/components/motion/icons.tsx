@@ -166,7 +166,7 @@ export function Equalizer({
 	);
 }
 
-/** The deemix mark: five waveform bars inside a rounded square. */
+/** The wavelet mark: five waveform bars inside a rounded square. */
 export function LogoMark({ animated = false, className }: { animated?: boolean; className?: string }) {
 	const heights = [6, 11, 16, 11, 6];
 	return (

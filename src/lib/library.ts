@@ -13,7 +13,7 @@
 // every API route stays a thin HTTP wrapper.
 
 import { prisma } from "@/lib/prisma";
-import { getDeemixApp } from "@/lib/server-state";
+import { getWaveletApp } from "@/lib/server-state";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -398,7 +398,7 @@ export async function forceEvictFile(trackId: string): Promise<number> {
 	});
 	if (stored.length === 0) return 0;
 
-	const app = await getDeemixApp();
+	const app = await getWaveletApp();
 	const storageProvider = app?.storageProvider;
 	let deleted = 0;
 

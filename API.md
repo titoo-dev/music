@@ -1,4 +1,4 @@
-# Deemix API v1 Documentation
+# Wavelet API v1 Documentation
 
 Base URL: `/api/v1`
 

@@ -1,6 +1,6 @@
 export type ThemePreference = "system" | "light" | "dark";
 
-export const THEME_STORAGE_KEY = "deemix-theme";
+export const THEME_STORAGE_KEY = "wavelet-theme";
 
 /** Resolve a stored preference against the OS setting. */
 export function resolveTheme(

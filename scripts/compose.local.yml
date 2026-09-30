@@ -4,8 +4,8 @@
 services:
   stems-worker:
     environment:
-      - DEEMIX_STORAGE_TYPE=s3
-      - DEEMIX_S3_ENDPOINT=http://minio:9000
+      - WAVELET_STORAGE_TYPE=s3
+      - WAVELET_S3_ENDPOINT=http://minio:9000
     depends_on:
       minio:
         condition: service_healthy

@@ -11,7 +11,7 @@ import type { StorageProvider } from "../storage/StorageProvider";
 import { OverwriteOption } from "../settings";
 import { USER_AGENT_HEADER, pipeline } from "../utils/index";
 
-const TEMPDIR = tmpdir() + "/deemix-imgs";
+const TEMPDIR = tmpdir() + "/wavelet-imgs";
 mkdirSync(TEMPDIR, { recursive: true });
 
 const MAX_IMAGE_RETRIES = 3;

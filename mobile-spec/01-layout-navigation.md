@@ -23,9 +23,9 @@ Concrete issues found in the in-scope files:
 
 5. **Sheet width = `w-[280px]` on 360px viewports.** `(main)/layout.tsx:241` sets `w-[280px]` regardless of viewport. On a 360px-wide phone (Pixel 5, DESIGN.md §14 baseline) that leaves only 80px of backdrop — borderline tap-to-dismiss target. Should be `w-[80vw] max-w-[320px]` so the cream backdrop is always >60px.
 
-6. **Breadcrumb is desktop-only and lacks current-screen fallback.** `(main)/layout.tsx:165-169` wraps Breadcrumb in `hidden md:flex`. On mobile there is *no* page-title indicator at all — user only sees the deemix logo + hamburger + avatar. DESIGN.md §7 says the mobile top bar should show "Logo + (current page label, truncated) + avatar dropdown."
+6. **Breadcrumb is desktop-only and lacks current-screen fallback.** `(main)/layout.tsx:165-169` wraps Breadcrumb in `hidden md:flex`. On mobile there is *no* page-title indicator at all — user only sees the wavelet logo + hamburger + avatar. DESIGN.md §7 says the mobile top bar should show "Logo + (current page label, truncated) + avatar dropdown."
 
-7. **Breadcrumb overflow risk.** `Breadcrumb.tsx:59` declares `overflow-hidden` on the wrapper but each crumb is `shrink-0` (line 70) and the root `~/DEEMIX` is `shrink-0` (line 63). On narrow viewports between `md` and `lg` (768–900px) the breadcrumb will visually clip without an ellipsis, since only the *last* crumb has `truncate max-w-[16ch]`. No middle-collapse pattern (e.g. `… / current`).
+7. **Breadcrumb overflow risk.** `Breadcrumb.tsx:59` declares `overflow-hidden` on the wrapper but each crumb is `shrink-0` (line 70) and the root `~/WAVELET` is `shrink-0` (line 63). On narrow viewports between `md` and `lg` (768–900px) the breadcrumb will visually clip without an ellipsis, since only the *last* crumb has `truncate max-w-[16ch]`. No middle-collapse pattern (e.g. `… / current`).
 
 8. **No `aria-label` on hamburger.** `(main)/layout.tsx:142-149` renders only the `<Menu>` icon — no accessible name. Same for the avatar trigger (line 178). Fails DESIGN.md §12 ("Icon-only buttons: Always `aria-label`") and the per-screen audit checklist (§15).
 
@@ -49,7 +49,7 @@ Concrete issues found in the in-scope files:
 - **Height:** `h-16` (64px) preserved per DESIGN.md §7, sticky, `border-b-[3px] border-foreground bg-background z-30`.
 - **Safe area:** add `pt-[env(safe-area-inset-top)]` and bump effective height with `min-h-[calc(64px+env(safe-area-inset-top))]`.
 - **Contents (left → right):**
-  1. Logo (`D` square + "deemix" wordmark) — keep current pattern (`(main)/layout.tsx:152-162`), but make it the *only* link on the left.
+  1. Logo (`D` square + "wavelet" wordmark) — keep current pattern (`(main)/layout.tsx:152-162`), but make it the *only* link on the left.
   2. Page-label slot: middle, mono uppercase 11px, `truncate max-w-[16ch]`. Sourced from `Breadcrumb.tsx` last-segment label OR a per-page `<PageTitle>` slot.
   3. Avatar dropdown (right) — tightened to: username, About, Logout. "My Playlists" removed (now a tab).
 - **Hamburger removed.** No more `<Menu>` button. Secondary destinations move into the avatar dropdown (or a tertiary "More" sheet if it grows beyond ~5 items in future).
@@ -118,7 +118,7 @@ Largely unchanged:
 
 ```
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ [D] deemix     HOME           [▓ avatar ▓] ┃ ← top bar  z-30  h-16
+┃ [D] wavelet     HOME           [▓ avatar ▓] ┃ ← top bar  z-30  h-16
 ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
 ┃                                              ┃
 ┃  GOOD EVENING.                               ┃
@@ -152,7 +152,7 @@ Largely unchanged:
 
 ```
 ┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┓
-┃ [▓] DEEMIX            ┃ ▓▓▓▓▓▓▓▓▓▓ backdrop┃
+┃ [▓] WAVELET            ┃ ▓▓▓▓▓▓▓▓▓▓ backdrop┃
 ┃ NAVIGATION            ┃ (tap to dismiss)   ┃
 ┣━━━━━━━━━━━━━━━━━━━━━━━┫                    ┃
 ┃                       ┃                    ┃
@@ -179,7 +179,7 @@ Note: when drawer opens, bottom nav is **covered by the backdrop** (z-50 backdro
 
 ```
 ┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ [▓] DEEMIX       ┃ ~/DEEMIX / LIBRARY / TRACKS              [▓ avatar v]      ┃
+┃ [▓] WAVELET       ┃ ~/WAVELET / LIBRARY / TRACKS              [▓ avatar v]      ┃
 ┃ ─────────────────┃                                                             ┃
 ┃ ┃ HOME           ┃─────────────────────────────────────────────────────────────┃
 ┃ ┃ SEARCH         ┃                                                             ┃
@@ -208,7 +208,7 @@ z-40
 - **Modify:** `<main class="...pb-24...">` at line 232 → `class="...pb-32 sm:pb-24..."`. Aligns with DESIGN.md §14 rule 6.
 - **Modify:** top bar at line 140 — replace mobile section. Drop the `<Menu>` button. Keep mobile logo (lines 152-162). Add a new middle slot: `<div className="md:hidden flex-1 min-w-0 flex justify-center"><Suspense><Breadcrumb compact /></Suspense></div>`. The compact prop drives the new mobile-collapsed mode in `Breadcrumb.tsx`.
 - **Modify:** mobile avatar dropdown content at lines 192-215. Remove "My Playlists" item (it's a tab now). Slim to: username header → About → Log out. Optionally add "More…" → opens secondary drawer.
-- **Modify:** Sheet drawer at lines 240-253. Title stays "DEEMIX / NAVIGATION" or rename to "MORE." Render a slimmed `<Navigation variant="secondary" onNavigate={...} />` (new prop) that only emits secondary items.
+- **Modify:** Sheet drawer at lines 240-253. Title stays "WAVELET / NAVIGATION" or rename to "MORE." Render a slimmed `<Navigation variant="secondary" onNavigate={...} />` (new prop) that only emits secondary items.
 - **Add:** `<Suspense>` wrap for breadcrumb compact mode (already wrapped on line 166-168 — extend the same pattern to the new mobile slot).
 - **Wrap:** the entire `<header>` with `style={{ paddingTop: 'env(safe-area-inset-top)' }}` or use a Tailwind class `pt-[env(safe-area-inset-top)]` for status-bar safety on edge-to-edge Android Chrome.
 
@@ -219,10 +219,10 @@ z-40
 - **Touch targets in drawer:** the current `py-3 px-[18px]` rows compute to ~44px. Bump to `py-3.5` (gives ~48px) when used in the drawer to comply with DESIGN.md §5 mobile minimum.
 
 ### `src/components/layout/Breadcrumb.tsx` (89 lines)
-- **Add a `compact` prop:** `compact?: boolean` (default `false`). When `true`, render only the **last** crumb's label as plain text (no `~/DEEMIX` root, no separators, no chain). This is the mobile top-bar mode.
+- **Add a `compact` prop:** `compact?: boolean` (default `false`). When `true`, render only the **last** crumb's label as plain text (no `~/WAVELET` root, no separators, no chain). This is the mobile top-bar mode.
 - **Compact rendering:** `<span class="font-mono text-[11px] font-bold tracking-[0.12em] uppercase truncate">{lastCrumb.label}</span>` — fits in the middle slot of the 64px top bar.
 - **Default rendering preserved:** desktop `≥md` keeps the full crumb chain. No regressions to the locked-in audit checklist.
-- **Edge case:** when `pathname === "/"`, compact mode shows "HOME" (not nothing). Default mode shows just `~/DEEMIX` (current line 26 behavior).
+- **Edge case:** when `pathname === "/"`, compact mode shows "HOME" (not nothing). Default mode shows just `~/WAVELET` (current line 26 behavior).
 
 ## 7. Components to create (NEW)
 

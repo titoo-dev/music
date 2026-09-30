@@ -29,13 +29,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-	title: "deemix",
+	title: "wavelet",
 	description: "Music downloader powered by Deezer",
-	applicationName: "deemix",
+	applicationName: "wavelet",
 	appleWebApp: {
 		capable: true,
 		statusBarStyle: "black-translucent",
-		title: "deemix",
+		title: "wavelet",
 	},
 	formatDetection: {
 		telephone: false,

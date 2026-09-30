@@ -16,7 +16,7 @@ vi.mock("@/lib/auth", () => ({ auth: authMock }));
 const { serverStateMock, DeezerCtor, deezerInstances, deezerLoginBehavior } =
 	vi.hoisted(() => {
 		const serverStateMock = {
-			getDeemixApp: vi.fn(),
+			getWaveletApp: vi.fn(),
 			getUserDz: vi.fn(),
 			setUserDz: vi.fn(),
 			getGuestDz: vi.fn(),
@@ -308,14 +308,14 @@ describe("requireDeezer()", () => {
 describe("requireApp()", () => {
 	it("returns the app when initialized", async () => {
 		const fakeApp = { id: "app" };
-		serverStateMock.getDeemixApp.mockResolvedValue(fakeApp);
+		serverStateMock.getWaveletApp.mockResolvedValue(fakeApp);
 		const result = await requireApp();
 		expect(result.error).toBeNull();
 		expect(result.app).toBe(fakeApp);
 	});
 
 	it("returns 500 APP_NOT_INITIALIZED when app is null", async () => {
-		serverStateMock.getDeemixApp.mockResolvedValue(null);
+		serverStateMock.getWaveletApp.mockResolvedValue(null);
 		const result = await requireApp();
 		expect(result.error).toBeTruthy();
 		expect(result.error!.status).toBe(500);
@@ -332,7 +332,7 @@ describe("requireUserAndApp()", () => {
 	it("returns userId + app on the happy path", async () => {
 		setSessionUser("u1");
 		const fakeApp = { id: "app" };
-		serverStateMock.getDeemixApp.mockResolvedValue(fakeApp);
+		serverStateMock.getWaveletApp.mockResolvedValue(fakeApp);
 
 		const result = await requireUserAndApp(makeNextRequest());
 		expect(result.error).toBeNull();
@@ -340,18 +340,18 @@ describe("requireUserAndApp()", () => {
 		expect(result.app).toBe(fakeApp);
 	});
 
-	it("returns the auth error when not authenticated (does not call getDeemixApp)", async () => {
+	it("returns the auth error when not authenticated (does not call getWaveletApp)", async () => {
 		const result = await requireUserAndApp(makeNextRequest());
 		expect(result.error).toBeTruthy();
 		expect(result.error!.status).toBe(401);
 		const body = await readJson<{ error: { code: string } }>(result.error!);
 		expect(body?.error.code).toBe("NOT_AUTHENTICATED");
-		expect(serverStateMock.getDeemixApp).not.toHaveBeenCalled();
+		expect(serverStateMock.getWaveletApp).not.toHaveBeenCalled();
 	});
 
 	it("returns 500 APP_NOT_INITIALIZED when authed but app is null", async () => {
 		setSessionUser("u1");
-		serverStateMock.getDeemixApp.mockResolvedValue(null);
+		serverStateMock.getWaveletApp.mockResolvedValue(null);
 
 		const result = await requireUserAndApp(makeNextRequest());
 		expect(result.error).toBeTruthy();
@@ -371,7 +371,7 @@ describe("requireDeezerAndApp()", () => {
 		const cachedDz = { loggedIn: true };
 		const fakeApp = { id: "app" };
 		serverStateMock.getUserDz.mockReturnValue(cachedDz);
-		serverStateMock.getDeemixApp.mockResolvedValue(fakeApp);
+		serverStateMock.getWaveletApp.mockResolvedValue(fakeApp);
 
 		const result = await requireDeezerAndApp(makeNextRequest());
 		expect(result.error).toBeNull();
@@ -380,7 +380,7 @@ describe("requireDeezerAndApp()", () => {
 		expect(result.app).toBe(fakeApp);
 	});
 
-	it("propagates the Deezer error and skips getDeemixApp", async () => {
+	it("propagates the Deezer error and skips getWaveletApp", async () => {
 		setSessionUser("u1");
 		serverStateMock.getUserDz.mockReturnValue(null);
 		prismaMock.deezerCredential.findUnique.mockResolvedValue(null);
@@ -390,13 +390,13 @@ describe("requireDeezerAndApp()", () => {
 		expect(result.error!.status).toBe(403);
 		const body = await readJson<{ error: { code: string } }>(result.error!);
 		expect(body?.error.code).toBe("NO_DEEZER_ARL");
-		expect(serverStateMock.getDeemixApp).not.toHaveBeenCalled();
+		expect(serverStateMock.getWaveletApp).not.toHaveBeenCalled();
 	});
 
 	it("returns 500 APP_NOT_INITIALIZED when Deezer ok but app is null", async () => {
 		setSessionUser("u1");
 		serverStateMock.getUserDz.mockReturnValue({ loggedIn: true });
-		serverStateMock.getDeemixApp.mockResolvedValue(null);
+		serverStateMock.getWaveletApp.mockResolvedValue(null);
 
 		const result = await requireDeezerAndApp(makeNextRequest());
 		expect(result.error).toBeTruthy();
@@ -410,7 +410,7 @@ describe("requireDeezerAndApp()", () => {
 		expect(result.error).toBeTruthy();
 		expect(result.error!.status).toBe(401);
 		expect(prismaMock.deezerCredential.findUnique).not.toHaveBeenCalled();
-		expect(serverStateMock.getDeemixApp).not.toHaveBeenCalled();
+		expect(serverStateMock.getWaveletApp).not.toHaveBeenCalled();
 	});
 });
 

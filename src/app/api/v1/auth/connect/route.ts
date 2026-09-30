@@ -1,18 +1,18 @@
 import { NextRequest } from "next/server";
-import { getDeemixApp, getUserDz, setUserDz } from "@/lib/server-state";
+import { getWaveletApp, getUserDz, setUserDz } from "@/lib/server-state";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ok, handleError } from "../../_lib/helpers";
 
 export async function GET(request: NextRequest) {
 	try {
-		const deemixApp = await getDeemixApp();
+		const waveletApp = await getWaveletApp();
 
-		const deezerAvailable = deemixApp
-			? await deemixApp.isDeezerAvailable()
+		const deezerAvailable = waveletApp
+			? await waveletApp.isDeezerAvailable()
 			: "no-network";
 
-		const settings = deemixApp ? deemixApp.getSettings() : {};
+		const settings = waveletApp ? waveletApp.getSettings() : {};
 
 		// Check better-auth session
 		let betterAuthUser = null;
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 					const cred = await prisma.deezerCredential.findUnique({
 						where: { userId: session.user.id },
 					});
-					const arl = cred?.arl || process.env.DEEMIX_SERVICE_ARL;
+					const arl = cred?.arl || process.env.WAVELET_SERVICE_ARL;
 					if (arl) {
 						const { Deezer } = await import("@/lib/deezer");
 						dz = new Deezer();
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 						if (loggedIn) {
 							setUserDz(session.user.id, dz);
 							// Persist service ARL as user credential if not already stored
-							if (!cred && process.env.DEEMIX_SERVICE_ARL) {
+							if (!cred && process.env.WAVELET_SERVICE_ARL) {
 								try {
 									await prisma.deezerCredential.create({
 										data: {

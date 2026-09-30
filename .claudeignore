@@ -65,43 +65,43 @@ src/app/api/user-tracks/
 # Read these on-demand when modifying them.
 # ──────────────────────────────────────────────
 
-# Deemix utils (all internal helpers)
-src/lib/deemix/utils/core.ts
-src/lib/deemix/utils/crypto.ts
-src/lib/deemix/utils/deezer.ts
-src/lib/deemix/utils/downloadUtils.ts
-src/lib/deemix/utils/downloadImage.ts
-src/lib/deemix/utils/getPreferredBitrate.ts
-src/lib/deemix/utils/localpaths.ts
-src/lib/deemix/utils/pathtemplates.ts
+# Wavelet utils (all internal helpers)
+src/lib/wavelet/utils/core.ts
+src/lib/wavelet/utils/crypto.ts
+src/lib/wavelet/utils/deezer.ts
+src/lib/wavelet/utils/downloadUtils.ts
+src/lib/wavelet/utils/downloadImage.ts
+src/lib/wavelet/utils/getPreferredBitrate.ts
+src/lib/wavelet/utils/localpaths.ts
+src/lib/wavelet/utils/pathtemplates.ts
 
-# Deemix download-object generators (internal factories)
-src/lib/deemix/download-objects/generateTrackItem.ts
-src/lib/deemix/download-objects/generateAlbumItem.ts
-src/lib/deemix/download-objects/generatePlaylistItem.ts
-src/lib/deemix/download-objects/generateArtistTopItem.ts
+# Wavelet download-object generators (internal factories)
+src/lib/wavelet/download-objects/generateTrackItem.ts
+src/lib/wavelet/download-objects/generateAlbumItem.ts
+src/lib/wavelet/download-objects/generatePlaylistItem.ts
+src/lib/wavelet/download-objects/generateArtistTopItem.ts
 
-# Deemix storage implementations (keep interface + factory)
-src/lib/deemix/storage/LocalStorageProvider.ts
-src/lib/deemix/storage/S3StorageProvider.ts
+# Wavelet storage implementations (keep interface + factory)
+src/lib/wavelet/storage/LocalStorageProvider.ts
+src/lib/wavelet/storage/S3StorageProvider.ts
 
-# Deemix config-store implementation (keep interface + factory)
-src/lib/deemix/config-store/PostgresConfigStore.ts
+# Wavelet config-store implementation (keep interface + factory)
+src/lib/wavelet/config-store/PostgresConfigStore.ts
 
-# Deemix plugin implementation (keep base class)
-src/lib/deemix/plugins/spotify.ts
+# Wavelet plugin implementation (keep base class)
+src/lib/wavelet/plugins/spotify.ts
 
-# Deemix type internals (keep Track.ts, Album.ts, index.ts)
-src/lib/deemix/types/Artist.ts
-src/lib/deemix/types/CustomDate.ts
-src/lib/deemix/types/Lyrics.ts
-src/lib/deemix/types/Picture.ts
-src/lib/deemix/types/Playlist.ts
-src/lib/deemix/types/listener.ts
-src/lib/deemix/types/Settings.ts
+# Wavelet type internals (keep Track.ts, Album.ts, index.ts)
+src/lib/wavelet/types/Artist.ts
+src/lib/wavelet/types/CustomDate.ts
+src/lib/wavelet/types/Lyrics.ts
+src/lib/wavelet/types/Picture.ts
+src/lib/wavelet/types/Playlist.ts
+src/lib/wavelet/types/listener.ts
+src/lib/wavelet/types/Settings.ts
 
-# Deemix errors (internal)
-src/lib/deemix/errors.ts
+# Wavelet errors (internal)
+src/lib/wavelet/errors.ts
 
 # Deezer internals (keep deezer.ts, api.ts, gw.ts, index.ts)
 src/lib/deezer/types.ts

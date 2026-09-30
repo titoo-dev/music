@@ -6,7 +6,7 @@
  * as a persistent cache layer.
  */
 
-const DB_NAME = "deemix-audio-cache";
+const DB_NAME = "wavelet-audio-cache";
 const DB_VERSION = 1;
 const STORE_NAME = "tracks";
 const META_STORE = "meta";

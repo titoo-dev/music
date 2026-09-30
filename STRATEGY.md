@@ -1,4 +1,4 @@
-# STRATEGY.md — deemix-next mobile-first rollout
+# STRATEGY.md — wavelet mobile-first rollout
 
 > Synthèse des 6 audits écrans (`mobile-spec/01..06`) en plan d'implémentation. Source de vérité visuelle: [`DESIGN.md`](./DESIGN.md). Aucun code n'est écrit ici — seulement la séquence des PRs, les composants partagés à extraire, les risques cross-cutting et la stratégie de test.
 

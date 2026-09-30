@@ -51,14 +51,14 @@ export function AudioCacheManager() {
 		setCurrentLimit(bytes);
 		// Persist to localStorage
 		try {
-			localStorage.setItem("deemix-cache-limit", String(bytes));
+			localStorage.setItem("wavelet-cache-limit", String(bytes));
 		} catch {}
 	};
 
 	// Restore limit from localStorage on mount
 	useEffect(() => {
 		try {
-			const saved = localStorage.getItem("deemix-cache-limit");
+			const saved = localStorage.getItem("wavelet-cache-limit");
 			if (saved) {
 				const bytes = parseInt(saved, 10);
 				if (!isNaN(bytes) && bytes > 0) {

@@ -18,7 +18,7 @@ const s3Row = {
 	id: "x",
 	trackId: "1",
 	bitrate: 320,
-	storagePath: "deemix-music/foo.mp3",
+	storagePath: "wavelet-music/foo.mp3",
 	storageType: "s3",
 } as any;
 
@@ -85,7 +85,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		expect(res.headers.get("Accept-Ranges")).toBe("bytes");
 		expect(res.headers.get("Cache-Control")).toBe("private, max-age=86400");
 		// No Range was sent — streamObject called without a range argument.
-		expect(streamObjectMock).toHaveBeenCalledWith("deemix-music/foo.mp3");
+		expect(streamObjectMock).toHaveBeenCalledWith("wavelet-music/foo.mp3");
 	});
 
 	it("returns the streamObject statusCode + Content-Range when a Range header is present", async () => {
@@ -106,7 +106,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		expect(res.status).toBe(206);
 		expect(res.headers.get("Content-Range")).toBe("bytes 0-99/12345");
 		expect(res.headers.get("Accept-Ranges")).toBe("bytes");
-		expect(streamObjectMock).toHaveBeenCalledWith("deemix-music/foo.mp3", "bytes=0-99");
+		expect(streamObjectMock).toHaveBeenCalledWith("wavelet-music/foo.mp3", "bytes=0-99");
 	});
 
 	it("on streamObject NotFound (by name): deletes stale rows and 302s to /stream-progressive", async () => {

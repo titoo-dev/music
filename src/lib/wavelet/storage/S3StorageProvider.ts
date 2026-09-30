@@ -17,7 +17,7 @@ import { Readable } from "stream";
 import type { StorageProvider } from "./StorageProvider";
 import type { S3Settings } from "../types/Settings";
 
-const S3_TEMP_DIR = path.join(tmpdir(), "deemix-s3");
+const S3_TEMP_DIR = path.join(tmpdir(), "wavelet-s3");
 fs.mkdirSync(S3_TEMP_DIR, { recursive: true });
 
 export class S3StorageProvider implements StorageProvider {

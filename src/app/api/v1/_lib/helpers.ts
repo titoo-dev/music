@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDeemixApp, getUserDz, setUserDz, getGuestDz } from "@/lib/server-state";
+import { getWaveletApp, getUserDz, setUserDz, getGuestDz } from "@/lib/server-state";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -78,7 +78,7 @@ export async function requireDeezer(request: NextRequest) {
 	}
 }
 
-// ── Combined: better-auth + Deezer + DeemixApp ──
+// ── Combined: better-auth + Deezer + WaveletApp ──
 
 export async function requireDeezerAndApp(request: NextRequest) {
 	const deezerResult = await requireDeezer(request);
@@ -90,7 +90,7 @@ export async function requireDeezerAndApp(request: NextRequest) {
 	return { userId: deezerResult.userId, dz: deezerResult.dz, app: appResult.app, error: null };
 }
 
-// ── Combined: better-auth + DeemixApp (no Deezer required) ──
+// ── Combined: better-auth + WaveletApp (no Deezer required) ──
 
 export async function requireUserAndApp(request: NextRequest) {
 	const userResult = await requireUser(request);
@@ -105,11 +105,11 @@ export async function requireUserAndApp(request: NextRequest) {
 // ── App guard ──
 
 export async function requireApp() {
-	const deemixApp = await getDeemixApp();
-	if (!deemixApp) {
+	const waveletApp = await getWaveletApp();
+	if (!waveletApp) {
 		return { app: null as never, error: fail("APP_NOT_INITIALIZED", "Server application not initialized.", 500) };
 	}
-	return { app: deemixApp, error: null };
+	return { app: waveletApp, error: null };
 }
 
 // ── Guest or user Deezer session (for search/browse routes) ──

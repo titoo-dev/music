@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireDeezerAndApp, fail, handleError } from "../../_lib/helpers";
-import { startProgressiveStream } from "@/lib/deemix/progressive-stream";
+import { startProgressiveStream } from "@/lib/wavelet/progressive-stream";
 
 // GET /api/v1/stream-progressive/[trackId]
 // Spotify-like progressive playback: streams live from Deezer, decrypts

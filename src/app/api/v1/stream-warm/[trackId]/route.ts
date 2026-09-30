@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireDeezerAndApp, handleError } from "../../_lib/helpers";
-import { getPreferredBitrate } from "@/lib/deemix/utils/getPreferredBitrate";
+import { getPreferredBitrate } from "@/lib/wavelet/utils/getPreferredBitrate";
 import { utils, type Deezer } from "@/lib/deezer";
-import Track from "@/lib/deemix/types/Track";
-import { gwTrackCache } from "@/lib/deemix/cache/deezer-track-cache";
+import Track from "@/lib/wavelet/types/Track";
+import { gwTrackCache } from "@/lib/wavelet/cache/deezer-track-cache";
 
 const { mapGwTrackToDeezer } = utils;
 

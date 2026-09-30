@@ -101,9 +101,9 @@ export function AppHeader() {
 	return (
 		<header className="glass sticky top-0 z-40 border-b border-border">
 			<div className="mx-auto flex h-[var(--header-h)] w-full max-w-6xl items-center gap-4 px-4 sm:px-6">
-				<Link href="/" className="flex shrink-0 items-center gap-2 no-underline" aria-label="deemix home">
+				<Link href="/" className="flex shrink-0 items-center gap-2 no-underline" aria-label="wavelet home">
 					<LogoMark animated={isPlaying} className="size-6" />
-					<span className="hidden text-[15px] font-semibold tracking-tight text-foreground sm:inline">deemix</span>
+					<span className="hidden text-[15px] font-semibold tracking-tight text-foreground sm:inline">wavelet</span>
 				</Link>
 
 				<span aria-hidden className="hidden h-5 w-px rotate-12 bg-border md:block" />

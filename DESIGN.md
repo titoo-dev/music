@@ -1,4 +1,4 @@
-# DESIGN.md — deemix-next mobile-first design system
+# DESIGN.md — wavelet mobile-first design system
 
 Single source of truth for the visual language. Brutalist, Chrome-only, mobile-first. All tokens reference `src/app/globals.css`. Anything tagged `🆕 NEW` is a proposed extension to fill an explicit gap.
 

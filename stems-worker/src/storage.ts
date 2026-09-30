@@ -1,6 +1,6 @@
 // S3 helpers for the worker. Mirrors the toS3Key logic from
-// src/lib/deemix/storage/S3StorageProvider so keys round-trip cleanly:
-// what the deemix S3 provider wrote, this worker can read; what this
+// src/lib/wavelet/storage/S3StorageProvider so keys round-trip cleanly:
+// what the wavelet S3 provider wrote, this worker can read; what this
 // worker writes, the s3-stream.ts in Next.js can read back.
 
 import {
@@ -21,25 +21,25 @@ function getClient(): { client: S3Client; bucket: string; pathPrefix: string } {
 	if (_client && _bucket !== null && _pathPrefix !== null) {
 		return { client: _client, bucket: _bucket, pathPrefix: _pathPrefix };
 	}
-	const endpoint = process.env.DEEMIX_S3_ENDPOINT;
-	if (!endpoint) throw new Error("DEEMIX_S3_ENDPOINT is not set");
+	const endpoint = process.env.WAVELET_S3_ENDPOINT;
+	if (!endpoint) throw new Error("WAVELET_S3_ENDPOINT is not set");
 	_client = new S3Client({
 		endpoint,
-		region: process.env.DEEMIX_S3_REGION || "us-east-1",
+		region: process.env.WAVELET_S3_REGION || "us-east-1",
 		credentials: {
-			accessKeyId: process.env.DEEMIX_S3_ACCESS_KEY || "",
-			secretAccessKey: process.env.DEEMIX_S3_SECRET_KEY || "",
+			accessKeyId: process.env.WAVELET_S3_ACCESS_KEY || "",
+			secretAccessKey: process.env.WAVELET_S3_SECRET_KEY || "",
 		},
 		forcePathStyle: true,
 	});
-	_bucket = process.env.DEEMIX_S3_BUCKET || "deemix-music";
-	_pathPrefix = process.env.DEEMIX_S3_PATH_PREFIX || "";
+	_bucket = process.env.WAVELET_S3_BUCKET || "wavelet-music";
+	_pathPrefix = process.env.WAVELET_S3_PATH_PREFIX || "";
 	return { client: _client, bucket: _bucket, pathPrefix: _pathPrefix };
 }
 
 function getDownloadLocation(): string {
 	if (_downloadLocation !== null) return _downloadLocation;
-	_downloadLocation = process.env.DEEMIX_DOWNLOAD_LOCATION || "";
+	_downloadLocation = process.env.WAVELET_DOWNLOAD_LOCATION || "";
 	return _downloadLocation;
 }
 

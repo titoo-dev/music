@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  WEB_IMAGE: titoo-dev/deemix-web
+  WEB_IMAGE: titoo-dev/wavelet-web
 
 jobs:
   build-and-push:
@@ -21,7 +21,7 @@ jobs:
       matrix:
         include:
           - name: web
-            image: titoo-dev/deemix-web
+            image: titoo-dev/wavelet-web
             dockerfile: Dockerfile
             context: .
             build_args: |

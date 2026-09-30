@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
-export const alt = "Shared track on deemix";
+export const alt = "Shared track on wavelet";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -206,7 +206,7 @@ export default async function OgImage({
 									textTransform: "uppercase",
 								}}
 							>
-								deemix
+								wavelet
 							</span>
 						</div>
 

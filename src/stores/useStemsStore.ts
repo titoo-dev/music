@@ -80,7 +80,7 @@ export const useStemsStore = create<StemsState>()(
 			},
 		}),
 		{
-			name: "deemix-stems-mixer",
+			name: "wavelet-stems-mixer",
 			partialize: (s) => ({
 				mode: s.mode,
 				volumes: s.volumes,

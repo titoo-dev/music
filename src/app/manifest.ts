@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
 	return {
-		name: "deemix",
-		short_name: "deemix",
+		name: "wavelet",
+		short_name: "wavelet",
 		description: "Music downloader powered by Deezer",
 		start_url: "/",
 		display: "standalone",

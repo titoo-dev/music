@@ -21,7 +21,7 @@ vi.mock("@/lib/auth", () => ({ auth: authMock }));
 const { serverStateMock, s3StreamMock, startProgressiveStreamMock } = vi.hoisted(
 	() => ({
 		serverStateMock: {
-			getDeemixApp: vi.fn(),
+			getWaveletApp: vi.fn(),
 			getUserDz: vi.fn(),
 			setUserDz: vi.fn(),
 			getGuestDz: vi.fn(),
@@ -35,7 +35,7 @@ const { serverStateMock, s3StreamMock, startProgressiveStreamMock } = vi.hoisted
 
 vi.mock("@/lib/server-state", () => serverStateMock);
 vi.mock("@/lib/s3-stream", () => s3StreamMock);
-vi.mock("@/lib/deemix/progressive-stream", () => ({
+vi.mock("@/lib/wavelet/progressive-stream", () => ({
 	startProgressiveStream: startProgressiveStreamMock,
 }));
 
@@ -47,7 +47,7 @@ const s3Row = {
 	id: "x",
 	trackId: "1",
 	bitrate: 320,
-	storagePath: "deemix-music/foo.mp3",
+	storagePath: "wavelet-music/foo.mp3",
 	storageType: "s3",
 } as any;
 
@@ -90,18 +90,18 @@ function makeApp(opts: FakeAppOptions = {}) {
 	return { app, lock, acquireDownloadLock };
 }
 
-/** Configure the auth + Deezer + DeemixApp mocks for a successful guard. */
+/** Configure the auth + Deezer + WaveletApp mocks for a successful guard. */
 function arrangeAuthOk(app: unknown) {
 	setSessionUser("u1");
 	serverStateMock.getUserDz.mockReturnValue({ loggedIn: true });
-	serverStateMock.getDeemixApp.mockResolvedValue(app);
+	serverStateMock.getWaveletApp.mockResolvedValue(app);
 }
 
 describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	beforeEach(() => {
 		resetPrismaMock();
 		clearSession();
-		serverStateMock.getDeemixApp.mockReset();
+		serverStateMock.getWaveletApp.mockReset();
 		serverStateMock.getUserDz.mockReset();
 		serverStateMock.setUserDz.mockReset();
 		serverStateMock.getGuestDz.mockReset();
@@ -156,7 +156,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		);
 		expect(res.status).toBe(302);
 		expect(res.headers.get("Location")).toBe("/api/v1/stream/1");
-		expect(s3StreamMock.headObject).toHaveBeenCalledWith("deemix-music/foo.mp3");
+		expect(s3StreamMock.headObject).toHaveBeenCalledWith("wavelet-music/foo.mp3");
 		expect(acquireDownloadLock).not.toHaveBeenCalled();
 		expect(startProgressiveStreamMock).not.toHaveBeenCalled();
 	});

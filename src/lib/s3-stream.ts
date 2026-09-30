@@ -11,16 +11,16 @@ let _cachedPathPrefix: string | null = null;
 let _cachedDownloadLocation: string | null = null;
 
 function getS3Config() {
-	const endpoint = process.env.DEEMIX_S3_ENDPOINT;
+	const endpoint = process.env.WAVELET_S3_ENDPOINT;
 	if (!endpoint) throw new Error("S3 not configured");
 
 	return {
 		endpoint,
-		region: process.env.DEEMIX_S3_REGION || "us-east-1",
-		bucket: process.env.DEEMIX_S3_BUCKET || "deemix-music",
-		accessKeyId: process.env.DEEMIX_S3_ACCESS_KEY || "",
-		secretAccessKey: process.env.DEEMIX_S3_SECRET_KEY || "",
-		pathPrefix: process.env.DEEMIX_S3_PATH_PREFIX || "",
+		region: process.env.WAVELET_S3_REGION || "us-east-1",
+		bucket: process.env.WAVELET_S3_BUCKET || "wavelet-music",
+		accessKeyId: process.env.WAVELET_S3_ACCESS_KEY || "",
+		secretAccessKey: process.env.WAVELET_S3_SECRET_KEY || "",
+		pathPrefix: process.env.WAVELET_S3_PATH_PREFIX || "",
 	};
 }
 
@@ -52,8 +52,8 @@ async function getDownloadLocation(): Promise<string> {
 	if (_cachedDownloadLocation !== null) return _cachedDownloadLocation;
 
 	try {
-		const { getDeemixApp } = await import("@/lib/server-state");
-		const app = await getDeemixApp();
+		const { getWaveletApp } = await import("@/lib/server-state");
+		const app = await getWaveletApp();
 		_cachedDownloadLocation = app?.settings?.downloadLocation || "";
 	} catch {
 		_cachedDownloadLocation = "";

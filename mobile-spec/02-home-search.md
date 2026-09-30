@@ -29,7 +29,7 @@ Concrete issues with `file:line`:
 - **Auto-focus is implicit** (`search/page.tsx:203` — `<input ref={inputRef}>` with no `autoFocus`). Currently no autofocus; this is correct for mobile (no keyboard pop) but loses desktop affordance. Should be conditional on `(hover: hover)`.
 - **No "Cancel" affordance on mobile** when input is focused. iOS/Android pattern is a Cancel link to dismiss the keyboard and reset state. Without it, users tap outside the input — which closes the dropdown but leaves the keyboard up.
 - **Search results blow past the bottom nav reservation**. Page shell sets `pb-24` (DESIGN §4) but when MiniPlayer + bottom nav are both visible (DESIGN §7) the floating MiniPlayer (`bottom: calc(64px + env(safe-area-inset-bottom) + 8px)`) overlaps the last `Load more` button and the last few result rows.
-- **Hero headline "GET STARTED WITH DEEMIX." for guest** (`HomeContent.tsx:99-101`) uses `text-brutal-xl` which clamps to 32px at 360px. With `<br />` between "GET STARTED" and "WITH DEEMIX." this is two-line and fine, but `max-w-3xl mx-auto py-10` (`HomeContent.tsx:95`) is a desktop-first container — no mobile padding adjust beyond the shell's `px-3`.
+- **Hero headline "GET STARTED WITH WAVELET." for guest** (`HomeContent.tsx:99-101`) uses `text-brutal-xl` which clamps to 32px at 360px. With `<br />` between "GET STARTED" and "WITH WAVELET." this is two-line and fine, but `max-w-3xl mx-auto py-10` (`HomeContent.tsx:95`) is a desktop-first container — no mobile padding adjust beyond the shell's `px-3`.
 
 ## 3. Home page — mobile-first spec
 
@@ -48,7 +48,7 @@ Concrete issues with `file:line`:
 
 ```
 ┌──────────────────────────────────────────┐
-│ ☰  ~/DEEMIX/HOME              ◯  Avatar │ ← top bar 64px, z-30
+│ ☰  ~/WAVELET/HOME              ◯  Avatar │ ← top bar 64px, z-30
 ├──────────────────────────────────────────┤
 │ 14:23 · MON · MAY 10                     │ ← brutal-label eyebrow
 │                                          │
@@ -143,7 +143,7 @@ Concrete issues with `file:line`:
 
 ```
 ┌──────────────────────────────────────────┐
-│ ☰  ~/DEEMIX/SEARCH            ◯  Avatar │ ← top bar 64px, z-30
+│ ☰  ~/WAVELET/SEARCH            ◯  Avatar │ ← top bar 64px, z-30
 ├──────────────────────────────────────────┤  ─┐
 │ ┌──────────────────────────┐ ┌───────┐  │   │ sticky top-[64px]
 │ │ 🔍 ARTIST, TRACK, ALBUM..│ │CANCEL │  │   │ z-29 (under top bar)
@@ -262,7 +262,7 @@ Empty-state wireframe (no term):
 - Mobile-first empty state for `/search` with no term.
 - Props: `recentSearches: string[]`, `onSelectChip: (term: string) => void`, `onPasteUrl?: (url: string) => void`.
 - Sections: "TYPE TO SEARCH" hero + recent-searches chip row + Deezer-link affordance.
-- Persist recent searches via `localStorage` (key: `deemix.search.recent`, max 10 items, dedup).
+- Persist recent searches via `localStorage` (key: `wavelet.search.recent`, max 10 items, dedup).
 
 ### `src/components/search/SectionHeader.tsx`
 - Reusable section header `<div className="flex items-baseline justify-between gap-3 pb-2 mb-4 border-b-[2px] border-foreground">…</div>` already inlined 5+ times in HomeContent and search page. Extract to single component with props `title`, `count?`, `viewAllHref?`, `icon?`.

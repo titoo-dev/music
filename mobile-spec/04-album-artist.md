@@ -111,7 +111,7 @@ NEW section, below tracklist:
 
 ```
 ┌──────────────────────────────────────┐
-│ [≡] DEEMIX            [SEARCH] [👤] │  64px top bar, sticky
+│ [≡] WAVELET            [SEARCH] [👤] │  64px top bar, sticky
 ├──────────────────────────────────────┤
 │                                      │
 │           ┌──────────────┐           │

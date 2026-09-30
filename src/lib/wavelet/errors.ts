@@ -1,13 +1,13 @@
 import Track from "./types/Track";
 
-export class DeemixError extends Error {
+export class WaveletError extends Error {
 	constructor(message?: string) {
 		super(message);
-		this.name = "DeemixError";
+		this.name = "WaveletError";
 	}
 }
 
-export class GenerationError extends DeemixError {
+export class GenerationError extends WaveletError {
 	link: string;
 
 	constructor(link: string, message: string) {
@@ -83,14 +83,14 @@ export class LinkNotRecognized extends GenerationError {
 	}
 }
 
-export class DownloadError extends DeemixError {
+export class DownloadError extends WaveletError {
 	constructor() {
 		super();
 		this.name = "DownloadError";
 	}
 }
 
-export class PluginNotEnabledError extends DeemixError {
+export class PluginNotEnabledError extends WaveletError {
 	constructor(pluginName: string) {
 		const message = `${pluginName} plugin not enabled`;
 		super(message);
@@ -149,21 +149,21 @@ export class PreferredBitrateNotFound extends DownloadError {
 	}
 }
 
-export class DownloadEmpty extends DeemixError {
+export class DownloadEmpty extends WaveletError {
 	constructor() {
 		super();
 		this.name = "DownloadEmpty";
 	}
 }
 
-export class DownloadCanceled extends DeemixError {
+export class DownloadCanceled extends WaveletError {
 	constructor() {
 		super();
 		this.name = "DownloadCanceled";
 	}
 }
 
-export class TrackError extends DeemixError {
+export class TrackError extends WaveletError {
 	constructor(message?: string) {
 		super(message);
 		this.name = "TrackError";

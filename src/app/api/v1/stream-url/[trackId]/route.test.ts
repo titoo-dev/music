@@ -19,7 +19,7 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 		resetPrismaMock();
 		clearSession();
 		getPresignedUrlMock.mockReset();
-		delete process.env.DEEMIX_DISABLE_PRESIGNED_URLS;
+		delete process.env.WAVELET_DISABLE_PRESIGNED_URLS;
 	});
 
 	it("returns 401 when not authenticated", async () => {
@@ -42,7 +42,7 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 
 	it("returns null url when presigned URLs are globally disabled", async () => {
 		setSessionUser("u1");
-		process.env.DEEMIX_DISABLE_PRESIGNED_URLS = "1";
+		process.env.WAVELET_DISABLE_PRESIGNED_URLS = "1";
 
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(200);
@@ -75,7 +75,7 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 			id: "x",
 			trackId: "1",
 			bitrate: 320,
-			storagePath: "deemix-music/foo.mp3",
+			storagePath: "wavelet-music/foo.mp3",
 			storageType: "s3",
 		} as any);
 		getPresignedUrlMock.mockResolvedValue({
@@ -96,7 +96,7 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 			id: "x",
 			trackId: "1",
 			bitrate: 320,
-			storagePath: "deemix-music/foo.mp3",
+			storagePath: "wavelet-music/foo.mp3",
 			storageType: "s3",
 		} as any);
 		const err: any = new Error("Not found");

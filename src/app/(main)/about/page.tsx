@@ -8,7 +8,6 @@ const STACK: { k: string; v: string }[] = [
 	{ k: "Runtime", v: "Next.js 16" },
 	{ k: "Database", v: "Postgres · Prisma 7" },
 	{ k: "UI", v: "React 19 · Tailwind 4" },
-	{ k: "Fork of", v: "bambanah/deemix" },
 ];
 
 function Row({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
@@ -37,7 +36,7 @@ export default function AboutPage() {
 			<div className="mb-10 flex items-center gap-4">
 				<LogoMark animated className="size-12 shrink-0" />
 				<div className="min-w-0 flex-1">
-					<h1 className="text-2xl sm:text-3xl font-semibold tracking-tight m-0">deemix next</h1>
+					<h1 className="text-2xl sm:text-3xl font-semibold tracking-tight m-0">wavelet</h1>
 					<p className="mt-1 text-sm text-muted-foreground">
 						Self-hosted music downloader, web edition.
 					</p>
@@ -49,7 +48,7 @@ export default function AboutPage() {
 				<h2 className="mb-3 text-sm font-medium">Version</h2>
 				<div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
 					{currentVersion && (
-						<Row label="Current build" hint="Currently installed version of deemix-next.">
+						<Row label="Current build" hint="Currently installed version of wavelet.">
 							<span className="text-sm font-mono tabular-nums">{currentVersion}</span>
 						</Row>
 					)}
@@ -82,18 +81,6 @@ export default function AboutPage() {
 							</div>
 						))}
 					</dl>
-					<p className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
-						Original project by{" "}
-						<a
-							href="https://github.com/bambanah/deemix"
-							target="_blank"
-							rel="noreferrer"
-							className="font-medium text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground transition-colors"
-						>
-							bambanah
-						</a>
-						. Thank you.
-					</p>
 				</div>
 			</section>
 		</motion.div>

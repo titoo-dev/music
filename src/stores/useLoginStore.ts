@@ -48,6 +48,6 @@ export const useLoginStore = create<LoginState>()(
 			setSpotifyUser: (spotifyUser) => set({ spotifyUser }),
 			logout: () => set({ user: null, loggedIn: false, arl: "" }),
 		}),
-		{ name: "deemix-login" }
+		{ name: "wavelet-login" }
 	)
 );

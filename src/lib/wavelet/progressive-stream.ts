@@ -35,7 +35,7 @@ const extensions = {
 	[TrackFormats.MP4_RA1]: ".mp4",
 } as const;
 
-const TEMPDIR = tmpdir() + "/deemix-imgs";
+const TEMPDIR = tmpdir() + "/wavelet-imgs";
 mkdirSync(TEMPDIR, { recursive: true });
 
 export interface ProgressiveResult {

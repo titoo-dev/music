@@ -69,12 +69,12 @@ if ($Status) { Compose ps; exit $LASTEXITCODE }
 if ($Logs) { Compose logs -f --tail 100; exit $LASTEXITCODE }
 
 $dotenv = Read-DotEnv ".env"
-$pgUser = Get-Env $dotenv "POSTGRES_USER" "deemix"
-$pgPass = Get-Env $dotenv "POSTGRES_PASSWORD" "deemix"
-$pgDb = Get-Env $dotenv "POSTGRES_DB" "deemix"
+$pgUser = Get-Env $dotenv "POSTGRES_USER" "wavelet"
+$pgPass = Get-Env $dotenv "POSTGRES_PASSWORD" "wavelet"
+$pgDb = Get-Env $dotenv "POSTGRES_DB" "wavelet"
 $minioUser = Get-Env $dotenv "MINIO_ROOT_USER" "minioadmin"
 $minioPass = Get-Env $dotenv "MINIO_ROOT_PASSWORD" "minioadmin"
-$bucket = Get-Env $dotenv "DEEMIX_S3_BUCKET" "deemix-music"
+$bucket = Get-Env $dotenv "WAVELET_S3_BUCKET" "wavelet-music"
 
 # ── 1. Infra ──
 Step "Starting $($infra -join ', ')"
@@ -88,11 +88,11 @@ Invoke-Checked "createbucket"
 # ── 2. Host-side env overrides (compose hostnames → localhost) ──
 $env:DATABASE_URL = "postgresql://${pgUser}:${pgPass}@localhost:15432/${pgDb}"
 $env:REDIS_URL = "redis://localhost:6379"
-$env:DEEMIX_STORAGE_TYPE = "s3"
-$env:DEEMIX_S3_ENDPOINT = "http://localhost:9000"
-$env:DEEMIX_S3_ACCESS_KEY = $minioUser
-$env:DEEMIX_S3_SECRET_KEY = $minioPass
-$env:DEEMIX_S3_BUCKET = $bucket
+$env:WAVELET_STORAGE_TYPE = "s3"
+$env:WAVELET_S3_ENDPOINT = "http://localhost:9000"
+$env:WAVELET_S3_ACCESS_KEY = $minioUser
+$env:WAVELET_S3_SECRET_KEY = $minioPass
+$env:WAVELET_S3_BUCKET = $bucket
 
 # ── 3. Node deps + DB schema ──
 if (-not (Test-Path "node_modules")) {
@@ -121,7 +121,7 @@ Write-Host ""
 Write-Host "  Postgres   localhost:15432  ($pgDb)" -ForegroundColor Green
 Write-Host "  Redis      localhost:6379" -ForegroundColor Green
 Write-Host "  MinIO      http://localhost:9000  (console http://localhost:9001)" -ForegroundColor Green
-if ($Stems) { Write-Host "  Stems      container Deemix-StemsWorker  (logs: .\scripts\stack.ps1 -Logs)" -ForegroundColor Green }
+if ($Stems) { Write-Host "  Stems      container Wavelet-StemsWorker  (logs: .\scripts\stack.ps1 -Logs)" -ForegroundColor Green }
 
 if ($InfraOnly) {
 	Write-Host "`nInfra is up. Stop it with .\scripts\stack.ps1 -Down"

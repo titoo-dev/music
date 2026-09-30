@@ -50,7 +50,7 @@ export default function LoginPage() {
 			>
 				<div className="mb-8 flex flex-col items-center text-center">
 					<LogoMark animated className="size-11" />
-					<h1 className="mt-5 text-2xl font-semibold tracking-tight m-0">Sign in to deemix</h1>
+					<h1 className="mt-5 text-2xl font-semibold tracking-tight m-0">Sign in to wavelet</h1>
 					<p className="mt-2 text-sm text-muted-foreground text-balance">
 						Sync your playlists, download history and preferences — or continue as a guest.
 					</p>
@@ -109,7 +109,7 @@ export default function LoginPage() {
 				</div>
 
 				<p className="mt-6 text-center text-xs leading-relaxed text-muted-foreground text-balance">
-					A self-hosted tool — respect artist rights. deemix is not affiliated with Deezer S.A.
+					A self-hosted tool — respect artist rights. wavelet is not affiliated with Deezer S.A.
 				</p>
 			</motion.div>
 		</div>

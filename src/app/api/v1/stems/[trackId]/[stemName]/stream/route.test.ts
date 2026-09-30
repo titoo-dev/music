@@ -70,7 +70,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 		prismaMock.stemFile.findUnique.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
-			storagePath: "deemix-music/stems/1/vocals.mp3",
+			storagePath: "wavelet-music/stems/1/vocals.mp3",
 			storageType: "s3",
 		} as any);
 		streamObjectMock.mockResolvedValue({
@@ -88,7 +88,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 		expect(res.status).toBe(200);
 		expect(res.headers.get("Content-Type")).toBe("audio/mpeg");
 		expect(res.headers.get("Accept-Ranges")).toBe("bytes");
-		expect(streamObjectMock).toHaveBeenCalledWith("deemix-music/stems/1/vocals.mp3");
+		expect(streamObjectMock).toHaveBeenCalledWith("wavelet-music/stems/1/vocals.mp3");
 	});
 
 	it("forwards the range header and returns 206 with Content-Range", async () => {
@@ -96,7 +96,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 		prismaMock.stemFile.findUnique.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
-			storagePath: "deemix-music/stems/1/vocals.mp3",
+			storagePath: "wavelet-music/stems/1/vocals.mp3",
 			storageType: "s3",
 		} as any);
 		streamObjectMock.mockResolvedValue({
@@ -114,7 +114,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 		expect(res.status).toBe(206);
 		expect(res.headers.get("Content-Range")).toBe("bytes 0-2/100");
 		expect(streamObjectMock).toHaveBeenCalledWith(
-			"deemix-music/stems/1/vocals.mp3",
+			"wavelet-music/stems/1/vocals.mp3",
 			"bytes=0-2",
 		);
 	});
@@ -124,7 +124,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/stream", () => {
 		prismaMock.stemFile.findUnique.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
-			storagePath: "deemix-music/stems/1/vocals.mp3",
+			storagePath: "wavelet-music/stems/1/vocals.mp3",
 			storageType: "s3",
 		} as any);
 		const err: any = new Error("Not found");

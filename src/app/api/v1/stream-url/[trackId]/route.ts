@@ -19,10 +19,10 @@ export async function GET(
 
 		// Some deployments expose an S3 endpoint that the browser can't reach
 		// directly (self-signed cert, HTTP-only, internal-only DNS). Setting
-		// DEEMIX_DISABLE_PRESIGNED_URLS=1 forces every client to stream through
+		// WAVELET_DISABLE_PRESIGNED_URLS=1 forces every client to stream through
 		// the backend proxy at /api/v1/stream/[trackId], which in turn talks
 		// server-to-server to S3 and never exposes the raw endpoint.
-		if (process.env.DEEMIX_DISABLE_PRESIGNED_URLS === "1") {
+		if (process.env.WAVELET_DISABLE_PRESIGNED_URLS === "1") {
 			return ok({ url: null, status: "presigned_disabled" });
 		}
 

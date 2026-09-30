@@ -1,5 +1,5 @@
-const CACHE_NAME = "deemix-v3";
-const AUDIO_DB_NAME = "deemix-audio-cache";
+const CACHE_NAME = "wavelet-v3";
+const AUDIO_DB_NAME = "wavelet-audio-cache";
 const AUDIO_DB_VERSION = 1;
 const AUDIO_STORE = "tracks";
 

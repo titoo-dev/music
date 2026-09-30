@@ -29,18 +29,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 	const shared = await getSharedTrack(shareId);
 
 	if (!shared) {
-		return { title: "Track not found — deemix" };
+		return { title: "Track not found — wavelet" };
 	}
 
 	if (shared.expiresAt && shared.expiresAt < new Date()) {
-		return { title: "This share link has expired — deemix" };
+		return { title: "This share link has expired — wavelet" };
 	}
 
 	const title = `${shared.title} — ${shared.artist}`;
 
 	return {
-		title: `${title} | deemix`,
-		description: `Listen to ${shared.title} by ${shared.artist} on deemix`,
+		title: `${title} | wavelet`,
+		description: `Listen to ${shared.title} by ${shared.artist} on wavelet`,
 		openGraph: {
 			title,
 			description: `Listen to ${shared.title} by ${shared.artist}`,

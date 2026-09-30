@@ -19,7 +19,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 		resetPrismaMock();
 		clearSession();
 		getPresignedUrlMock.mockReset();
-		delete process.env.DEEMIX_DISABLE_PRESIGNED_URLS;
+		delete process.env.WAVELET_DISABLE_PRESIGNED_URLS;
 	});
 
 	it("returns 401 when not authenticated", async () => {
@@ -50,11 +50,11 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 		// not_cached → fall through to original audio) from "stem exists,
 		// just no direct URL" (status=presigned_disabled → use /stream).
 		setSessionUser("u1");
-		process.env.DEEMIX_DISABLE_PRESIGNED_URLS = "1";
+		process.env.WAVELET_DISABLE_PRESIGNED_URLS = "1";
 		prismaMock.stemFile.findUnique.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
-			storagePath: "deemix-music/stems/1/vocals.mp3",
+			storagePath: "wavelet-music/stems/1/vocals.mp3",
 			storageType: "s3",
 		} as any);
 
@@ -73,7 +73,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 		// when the stem doesn't exist, the client must see not_cached so it
 		// falls back to original audio, even with presigned URLs disabled.
 		setSessionUser("u1");
-		process.env.DEEMIX_DISABLE_PRESIGNED_URLS = "1";
+		process.env.WAVELET_DISABLE_PRESIGNED_URLS = "1";
 		prismaMock.stemFile.findUnique.mockResolvedValue(null);
 
 		const res = await GET(
@@ -108,7 +108,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 		prismaMock.stemFile.findUnique.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
-			storagePath: "deemix-music/stems/1/vocals.mp3",
+			storagePath: "wavelet-music/stems/1/vocals.mp3",
 			storageType: "s3",
 		} as any);
 		getPresignedUrlMock.mockResolvedValue({
@@ -131,7 +131,7 @@ describe("GET /api/v1/stems/[trackId]/[stemName]/url", () => {
 		prismaMock.stemFile.findUnique.mockResolvedValue({
 			trackId: "1",
 			stemName: "vocals",
-			storagePath: "deemix-music/stems/1/vocals.mp3",
+			storagePath: "wavelet-music/stems/1/vocals.mp3",
 			storageType: "s3",
 		} as any);
 		const err: any = new Error("Not found");

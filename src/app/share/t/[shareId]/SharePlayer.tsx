@@ -172,7 +172,7 @@ export function SharePlayer({
 				<div className="max-w-5xl mx-auto h-14 px-4 sm:px-6 flex items-center justify-between gap-4">
 					<Link href="/" className="flex items-center gap-2 no-underline text-foreground">
 						<LogoMark className="size-6 shrink-0" />
-						<span className="text-sm font-semibold tracking-tight">deemix</span>
+						<span className="text-sm font-semibold tracking-tight">wavelet</span>
 					</Link>
 					<Link
 						href="/"
@@ -322,14 +322,14 @@ export function SharePlayer({
 								Download your library
 							</h2>
 							<p className="mt-2 text-sm text-muted-foreground max-w-[52ch]">
-								deemix is a self-hosted, open-source web app for downloading high-quality music from Deezer. No ads — your files, your disk.
+								wavelet is a self-hosted, open-source web app for downloading high-quality music from Deezer. No ads — your files, your disk.
 							</p>
 						</div>
 						<Link
 							href="/"
 							className="inline-flex items-center justify-center gap-2 h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-medium transition-colors no-underline whitespace-nowrap [@media(hover:hover)]:hover:bg-primary/85"
 						>
-							Get deemix
+							Get wavelet
 							<ArrowRight className="size-4" aria-hidden />
 						</Link>
 					</div>

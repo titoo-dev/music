@@ -50,7 +50,7 @@ export const usePreviewStore = create<PreviewState>()(
 			setMainWasPlaying: (_mainWasPlaying) => set({ _mainWasPlaying }),
 		}),
 		{
-			name: "deemix-preview",
+			name: "wavelet-preview",
 			partialize: (state) => ({ volume: state.volume }),
 		}
 	)

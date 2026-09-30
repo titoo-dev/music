@@ -18,8 +18,8 @@ function checkPath(path: string) {
 export function getConfigFolder() {
 	if (userdata !== "") return userdata;
 
-	if (process.env.DEEMIX_DATA_DIR)
-		return process.env.DEEMIX_DATA_DIR.replace(/\/*$/, "") + "/";
+	if (process.env.WAVELET_DATA_DIR)
+		return process.env.WAVELET_DATA_DIR.replace(/\/*$/, "") + "/";
 
 	if (process.env.XDG_CONFIG_HOME && userdata === "") {
 		userdata = `${process.env.XDG_CONFIG_HOME}${sep}`;
@@ -39,7 +39,7 @@ export function getConfigFolder() {
 	}
 
 	if (userdata === "") userdata = `${process.cwd()}${sep}config${sep}`;
-	else userdata += `deemix${sep}`;
+	else userdata += `wavelet${sep}`;
 
 	return userdata;
 }
@@ -47,8 +47,8 @@ export function getConfigFolder() {
 export function getMusicFolder() {
 	if (musicdata !== "") return musicdata;
 
-	if (process.env.DEEMIX_MUSIC_DIR)
-		return process.env.DEEMIX_MUSIC_DIR.replace(/\/*$/, "") + "/";
+	if (process.env.WAVELET_MUSIC_DIR)
+		return process.env.WAVELET_MUSIC_DIR.replace(/\/*$/, "") + "/";
 
 	if (process.env.XDG_MUSIC_DIR && musicdata === "") {
 		musicdata = `${process.env.XDG_MUSIC_DIR}${sep}`;
@@ -95,7 +95,7 @@ export function getMusicFolder() {
 	}
 
 	if (musicdata === "") musicdata = `${process.cwd()}${sep}music${sep}`;
-	else musicdata += `deemix Music${sep}`;
+	else musicdata += `Wavelet Music${sep}`;
 
 	return musicdata;
 }

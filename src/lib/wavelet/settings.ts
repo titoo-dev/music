@@ -71,7 +71,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	s3: {
 		endpoint: "http://localhost:9000",
 		region: "us-east-1",
-		bucket: "deemix-music",
+		bucket: "wavelet-music",
 		accessKeyId: "",
 		secretAccessKey: "",
 		pathPrefix: "",
@@ -133,25 +133,25 @@ export async function loadSettings(configStore: ConfigStore) {
 	}
 
 	// Environment variable overrides for S3 storage
-	if (process.env.DEEMIX_STORAGE_TYPE) {
-		settings.storageType = process.env.DEEMIX_STORAGE_TYPE as "local" | "s3";
+	if (process.env.WAVELET_STORAGE_TYPE) {
+		settings.storageType = process.env.WAVELET_STORAGE_TYPE as "local" | "s3";
 	}
-	if (process.env.DEEMIX_S3_ENDPOINT) {
+	if (process.env.WAVELET_S3_ENDPOINT) {
 		settings.s3 = {
 			...settings.s3,
-			endpoint: process.env.DEEMIX_S3_ENDPOINT,
+			endpoint: process.env.WAVELET_S3_ENDPOINT,
 			region:
-				process.env.DEEMIX_S3_REGION || settings.s3?.region || "us-east-1",
+				process.env.WAVELET_S3_REGION || settings.s3?.region || "us-east-1",
 			bucket:
-				process.env.DEEMIX_S3_BUCKET || settings.s3?.bucket || "deemix-music",
+				process.env.WAVELET_S3_BUCKET || settings.s3?.bucket || "wavelet-music",
 			accessKeyId:
-				process.env.DEEMIX_S3_ACCESS_KEY || settings.s3?.accessKeyId || "",
+				process.env.WAVELET_S3_ACCESS_KEY || settings.s3?.accessKeyId || "",
 			secretAccessKey:
-				process.env.DEEMIX_S3_SECRET_KEY ||
+				process.env.WAVELET_S3_SECRET_KEY ||
 				settings.s3?.secretAccessKey ||
 				"",
 			pathPrefix:
-				process.env.DEEMIX_S3_PATH_PREFIX || settings.s3?.pathPrefix || "",
+				process.env.WAVELET_S3_PATH_PREFIX || settings.s3?.pathPrefix || "",
 		};
 	}
 

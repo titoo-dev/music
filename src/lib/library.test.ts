@@ -3,7 +3,7 @@ import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/server-state", () => ({
-	getDeemixApp: vi.fn(async () => null),
+	getWaveletApp: vi.fn(async () => null),
 }));
 
 import {
@@ -27,14 +27,14 @@ import {
 	getFollowedArtistIds,
 	listFollowedArtists,
 } from "./library";
-import { getDeemixApp } from "@/lib/server-state";
+import { getWaveletApp } from "@/lib/server-state";
 
-const getDeemixAppMock = vi.mocked(getDeemixApp);
+const getWaveletAppMock = vi.mocked(getWaveletApp);
 
 beforeEach(() => {
 	resetPrismaMock();
-	getDeemixAppMock.mockReset();
-	getDeemixAppMock.mockResolvedValue(null as any);
+	getWaveletAppMock.mockReset();
+	getWaveletAppMock.mockResolvedValue(null as any);
 });
 
 describe("saveTrack", () => {
@@ -415,7 +415,7 @@ describe("forceEvictFile", () => {
 
 	it("calls storageProvider.deleteFile for each row when one exists", async () => {
 		const deleteFile = vi.fn().mockResolvedValue(undefined);
-		getDeemixAppMock.mockResolvedValue({
+		getWaveletAppMock.mockResolvedValue({
 			storageProvider: { deleteFile },
 		} as any);
 		prismaMock.storedTrack.findMany.mockResolvedValue([

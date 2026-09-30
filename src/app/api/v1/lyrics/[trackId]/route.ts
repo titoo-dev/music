@@ -140,7 +140,7 @@ async function fetchLrcLib(
 	if (duration) params.set("duration", String(duration));
 
 	const res = await fetch(`https://lrclib.net/api/get?${params}`, {
-		headers: { "User-Agent": "deemix-next/0.1.0" },
+		headers: { "User-Agent": "wavelet/0.1.0" },
 		signal: AbortSignal.timeout(5000),
 	});
 

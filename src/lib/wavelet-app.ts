@@ -3,10 +3,10 @@
 // engine. The legacy queue (addToQueue / startQueue) was removed in favor
 // of the progressive streaming + library-save model.
 
-import type { Listener } from "@/lib/deemix/types/listener";
-import type { Settings } from "@/lib/deemix/types/Settings";
-import type { ConfigStore } from "@/lib/deemix/config-store/ConfigStore";
-import type { StorageProvider } from "@/lib/deemix/storage/StorageProvider";
+import type { Listener } from "@/lib/wavelet/types/listener";
+import type { Settings } from "@/lib/wavelet/types/Settings";
+import type { ConfigStore } from "@/lib/wavelet/config-store/ConfigStore";
+import type { StorageProvider } from "@/lib/wavelet/storage/StorageProvider";
 
 let loadSettings: any;
 let saveSettingsFn: any;
@@ -17,18 +17,18 @@ let _initialized = false;
 async function ensureImports() {
 	if (_initialized) return;
 	try {
-		const deemix = await import("@/lib/deemix");
-		loadSettings = deemix.loadSettings;
-		saveSettingsFn = deemix.saveSettings;
-		DEFAULT_SETTINGS = deemix.DEFAULT_SETTINGS;
-		createStorageProvider = deemix.createStorageProvider;
+		const wavelet = await import("@/lib/wavelet");
+		loadSettings = wavelet.loadSettings;
+		saveSettingsFn = wavelet.saveSettings;
+		DEFAULT_SETTINGS = wavelet.DEFAULT_SETTINGS;
+		createStorageProvider = wavelet.createStorageProvider;
 		_initialized = true;
 	} catch (e) {
-		console.error("Failed to import deemix modules:", e);
+		console.error("Failed to import wavelet modules:", e);
 	}
 }
 
-export class DeemixApp {
+export class WaveletApp {
 	deezerAvailable?: "yes" | "no" | "no-network";
 	settings: Settings;
 	configStore: ConfigStore;

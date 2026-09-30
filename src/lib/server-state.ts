@@ -1,7 +1,7 @@
-// Server-side singleton state for the DeemixApp
+// Server-side singleton state for the WaveletApp
 // This module is only imported in API routes (server-side)
 
-import type { Listener } from "@/lib/deemix/types/listener";
+import type { Listener } from "@/lib/wavelet/types/listener";
 
 // ── Per-user Deezer session with TTL eviction ──
 
@@ -12,8 +12,8 @@ interface DzSession {
 
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
-const globalForDeemix = globalThis as unknown as {
-	deemixApp: any;
+const globalForWavelet = globalThis as unknown as {
+	waveletApp: any;
 	sessionDZ: Map<string, DzSession>;
 	guestDZ: any;
 	initialized: boolean;
@@ -21,10 +21,10 @@ const globalForDeemix = globalThis as unknown as {
 
 /** Get a per-user Deezer session map (keyed by better-auth user ID) */
 export function getSessionDZ(): Map<string, DzSession> {
-	if (!globalForDeemix.sessionDZ) {
-		globalForDeemix.sessionDZ = new Map();
+	if (!globalForWavelet.sessionDZ) {
+		globalForWavelet.sessionDZ = new Map();
 	}
-	return globalForDeemix.sessionDZ;
+	return globalForWavelet.sessionDZ;
 }
 
 /** Retrieve the Deezer instance for a specific user, refreshing TTL */
@@ -79,9 +79,9 @@ export async function getOrLoginUserDz(userId: string): Promise<any | null> {
 
 /** Get or create a shared guest Deezer session (for browsing without auth) */
 export async function getGuestDz(): Promise<any | null> {
-	if (globalForDeemix.guestDZ?.loggedIn) return globalForDeemix.guestDZ;
+	if (globalForWavelet.guestDZ?.loggedIn) return globalForWavelet.guestDZ;
 
-	const serviceArl = process.env.DEEMIX_SERVICE_ARL;
+	const serviceArl = process.env.WAVELET_SERVICE_ARL;
 	if (!serviceArl) return null;
 
 	try {
@@ -89,7 +89,7 @@ export async function getGuestDz(): Promise<any | null> {
 		const dz = new Deezer();
 		const loggedIn = await dz.loginViaArl(serviceArl);
 		if (loggedIn) {
-			globalForDeemix.guestDZ = dz;
+			globalForWavelet.guestDZ = dz;
 			return dz;
 		}
 	} catch {
@@ -108,37 +108,37 @@ function evictStaleSessions() {
 	}
 }
 
-// ── DeemixApp singleton ──
+// ── WaveletApp singleton ──
 
-let _deemixApp: any = null;
+let _waveletApp: any = null;
 let _initPromise: Promise<any> | null = null;
 
-export async function getDeemixApp() {
-	if (_deemixApp) return _deemixApp;
+export async function getWaveletApp() {
+	if (_waveletApp) return _waveletApp;
 	if (!_initPromise) {
-		_initPromise = initializeDeemixApp().then((app) => {
-			_deemixApp = app;
+		_initPromise = initializeWaveletApp().then((app) => {
+			_waveletApp = app;
 			return app;
 		});
 	}
 	return _initPromise;
 }
 
-async function initializeDeemixApp() {
+async function initializeWaveletApp() {
 	// Dynamic import to avoid issues during build
 	try {
 		const { createConfigStore } = await import(
-			"@/lib/deemix/config-store/index"
+			"@/lib/wavelet/config-store/index"
 		);
 		const configStore = await createConfigStore();
 
-		const { DeemixApp } = await import("@/lib/deemix-app");
-		const app = new DeemixApp(createListener(), configStore);
+		const { WaveletApp } = await import("@/lib/wavelet-app");
+		const app = new WaveletApp(createListener(), configStore);
 		await app.init(); // Must await before returning
-		globalForDeemix.deemixApp = app;
+		globalForWavelet.waveletApp = app;
 		return app;
 	} catch (e) {
-		console.error("Failed to initialize DeemixApp:", e);
+		console.error("Failed to initialize WaveletApp:", e);
 		_initPromise = null; // Allow retry on failure
 		return null;
 	}
@@ -147,7 +147,7 @@ async function initializeDeemixApp() {
 function createListener(): Listener {
 	// No-op listener: the WS broadcast server is gone. Progressive streaming
 	// engine + library helpers don't need to broadcast anything; the legacy
-	// queue path (still alive in deemix-app.ts during the transition) just
+	// queue path (still alive in wavelet-app.ts during the transition) just
 	// drops its events on the floor here.
 	return {
 		send() {},

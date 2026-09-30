@@ -6,7 +6,7 @@
       "title": "Fix _recordDownloadHistory to save storagePath",
       "description": "The storagePath field in DownloadHistory is never populated. Use downloadObject.files[].path to save the actual S3-compatible path for each track after download completes.",
       "status": "done",
-      "files": ["src/lib/deemix-app.ts"]
+      "files": ["src/lib/wavelet-app.ts"]
     },
     {
       "id": 2,

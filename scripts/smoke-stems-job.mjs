@@ -14,7 +14,7 @@ const connection = new IORedis(url, { maxRetriesPerRequest: null });
 // lookup (otherwise it fails earlier on getOrFailSeparation).
 import pg from "pg";
 const dbUrl =
-	process.env.DATABASE_URL ?? "postgresql://deemix:deemix@localhost:15432/deemix";
+	process.env.DATABASE_URL ?? "postgresql://wavelet:wavelet@localhost:15432/wavelet";
 const pool = new pg.Pool({ connectionString: dbUrl });
 
 const trackId = "SMOKE_TEST_TRACK_" + Date.now();

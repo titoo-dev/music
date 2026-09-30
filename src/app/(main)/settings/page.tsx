@@ -219,7 +219,7 @@ export default function SettingsPage() {
 
 			{/* Build footer */}
 			<p className="mt-12 mb-6 text-xs text-muted-foreground">
-				deemix-next <span className="font-mono tabular-nums">v0.1.0</span>
+				wavelet <span className="font-mono tabular-nums">v0.1.0</span>
 			</p>
 		</motion.div>
 	);
