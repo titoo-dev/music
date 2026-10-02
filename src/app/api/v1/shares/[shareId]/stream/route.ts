@@ -1,14 +1,18 @@
 import { NextRequest, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { fail } from "../../../_lib/helpers";
-import { streamObject } from "@/lib/s3-stream";
+import { streamObject } from "@/lib/blob-stream";
+import { BLOB_STORAGE_TYPE, isStorageNotFound } from "@/lib/wavelet/storage/blob";
 import { resolveShareForPlayback } from "@/lib/library";
 import { startProgressiveStream } from "@/lib/wavelet/progressive-stream";
 import { getWaveletApp, getOrLoginUserDz } from "@/lib/server-state";
 
+// The progressive fallback persists the file in after(); see stream-progressive.
+export const maxDuration = 300;
+
 // GET /api/v1/shares/[shareId]/stream
 // Public, no auth. Resolves the share, then either:
-//   1. Streams the cached S3 file (fast path), OR
+//   1. Streams the cached Blob file (fast path), OR
 //   2. Re-streams via the progressive engine using the share creator's
 //      stored Deezer credentials (fallback when the file was evicted)
 export async function GET(
@@ -31,15 +35,15 @@ export async function GET(
 				.catch(() => {});
 		});
 
-		// Fast path: file already cached in S3
-		if (share.storedTrack && share.storedTrack.storageType === "s3") {
+		// Fast path: file already cached in Blob
+		if (share.storedTrack && share.storedTrack.storageType === BLOB_STORAGE_TYPE) {
 			try {
-				return await streamFromS3(request, share.storedTrack.storagePath);
-			} catch (e: any) {
+				return await streamFromBlob(request, share.storedTrack.storagePath);
+			} catch (e) {
 				// Fall through to progressive on 404 (file evicted between
-				// the DB lookup and the actual S3 fetch)
-				if (e?.name !== "NotFound" && e?.$metadata?.httpStatusCode !== 404) {
-					console.error("[shares/stream] S3 error, falling back:", e);
+				// the DB lookup and the actual Blob fetch)
+				if (!isStorageNotFound(e)) {
+					console.error("[shares/stream] Blob error, falling back:", e);
 				}
 				// Detach the stale storedTrackId — next visit goes straight to progressive
 				await prisma.sharedTrack
@@ -55,22 +59,8 @@ export async function GET(
 	}
 }
 
-async function streamFromS3(request: NextRequest, storagePath: string) {
-	const rangeHeader = request.headers.get("range");
-
-	if (!rangeHeader) {
-		const { body, contentLength, contentType } = await streamObject(storagePath);
-		return new Response(body, {
-			status: 200,
-			headers: {
-				"Content-Type": contentType,
-				"Content-Length": String(contentLength),
-				"Accept-Ranges": "bytes",
-				"Cache-Control": "public, max-age=3600",
-			},
-		});
-	}
-
+async function streamFromBlob(request: NextRequest, storagePath: string) {
+	const rangeHeader = request.headers.get("range") ?? undefined;
 	const { body, contentLength, contentRange, contentType, statusCode } =
 		await streamObject(storagePath, rangeHeader);
 
@@ -103,7 +93,7 @@ async function streamProgressive(share: { trackId: string; userId: string }) {
 	const settings = app.settings;
 	const preferredBitrate = settings.maxBitrate;
 
-	const { body, contentType, contentLength } = await startProgressiveStream({
+	const { body, contentType, contentLength, persisted } = await startProgressiveStream({
 		dz,
 		trackId: share.trackId,
 		bitrate: Number(preferredBitrate),
@@ -111,6 +101,7 @@ async function streamProgressive(share: { trackId: string; userId: string }) {
 		storageProvider: app.storageProvider,
 		userId: share.userId,
 	});
+	after(() => persisted);
 
 	const headers: Record<string, string> = {
 		"Content-Type": contentType,

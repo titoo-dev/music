@@ -3,7 +3,7 @@
 // (b) a persistence pipeline (write → tag → finalize → DB upsert).
 // Goal: Spotify-like "play-while-downloading" — the user starts hearing audio
 // as soon as the first decrypted bytes arrive, while the file is persisted in
-// parallel so subsequent plays come from S3/local storage.
+// parallel so subsequent plays come from Vercel Blob.
 
 import { PassThrough, Readable } from "stream";
 import { TrackFormats, utils, type Deezer } from "@/lib/deezer";
@@ -19,6 +19,7 @@ import Track, { formatsName } from "./types/Track";
 import type { Settings } from "./types/Settings";
 import type { StorageProvider } from "./storage/StorageProvider";
 import { gwTrackCache } from "./cache/deezer-track-cache";
+import { BLOB_STORAGE_TYPE } from "./storage/blob";
 import { mkdirSync } from "fs";
 import { tmpdir } from "os";
 
@@ -43,6 +44,12 @@ export interface ProgressiveResult {
 	contentType: string;
 	/** 0 when unknown — Chrome streams fine without Content-Length. */
 	contentLength: number;
+	/**
+	 * Settles once the persist pipeline (tag → Blob upload → DB row) is done.
+	 * Never rejects. Callers must hand it to `after()` — on Vercel the
+	 * function is frozen as soon as the response ends otherwise.
+	 */
+	persisted: Promise<void>;
 }
 
 export interface ProgressiveOptions {
@@ -54,7 +61,7 @@ export interface ProgressiveOptions {
 	userId: string;
 	lock?: { release: () => void };
 	/**
-	 * Persist the decrypted bytes to S3 / DB as they flow.
+	 * Persist the decrypted bytes to Blob / DB as they flow.
 	 * Set false for hover-prefetch streams that should not pollute storage —
 	 * the bytes are streamed to the client only and discarded server-side.
 	 * Default true.
@@ -188,7 +195,7 @@ export async function startProgressiveStream(
 	artworkPromise.catch(() => {});
 
 	// Step 7 — Drive the source. In persist mode we tee into responseBranch
-	// (HTTP) and persistBranch (S3 / FS write); in preview mode we only feed
+	// (HTTP) and persistBranch (/tmp → Blob upload); in preview mode we only feed
 	// responseBranch and discard the rest, so the client gets bytes immediately
 	// and nothing pollutes storage.
 	const responseBranch = new PassThrough();
@@ -268,13 +275,14 @@ export async function startProgressiveStream(
 		}
 	})();
 
-	// Step 8 — Persistence pipeline (fire-and-forget; runs to completion even if
-	// the client disconnects). Waits for persistSetupPromise to know writepath,
+	// Step 8 — Persistence pipeline (runs to completion even if the client
+	// disconnects, as long as the caller keeps `persisted` alive via after()). Waits for persistSetupPromise to know writepath,
 	// then tags the file, finalizes storage, and creates the DB rows so the
 	// next playback uses /api/v1/stream/[trackId] directly.
 	// Skipped entirely when persist=false (preview / hover-prefetch mode).
+	let persisted: Promise<void> = Promise.resolve();
 	if (persist && persistBranch && persistSetupPromise) {
-		void (async () => {
+		persisted = (async () => {
 			let writepath: string | null = null;
 			let partPath: string | null = null;
 			let extension: string | null = null;
@@ -293,32 +301,31 @@ export async function startProgressiveStream(
 					persistBranch.on("error", reject);
 				});
 
-				// Atomic rename: .part → final (S3: just remaps temp→final mapping)
+				// Atomic rename: .part → final (Blob: just remaps the temp file mapping)
 				await storageProvider.rename(partPath, writepath);
 
 				// Make sure the cover art finished downloading before tagging
 				await artworkPromise;
 
-				// Tag in place — for S3, getLocalPath returns the temp file
+				// Tag in place — getLocalPath returns the /tmp file
 				const localPath = storageProvider.getLocalPath(writepath);
 				await tagTrack(extension, localPath, track, settings.tags);
 
-				// Upload to S3 (no-op for LocalStorageProvider)
+				// Upload the tagged temp file to Blob
 				await storageProvider.finalizeStream(writepath);
 
 				// Record the global StoredTrack so future plays hit the cached file.
 				// Per-user state (SavedTrack / RecentPlay) is set independently by the
 				// user's actions (save) or playback rules (30s threshold).
 				const { prisma } = await import("@/lib/prisma");
-				const storageType = settings.storageType || "local";
 				await prisma.storedTrack.upsert({
 					where: { trackId_bitrate: { trackId, bitrate: resolvedBitrate } },
-					update: { storagePath: writepath, storageType },
+					update: { storagePath: writepath, storageType: BLOB_STORAGE_TYPE },
 					create: {
 						trackId,
 						bitrate: resolvedBitrate,
 						storagePath: writepath,
-						storageType,
+						storageType: BLOB_STORAGE_TYPE,
 					},
 				});
 			} catch (e) {
@@ -405,6 +412,7 @@ export async function startProgressiveStream(
 		body,
 		contentType,
 		contentLength,
+		persisted,
 	};
 }
 

@@ -23,8 +23,6 @@ package-lock.json
 public/*.svg
 public/*.png
 
-# Docker / deployment
-.dockerignore
 
 # IDE / OS
 .DS_Store
@@ -80,10 +78,6 @@ src/lib/wavelet/download-objects/generateTrackItem.ts
 src/lib/wavelet/download-objects/generateAlbumItem.ts
 src/lib/wavelet/download-objects/generatePlaylistItem.ts
 src/lib/wavelet/download-objects/generateArtistTopItem.ts
-
-# Wavelet storage implementations (keep interface + factory)
-src/lib/wavelet/storage/LocalStorageProvider.ts
-src/lib/wavelet/storage/S3StorageProvider.ts
 
 # Wavelet config-store implementation (keep interface + factory)
 src/lib/wavelet/config-store/PostgresConfigStore.ts

@@ -10,7 +10,6 @@ import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { useDownloadStore } from "@/stores/useDownloadStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { CoverImage } from "@/components/ui/cover-image";
-import { KaraokeToggle } from "./KaraokeToggle";
 import {
 	DropdownMenu,
 	DropdownMenuTrigger,
@@ -295,8 +294,6 @@ export function Player() {
 									</span>
 								)}
 							</Tip>
-
-							<KaraokeToggle />
 
 							<Tip
 								label={lyricsVisible ? "Hide lyrics" : "Show lyrics"}

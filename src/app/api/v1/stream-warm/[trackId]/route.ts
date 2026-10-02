@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireDeezerAndApp, handleError } from "../../_lib/helpers";
 import { getPreferredBitrate } from "@/lib/wavelet/utils/getPreferredBitrate";
@@ -15,7 +15,7 @@ const { mapGwTrackToDeezer } = utils;
 // (gw.get_track_with_fallback + media.deezer.com/v1/get_url).
 //
 // Crucially this does NOT open the encrypted audio stream and does NOT
-// persist to S3 — it only fills the in-memory metadata caches. So hovering
+// persist to Blob — it only fills the in-memory metadata caches. So hovering
 // over many tracks costs almost nothing.
 export async function GET(
 	request: NextRequest,
@@ -41,8 +41,9 @@ export async function GET(
 		}
 
 		// Don't await any heavy / failure-prone work in the response path —
-		// fire-and-forget so a slow Deezer doesn't slow the hover handler.
-		void warmInBackground(dz, trackId, app.settings.maxBitrate);
+		// run it in after() so a slow Deezer doesn't slow the hover handler
+		// and the function isn't frozen before the caches are filled.
+		after(() => warmInBackground(dz, trackId, app.settings.maxBitrate));
 
 		return new NextResponse(null, { status: 204 });
 	} catch (e) {

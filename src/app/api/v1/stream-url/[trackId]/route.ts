@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, ok, handleError } from "../../_lib/helpers";
-import { getPresignedUrl } from "@/lib/s3-stream";
+import { getPresignedUrl } from "@/lib/blob-stream";
+import { BLOB_STORAGE_TYPE, isStorageNotFound } from "@/lib/wavelet/storage/blob";
 
-// GET /api/v1/stream-url/[trackId] — return a presigned S3 URL for direct
+// GET /api/v1/stream-url/[trackId] — return a presigned Blob URL for direct
 // browser playback. Returns { url: null } when the track isn't cached so
 // the client can fall through to /api/v1/stream-progressive without a 404
 // in the Network tab.
@@ -17,11 +18,9 @@ export async function GET(
 
 		const { trackId } = await params;
 
-		// Some deployments expose an S3 endpoint that the browser can't reach
-		// directly (self-signed cert, HTTP-only, internal-only DNS). Setting
-		// WAVELET_DISABLE_PRESIGNED_URLS=1 forces every client to stream through
-		// the backend proxy at /api/v1/stream/[trackId], which in turn talks
-		// server-to-server to S3 and never exposes the raw endpoint.
+		// Escape hatch: WAVELET_DISABLE_PRESIGNED_URLS=1 forces every client to
+		// stream through the same-origin proxy at /api/v1/stream/[trackId]
+		// (e.g. if the Blob CDN ever rejects the player's CORS requests).
 		if (process.env.WAVELET_DISABLE_PRESIGNED_URLS === "1") {
 			return ok({ url: null, status: "presigned_disabled" });
 		}
@@ -35,15 +34,14 @@ export async function GET(
 			return ok({ url: null, status: "not_cached" });
 		}
 
-		if (stored.storageType !== "s3") {
+		if (stored.storageType !== BLOB_STORAGE_TYPE) {
 			return ok({ url: null, status: "unsupported_storage" });
 		}
 
 		const { url, contentType } = await getPresignedUrl(stored.storagePath, 900);
 		return ok({ url, contentType });
 	} catch (e: unknown) {
-		const err = e as { name?: string; $metadata?: { httpStatusCode?: number } };
-		if (err?.name === "NotFound" || err?.$metadata?.httpStatusCode === 404) {
+		if (isStorageNotFound(e)) {
 			return ok({ url: null, status: "file_missing" });
 		}
 		return handleError(e);

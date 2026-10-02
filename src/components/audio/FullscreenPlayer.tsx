@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AudioVisualizer } from "./AudioVisualizer";
 import { LyricsDisplay } from "./LyricsDisplay";
-import { KaraokeToggle } from "./KaraokeToggle";
 import { WaveSeek } from "./WaveSeek";
 import { ImmersiveBackdrop } from "./ImmersiveBackdrop";
 import { motion, AnimatePresence, useDragControls, useTransform, type MotionValue } from "motion/react";
@@ -531,7 +530,6 @@ export function FullscreenPlayer() {
 							<SlideSwap id={lyricsVisible ? "lyrics" : "playing"}>{lyricsVisible ? "Lyrics" : "Now Playing"}</SlideSwap>
 						</span>
 						<div className="flex items-center gap-0.5">
-							<KaraokeToggle className="h-11 w-11 px-0" iconSize={18} />
 							{hasQueue && (
 								<button
 									type="button"

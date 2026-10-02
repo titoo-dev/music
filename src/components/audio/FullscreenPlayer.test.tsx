@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("./KaraokeToggle", () => ({ KaraokeToggle: () => null }));
 // Canvas isn't implemented in jsdom; the visualizer is pure decoration.
 vi.mock("./AudioVisualizer", () => ({ AudioVisualizer: () => <div data-testid="visualizer" /> }));
 // Embla needs real layout — a plain list keeps the covers renderable.

@@ -1,6 +1,6 @@
 # Project: wavelet
 
-Music download/streaming app built with Next.js 16, React 19, Prisma 7, Express, Zustand, Tailwind 4.
+Music download/streaming app built with Next.js 16, React 19, Prisma 7, Zustand, Tailwind 4. Hosted on Vercel — everything runs inside Next.js, no external Node service (setup: `docs/vercel.md`).
 
 ## Next.js 16 — Breaking Changes
 
@@ -9,9 +9,9 @@ This project uses Next.js 16 which has breaking changes from earlier versions. *
 ## Stack
 
 - **Frontend**: Next.js 16 (app router), React 19, Zustand stores, Tailwind CSS 4, shadcn/ui, Motion
-- **Backend**: Next.js API routes (`src/app/api/v1/`) + BullMQ stems-worker (`stems-worker/`)
-- **Database**: PostgreSQL via Prisma 7 (schema at `prisma/schema.prisma`)
-- **Storage**: S3 (AWS SDK v3) or local filesystem — see `src/lib/wavelet/storage/`
+- **Backend**: Next.js API routes (`src/app/api/v1/`) on Vercel Functions (Fluid compute). Background work after a response goes through `after()` — a bare fire-and-forget promise is frozen when the response ends.
+- **Database**: PostgreSQL (Neon via Vercel Marketplace) through Prisma 7 + `pg` pool attached with `attachDatabasePool` (schema at `prisma/schema.prisma`, applied with `npm run db:push`)
+- **Storage**: private Vercel Blob store — writes via `BlobStorageProvider` (`src/lib/wavelet/storage/`), reads/presigned URLs via `src/lib/blob-stream.ts`. `/tmp` is the only writable path.
 - **Auth**: better-auth (`src/lib/auth.ts`, `src/lib/auth-client.ts`)
 
 ## Project Map
@@ -39,18 +39,17 @@ src/
 │   ├── wavelet/              # Core download engine (decryption, tagger, downloader, settings)
 │   │   ├── download-objects/ # Single/Collection download items + generators
 │   │   ├── plugins/         # Spotify integration
-│   │   ├── storage/         # S3 / Local storage providers
+│   │   ├── storage/         # Vercel Blob provider + pure path/error helpers (blob.ts)
 │   │   ├── types/           # Track, Album, Artist, Playlist, Settings
 │   │   └── utils/           # Crypto, bitrate, path templates, image download
 │   ├── deezer/              # Deezer API client (api, gw, schemas, store)
 │   ├── auth.ts              # Server-side auth config
 │   ├── auth-client.ts       # Client-side auth
 │   ├── prisma.ts            # Prisma client singleton
-│   ├── s3-stream.ts         # S3 streaming helper
+│   ├── blob-stream.ts       # Blob head / proxied stream / presigned URLs
 │   └── server-state.ts      # Shared server state
 ├── stores/                  # Zustand: useAppStore, usePlayerStore, useQueueStore, etc.
 └── utils/                   # api helpers, volume adjustment, misc helpers
-stems-worker/                # BullMQ consumer for Demucs stem separation
 scripts/                     # DB check, icon generation, streaming tasks
 prisma/schema.prisma         # Database schema
 ```
@@ -93,6 +92,7 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Player seek ring | `src/components/audio/SeekRing.tsx`, `src/lib/perimeter.ts` | `SeekRing.test.tsx`, `perimeter.test.ts` |
 | Fullscreen wave seek | `src/components/audio/WaveSeek.tsx`, `src/lib/wave.ts`, `src/lib/spectrum.ts` | `WaveSeek.test.tsx`, `wave.test.ts`, `spectrum.test.ts` (+ `FullscreenPlayer.test.tsx`) |
 | Stream failure diagnosis | `src/lib/stream-failure.ts` (used by `AudioEngine.tsx` give-up path) | `stream-failure.test.ts` |
+| Blob storage | `src/lib/blob-stream.ts`, `src/lib/wavelet/storage/{blob,BlobStorageProvider}.ts` | `blob-stream.test.ts`, `blob.test.ts`, `BlobStorageProvider.test.ts` |
 
 ### Fix-bug-once strategy (read this before fixing anything)
 
@@ -122,7 +122,7 @@ Examples already in the suite (search for `TODO` in `*.test.ts`):
 
 - `AudioEngine.tsx` and audio prefetch helpers (`getTrackUrl`, `fetchPresignedUrl`, `preloadAudio`) — too coupled to `HTMLAudioElement` / `IndexedDB` for unit tests. Plan: extract pure helpers, then add Playwright for the full flow.
 - Routes: `playlists/**`, `shares/**`, `search/**`, `lyrics/**`, `auth/**`, `settings/**`, `content/**`, `stream-warm/**`.
-- Wavelet engine: `decryption.ts`, `tagger.ts`, `progressive-stream.ts`, `downloader.ts` (need real Deezer/S3 — gate them behind `[skip]` until we have a recorded-cassette setup).
+- Wavelet engine: `decryption.ts`, `tagger.ts`, `progressive-stream.ts`, `downloader.ts` (need real Deezer/Blob — gate them behind `[skip]` until we have a recorded-cassette setup).
 - Stores: `useAuthStore`, `useAppStore`, `useShareStore`, `useLyricsStore`, `useLoginStore`, `useErrorStore`.
 
 When you finish locking in any of the above, append it to the table above and to `vitest.config.ts` `coverage.include`.
@@ -164,7 +164,7 @@ Many internal files are in `.claudeignore` to save tokens. Only **entry points**
 | wavelet | `index.ts`, `downloader.ts`, `settings.ts`, `decryption.ts`, `tagger.ts` | Core API + orchestration |
 | wavelet/types | `index.ts`, `Track.ts`, `Album.ts` | Domain models |
 | wavelet/download-objects | `index.ts`, `DownloadObject.ts`, `Single.ts`, `Collection.ts` | Download containers |
-| wavelet/storage | `index.ts`, `StorageProvider.ts`, `factory.ts` | Storage abstraction |
+| wavelet/storage | `index.ts`, `StorageProvider.ts`, `factory.ts`, `blob.ts`, `BlobStorageProvider.ts` | Storage abstraction + Vercel Blob |
 | wavelet/config-store | `index.ts`, `ConfigStore.ts` | Config abstraction |
 | wavelet/plugins | `index.ts`, `base.ts` | Plugin contract |
 | deezer | `index.ts`, `deezer.ts`, `api.ts`, `gw.ts` | Deezer API client |
@@ -174,7 +174,6 @@ Many internal files are in `.claudeignore` to save tokens. Only **entry points**
 - `src/app/api/` (non-v1) — legacy API routes
 - `wavelet/utils/*` — internal helpers (crypto, paths, bitrate, images)
 - `wavelet/download-objects/generate*.ts` — factory functions
-- `wavelet/storage/{Local,S3}StorageProvider.ts` — concrete implementations
 - `wavelet/config-store/PostgresConfigStore.ts` — concrete implementation
 - `wavelet/plugins/spotify.ts` — Spotify plugin implementation
 - `wavelet/types/{Artist,Playlist,Lyrics,Picture,CustomDate,listener,Settings}.ts` — secondary models

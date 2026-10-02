@@ -44,7 +44,7 @@ let usePresigned = true;
 // Dedup in-flight presigned URL requests so prefetch + on-demand calls share one fetch
 const inflightPresigned = new Map<string, Promise<string | null>>();
 
-// Tracks whose presigned URL failed (mixed-content, S3 denial, etc.) — we go
+// Tracks whose presigned URL failed (mixed-content, storage denial, etc.) — we go
 // straight to progressive for these without burning a sign roundtrip.
 const presignedDenied = new Set<string>();
 
@@ -56,7 +56,7 @@ function pruneUrlCache() {
 }
 
 async function fetchPresignedUrl(trackId: string): Promise<string | null> {
-	// Session-wide kill switch — once the S3/MinIO host is known unreachable,
+	// Session-wide kill switch — once the storage host is known unreachable,
 	// short-circuit every caller (on-demand, prefetch, hover-preload) so we
 	// don't burn a DNS-timeout per track.
 	if (!usePresigned) return null;
@@ -92,37 +92,7 @@ async function fetchPresignedUrl(trackId: string): Promise<string | null> {
 	return promise;
 }
 
-// Karaoke mode — fetch the presigned URL for a track's `no_vocals` stem.
-// Returns null when the stem doesn't exist yet (separation hasn't run, or
-// the track was processed in a different mode that didn't produce no_vocals).
-// Caller falls back to the original track URL on null.
-//
-// When WAVELET_DISABLE_PRESIGNED_URLS=1 the server returns
-// status=presigned_disabled (after confirming the stem is cached). The
-// client must use the /stream proxy in that case — returning null would
-// fall through to the original track and silently break karaoke.
-async function fetchKaraokeStemUrl(trackId: string): Promise<string | null> {
-	try {
-		const res = await fetch(
-			`/api/v1/stems/${encodeURIComponent(trackId)}/no_vocals/url`,
-			{ credentials: "include", cache: "no-store" },
-		);
-		if (!res.ok) return null;
-		const json = (await res.json()) as {
-			success?: boolean;
-			data?: { url?: string | null; status?: string };
-		};
-		if (!json.success) return null;
-		if (json.data?.status === "presigned_disabled") {
-			return `/api/v1/stems/${encodeURIComponent(trackId)}/no_vocals/stream`;
-		}
-		return json.data?.url ?? null;
-	} catch {
-		return null;
-	}
-}
-
-// Warm the URL cache for upcoming tracks. Cheap (one DB query + S3 sign per
+// Warm the URL cache for upcoming tracks. Cheap (one DB query + Blob sign per
 // track) and turns the next click-to-play into a cache hit on the URL fetch.
 function prefetchPresignedUrls(trackIds: string[]) {
 	if (!usePresigned) return;
@@ -136,31 +106,11 @@ function prefetchPresignedUrls(trackIds: string[]) {
 
 /**
  * Resolve audio URL for a track. Priority:
- * 0. Karaoke override — if karaokeMode is on AND a `no_vocals` stem exists,
- *    play that instead. Falls through to the normal chain on miss so
- *    enabling karaoke on a track without stems still produces audio while
- *    the worker prepares the separation in the background.
  * 1. IndexedDB blob URL (instant, zero network)
- * 2. Presigned S3 URL (direct browser streaming for downloaded tracks)
+ * 2. Presigned Blob URL (direct browser streaming for downloaded tracks)
  * 3. Progressive endpoint (live decrypts from Deezer; auto-redirects to /stream once cached)
  */
 async function getTrackUrl(trackId: string): Promise<string> {
-	// 0. Karaoke mode — try the no_vocals stem first.
-	if (usePlayerStore.getState().karaokeMode) {
-		const stemUrl = await fetchKaraokeStemUrl(trackId);
-		if (stemUrl) {
-			if (window.location.protocol === "https:" && stemUrl.startsWith("http://")) {
-				// Mixed-content guard: same as the regular presigned path.
-				return `/api/v1/stems/${encodeURIComponent(trackId)}/no_vocals/stream`;
-			}
-			return stemUrl;
-		}
-		// Stem not ready — fall through. The KaraokeToggle component is
-		// responsible for kicking off the separation; once it lands, it
-		// will call retryTrack() and we'll hit the stem URL on the next
-		// pass through this resolver.
-	}
-
 	// 1. Check IndexedDB cache — instant blob URL
 	try {
 		const blobUrl = await getCachedBlobUrl(trackId);
@@ -442,7 +392,7 @@ async function logRecentPlay(track: {
 
 /**
  * Notify the server that the user skipped a track before reaching the 30s
- * threshold so its S3 file can be evicted (if no other user listened to it).
+ * threshold so its Blob file can be evicted (if no other user listened to it).
  * The DownloadHistory metadata stays for re-streaming on a future replay.
  */
 function notifyTrackSkipped(trackId: string) {
@@ -498,7 +448,7 @@ async function cacheCurrentTrackInBackground(trackId: string) {
 }
 
 /**
- * Drives full-track playback from S3 using imperatively managed Audio objects.
+ * Drives full-track playback from Blob using imperatively managed Audio objects.
  * Pre-buffers adjacent tracks in the queue for instant playback.
  * Also manages the Media Session API for OS-level media controls.
  */
@@ -937,7 +887,7 @@ export function AudioEngine() {
 				// full stream now so it can take over before the head runs
 				// out. The full stream goes through normal /stream-progressive
 				// (no preview, persisting) — first listen, server downloads
-				// from Deezer once and persists; subsequent plays hit S3.
+				// from Deezer once and persists; subsequent plays hit Blob.
 				if (headPrefetchedTracks.has(currentTrack.trackId)) {
 					handoffFullStream(preloaded, currentTrack.trackId, gen);
 					headPrefetchedTracks.delete(currentTrack.trackId);
@@ -1015,23 +965,10 @@ export function AudioEngine() {
 		}
 	}, [normalizationEnabled]);
 
-	// Karaoke toggle — reload the current track when the user flips it so the
-	// audio source switches between original and no_vocals stem. Skips the
-	// initial mount (the regular currentTrack effect already handles that).
-	const karaokeMode = usePlayerStore((s) => s.karaokeMode);
-	const prevKaraokeRef = useRef(karaokeMode);
-	useEffect(() => {
-		if (prevKaraokeRef.current === karaokeMode) return;
-		prevKaraokeRef.current = karaokeMode;
-		if (!usePlayerStore.getState().currentTrack) return;
-		usePlayerStore.getState().retryTrack();
-	}, [karaokeMode]);
-
 	// Retry: bumped by retryTrack() — reload the current track from scratch.
-	// We preserve the current playback position across the reload so callers
-	// like the karaoke toggle (which swaps source between original and the
-	// no_vocals stem) keep the user on the same timeline instead of jumping
-	// back to 0. applyResumePosition picks the captured time up on canplay.
+	// We preserve the current playback position across the reload so the
+	// user stays on the same timeline instead of jumping back to 0.
+	// applyResumePosition picks the captured time up on canplay.
 	const retryLoadCount = usePlayerStore((s) => s._retryLoadCount);
 	const prevRetryRef = useRef(retryLoadCount);
 	useEffect(() => {
@@ -1149,7 +1086,7 @@ export function AudioEngine() {
 
 		// Spotify rule: count a real play once playback crosses 30s.
 		// This is the moment the track "joins" the user's recently-played
-		// history and its S3 file is locked from eviction-on-skip.
+		// history and its Blob file is locked from eviction-on-skip.
 		const track = usePlayerStore.getState().currentTrack;
 		if (
 			track &&
@@ -1168,7 +1105,7 @@ export function AudioEngine() {
 
 			// If this track is playing from a preview-mode prefetch, the server
 			// didn't persist it. Trigger a real (persisting) progressive stream
-			// in the background so the next play hits the cached S3 file. The
+			// in the background so the next play hits the cached Blob file. The
 			// server's persist branch runs to completion even after we cancel
 			// the response body — we just want the upload to start.
 			const src = audio.src || "";
@@ -1312,7 +1249,7 @@ export function AudioEngine() {
 			urlCache.delete(currentTrack.trackId);
 
 			// MEDIA_ERR_NETWORK (2) and MEDIA_ERR_SRC_NOT_SUPPORTED (4) on a
-			// presigned URL almost always mean the S3/MinIO host is unreachable
+			// presigned URL almost always mean the storage host is unreachable
 			// from the browser (DNS failure, expired tunnel, mixed content,
 			// firewall). Disable presigned URLs globally for the rest of the
 			// session so subsequent tracks don't each pay a DNS-timeout before

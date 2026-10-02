@@ -1,4 +1,3 @@
 export type { StorageProvider } from "./StorageProvider";
-export { LocalStorageProvider } from "./LocalStorageProvider";
-export { S3StorageProvider } from "./S3StorageProvider";
+export { BlobStorageProvider } from "./BlobStorageProvider";
 export { createStorageProvider } from "./factory";

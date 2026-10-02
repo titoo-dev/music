@@ -235,7 +235,7 @@ export async function streamTrack(writepath, track, downloadObject, listener, st
 	}
 
 	// Atomic rename: .part → final path
-	// For StorageProvider (S3), remap the temp file reference so finalizeStream/getLocalPath use the right key
+	// For StorageProvider (Blob), remap the temp file reference so finalizeStream/getLocalPath use the right key
 	if (storageProvider) {
 		await storageProvider.rename(partPath, writepath);
 	} else {

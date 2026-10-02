@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("./KaraokeToggle", () => ({ KaraokeToggle: () => null }));
 vi.mock("sonner", () => ({ toast: vi.fn() }));
 
 import { Player } from "./Player";

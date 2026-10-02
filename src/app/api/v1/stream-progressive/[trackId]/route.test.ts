@@ -10,6 +10,10 @@ import {
 	makeParams,
 	readJson,
 } from "@/test/helpers/nextRequest";
+import {
+	StorageNotFoundError,
+	StorageUnavailableError,
+} from "@/lib/wavelet/storage/blob";
 
 // ── Mock setup ──
 
@@ -18,7 +22,7 @@ vi.mock("@/lib/auth", () => ({ auth: authMock }));
 
 // vi.mock factories are hoisted above imports — use vi.hoisted() so test
 // code can share refs with the factory below.
-const { serverStateMock, s3StreamMock, startProgressiveStreamMock } = vi.hoisted(
+const { serverStateMock, blobStreamMock, startProgressiveStreamMock, afterMock } = vi.hoisted(
 	() => ({
 		serverStateMock: {
 			getWaveletApp: vi.fn(),
@@ -26,15 +30,22 @@ const { serverStateMock, s3StreamMock, startProgressiveStreamMock } = vi.hoisted
 			setUserDz: vi.fn(),
 			getGuestDz: vi.fn(),
 		},
-		s3StreamMock: {
+		blobStreamMock: {
 			headObject: vi.fn(),
 		},
 		startProgressiveStreamMock: vi.fn(),
+		afterMock: vi.fn(),
 	})
 );
 
+// after() throws outside a real request scope — capture the callbacks instead.
+vi.mock("next/server", async (importOriginal) => ({
+	...(await importOriginal<typeof import("next/server")>()),
+	after: afterMock,
+}));
+
 vi.mock("@/lib/server-state", () => serverStateMock);
-vi.mock("@/lib/s3-stream", () => s3StreamMock);
+vi.mock("@/lib/blob-stream", () => blobStreamMock);
 vi.mock("@/lib/wavelet/progressive-stream", () => ({
 	startProgressiveStream: startProgressiveStreamMock,
 }));
@@ -43,15 +54,14 @@ import { GET } from "./route";
 
 // ── Local helpers / factories (kept inline per test guidance) ──
 
-const s3Row = {
+const blobRow = {
 	id: "x",
 	trackId: "1",
 	bitrate: 320,
-	storagePath: "wavelet-music/foo.mp3",
-	storageType: "s3",
+	storagePath: "music/foo.mp3",
+	storageType: "blob",
 } as any;
 
-const localRow = { ...s3Row, storageType: "local" } as any;
 
 function fakeBody() {
 	return new ReadableStream({
@@ -105,8 +115,9 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		serverStateMock.getUserDz.mockReset();
 		serverStateMock.setUserDz.mockReset();
 		serverStateMock.getGuestDz.mockReset();
-		s3StreamMock.headObject.mockReset();
+		blobStreamMock.headObject.mockReset();
 		startProgressiveStreamMock.mockReset();
+		afterMock.mockReset();
 	});
 
 	it("returns 401 NOT_AUTHENTICATED when there is no session", async () => {
@@ -139,11 +150,11 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		expect(body?.error.code).toBe("NO_DEEZER_ARL");
 	});
 
-	it("redirects to /stream when stored row exists on S3 and headObject succeeds", async () => {
+	it("redirects to /stream when stored row exists in Blob and headObject succeeds", async () => {
 		const { app, acquireDownloadLock } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(s3Row);
-		s3StreamMock.headObject.mockResolvedValue({
+		prismaMock.storedTrack.findFirst.mockResolvedValue(blobRow);
+		blobStreamMock.headObject.mockResolvedValue({
 			contentLength: 100,
 			contentType: "audio/mpeg",
 		});
@@ -156,18 +167,16 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		);
 		expect(res.status).toBe(302);
 		expect(res.headers.get("Location")).toBe("/api/v1/stream/1");
-		expect(s3StreamMock.headObject).toHaveBeenCalledWith("wavelet-music/foo.mp3");
+		expect(blobStreamMock.headObject).toHaveBeenCalledWith("music/foo.mp3");
 		expect(acquireDownloadLock).not.toHaveBeenCalled();
 		expect(startProgressiveStreamMock).not.toHaveBeenCalled();
 	});
 
-	it("on headObject NotFound: deletes stale rows and falls through to live stream", async () => {
+	it("on headObject StorageNotFoundError: deletes stale rows and falls through to live stream", async () => {
 		const { app } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(s3Row);
-		const err: any = new Error("Not found");
-		err.name = "NotFound";
-		s3StreamMock.headObject.mockRejectedValue(err);
+		prismaMock.storedTrack.findFirst.mockResolvedValue(blobRow);
+		blobStreamMock.headObject.mockRejectedValue(new StorageNotFoundError("music/foo.mp3"));
 		startProgressiveStreamMock.mockResolvedValue({
 			body: fakeBody(),
 			contentType: "audio/mpeg",
@@ -187,13 +196,11 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		expect(startProgressiveStreamMock).toHaveBeenCalled();
 	});
 
-	it("on headObject ENOTFOUND (non-404): falls through to live stream WITHOUT deleting the row", async () => {
+	it("on headObject StorageUnavailableError: falls through to live stream WITHOUT deleting the row", async () => {
 		const { app } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(s3Row);
-		const err: any = new Error("ENOTFOUND");
-		err.code = "ENOTFOUND";
-		s3StreamMock.headObject.mockRejectedValue(err);
+		prismaMock.storedTrack.findFirst.mockResolvedValue(blobRow);
+		blobStreamMock.headObject.mockRejectedValue(new StorageUnavailableError(new Error("503")));
 		startProgressiveStreamMock.mockResolvedValue({
 			body: fakeBody(),
 			contentType: "audio/mpeg",
@@ -211,10 +218,44 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		expect(startProgressiveStreamMock).toHaveBeenCalled();
 	});
 
-	it("redirects to /stream when stored row is on local storage (skips headObject)", async () => {
+	it.each(["s3", "local"])(
+		"drops pre-Blob %s rows and streams live (was: 302 to /stream for local rows)",
+		async (storageType) => {
+			const { app } = makeApp();
+			arrangeAuthOk(app);
+			prismaMock.storedTrack.findFirst.mockResolvedValue({ ...blobRow, storageType });
+			startProgressiveStreamMock.mockResolvedValue({
+				body: fakeBody(),
+				contentType: "audio/mpeg",
+				contentLength: 0,
+			});
+
+			const res = await GET(
+				makeNextRequest({
+					url: "http://localhost:3000/api/v1/stream-progressive/1",
+				}),
+				makeParams({ trackId: "1" })
+			);
+			expect(res.status).toBe(200);
+			expect(blobStreamMock.headObject).not.toHaveBeenCalled();
+			expect(prismaMock.storedTrack.deleteMany).toHaveBeenCalledWith({
+				where: { trackId: "1" },
+			});
+			expect(startProgressiveStreamMock).toHaveBeenCalled();
+		}
+	);
+
+	it("hands the persist promise to after() so Vercel doesn't freeze the upload (was: fire-and-forget)", async () => {
 		const { app } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(localRow);
+		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		const persisted = Promise.resolve();
+		startProgressiveStreamMock.mockResolvedValue({
+			body: fakeBody(),
+			contentType: "audio/mpeg",
+			contentLength: 0,
+			persisted,
+		});
 
 		const res = await GET(
 			makeNextRequest({
@@ -222,10 +263,10 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 			}),
 			makeParams({ trackId: "1" })
 		);
-		expect(res.status).toBe(302);
-		expect(res.headers.get("Location")).toBe("/api/v1/stream/1");
-		expect(s3StreamMock.headObject).not.toHaveBeenCalled();
-		expect(startProgressiveStreamMock).not.toHaveBeenCalled();
+		expect(res.status).toBe(200);
+		expect(afterMock).toHaveBeenCalledTimes(1);
+		const callback = afterMock.mock.calls[0][0] as () => unknown;
+		expect(callback()).toBe(persisted);
 	});
 
 	it("opens a live stream when no stored row exists", async () => {

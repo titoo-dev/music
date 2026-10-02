@@ -54,16 +54,6 @@ interface PlayerState {
 	crossfadeDuration: number;
 	normalizationEnabled: boolean;
 
-	/**
-	 * When on, AudioEngine.getTrackUrl prefers the `no_vocals` stem of the
-	 * current track (and any future track with stems available) so the user
-	 * hears the instrumental version. If a track has no stems yet, the
-	 * KaraokeToggle component triggers a `two_stems` separation in the
-	 * background; the original audio keeps playing until stems are ready,
-	 * then AudioEngine swaps the source.
-	 */
-	karaokeMode: boolean;
-
 	play: (track: PlayerTrack, queue?: PlayerTrack[]) => void;
 	pause: () => void;
 	resume: () => void;
@@ -94,8 +84,6 @@ interface PlayerState {
 	playQueue: (queue: PlayerTrack[], startIndex?: number) => void;
 	setCrossfadeDuration: (seconds: number) => void;
 	toggleNormalization: () => void;
-	setKaraokeMode: (on: boolean) => void;
-	toggleKaraokeMode: () => void;
 
 	// Queue management (P2)
 	/** Insert a track right after the current track ("Play Next"). */
@@ -110,10 +98,7 @@ interface PlayerState {
 	clearQueue: () => void;
 }
 
-/** Navigate to a queue index, setting it as the current track. Karaoke
- *  mode is reset because every caller of goToIndex advances to a
- *  different queue position (next/prev/jumpToIndex). The "restart same
- *  track" branches in prev() / prevTrack() bypass this helper. */
+/** Navigate to a queue index, setting it as the current track. */
 function goToIndex(queueIndex: number, queue: PlayerTrack[]): Partial<PlayerState> {
 	return {
 		currentTrack: queue[queueIndex],
@@ -123,7 +108,6 @@ function goToIndex(queueIndex: number, queue: PlayerTrack[]): Partial<PlayerStat
 		currentTime: 0,
 		buffered: 0,
 		error: null,
-		karaokeMode: false,
 	};
 }
 
@@ -161,15 +145,10 @@ export const usePlayerStore = create<PlayerState>()(
 			queuePanelOpen: false,
 			crossfadeDuration: 0,
 			normalizationEnabled: false,
-			karaokeMode: false,
 
 			play: (track, queue) => {
 				const state = get();
 				const isSameTrack = state.currentTrack?.trackId === track.trackId;
-				// Reset karaoke whenever the track id changes. The "resume same
-				// track without a queue" branch keeps it intentionally — that's
-				// just a play after pause, the user's preference shouldn't flip.
-				const karaokeReset = isSameTrack ? {} : { karaokeMode: false };
 				if (queue) {
 					const idx = queue.findIndex((t) => t.trackId === track.trackId);
 					const startIdx = idx >= 0 ? idx : 0;
@@ -183,7 +162,6 @@ export const usePlayerStore = create<PlayerState>()(
 							isBuffering: true,
 							currentTime: 0,
 							error: null,
-							...karaokeReset,
 						});
 					} else {
 						set({
@@ -194,7 +172,6 @@ export const usePlayerStore = create<PlayerState>()(
 							isBuffering: true,
 							currentTime: 0,
 							error: null,
-							...karaokeReset,
 						});
 					}
 				} else if (isSameTrack) {
@@ -208,7 +185,6 @@ export const usePlayerStore = create<PlayerState>()(
 						isBuffering: true,
 						currentTime: 0,
 						error: null,
-						karaokeMode: false,
 					});
 				}
 			},
@@ -360,11 +336,6 @@ export const usePlayerStore = create<PlayerState>()(
 
 			setCrossfadeDuration: (crossfadeDuration) => set({ crossfadeDuration }),
 			toggleNormalization: () => set((s) => ({ normalizationEnabled: !s.normalizationEnabled })),
-			setKaraokeMode: (karaokeMode) => set({ karaokeMode }),
-			toggleKaraokeMode: () => {
-				haptic(8);
-				set((s) => ({ karaokeMode: !s.karaokeMode }));
-			},
 			toggleRepeat: () =>
 				set((s) => ({
 					repeat: s.repeat === "off" ? "all" : s.repeat === "all" ? "one" : "off",
@@ -382,7 +353,6 @@ export const usePlayerStore = create<PlayerState>()(
 						isPlaying: true,
 						isBuffering: true,
 						currentTime: 0,
-						karaokeMode: false,
 					});
 				} else {
 					set({
@@ -392,7 +362,6 @@ export const usePlayerStore = create<PlayerState>()(
 						isPlaying: true,
 						isBuffering: true,
 						currentTime: 0,
-						karaokeMode: false,
 					});
 				}
 			},
@@ -497,7 +466,6 @@ export const usePlayerStore = create<PlayerState>()(
 				currentTrack: state.currentTrack,
 				crossfadeDuration: state.crossfadeDuration,
 				normalizationEnabled: state.normalizationEnabled,
-				karaokeMode: state.karaokeMode,
 			}),
 		}
 	)

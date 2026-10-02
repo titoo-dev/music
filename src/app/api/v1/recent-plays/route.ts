@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 // POST /api/v1/recent-plays — log a play (called by the client at 30s of
 // continuous playback). Upserts on (userId, trackId) so replays just bump
 // playedAt without duplicating rows. When the per-user cap is exceeded,
-// evicts the oldest entries — releasing their S3 files but keeping nothing
+// evicts the oldest entries — releasing their Blob files but keeping nothing
 // for them in RecentPlay (DownloadHistory metadata stays so the track can
 // be re-streamed later).
 export async function POST(request: NextRequest) {

@@ -6,7 +6,7 @@ export interface UserPrefsData {
 	playlistSortOrder?: "asc" | "desc";
 	albumSortOrder?: "asc" | "desc";
 	/** When true, saving a track/album triggers a background fetch to warm
-	 *  the S3 cache so the first play is instant. Off by default. */
+	 *  the Blob cache so the first play is instant. Off by default. */
 	preCacheSaved?: boolean;
 }
 

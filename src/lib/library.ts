@@ -6,7 +6,7 @@
 //   • Playlist + PlaylistTrack[] = user-created playlists (metadata only,
 //     decoupled from file lifecycle)
 //
-// File persistence (StoredTrack + S3) is orthogonal. A saved track may or
+// File persistence (StoredTrack + Blob) is orthogonal. A saved track may or
 // may not have a backing audio file; playback is always served via the
 // progressive streaming engine which fetches/persists/evicts files
 // transparently. This module holds the ref-counting + cleanup logic so
@@ -449,7 +449,7 @@ export async function shareTrack(
 	const shareId = randomBytes(8).toString("hex");
 
 	// If a StoredTrack already exists for this trackId at any bitrate, link
-	// to the highest-quality one so the public player can fast-path through S3.
+	// to the highest-quality one so the public player can fast-path through Blob.
 	// If not (track never persisted), the share is created with storedTrackId=null
 	// and the public stream route will lazily re-fetch via progressive.
 	const stored = await prisma.storedTrack.findFirst({
@@ -492,7 +492,7 @@ export async function resolveShareForPlayback(shareId: string) {
 //
 // When the user has UserPreferences.preferences.preCacheSaved === true,
 // saveTrack/saveAlbum can fire-and-forget a background fetch to warm the
-// S3 cache so the first play is instant. The actual fetch reuses the
+// Blob cache so the first play is instant. The actual fetch reuses the
 // progressive engine in persist-only mode (no client response branch).
 
 export async function isPreCacheEnabled(userId: string): Promise<boolean> {

@@ -52,7 +52,7 @@ export class WaveletApp {
 			this.settings = await loadSettings(this.configStore);
 		}
 		if (createStorageProvider) {
-			this.storageProvider = createStorageProvider(this.settings);
+			this.storageProvider = createStorageProvider();
 		}
 	}
 
@@ -92,7 +92,7 @@ export class WaveletApp {
 		}
 		this.settings = newSettings;
 		if (createStorageProvider) {
-			this.storageProvider = createStorageProvider(this.settings);
+			this.storageProvider = createStorageProvider();
 		}
 	}
 
