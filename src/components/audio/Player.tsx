@@ -22,8 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DownloadGlyph, Equalizer, PlayPauseIcon, SlideSwap } from "@/components/motion/icons";
-import { SeekRing } from "./SeekRing";
-import { formatTime } from "@/utils/format-time";
+import { SeekBar } from "./SeekBar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -148,16 +147,9 @@ export function Player() {
 					animate={{ y: 0, opacity: 1, scale: 1 }}
 					exit={{ y: 120, opacity: 0, scale: 0.96 }}
 					transition={{ type: "spring", damping: 30, stiffness: 320 }}
-					className="fixed inset-x-0 bottom-[var(--player-offset)] z-[45] mx-auto w-[min(760px,calc(100%-24px))]"
+					className="fixed inset-x-0 bottom-[var(--player-offset)] z-[45] mx-auto w-[min(860px,calc(100%-24px))]"
 				>
-					<SeekRing
-						currentTime={currentTime}
-						duration={duration}
-						buffered={buffered}
-						loading={isPlaying && isBuffering}
-						onSeek={seek}
-						className="glass flex h-[var(--player-h)] items-center gap-2 rounded-2xl border border-border pl-2 pr-2 shadow-float sm:gap-3 sm:pr-3 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
-					>
+					<div className="glass relative flex h-[var(--player-h)] items-center gap-2 rounded-2xl border border-border pl-2 pr-2 shadow-float sm:gap-3 sm:pr-3 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:pl-3">
 
 						{/* Track */}
 						<div className="flex min-w-0 flex-1 items-center gap-3" onContextMenu={handleContextMenu}>
@@ -200,76 +192,82 @@ export function Player() {
 							</div>
 						</div>
 
-						{/* Transport */}
-						<div className="flex shrink-0 items-center justify-center gap-0.5 sm:gap-1">
-							{hasQueue && (
+						{/* Transport + seek (the bar sits under the buttons from md up) */}
+						<div className="flex shrink-0 flex-col items-center md:gap-0.5">
+							<div className="flex items-center justify-center gap-0.5 sm:gap-1">
+								{hasQueue && (
+									<Tip
+										label={shuffle ? "Shuffle on" : "Shuffle"}
+										trigger={
+											<button
+												type="button"
+												aria-label="Shuffle"
+												aria-pressed={shuffle}
+												className={cn(ctl, "relative hidden size-8 sm:inline-flex", shuffle && "text-foreground")}
+												onClick={toggleShuffle}
+											/>
+										}
+									>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" className="size-3.5">
+											<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+										</svg>
+										{shuffle && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute bottom-0.5 size-1 rounded-full bg-highlight" />}
+									</Tip>
+								)}
+								<Tip label="Previous track" trigger={<button type="button" aria-label="Previous track" className={cn(ctl, "hidden size-9 text-foreground sm:inline-flex")} onClick={prev} />}>
+									<PrevGlyph />
+								</Tip>
 								<Tip
-									label={shuffle ? "Shuffle on" : "Shuffle"}
+									label={isPlaying ? "Pause" : "Play"}
 									trigger={
-										<button
+										<motion.button
 											type="button"
-											aria-label="Shuffle"
-											aria-pressed={shuffle}
-											className={cn(ctl, "relative hidden size-8 sm:inline-flex", shuffle && "text-foreground")}
-											onClick={toggleShuffle}
+											aria-label={isPlaying ? "Pause" : "Play"}
+											whileTap={{ scale: 0.9 }}
+											className="relative inline-flex size-11 items-center justify-center rounded-full bg-foreground text-background transition-colors hover:bg-foreground/85 md:size-9"
+											onClick={toggle}
 										/>
 									}
 								>
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" className="size-3.5">
-										<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-									</svg>
-									{shuffle && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute bottom-0.5 size-1 rounded-full bg-highlight" />}
+									<PlayPauseIcon playing={isPlaying} className="size-[18px]" />
 								</Tip>
-							)}
-							<Tip label="Previous track" trigger={<button type="button" aria-label="Previous track" className={cn(ctl, "hidden size-9 text-foreground sm:inline-flex")} onClick={prev} />}>
-								<PrevGlyph />
-							</Tip>
-							<Tip
-								label={isPlaying ? "Pause" : "Play"}
-								trigger={
-									<motion.button
-										type="button"
-										aria-label={isPlaying ? "Pause" : "Play"}
-										whileTap={{ scale: 0.9 }}
-										className="relative inline-flex size-11 items-center justify-center rounded-full bg-foreground text-background transition-colors hover:bg-foreground/85"
-										onClick={toggle}
-									/>
-								}
-							>
-								<PlayPauseIcon playing={isPlaying} className="size-[18px]" />
-							</Tip>
-							<Tip label="Next track" trigger={<button type="button" aria-label="Next track" className={cn(ctl, "size-9 text-foreground")} onClick={next} />}>
-								<NextGlyph />
-							</Tip>
-							{hasQueue && (
-								<Tip
-									label={repeat === "off" ? "Repeat" : repeat === "all" ? "Repeat all" : "Repeat one"}
-									trigger={
-										<button
-											type="button"
-											aria-label={`Repeat ${repeat}`}
-											aria-pressed={repeat !== "off"}
-											className={cn(ctl, "relative hidden size-8 sm:inline-flex", repeat !== "off" && "text-foreground")}
-											onClick={toggleRepeat}
-										/>
-									}
-								>
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="size-3.5">
-										<path d="m17 2 4 4-4 4M3 11V10a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" />
-									</svg>
-									{repeat === "one" && <span className="absolute right-1 top-1 text-[8px] font-semibold text-highlight">1</span>}
-									{repeat !== "off" && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute bottom-0.5 size-1 rounded-full bg-highlight" />}
+								<Tip label="Next track" trigger={<button type="button" aria-label="Next track" className={cn(ctl, "size-9 text-foreground")} onClick={next} />}>
+									<NextGlyph />
 								</Tip>
-							)}
+								{hasQueue && (
+									<Tip
+										label={repeat === "off" ? "Repeat" : repeat === "all" ? "Repeat all" : "Repeat one"}
+										trigger={
+											<button
+												type="button"
+												aria-label={`Repeat ${repeat}`}
+												aria-pressed={repeat !== "off"}
+												className={cn(ctl, "relative hidden size-8 sm:inline-flex", repeat !== "off" && "text-foreground")}
+												onClick={toggleRepeat}
+											/>
+										}
+									>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="size-3.5">
+											<path d="m17 2 4 4-4 4M3 11V10a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" />
+										</svg>
+										{repeat === "one" && <span className="absolute right-1 top-1 text-[8px] font-semibold text-highlight">1</span>}
+										{repeat !== "off" && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute bottom-0.5 size-1 rounded-full bg-highlight" />}
+									</Tip>
+								)}
+							</div>
+							<SeekBar
+								currentTime={currentTime}
+								duration={duration}
+								buffered={buffered}
+								loading={isPlaying && isBuffering}
+								onSeek={seek}
+								showTimes
+								className="hidden w-[clamp(260px,34vw,420px)] md:flex"
+							/>
 						</div>
 
 						{/* Secondary */}
 						<div className="hidden min-w-0 items-center justify-end gap-0.5 md:flex">
-							<span className="mr-1.5 hidden shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground lg:inline">
-								{formatTime(currentTime)}
-								<span className="text-muted-foreground/50"> / {formatTime(duration)}</span>
-							</span>
-
 							<Tip
 								label={queuePanelOpen ? "Close queue" : `Queue (${queue.length})`}
 								trigger={
@@ -396,7 +394,7 @@ export function Player() {
 							</DropdownMenu>
 						</div>
 
-						{/* Mobile: fullscreen affordance (progress lives on the rim) */}
+						{/* Mobile: fullscreen affordance */}
 						<button
 							type="button"
 							aria-label="Open fullscreen player"
@@ -405,7 +403,17 @@ export function Player() {
 						>
 							<Maximize2 className="size-4" />
 						</button>
-					</SeekRing>
+
+						{/* Mobile: the bar rides the pill's bottom border */}
+						<SeekBar
+							currentTime={currentTime}
+							duration={duration}
+							buffered={buffered}
+							loading={isPlaying && isBuffering}
+							onSeek={seek}
+							className="absolute inset-x-5 -bottom-2 md:hidden"
+						/>
+					</div>
 				</motion.div>
 			)}
 		</AnimatePresence>

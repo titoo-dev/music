@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
@@ -63,6 +63,18 @@ describe("Player", () => {
 		await userEvent.click(screen.getByRole("button", { name: "More player options" }));
 		await userEvent.click(await screen.findByRole("button", { name: "3s" }));
 		expect(usePlayerStore.getState().crossfadeDuration).toBe(3);
+	});
+
+	it("seeks from a horizontal bar instead of the ring around the pill", () => {
+		usePlayerStore.setState({ currentTime: 60 });
+		renderPlayer();
+		expect(screen.queryByTestId("seek-ring")).toBeNull();
+		// Desktop bar (with times) + mobile bar on the pill's bottom edge.
+		const sliders = screen.getAllByRole("slider", { name: "Seek" });
+		expect(sliders).toHaveLength(2);
+		expect(screen.getByTestId("seek-total")).toHaveTextContent("4:27");
+		fireEvent.keyDown(sliders[0], { key: "ArrowRight" });
+		expect(usePlayerStore.getState()._seekTo).toBe(65);
 	});
 
 	it("exposes the volume slider without widening the bar", () => {

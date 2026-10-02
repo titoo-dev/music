@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-failure";
+import { canSeekInPlace, isPreviewSource, waitForSeekableUrl } from "@/lib/seek";
 
 // Restore cache limit from localStorage
 if (typeof window !== "undefined") {
@@ -420,6 +421,17 @@ function notifyTrackSkipped(trackId: string) {
  * cacheable yet (the progressive flow will create the DB row on completion,
  * and a future play will populate the cache).
  */
+// Preview streams (hover / head prefetch) aren't persisted by the server.
+// Open a real progressive stream and hang up right away: the server's persist
+// branch runs to completion on its own, so the next play hits the Blob file.
+function persistInBackground(trackId: string) {
+	fetch(`/api/v1/stream-progressive/${trackId}`, { credentials: "include" })
+		.then((res) => {
+			res.body?.cancel().catch(() => {});
+		})
+		.catch(() => {});
+}
+
 async function cacheCurrentTrackInBackground(trackId: string) {
 	if (await isCached(trackId)) return;
 
@@ -681,6 +693,76 @@ export function AudioEngine() {
 		};
 	}, []);
 
+	// --- Seeking on the live (range-less) stream ---
+	// /stream-progressive is served without byte ranges: setting currentTime
+	// past what the browser holds makes it restart the track from 0. Instead,
+	// hang up the live stream (the server then drains Deezer at full speed into
+	// Blob), wait for the persisted file and reopen it — Blob URLs support
+	// Range — at the requested position. While a seek is pending, further
+	// seeks only move its target.
+	const pendingSeekRef = useRef<{ target: number } | null>(null);
+
+	const swapSource = useCallback(
+		(url: string, position: number | null) => {
+			const old = audioRef.current;
+			++loadGenRef.current;
+			if (old) {
+				detachEvents(old);
+				old.pause();
+				old.src = "";
+				evictedAudio.add(old);
+			}
+			resumePositionRef.current = position;
+			const audio = new Audio();
+			audio.preload = "auto";
+			audio.crossOrigin = "anonymous";
+			audioRef.current = audio;
+			attachEvents(audio);
+			audio.src = url;
+			audio.load();
+		},
+		[attachEvents, detachEvents]
+	);
+
+	const seekViaPersistedFile = useCallback(
+		(audio: HTMLAudioElement, trackId: string, target: number) => {
+			setCurrentTime(target);
+			if (pendingSeekRef.current) {
+				pendingSeekRef.current.target = target;
+				return;
+			}
+			const pending = { target };
+			pendingSeekRef.current = pending;
+			const gen = loadGenRef.current;
+			setBuffering(true);
+
+			if (isPreviewSource(audio.src)) persistInBackground(trackId);
+			// Hang up so the server persists at network speed, not playback pace.
+			// Events go first: emptying src fires an error on some browsers.
+			detachEvents(audio);
+			audio.pause();
+			audio.src = "";
+
+			const cancelled = () => pendingSeekRef.current !== pending || loadGenRef.current !== gen;
+			void waitForSeekableUrl({
+				resolve: () => fetchPresignedUrl(trackId),
+				isCancelled: cancelled,
+			}).then((url) => {
+				if (cancelled()) return;
+				pendingSeekRef.current = null;
+				if (url) {
+					swapSource(url, pending.target);
+				} else {
+					// Never persisted in time — restart the live stream rather
+					// than leave the player silent.
+					setCurrentTime(0);
+					swapSource(`/api/v1/stream-progressive/${trackId}`, null);
+				}
+			});
+		},
+		[detachEvents, setBuffering, setCurrentTime, swapSource]
+	);
+
 	const applyResumePosition = useCallback(
 		(audio: HTMLAudioElement) => {
 			const resume = resumePositionRef.current;
@@ -688,6 +770,14 @@ export function AudioEngine() {
 			resumePositionRef.current = null;
 			const dur = audio.duration;
 			if (!isFinite(dur) || dur <= 0 || resume >= dur - 1) return;
+			const track = usePlayerStore.getState().currentTrack;
+			if (
+				track &&
+				!canSeekInPlace({ src: audio.src, target: resume, seekable: audio.seekable, buffered: audio.buffered })
+			) {
+				seekViaPersistedFile(audio, track.trackId, resume);
+				return;
+			}
 			try {
 				audio.currentTime = resume;
 				setCurrentTime(resume);
@@ -695,7 +785,7 @@ export function AudioEngine() {
 				// Buffer might not cover seek target yet — browser will catch up
 			}
 		},
-		[setCurrentTime]
+		[setCurrentTime, seekViaPersistedFile]
 	);
 
 	// --- Initialize audio element (client-only) ---
@@ -857,6 +947,7 @@ export function AudioEngine() {
 			if (prevTrackIdRef.current !== null) {
 				resumePositionRef.current = null;
 			}
+			pendingSeekRef.current = null;
 
 			// Immediately kill the old audio — hard stop, no fade
 			detachEvents(audio);
@@ -981,7 +1072,8 @@ export function AudioEngine() {
 		// Capture position before tearing the old element down. Anything <1s
 		// is treated as "near the start" and skipped — that's the recovery
 		// case where there's nothing to preserve.
-		const liveTime = audio.currentTime;
+		const liveTime = pendingSeekRef.current?.target ?? audio.currentTime;
+		pendingSeekRef.current = null;
 		if (isFinite(liveTime) && liveTime >= 1) {
 			resumePositionRef.current = liveTime;
 		}
@@ -1012,8 +1104,17 @@ export function AudioEngine() {
 	useEffect(() => {
 		if (seekTo === null) return;
 		const audio = audioRef.current;
-		if (audio) {
-			if (audio.readyState >= 1 && isFinite(audio.duration) && audio.duration > 0) {
+		const track = usePlayerStore.getState().currentTrack;
+		if (audio && track && pendingSeekRef.current) {
+			seekViaPersistedFile(audio, track.trackId, seekTo);
+		} else if (audio) {
+			if (
+				track &&
+				audio.readyState >= 1 &&
+				!canSeekInPlace({ src: audio.src, target: seekTo, seekable: audio.seekable, buffered: audio.buffered })
+			) {
+				seekViaPersistedFile(audio, track.trackId, seekTo);
+			} else if (audio.readyState >= 1 && isFinite(audio.duration) && audio.duration > 0) {
 				try {
 					audio.currentTime = seekTo;
 				} catch {
@@ -1028,7 +1129,7 @@ export function AudioEngine() {
 		}
 		// Clear the signal so it doesn't re-fire
 		usePlayerStore.setState({ _seekTo: null });
-	}, [seekTo]);
+	}, [seekTo, seekViaPersistedFile]);
 
 	// --- Media Session position update ---
 	const onPositionUpdate = useCallback(() => {
@@ -1072,7 +1173,7 @@ export function AudioEngine() {
 		// Don't write timeUpdates back to the store while a seek is pending —
 		// audio.currentTime may briefly be the pre-seek value, which would
 		// rubber-band the SeekBar visually after the user releases.
-		if (usePlayerStore.getState()._seekTo !== null) {
+		if (usePlayerStore.getState()._seekTo !== null || pendingSeekRef.current) {
 			onPositionUpdate();
 			return;
 		}
@@ -1104,20 +1205,8 @@ export function AudioEngine() {
 			});
 
 			// If this track is playing from a preview-mode prefetch, the server
-			// didn't persist it. Trigger a real (persisting) progressive stream
-			// in the background so the next play hits the cached Blob file. The
-			// server's persist branch runs to completion even after we cancel
-			// the response body — we just want the upload to start.
-			const src = audio.src || "";
-			if (src.includes("/stream-progressive/") && src.includes("preview=1")) {
-				fetch(`/api/v1/stream-progressive/${track.trackId}`, {
-					credentials: "include",
-				})
-					.then((res) => {
-						res.body?.cancel().catch(() => {});
-					})
-					.catch(() => {});
-			}
+			// didn't persist it — start a persisting stream in the background.
+			if (isPreviewSource(audio.src || "")) persistInBackground(track.trackId);
 		}
 
 		// Connect to Web Audio API on first timeUpdate after playback starts.

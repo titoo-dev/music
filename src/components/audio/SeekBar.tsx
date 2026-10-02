@@ -1,204 +1,188 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useRef, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { cn } from "@/lib/utils";
 import { formatTime } from "@/utils/format-time";
 
 interface SeekBarProps {
 	currentTime: number;
 	duration: number;
-	onSeek: (time: number) => void;
 	/** Buffered end position in seconds (from audio.buffered). */
-	buffered?: number;
-	variant?: "thin" | "large";
+	buffered: number;
+	/** Track is loading / buffering — a sheen sweeps across the track. */
+	loading?: boolean;
+	onSeek: (time: number) => void;
+	/** Elapsed / total labels on each side of the bar. */
+	showTimes?: boolean;
+	className?: string;
 }
 
-export function SeekBar({
-	currentTime,
-	duration,
-	onSeek,
-	buffered = 0,
-	variant = "thin",
-}: SeekBarProps) {
-	const barRef = useRef<HTMLDivElement>(null);
-	const [dragProgress, setDragProgress] = useState<number | null>(null);
-	const isDragging = useRef(false);
-	// Use refs for duration/onSeek so mouse event closures always read latest values
-	const durationRef = useRef(duration);
-	durationRef.current = duration;
-	const onSeekRef = useRef(onSeek);
-	onSeekRef.current = onSeek;
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+
+/**
+ * Horizontal seek bar. Dragging only previews the position; the seek is sent
+ * once, on release — every seek on the live stream costs a reload, so
+ * scrubbing must not fire one per pointermove.
+ */
+export function SeekBar({ currentTime, duration, buffered, loading = false, onSeek, showTimes = false, className }: SeekBarProps) {
+	const trackRef = useRef<HTMLDivElement>(null);
+	const [hover, setHover] = useState<number | null>(null);
+	const [drag, setDrag] = useState<number | null>(null);
 
 	const disabled = duration <= 0;
+	const pct = disabled ? 0 : clamp01(currentTime / duration);
+	const bufPct = disabled ? 0 : clamp01(buffered / duration);
+	const shown = drag ?? pct;
+	const active = drag !== null || hover !== null;
 
-	const computeProgress = useCallback(
-		(clientX: number) => {
-			if (!barRef.current) return 0;
-			const rect = barRef.current.getBoundingClientRect();
-			return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-		},
-		[]
-	);
+	const ratioAt = (clientX: number) => {
+		const rect = trackRef.current?.getBoundingClientRect();
+		if (!rect || rect.width <= 0) return 0;
+		return clamp01((clientX - rect.left) / rect.width);
+	};
 
-	const commitSeek = useCallback(
-		(pct: number) => {
-			const d = durationRef.current;
-			if (d > 0) {
-				// Update store first so the new currentTime is in place when we
-				// release the drag overlay — prevents a one-frame visual snap-back.
-				onSeekRef.current(pct * d);
-			}
-			setDragProgress(null);
-		},
-		[],
-	);
+	const step = (e: React.KeyboardEvent) => {
+		if (disabled) return;
+		const by = e.shiftKey ? 15 : 5;
+		const to =
+			e.key === "ArrowRight" || e.key === "ArrowUp"
+				? Math.min(duration, currentTime + by)
+				: e.key === "ArrowLeft" || e.key === "ArrowDown"
+					? Math.max(0, currentTime - by)
+					: e.key === "Home"
+						? 0
+						: e.key === "End"
+							? duration
+							: null;
+		if (to === null) return;
+		e.preventDefault();
+		e.stopPropagation();
+		onSeek(to);
+	};
 
-	// Touch handlers
-	const handleTouchStart = useCallback(
-		(e: React.TouchEvent) => {
-			if (disabled) return;
-			isDragging.current = true;
-			const pct = computeProgress(e.touches[0].clientX);
-			setDragProgress(pct);
-		},
-		[computeProgress, disabled]
-	);
-
-	const handleTouchMove = useCallback(
-		(e: React.TouchEvent) => {
-			if (!isDragging.current) return;
-			const pct = computeProgress(e.touches[0].clientX);
-			setDragProgress(pct);
-		},
-		[computeProgress]
-	);
-
-	const handleTouchEnd = useCallback(
-		(e: React.TouchEvent) => {
-			if (!isDragging.current) return;
-			isDragging.current = false;
-			const lastTouch = e.changedTouches[0];
-			const pct = computeProgress(lastTouch.clientX);
-			commitSeek(pct);
-		},
-		[computeProgress, commitSeek],
-	);
-
-	// Mouse handlers
-	const handleMouseDown = useCallback(
-		(e: React.MouseEvent) => {
-			if (disabled) return;
-			isDragging.current = true;
-			const pct = computeProgress(e.clientX);
-			setDragProgress(pct);
-			let lastPct = pct;
-
-			const handleMouseMove = (ev: MouseEvent) => {
-				lastPct = computeProgress(ev.clientX);
-				setDragProgress(lastPct);
-			};
-
-			const handleMouseUp = () => {
-				isDragging.current = false;
-				commitSeek(lastPct);
-				window.removeEventListener("mousemove", handleMouseMove);
-				window.removeEventListener("mouseup", handleMouseUp);
-			};
-
-			window.addEventListener("mousemove", handleMouseMove);
-			window.addEventListener("mouseup", handleMouseUp);
-		},
-		[computeProgress, commitSeek, disabled]
-	);
-
-	const baseProgress = duration > 0 ? currentTime / duration : 0;
-	const displayProgress = dragProgress ?? baseProgress;
-	const bufferProgress = duration > 0 ? Math.min(1, buffered / duration) : 0;
-	const isThin = variant === "thin";
-
-	const ariaValueText = duration > 0
-		? `${formatTime(dragProgress !== null ? dragProgress * duration : currentTime)} of ${formatTime(duration)}`
-		: "0:00";
+	const labelTime = drag !== null ? drag * duration : currentTime;
 
 	return (
-		<div
-			ref={barRef}
-			role="slider"
-			aria-label="Track progress"
-			aria-orientation="horizontal"
-			aria-valuenow={Math.round(dragProgress !== null ? dragProgress * duration : currentTime)}
-			aria-valuemin={0}
-			aria-valuemax={Math.round(duration)}
-			aria-valuetext={ariaValueText}
-			aria-disabled={disabled}
-			tabIndex={disabled ? -1 : 0}
-			className={`group/seekbar relative flex items-center w-full select-none rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 ${
-				isThin
-					? "h-8 before:absolute before:inset-x-0 before:-inset-y-3 before:content-['']"
-					: "h-8 before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']"
-			} ${disabled ? "cursor-default opacity-40 pointer-events-none" : "cursor-pointer"}`}
-			style={{ touchAction: "none" }}
-			onTouchStart={handleTouchStart}
-			onTouchMove={handleTouchMove}
-			onTouchEnd={handleTouchEnd}
-			onMouseDown={handleMouseDown}
-			onKeyDown={(e) => {
-				if (disabled) return;
-				if (e.key === "ArrowRight") {
-					e.stopPropagation();
-					onSeekRef.current(Math.min(duration, currentTime + 5));
-				} else if (e.key === "ArrowLeft") {
-					e.stopPropagation();
-					onSeekRef.current(Math.max(0, currentTime - 5));
-				}
-			}}
-		>
-			{/* Time tooltip during drag */}
-			{dragProgress !== null && (
-				<div
-					className="absolute -top-8 z-10 -translate-x-1/2 rounded-md bg-foreground px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums text-background shadow-float pointer-events-none"
-					style={{ left: `${displayProgress * 100}%` }}
-				>
-					{formatTime(displayProgress * duration)}
-				</div>
+		<div className={cn("flex w-full items-center gap-2.5", className)}>
+			{showTimes && (
+				<span className="w-9 shrink-0 text-right font-mono text-[10.5px] tabular-nums text-muted-foreground" data-testid="seek-elapsed">
+					{formatTime(labelTime)}
+				</span>
 			)}
 
-			{/* Visual track */}
 			<div
-				className={`relative w-full overflow-hidden rounded-full bg-border ${
-					isThin
-						? "h-[3px] group-hover/seekbar:h-[5px]"
-						: "h-1 group-hover/seekbar:h-1.5"
-				} ${dragProgress !== null ? (isThin ? "h-[5px]" : "h-1.5") : ""} transition-[height] duration-150 ease-out`}
+				role="slider"
+				tabIndex={disabled ? -1 : 0}
+				aria-label="Seek"
+				aria-orientation="horizontal"
+				aria-valuemin={0}
+				aria-valuemax={Math.round(duration)}
+				aria-valuenow={Math.round(labelTime)}
+				aria-valuetext={`${formatTime(labelTime)} of ${formatTime(duration)}`}
+				aria-disabled={disabled || undefined}
+				aria-busy={loading || undefined}
+				data-active={active || undefined}
+				className={cn(
+					"group/seek relative flex h-4 min-w-0 flex-1 touch-none select-none items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+					disabled ? "pointer-events-none opacity-40" : "cursor-pointer"
+				)}
+				onKeyDown={step}
+				onPointerDown={(e) => {
+					if (disabled || e.button > 0) return;
+					e.currentTarget.setPointerCapture?.(e.pointerId);
+					setDrag(ratioAt(e.clientX));
+				}}
+				onPointerMove={(e) => {
+					const r = ratioAt(e.clientX);
+					if (drag !== null) setDrag(r);
+					else if (e.pointerType === "mouse") setHover(r);
+				}}
+				onPointerUp={(e) => {
+					if (drag === null) return;
+					const r = ratioAt(e.clientX);
+					setDrag(null);
+					onSeek(r * duration);
+				}}
+				onPointerCancel={() => setDrag(null)}
+				onPointerLeave={() => setHover(null)}
 			>
-				{/* Buffered (behind progress) */}
-				{bufferProgress > baseProgress && (
+				{/* Track */}
+				<div
+					ref={trackRef}
+					className="relative h-1 w-full overflow-hidden rounded-full bg-foreground/12 transition-[height] duration-150 ease-out group-hover/seek:h-1.5 group-data-[active]/seek:h-1.5"
+				>
 					<div
-						className="absolute inset-y-0 left-0 rounded-full bg-foreground/20"
-						style={{ width: `${bufferProgress * 100}%` }}
+						className="absolute inset-y-0 left-0 rounded-full bg-foreground/15 transition-[width] duration-300"
+						style={{ width: `${bufPct * 100}%` }}
+						data-testid="seek-buffered"
+					/>
+					{hover !== null && drag === null && hover > pct && (
+						<div
+							className="absolute inset-y-0 left-0 rounded-full bg-foreground/20"
+							style={{ width: `${hover * 100}%` }}
+							data-testid="seek-hover"
+						/>
+					)}
+					<div
+						className={cn(
+							"absolute inset-y-0 left-0 rounded-full bg-foreground transition-colors group-hover/seek:bg-highlight group-data-[active]/seek:bg-highlight",
+							drag === null && "transition-[width,background-color] duration-200 ease-linear",
+							loading && "opacity-50"
+						)}
+						style={{ width: `${shown * 100}%` }}
+						data-testid="seek-progress"
+					/>
+					<AnimatePresence>
+						{loading && (
+							<motion.div
+								key="sheen"
+								data-testid="seek-loading"
+								className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-foreground/45 to-transparent"
+								initial={{ left: "-35%", opacity: 0 }}
+								animate={{ left: ["-35%", "100%"], opacity: 1 }}
+								exit={{ opacity: 0 }}
+								transition={{ left: { repeat: Infinity, duration: 1.1, ease: "easeInOut" }, opacity: { duration: 0.2 } }}
+							/>
+						)}
+					</AnimatePresence>
+				</div>
+
+				{/* Thumb */}
+				{!disabled && (
+					<span
+						aria-hidden
+						className={cn(
+							"pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground shadow-[0_1px_4px_rgb(0_0_0/0.3)] ring-2 ring-background transition-[scale,opacity] duration-150",
+							active ? "scale-100 opacity-100" : "scale-50 opacity-0 group-focus-visible/seek:scale-100 group-focus-visible/seek:opacity-100"
+						)}
+						style={{ left: `${shown * 100}%` }}
 					/>
 				)}
-				{/* Progress */}
-				<div
-					className="absolute inset-y-0 left-0 rounded-full bg-foreground transition-[width] ease-linear"
-					style={{
-						width: `${displayProgress * 100}%`,
-						transitionDuration: dragProgress !== null ? "0ms" : "100ms",
-					}}
-				/>
+
+				{/* Time bubble */}
+				<AnimatePresence>
+					{active && !disabled && (
+						<motion.span
+							key="bubble"
+							initial={{ opacity: 0, y: 4, scale: 0.95 }}
+							animate={{ opacity: 1, y: 0, scale: 1 }}
+							exit={{ opacity: 0, y: 4, scale: 0.95 }}
+							transition={{ duration: 0.12 }}
+							className="pointer-events-none absolute bottom-full z-10 mb-2 -translate-x-1/2 rounded-md bg-foreground px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums text-background shadow-float"
+							style={{ left: `${(drag ?? hover ?? 0) * 100}%` }}
+							data-testid="seek-bubble"
+						>
+							{formatTime((drag ?? hover ?? 0) * duration)}
+						</motion.span>
+					)}
+				</AnimatePresence>
 			</div>
 
-			{/* Thumb */}
-			{!disabled && (
-				<div
-					className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground shadow-[0_0_0_3px_var(--background)] transition-[opacity,transform] duration-150 ease-out ${
-						isThin ? "size-2.5" : "size-3"
-					} ${
-						dragProgress !== null
-							? "opacity-100 scale-125"
-							: "opacity-100 scale-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:scale-50 [@media(hover:hover)]:group-hover/seekbar:opacity-100 [@media(hover:hover)]:group-hover/seekbar:scale-100 group-focus-visible/seekbar:opacity-100 group-focus-visible/seekbar:scale-100"
-					}`}
-					style={{ left: `${displayProgress * 100}%` }}
-				/>
+			{showTimes && (
+				<span className="w-9 shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground" data-testid="seek-total">
+					{formatTime(duration)}
+				</span>
 			)}
 		</div>
 	);
