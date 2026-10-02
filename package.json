@@ -5,11 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "vercel-build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint",
     "studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",

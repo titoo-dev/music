@@ -16,24 +16,20 @@ Wavelet tourne entièrement dans Next.js (pages + routes `src/app/api/v1/`), san
 4. **Settings → Environment Variables** : ajouter `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (l'URL de production), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, et si besoin `WAVELET_SERVICE_ARL`, `SPOTIFY_CLIENT_ID` et `SPOTIFY_CLIENT_SECRET` (voir `.env.example`).
 5. Dans la console Google OAuth, ajouter `https://<domaine>/api/auth/callback/google` aux redirect URIs.
 
-## 2. Initialiser le schéma
+## 2. Schéma de la base
 
-Il n'y a pas de migrations : le schéma est poussé avec `db push`, une fois, puis à chaque changement de `prisma/schema.prisma` :
+Le schéma est géré par des migrations Prisma (`prisma/migrations/`). Le build Vercel (`vercel.json` → `npm run vercel-build`) lance `prisma migrate deploy` avant `next build`, sur la connexion directe `DATABASE_URL_UNPOOLED` (le pooler Neon ne supporte pas les verrous de migration). Rien à faire à la main.
 
-```bash
-vercel link
-vercel env pull .env.local
-npm run db:push
-```
+Pour modifier le schéma : éditer `prisma/schema.prisma`, puis lancer `npm run db:migrate -- --name <nom>` contre une base de dev. La migration générée est commitée, puis appliquée au prochain déploiement.
 
 ## 3. Développement local
 
 ```bash
-vercel env pull .env.local   # DATABASE_URL + BLOB_READ_WRITE_TOKEN + secrets
+vercel env pull .env.local   # BLOB_READ_WRITE_TOKEN (+ variables non sensibles)
 npm run dev
 ```
 
-Le dev local utilise la même base Neon et le même store Blob que l'environnement tiré. Prévoir une branche Neon et un store Blob dédiés au dev pour ne pas toucher la prod.
+Les variables Neon sont marquées « Sensitive » et ne sont pas récupérées par `vercel env pull`. En local, ajouter à la main dans `.env.local` la `DATABASE_URL` d'une branche Neon de dev. Le store Blob tiré est celui de la prod : prévoir un store dédié au dev pour ne pas y écrire.
 
 ## Fonctionnement du streaming
 

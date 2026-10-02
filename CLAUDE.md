@@ -10,7 +10,7 @@ This project uses Next.js 16 which has breaking changes from earlier versions. *
 
 - **Frontend**: Next.js 16 (app router), React 19, Zustand stores, Tailwind CSS 4, shadcn/ui, Motion
 - **Backend**: Next.js API routes (`src/app/api/v1/`) on Vercel Functions (Fluid compute). Background work after a response goes through `after()` — a bare fire-and-forget promise is frozen when the response ends.
-- **Database**: PostgreSQL (Neon via Vercel Marketplace) through Prisma 7 + `pg` pool attached with `attachDatabasePool` (schema at `prisma/schema.prisma`, applied with `npm run db:push`)
+- **Database**: PostgreSQL (Neon via Vercel Marketplace) through Prisma 7 + `pg` pool attached with `attachDatabasePool` (schema at `prisma/schema.prisma`; migrations in `prisma/migrations/` are applied by `prisma migrate deploy` during the Vercel build — create new ones with `npm run db:migrate`)
 - **Storage**: private Vercel Blob store — writes via `BlobStorageProvider` (`src/lib/wavelet/storage/`), reads/presigned URLs via `src/lib/blob-stream.ts`. `/tmp` is the only writable path.
 - **Auth**: better-auth (`src/lib/auth.ts`, `src/lib/auth-client.ts`)
 
