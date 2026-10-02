@@ -29,7 +29,8 @@ vercel env pull .env.local   # BLOB_READ_WRITE_TOKEN (+ variables non sensibles)
 npm run dev
 ```
 
-Les variables Neon sont marquées « Sensitive » et ne sont pas récupérées par `vercel env pull`. En local, ajouter à la main dans `.env.local` la `DATABASE_URL` d'une branche Neon de dev. Le store Blob tiré est celui de la prod : prévoir un store dédié au dev pour ne pas y écrire.
+- **Blob** : l'environnement Development a son propre store privé (`wavelet-music-local`). `vercel env pull` récupère son token, et la prod (`wavelet-music`) n'est jamais touchée.
+- **Postgres** : les variables Neon sont « Sensitive » et ne sont pas récupérées par `vercel env pull`. En local, `DATABASE_URL` (dans `.env` ou `.env.local`) pointe vers un Postgres local, par exemple un conteneur Docker, ou vers une branche Neon de dev. Pour une base existante créée avant les migrations : `npx prisma db push`, puis `npx prisma migrate resolve --applied 0_init`.
 
 ## Fonctionnement du streaming
 
