@@ -8,6 +8,7 @@
     "vercel-build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint",
+    "icons": "tsx scripts/generate-icons.ts",
     "studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

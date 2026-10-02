@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 64 64">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1C1C22"/><stop offset="1" stop-color="#08080A"/></linearGradient>
+<radialGradient id="sheen" cx="0.3" cy="0.15" r="0.75"><stop offset="0" stop-color="#fff" stop-opacity="0.10"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<linearGradient id="wave" gradientUnits="userSpaceOnUse" x1="9" y1="0" x2="55" y2="0"><stop offset="0" stop-color="#38BDF8"/><stop offset="0.5" stop-color="#818CF8"/><stop offset="1" stop-color="#F472B6"/></linearGradient>
+
+</defs>
+<rect x="1" y="1" width="62" height="62" rx="15" fill="url(#bg)"/><rect x="1.5" y="1.5" width="61" height="61" rx="14.5" fill="none" stroke="#fff" stroke-opacity="0.09"/>
+<rect x="1" y="1" width="62" height="62" rx="15" fill="url(#sheen)"/>
+<g transform="translate(32 32) scale(1) translate(-32 -32)">
+
+<path d="M9 34.4C9.27 34.41 10.1 34.5 10.64 34.45C11.19 34.4 11.74 34.3 12.29 34.09C12.83 33.87 13.38 33.52 13.93 33.15C14.48 32.78 15.02 32.22 15.57 31.87C16.12 31.51 16.67 31.05 17.21 31.02C17.76 30.98 18.31 31.09 18.86 31.66C19.4 32.23 19.95 33.26 20.5 34.42C21.05 35.59 21.6 37.35 22.14 38.66C22.69 39.96 23.24 41.6 23.79 42.26C24.33 42.92 24.88 43.27 25.43 42.64C25.98 42.01 26.52 40.4 27.07 38.47C27.62 36.54 28.17 33.46 28.71 31.03C29.26 28.61 29.81 25.59 30.36 23.92C30.9 22.24 31.45 20.99 32 20.99C32.55 20.99 33.1 22.24 33.64 23.92C34.19 25.59 34.74 28.61 35.29 31.03C35.83 33.46 36.38 36.54 36.93 38.47C37.48 40.4 38.02 42.01 38.57 42.64C39.12 43.27 39.67 42.92 40.21 42.26C40.76 41.6 41.31 39.96 41.86 38.66C42.4 37.35 42.95 35.59 43.5 34.42C44.05 33.26 44.6 32.23 45.14 31.66C45.69 31.09 46.24 30.98 46.79 31.02C47.33 31.05 47.88 31.51 48.43 31.87C48.98 32.22 49.52 32.78 50.07 33.15C50.62 33.52 51.17 33.87 51.71 34.09C52.26 34.3 52.81 34.4 53.36 34.45C53.9 34.5 54.73 34.41 55 34.4" fill="none" stroke="url(#wave)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

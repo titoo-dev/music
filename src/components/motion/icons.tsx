@@ -1,7 +1,9 @@
 "use client";
 
 import { motion, AnimatePresence, type Transition } from "motion/react";
+import { useId } from "react";
 import { cn } from "@/lib/utils";
+import { LOGO_BG, LOGO_GRADIENT, LOGO_VIEWBOX, waveletPath } from "@/lib/logo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Motion-driven SVG primitives. Every icon here animates its own geometry
@@ -166,35 +168,46 @@ export function Equalizer({
 	);
 }
 
-/** The wavelet mark: five waveform bars inside a rounded square. */
+/** One carrier cycle of the travelling wavelet, sampled for the `d` keyframes. */
+const LOGO_FRAMES = Array.from({ length: 9 }, (_, i) => waveletPath({ phase: (i / 8) * 2 * Math.PI }));
+
+/**
+ * The wavelet mark: a gradient wavelet stroke on a dark squircle. It draws
+ * itself in on mount; `animated` makes the carrier travel under its envelope.
+ */
 export function LogoMark({ animated = false, className }: { animated?: boolean; className?: string }) {
-	const heights = [6, 11, 16, 11, 6];
+	const uid = useId().replace(/[^w-]/g, "");
+	const [g0, g1, g2] = LOGO_GRADIENT;
+	const [b0, b1] = LOGO_BG;
 	return (
-		<svg viewBox="0 0 24 24" aria-hidden className={cn("size-6", className)}>
-			<rect x="0.5" y="0.5" width="23" height="23" rx="6.5" className="fill-foreground" />
-			{heights.map((h, i) => (
-				<motion.rect
-					key={i}
-					x={4.6 + i * 3.3}
-					width={1.8}
-					rx={0.9}
-					className="fill-background"
-					initial={{ height: 2, y: 11 }}
-					animate={
-						animated
-							? {
-									height: [h, h * 0.4, h * 1.1 > 17 ? 17 : h * 1.1, h],
-									y: [12 - h / 2, 12 - (h * 0.4) / 2, 12 - Math.min(17, h * 1.1) / 2, 12 - h / 2],
-								}
-							: { height: h, y: 12 - h / 2 }
-					}
-					transition={
-						animated
-							? { repeat: Infinity, duration: 1.2, delay: i * 0.1, ease: "easeInOut" }
-							: { type: "spring", stiffness: 300, damping: 18, delay: 0.1 + i * 0.05 }
-					}
-				/>
-			))}
+		<svg viewBox={`0 0 ${LOGO_VIEWBOX} ${LOGO_VIEWBOX}`} aria-hidden className={cn("size-6", className)}>
+			<defs>
+				<linearGradient id={`${uid}-bg`} x1="0" y1="0" x2="0" y2="1">
+					<stop offset="0" stopColor={b0} />
+					<stop offset="1" stopColor={b1} />
+				</linearGradient>
+				<linearGradient id={`${uid}-wave`} gradientUnits="userSpaceOnUse" x1="9" y1="0" x2="55" y2="0">
+					<stop offset="0" stopColor={g0} />
+					<stop offset="0.5" stopColor={g1} />
+					<stop offset="1" stopColor={g2} />
+				</linearGradient>
+			</defs>
+			<rect x="1" y="1" width="62" height="62" rx="15" fill={`url(#${uid}-bg)`} />
+			<rect x="1.5" y="1.5" width="61" height="61" rx="14.5" fill="none" stroke="#fff" strokeOpacity={0.09} />
+			<motion.path
+				d={LOGO_FRAMES[0]}
+				fill="none"
+				stroke={`url(#${uid}-wave)`}
+				strokeWidth={5.5}
+				strokeLinecap="round"
+				strokeLinejoin="round"
+				initial={{ pathLength: 0 }}
+				animate={animated ? { pathLength: 1, d: LOGO_FRAMES } : { pathLength: 1, d: LOGO_FRAMES[0] }}
+				transition={{
+					pathLength: { duration: 0.7, ease: "easeOut" },
+					d: animated ? { repeat: Infinity, duration: 1.6, ease: "linear" } : { duration: 0.4 },
+				}}
+			/>
 		</svg>
 	);
 }

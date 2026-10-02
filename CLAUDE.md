@@ -50,7 +50,7 @@ src/
 │   └── server-state.ts      # Shared server state
 ├── stores/                  # Zustand: useAppStore, usePlayerStore, useQueueStore, etc.
 └── utils/                   # api helpers, volume adjustment, misc helpers
-scripts/                     # DB check, icon generation, streaming tasks
+scripts/                     # DB check, icon generation (`npm run icons`), streaming tasks
 prisma/schema.prisma         # Database schema
 ```
 
@@ -92,6 +92,7 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Player seek ring | `src/components/audio/SeekRing.tsx`, `src/lib/perimeter.ts` | `SeekRing.test.tsx`, `perimeter.test.ts` |
 | Fullscreen wave seek | `src/components/audio/WaveSeek.tsx`, `src/lib/wave.ts`, `src/lib/spectrum.ts` | `WaveSeek.test.tsx`, `wave.test.ts`, `spectrum.test.ts` (+ `FullscreenPlayer.test.tsx`) |
 | Stream failure diagnosis | `src/lib/stream-failure.ts` (used by `AudioEngine.tsx` give-up path) | `stream-failure.test.ts` |
+| Logo / icons | `src/lib/logo.ts` (shared by `LogoMark`, OG image, `scripts/generate-icons.ts`) | `logo.test.ts` |
 | Blob storage | `src/lib/blob-stream.ts`, `src/lib/wavelet/storage/{blob,BlobStorageProvider}.ts` | `blob-stream.test.ts`, `blob.test.ts`, `BlobStorageProvider.test.ts` |
 
 ### Fix-bug-once strategy (read this before fixing anything)

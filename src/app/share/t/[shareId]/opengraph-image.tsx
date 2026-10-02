@@ -1,10 +1,13 @@
 import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/prisma";
+import { logoSvg } from "@/lib/logo";
 
 export const runtime = "nodejs";
 export const alt = "Shared track on wavelet";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+
+const LOGO_DATA_URI = `data:image/svg+xml;base64,${Buffer.from(logoSvg({ size: 88, glow: false })).toString("base64")}`;
 
 export default async function OgImage({
 	params,
@@ -181,22 +184,7 @@ export default async function OgImage({
 								marginBottom: 16,
 							}}
 						>
-							<div
-								style={{
-									width: 40,
-									height: 40,
-									backgroundColor: "#FF2E00",
-									border: "3px solid #0D0D0D",
-									display: "flex",
-									alignItems: "center",
-									justifyContent: "center",
-									color: "white",
-									fontSize: 20,
-									fontWeight: 900,
-								}}
-							>
-								D
-							</div>
+							<img src={LOGO_DATA_URI} width={44} height={44} alt="" />
 							<span
 								style={{
 									fontSize: 22,

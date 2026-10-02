@@ -52,6 +52,7 @@ export default defineConfig({
 				"src/lib/wave.ts",
 				"src/lib/spectrum.ts",
 				"src/lib/stream-failure.ts",
+				"src/lib/logo.ts",
 				"src/lib/blob-stream.ts",
 				"src/lib/wavelet/storage/blob.ts",
 				"src/lib/wavelet/storage/BlobStorageProvider.ts",
