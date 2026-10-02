@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { bearer } from "better-auth/plugins";
 import { prisma } from "@/lib/prisma";
 
 export const auth = betterAuth({
@@ -25,6 +26,11 @@ export const auth = betterAuth({
 			maxAge: 5 * 60, // 5 minutes
 		},
 	},
+	// Native clients (Flutter) authenticate with `Authorization: Bearer <token>`
+	// instead of cookies. The token comes from the `set-auth-token` response
+	// header on sign-in; the plugin turns it back into a session cookie so every
+	// `auth.api.getSession({ headers })` call in the API routes keeps working.
+	plugins: [bearer()],
 });
 
 export type Session = typeof auth.$Infer.Session;
