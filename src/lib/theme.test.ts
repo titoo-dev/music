@@ -5,7 +5,11 @@ import {
 	applyThemePreference,
 	THEME_STORAGE_KEY,
 	THEME_SCRIPT,
+	THEME_COLORS,
 } from "./theme";
+
+const themeColor = () =>
+	Array.from(document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')).map((m) => m.content);
 
 const origMatchMedia = window.matchMedia;
 
@@ -16,6 +20,7 @@ function mockMatchMedia(dark: boolean) {
 beforeEach(() => {
 	localStorage.clear();
 	document.documentElement.classList.remove("dark");
+	document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.remove());
 });
 
 afterEach(() => {
@@ -58,5 +63,32 @@ describe("theme", () => {
 		mockMatchMedia(true);
 		new Function(THEME_SCRIPT)();
 		expect(document.documentElement.classList.contains("dark")).toBe(true);
+	});
+
+	it("paints the PWA title bar with the app theme, not the OS one (was: white title bar over the dark app)", () => {
+		mockMatchMedia(false);
+		applyThemePreference("dark");
+		expect(themeColor()).toEqual([THEME_COLORS.dark]);
+		applyThemePreference("light");
+		expect(themeColor()).toEqual([THEME_COLORS.light]);
+	});
+
+	it("rewrites existing theme-color metas instead of adding more", () => {
+		mockMatchMedia(true);
+		const meta = document.createElement("meta");
+		meta.name = "theme-color";
+		meta.content = "#123456";
+		meta.media = "(prefers-color-scheme: light)";
+		document.head.appendChild(meta);
+		applyThemePreference("system");
+		expect(themeColor()).toEqual([THEME_COLORS.dark]);
+		expect(meta.hasAttribute("media")).toBe(false);
+	});
+
+	it("inline script sets the theme-color before paint", () => {
+		mockMatchMedia(false);
+		localStorage.setItem(THEME_STORAGE_KEY, "dark");
+		new Function(THEME_SCRIPT)();
+		expect(themeColor()).toEqual([THEME_COLORS.dark]);
 	});
 });

@@ -16,11 +16,9 @@ const geistMono = Geist_Mono({
 	variable: "--font-geist-mono",
 });
 
+// No `themeColor` here: THEME_SCRIPT writes it from the in-app theme, so the
+// PWA title bar matches the app rather than the OS scheme.
 export const viewport: Viewport = {
-	themeColor: [
-		{ media: "(prefers-color-scheme: light)", color: "#ffffff" },
-		{ media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
-	],
 	width: "device-width",
 	initialScale: 1,
 	maximumScale: 1,

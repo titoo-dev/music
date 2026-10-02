@@ -312,3 +312,34 @@ html.dark {
 	background: color-mix(in srgb, var(--highlight) 25%, transparent);
 	color: var(--foreground);
 }
+
+/* ─── DESKTOP PWA: WINDOW CONTROLS OVERLAY ───
+   The installed app has no title bar (manifest `display_override`); the
+   window's min/max/close buttons float over the top-right corner instead.
+   The header doubles as the title bar: it drags the window, its controls stay
+   clickable, and its content stops short of the window buttons. */
+@media (display-mode: window-controls-overlay) {
+	/* Drag strip for pages without the app header (login, share). */
+	body::before {
+		content: "";
+		position: fixed;
+		z-index: 60;
+		top: 0;
+		left: env(titlebar-area-x, 0);
+		width: env(titlebar-area-width, 100%);
+		height: env(titlebar-area-height, 0);
+		pointer-events: none;
+		app-region: drag;
+		-webkit-app-region: drag;
+	}
+	.app-titlebar {
+		app-region: drag;
+		-webkit-app-region: drag;
+		padding-left: env(titlebar-area-x, 0);
+		padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+	}
+	:is(a, button, input, select, textarea, label, [role="button"], [role="tab"], [role="menuitem"], [tabindex]) {
+		app-region: no-drag;
+		-webkit-app-region: no-drag;
+	}
+}

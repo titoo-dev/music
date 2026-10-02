@@ -7,8 +7,11 @@ export default function manifest(): MetadataRoute.Manifest {
 		description: "Music downloader powered by Deezer",
 		start_url: "/",
 		display: "standalone",
-		background_color: "#F0EBE3",
-		theme_color: "#18181B",
+		// Desktop PWA: drop the title bar and let the app header run up to the
+		// window controls (see the window-controls-overlay rules in globals.css).
+		display_override: ["window-controls-overlay", "standalone"],
+		background_color: "#0a0a0a",
+		theme_color: "#0a0a0a",
 		orientation: "portrait-primary",
 		categories: ["music", "entertainment"],
 		icons: [
