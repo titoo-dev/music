@@ -11,10 +11,11 @@ export const BLOB_ACCESS = "private" as const;
 /**
  * Map a storagePath (as saved in StoredTrack, e.g. "music/Artist/Album/Track.mp3")
  * to a Blob pathname. Blob has no notion of absolute paths, so leading slashes
- * are dropped and Windows separators normalized.
+ * are dropped, Windows separators normalized and repeated slashes collapsed
+ * (Blob rejects "//", which generatePath produces from downloadLocation "music/").
  */
 export function toBlobPathname(storagePath: string): string {
-	return storagePath.replace(/\\/g, "/").replace(/^\/+/, "");
+	return storagePath.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^\//, "");
 }
 
 export function inferContentType(path: string): string {

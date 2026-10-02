@@ -1,11 +1,12 @@
 import pg from "pg";
+import { withExplicitSslMode } from "@/lib/db-url";
 import type { ConfigStore } from "./ConfigStore";
 
 export class PostgresConfigStore implements ConfigStore {
 	private pool: pg.Pool;
 
 	constructor(connectionString: string) {
-		this.pool = new pg.Pool({ connectionString });
+		this.pool = new pg.Pool({ connectionString: withExplicitSslMode(connectionString) });
 	}
 
 	async init() {

@@ -18,6 +18,12 @@ describe("toBlobPathname", () => {
 		expect(toBlobPathname("music\\Artist\\Album\\T.flac")).toBe("music/Artist/Album/T.flac");
 	});
 
+	it("collapses repeated slashes (was: 'Vercel Blob: pathname cannot contain \"//\"' on progressive-stream persist)", () => {
+		// downloadLocation defaults to "music/" and generatePath appends "/<album>".
+		expect(toBlobPathname("music//Album/CD1/T.flac")).toBe("music/Album/CD1/T.flac");
+		expect(toBlobPathname("music\\\\A//B///T.mp3")).toBe("music/A/B/T.mp3");
+	});
+
 	it("leaves an already-relative pathname untouched", () => {
 		expect(toBlobPathname("music/A - B/01 - T.mp3")).toBe("music/A - B/01 - T.mp3");
 	});

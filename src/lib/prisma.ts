@@ -2,6 +2,7 @@ import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { attachDatabasePool } from "@vercel/functions";
 import { Pool } from "pg";
+import { withExplicitSslMode } from "@/lib/db-url";
 
 const globalForPrisma = globalThis as unknown as {
 	prisma: any;
@@ -12,7 +13,7 @@ function createPrismaClient() {
 	if (!connectionString) {
 		throw new Error("DATABASE_URL is not set");
 	}
-	const pool = new Pool({ connectionString });
+	const pool = new Pool({ connectionString: withExplicitSslMode(connectionString) });
 	// Fluid compute reuses instances between requests: let Vercel drain idle
 	// connections before an instance is suspended so they don't leak on the
 	// Postgres side. No-op outside Vercel.
