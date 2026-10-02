@@ -96,9 +96,9 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Stream failure diagnosis | `src/lib/stream-failure.ts` (used by `AudioEngine.tsx` give-up path) | `stream-failure.test.ts` |
 | Logo / icons | `src/lib/logo.ts` (shared by `LogoMark`, OG image, `scripts/generate-icons.ts`) | `logo.test.ts` |
 | Blob storage | `src/lib/blob-stream.ts`, `src/lib/wavelet/storage/{blob,BlobStorageProvider}.ts` | `blob-stream.test.ts`, `blob.test.ts`, `BlobStorageProvider.test.ts` |
+| Bearer auth (native clients) | `src/lib/auth.ts` (better-auth `bearer()` plugin) | `auth.test.ts` |
 
 ### Fix-bug-once strategy (read this before fixing anything)
-| Bearer auth (native clients) | `src/lib/auth.ts` (better-auth `bearer()` plugin) | `auth.test.ts` |
 
 **Every bug fix must ship with a failing-then-passing test.** No exceptions. The workflow is:
 
