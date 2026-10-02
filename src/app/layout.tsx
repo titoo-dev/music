@@ -29,6 +29,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+	// Canonical origin for absolute OG / Twitter image URLs (https://wavelet.titosy.dev in production).
+	metadataBase: process.env.BETTER_AUTH_URL ? new URL(process.env.BETTER_AUTH_URL) : undefined,
 	title: "wavelet",
 	description: "Music downloader powered by Deezer",
 	applicationName: "wavelet",
