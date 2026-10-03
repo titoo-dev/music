@@ -593,8 +593,24 @@ describe("usePlayerStore — addToQueue()", () => {
 	it("ignores duplicates", () => {
 		const queue = makeQueue(["a", "b", "c"]);
 		usePlayerStore.setState({ queue, queueIndex: 0, currentTrack: queue[0] });
-		usePlayerStore.getState().addToQueue(queue[1]);
+		expect(usePlayerStore.getState().addToQueue(queue[1])).toBe(false);
 		expect(usePlayerStore.getState().queue.length).toBe(3);
+	});
+
+	it("re-queues a track that already played (was: ⌘K 'Add to queue' silently did nothing)", () => {
+		const queue = makeQueue(["a", "b", "c"]);
+		usePlayerStore.setState({ queue, queueIndex: 2, currentTrack: queue[2] });
+		expect(usePlayerStore.getState().addToQueue(makeTrack("a"))).toBe(true);
+		const s = usePlayerStore.getState();
+		expect(s.queue.map((t) => t.trackId)).toEqual(["a", "b", "c", "a"]);
+		expect(s.queueIndex).toBe(2);
+	});
+
+	it("re-queues the track that is playing now", () => {
+		const queue = makeQueue(["a", "b"]);
+		usePlayerStore.setState({ queue, queueIndex: 0, currentTrack: queue[0] });
+		expect(usePlayerStore.getState().addToQueue(makeTrack("a"))).toBe(true);
+		expect(usePlayerStore.getState().queue.map((t) => t.trackId)).toEqual(["a", "b", "a"]);
 	});
 });
 

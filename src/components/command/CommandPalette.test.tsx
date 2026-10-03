@@ -139,6 +139,35 @@ describe("CommandPalette", () => {
 		expect(useCommandStore.getState().isOpen).toBe(false);
 	});
 
+	it("plays a searched track next, right after the current one (was: no 'Play next' in ⌘K, only append)", async () => {
+		const queue = ["x", "y", "z"].map((id) => ({ trackId: id, title: id, artist: "A", cover: null, duration: null }));
+		usePlayerStore.setState({ queue, queueIndex: 0, currentTrack: queue[0] });
+		fetchData.mockResolvedValue(SUGGEST);
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		await userEvent.click(screen.getByRole("button", { name: "Play next" }));
+		const s = usePlayerStore.getState();
+		expect(s.queue.map((t) => t.trackId)).toEqual(["x", "111", "y", "z"]);
+		expect(s.currentTrack?.trackId).toBe("x");
+		expect(toast).toHaveBeenCalledWith("“One More Time” plays next");
+	});
+
+	it("says so when 'Add to queue' finds the track already up next (was: toast claimed it was added)", async () => {
+		const queue = [
+			{ trackId: "x", title: "x", artist: "A", cover: null, duration: null },
+			{ trackId: "111", title: "One More Time", artist: "Daft Punk", cover: null, duration: null },
+		];
+		usePlayerStore.setState({ queue, queueIndex: 0, currentTrack: queue[0] });
+		fetchData.mockResolvedValue(SUGGEST);
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		await userEvent.click(screen.getByRole("button", { name: "Add to queue" }));
+		expect(usePlayerStore.getState().queue).toHaveLength(2);
+		expect(toast).toHaveBeenCalledWith("“One More Time” is already up next");
+	});
+
 	it("Shift+Enter downloads the active track", async () => {
 		fetchData.mockResolvedValue(SUGGEST);
 		render(<CommandPalette />);

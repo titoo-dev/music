@@ -13,7 +13,8 @@ import {
 	Info,
 	Library,
 	ListMusic,
-	ListPlus,
+	ListEnd,
+	ListStart,
 	Moon,
 	RotateCw,
 	Settings,
@@ -76,6 +77,7 @@ interface Row {
 	/** Shift+Enter — only for downloadable rows. */
 	onDownload?: () => void;
 	onQueue?: () => void;
+	onPlayNext?: () => void;
 	hint?: string;
 }
 
@@ -173,6 +175,7 @@ function PaletteBody() {
 	const play = usePlayerStore((s) => s.play);
 	const playQueue = usePlayerStore((s) => s.playQueue);
 	const addToQueue = usePlayerStore((s) => s.addToQueue);
+	const addNext = usePlayerStore((s) => s.addNext);
 
 	const inputRef = useRef<HTMLInputElement>(null);
 	const listRef = useRef<HTMLDivElement>(null);
@@ -336,9 +339,12 @@ function PaletteBody() {
 						play(toPlayerTrack(t));
 						close();
 					},
+					onPlayNext: () => {
+						addNext(toPlayerTrack(t));
+						toast(`“${t.title}” plays next`);
+					},
 					onQueue: () => {
-						addToQueue(toPlayerTrack(t));
-						toast(`Added “${t.title}” to queue`);
+						toast(addToQueue(toPlayerTrack(t)) ? `Added “${t.title}” to queue` : `“${t.title}” is already up next`);
 					},
 					onDownload: () => download([toDownloadable(t)]),
 					hint: "Play",
@@ -397,7 +403,7 @@ function PaletteBody() {
 			});
 		}
 		return out;
-	}, [view, collection, trimmed, data, isAuthenticated, download, downloadCollection, go, play, playQueue, addToQueue, close]);
+	}, [view, collection, trimmed, data, isAuthenticated, download, downloadCollection, go, play, playQueue, addToQueue, addNext, close]);
 
 	// Back to the first row whenever the list changes (adjusted during render).
 	const resetKey = `${rows.length}\u0000${trimmed}\u0000${view}`;
@@ -640,9 +646,14 @@ function PaletteRow({ row, index, active, onHover }: { row: Row; index: number; 
 				{row.subtitle && <span className={cn("block truncate text-xs", active ? "text-secondary-foreground/75" : "text-muted-foreground")}>{row.subtitle}</span>}
 			</span>
 			<span className="relative flex shrink-0 items-center gap-0.5">
+				{row.onPlayNext && (
+					<RowAction label="Play next" onClick={row.onPlayNext} visible={active}>
+						<ListStart className="size-4" />
+					</RowAction>
+				)}
 				{row.onQueue && (
 					<RowAction label="Add to queue" onClick={row.onQueue} visible={active}>
-						<ListPlus className="size-4" />
+						<ListEnd className="size-4" />
 					</RowAction>
 				)}
 				{row.onDownload && (

@@ -90,8 +90,12 @@ interface PlayerState {
 	// Queue management (P2)
 	/** Insert a track right after the current track ("Play Next"). */
 	addNext: (track: PlayerTrack) => void;
-	/** Append a track to the end of the queue ("Add to Queue"). */
-	addToQueue: (track: PlayerTrack) => void;
+	/**
+	 * Append a track to the end of the queue ("Add to Queue"). Returns false
+	 * when it is already up next; played tracks (and the current one) can be
+	 * queued again.
+	 */
+	addToQueue: (track: PlayerTrack) => boolean;
 	/** Remove a track from the queue by its queue index. */
 	removeFromQueue: (index: number) => void;
 	/** Move a track within the queue (drag-reorder). */
@@ -397,10 +401,11 @@ export const usePlayerStore = create<PlayerState>()(
 				const { queue, queueIndex } = get();
 				if (queue.length === 0 || queueIndex < 0) {
 					get().play(track);
-					return;
+					return true;
 				}
-				if (queue.some((t) => t.trackId === track.trackId)) return;
+				if (queue.slice(queueIndex + 1).some((t) => t.trackId === track.trackId)) return false;
 				set({ queue: [...queue, track] });
+				return true;
 			},
 
 			removeFromQueue: (index) => {
