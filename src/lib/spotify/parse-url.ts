@@ -29,3 +29,15 @@ export function parsePlaylistInput(input: string): string | null {
 		return null;
 	}
 }
+
+// Track links as Spotify desktop copies them (select all tracks of a
+// playlist, Ctrl+C): one https://open.spotify.com/track/{id} per line. Also
+// matches links glued together by a single-line field, since IDs are fixed
+// width. Returns unique IDs in first-seen order.
+const TRACK_LINK = /(?:open\.spotify\.com\/(?:intl-[a-z]{2}(?:-[a-z]+)?\/)?track\/|spotify:track:)([A-Za-z0-9]{22})/gi;
+
+export function parseTrackLinks(input: string): string[] {
+	const ids = new Set<string>();
+	for (const m of input.matchAll(TRACK_LINK)) ids.add(m[1]);
+	return [...ids];
+}

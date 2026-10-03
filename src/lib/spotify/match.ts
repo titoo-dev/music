@@ -3,8 +3,8 @@
 // Cascade (stop at first hit):
 //   1. ISRC exact (highest confidence; ~70-80% of well-tagged catalogues).
 //   2. Advanced search (artist + track + album), filtered by duration.
-//   3. Advanced search (artist + track), with title cleanup variants.
-//   4. Free-text search "title artist" — last-resort fuzzy.
+//   3. Free-text search "title artist", scored like the advanced results.
+//   4. Advanced search (artist + track), with title cleanup variants.
 //
 // Anything below `MIN_FUZZY_SCORE` is treated as not_found rather than a
 // silent low-quality match — the import UI surfaces the misses so the user
@@ -259,7 +259,13 @@ export async function matchTrack(
 		if (hit) return hit;
 	}
 
-	// 3. Drop the album constraint (frequent cause of misses: re-issues,
+	// 3. Free-text search, scored on title + artist + duration. Runs before the
+	//    artist-only advanced search: Deezer's `artist:` filter currently
+	//    returns nothing, and every extra call counts against its ~10 req/s.
+	const fuzzy = await tryFreeText(dz, target);
+	if (fuzzy) return fuzzy;
+
+	// 4. Drop the album constraint (frequent cause of misses: re-issues,
 	//    different region, single vs album versions).
 	if (primaryArtist) {
 		const hit = await tryAdvanced(
@@ -271,10 +277,6 @@ export async function matchTrack(
 		);
 		if (hit) return hit;
 	}
-
-	// 4. Free-text fallback.
-	const fuzzy = await tryFreeText(dz, target);
-	if (fuzzy) return fuzzy;
 
 	return {
 		status: "not_found",

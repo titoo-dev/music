@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { parseEmbedHtml, splitArtists, EMBED_TRACK_LIMIT } from "./embed";
-import { embedHtml } from "./embed.fixture";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { parseEmbedHtml, splitArtists, EMBED_TRACK_LIMIT, parseTrackEmbedHtml, fetchTracksFromEmbed } from "./embed";
+import { embedHtml, trackEmbedHtml } from "./embed.fixture";
 
 describe("parseEmbedHtml", () => {
 	it("extracts playlist metadata and tracks", () => {
@@ -72,5 +72,75 @@ describe("splitArtists", () => {
 
 	it("returns [] for an empty subtitle", () => {
 		expect(splitArtists("")).toEqual([]);
+	});
+});
+
+describe("parseTrackEmbedHtml", () => {
+	it("extracts title, artists array and duration", () => {
+		const t = parseTrackEmbedHtml(
+			trackEmbedHtml({ id: "11hcBLPtbMp4aQI6zGQLub", name: "Who", artists: ["Tyler, The Creator", "Kali Uchis"], duration: 1000 })
+		);
+		expect(t).toEqual({
+			spotifyId: "11hcBLPtbMp4aQI6zGQLub",
+			title: "Who",
+			artists: ["Tyler, The Creator", "Kali Uchis"],
+			album: "",
+			albumId: null,
+			durationMs: 1000,
+			isrc: null,
+			coverUrl: null,
+		});
+	});
+
+	it("returns null when the page has no track", () => {
+		expect(parseTrackEmbedHtml("<html></html>")).toBeNull();
+	});
+});
+
+describe("fetchTracksFromEmbed", () => {
+	const fetchMock = vi.fn();
+	const ok = (id: string, name: string) =>
+		new Response(trackEmbedHtml({ id, name, artists: ["X"], duration: 1 }), { status: 200 });
+
+	beforeEach(() => {
+		fetchMock.mockReset();
+		vi.stubGlobal("fetch", fetchMock);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it("keeps the input order and reports the tracks it couldn't read", async () => {
+		const ids = ["a".repeat(22), "b".repeat(22), "c".repeat(22)];
+		fetchMock.mockImplementation(async (url: string) =>
+			url.endsWith(ids[1]) ? new Response("", { status: 404 }) : ok(url.slice(-22), url.slice(-1))
+		);
+
+		const res = await fetchTracksFromEmbed(ids, { concurrency: 2 });
+
+		expect(res.tracks.map((t) => t.spotifyId)).toEqual([ids[0], ids[2]]);
+		expect(res.failed).toEqual([ids[1]]);
+		expect(fetchMock).toHaveBeenCalledWith(`https://open.spotify.com/embed/track/${ids[0]}`, expect.anything());
+	});
+
+	it("stops at the first 429 and hands back the unread IDs (was: retry-after 0 retried into the same wall)", async () => {
+		const ids = ["a".repeat(22), "b".repeat(22), "c".repeat(22)];
+		fetchMock
+			.mockResolvedValueOnce(ok(ids[0], "A"))
+			.mockResolvedValueOnce(new Response("", { status: 429, headers: { "retry-after": "0" } }));
+
+		const res = await fetchTracksFromEmbed(ids, { concurrency: 1 });
+
+		expect(res.tracks.map((t) => t.spotifyId)).toEqual([ids[0]]);
+		expect(res.rateLimited).toEqual([ids[1], ids[2]]);
+		expect(res.failed).toEqual([]);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("counts a network error as a failed track", async () => {
+		fetchMock.mockRejectedValue(new Error("boom"));
+		const res = await fetchTracksFromEmbed(["a".repeat(22)]);
+		expect(res).toEqual({ tracks: [], failed: ["a".repeat(22)], rateLimited: [] });
 	});
 });

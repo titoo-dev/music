@@ -50,6 +50,7 @@ describe("POST /api/v1/playlists/import/spotify", () => {
 		vi.stubGlobal("fetch", fetchMock);
 		delete process.env.SPOTIFY_CLIENT_ID;
 		delete process.env.SPOTIFY_CLIENT_SECRET;
+		Object.values(dz.api).forEach((f) => f.mockClear());
 		requireDeezerMock.mockResolvedValue({ userId: "u1", dz: dz as never, error: null });
 	});
 
@@ -98,5 +99,66 @@ describe("POST /api/v1/playlists/import/spotify", () => {
 		const res = await POST(makeNextRequest({ method: "POST", body: { url: "https://example.com" } }));
 		expect(res.status).toBe(400);
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	describe("tracks read from pasted links (Spotify desktop Ctrl+A / Ctrl+C)", () => {
+		const PZ = "11hcBLPtbMp4aQI6zGQLub";
+		const NOWHERE = "4EoJ151oQ5jY48z4RhSE96";
+		const GONE = "0000000000000000000000";
+		const track = (spotifyId: string, title: string, artists: string[], durationMs: number) => ({ spotifyId, title, artists, durationMs });
+		const tracks = [track(PZ, "Patient Zero", ["Taylor Swift"], 225_868), track(NOWHERE, "Nowhere", ["Nobody"], 1000)];
+
+		beforeEach(() => {
+			prismaMock.playlist.create.mockResolvedValue({ id: "pl2", title: "Road trip" } as never);
+		});
+
+		it("matches the tracks and names the playlist (was: link imports capped at the embed's 100 tracks)", async () => {
+			const res = await POST(makeNextRequest({ method: "POST", body: { tracks, unreadable: [GONE], total: 3, title: "  Road trip " } }));
+			const body = await readJson<Body>(res);
+
+			expect(res.status).toBe(200);
+			expect(body?.data.report).toMatchObject({ matched: 1, processed: 3, limited: false, truncated: false });
+			expect(body?.data.report.notFound.map((n) => n.title)).toEqual([`spotify:track:${GONE}`, "Nowhere"]);
+			expect(prismaMock.playlist.create).toHaveBeenCalledWith({
+				data: expect.objectContaining({ userId: "u1", title: "Road trip", coverUrl: "c" }),
+			});
+			expect(addToPlaylistMock).toHaveBeenCalledWith("pl2", [expect.objectContaining({ trackId: "42" })]);
+			expect(fetchMock).not.toHaveBeenCalled();
+		});
+
+		it("names the playlist \"Spotify import\" when no title is given", async () => {
+			await POST(makeNextRequest({ method: "POST", body: { tracks } }));
+			expect(prismaMock.playlist.create).toHaveBeenCalledWith({
+				data: expect.objectContaining({ title: "Spotify import" }),
+			});
+		});
+
+		it.each([
+			["an empty list", []],
+			["a bad track id", [track("nope", "x", ["a"], 1)]],
+			["a missing title", [{ spotifyId: PZ, artists: ["a"], durationMs: 1 }]],
+			["non-string artists", [{ spotifyId: PZ, title: "x", artists: [1], durationMs: 1 }]],
+		])("returns 400 INVALID_TRACKS for %s", async (_, bad) => {
+			const res = await POST(makeNextRequest({ method: "POST", body: { tracks: bad } }));
+			expect(res.status).toBe(400);
+			expect((await readJson<Body>(res))?.error?.code).toBe("INVALID_TRACKS");
+			expect(prismaMock.playlist.create).not.toHaveBeenCalled();
+		});
+
+		it("keeps only the matcher fields from the client", async () => {
+			await POST(makeNextRequest({ method: "POST", body: { tracks: [{ ...tracks[0], isrc: "FAKE", album: "x".repeat(10_000) }] } }));
+			const targets = dz.api.advanced_search.mock.calls.length + dz.api.search_track.mock.calls.length;
+			expect(targets).toBeGreaterThan(0);
+			expect(dz.api.getTrackByISRC).not.toHaveBeenCalled();
+		});
+
+		it("flags a paste above 500 links as truncated", async () => {
+			const many = Array.from({ length: 501 }, (_, i) => track(String(i).padStart(22, "x"), "Patient Zero", ["Taylor Swift"], 225_868));
+
+			const res = await POST(makeNextRequest({ method: "POST", body: { tracks: many, total: 600 } }));
+			const body = await readJson<Body & { data: { report: { truncated: boolean; totalSpotify: number } } }>(res);
+
+			expect(body?.data.report).toMatchObject({ truncated: true, totalSpotify: 600, processed: 500 });
+		});
 	});
 });

@@ -116,3 +116,96 @@ export async function fetchPlaylistFromEmbed(playlistId: string): Promise<Spotif
 	}
 	return parseEmbedHtml(await res.text());
 }
+
+// ─── Single tracks ──────────────────────────────────────────────────────────
+// Used for pasted track links (Spotify desktop: Ctrl+A, Ctrl+C in a
+// playlist), which is how a playlist past the embed's 100-track cap gets in.
+
+const TRACK_EMBED_URL = "https://open.spotify.com/embed/track/";
+
+interface EmbedTrackEntity {
+	type?: string;
+	id?: string;
+	name?: string;
+	title?: string;
+	artists?: Array<{ name?: string }>;
+	duration?: number;
+}
+
+export function parseTrackEmbedHtml(html: string): SpotifyTrackMeta | null {
+	const raw = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/)?.[1];
+	let entity: EmbedTrackEntity | undefined;
+	try {
+		entity = raw ? JSON.parse(raw)?.props?.pageProps?.state?.data?.entity : undefined;
+	} catch {
+		return null;
+	}
+	const title = entity?.name ?? entity?.title;
+	if (!entity?.id || entity.type !== "track" || !title) return null;
+	return {
+		spotifyId: entity.id,
+		title,
+		artists: (entity.artists ?? []).map((a) => a.name ?? "").filter(Boolean),
+		album: "",
+		albumId: null,
+		durationMs: entity.duration ?? 0,
+		isrc: null,
+		coverUrl: null,
+	};
+}
+
+const RATE_LIMITED = Symbol("rate-limited");
+
+async function fetchTrackFromEmbed(
+	trackId: string
+): Promise<SpotifyTrackMeta | null | typeof RATE_LIMITED> {
+	const res = await fetch(`${TRACK_EMBED_URL}${trackId}`, {
+		headers: { "User-Agent": USER_AGENT, "Accept-Language": "en" },
+		cache: "no-store",
+	});
+	// Spotify answers 429 with "retry-after: 0" yet keeps refusing for minutes,
+	// so retrying here is pointless — the caller paces and resumes instead.
+	if (res.status === 429) return RATE_LIMITED;
+	if (!res.ok) return null;
+	return parseTrackEmbedHtml(await res.text());
+}
+
+export interface TrackEmbedBatch {
+	tracks: SpotifyTrackMeta[]; // input order
+	failed: string[]; // Spotify didn't return them (removed, region-locked, network error)
+	rateLimited: string[]; // not read because Spotify started refusing: try again later
+}
+
+// Bounded-concurrency fetch that stops at the first 429 and hands back the
+// IDs it didn't get to.
+export async function fetchTracksFromEmbed(
+	trackIds: string[],
+	options: { concurrency?: number } = {}
+): Promise<TrackEmbedBatch> {
+	const concurrency = Math.max(1, Math.min(options.concurrency ?? 3, 16));
+	const results = new Array<SpotifyTrackMeta | null | typeof RATE_LIMITED | undefined>(trackIds.length);
+	let cursor = 0;
+	let limited = false;
+
+	const worker = async () => {
+		while (!limited && cursor < trackIds.length) {
+			const idx = cursor++;
+			try {
+				results[idx] = await fetchTrackFromEmbed(trackIds[idx]);
+				if (results[idx] === RATE_LIMITED) limited = true;
+			} catch {
+				results[idx] = null;
+			}
+		}
+	};
+	await Promise.all(Array.from({ length: concurrency }, worker));
+
+	const batch: TrackEmbedBatch = { tracks: [], failed: [], rateLimited: [] };
+	for (let i = 0; i < trackIds.length; i++) {
+		const r = results[i];
+		if (r === RATE_LIMITED || r === undefined) batch.rateLimited.push(trackIds[i]);
+		else if (r === null) batch.failed.push(trackIds[i]);
+		else batch.tracks.push(r);
+	}
+	return batch;
+}

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import Link from "next/link";
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "motion/react";
-import { ChevronDown, ClipboardPaste, Download, Link2, ListMusic, Search, X } from "lucide-react";
+import { ChevronDown, ClipboardPaste, Download, Link2, ListMusic, Pencil, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { Equalizer, Spinner } from "@/components/motion/icons";
 import { postToServer } from "@/utils/api";
+import { parsePlaylistInput, parseTrackLinks } from "@/lib/spotify/parse-url";
+import { readTrackLinks, type ReadProgress, type TrackLinkBatch } from "@/lib/spotify/read-links";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogBadge, FilledField, M3DialogBody, filledButton, textButton } from "./PlaylistDialogs";
 
@@ -37,12 +39,15 @@ const FRIENDLY_ERRORS: Record<string, string> = {
 	DEEZER_LOGIN_FAILED: "Your Deezer ARL is invalid. Update it in Settings.",
 	SPOTIFY_NOT_FOUND: "Playlist not found. Make sure the link is public and not region-locked.",
 	SPOTIFY_FORBIDDEN: "Spotify refused to share this playlist. Make sure it's public.",
-	SPOTIFY_ERROR: "Couldn't read this playlist from Spotify. Please try again.",
+	SPOTIFY_ERROR: "Couldn't read this from Spotify. Please try again.",
 	SPOTIFY_RATE_LIMITED: "Spotify is rate-limiting requests. Please try again in a moment.",
-	INVALID_URL: "That doesn't look like a Spotify playlist link.",
+	INVALID_URL: "That doesn't look like a Spotify playlist link or track links.",
 	MISSING_URL: "Paste a Spotify playlist URL first.",
 	EMPTY_PLAYLIST: "This playlist has no importable tracks.",
 };
+
+// Same cap as the import route: matching more would outlast the function timeout.
+const MAX_TRACKS = 500;
 
 const morph = {
 	initial: { opacity: 0, scale: 0.94 },
@@ -51,7 +56,9 @@ const morph = {
 } as const;
 
 /**
- * Import a public Spotify playlist: a URL form that morphs into a summary
+ * Import a public Spotify playlist — from its link (Spotify only shares the
+ * first 100 tracks that way) or from the track links Spotify desktop copies
+ * with Ctrl+A / Ctrl+C (the whole playlist): a form that morphs into a summary
  * (match ring + the tracks Deezer didn't have). Use it with a `trigger`, or
  * controlled with `open` / `onOpenChange`.
  */
@@ -69,17 +76,25 @@ export function ImportSpotifyDialog({
 	const [openState, setOpenState] = useState(false);
 	const open = openProp ?? openState;
 	const [url, setUrl] = useState("");
+	const [title, setTitle] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [result, setResult] = useState<ImportResponse | null>(null);
 	const [showAllMisses, setShowAllMisses] = useState(false);
+	// Pasted track links are read from Spotify in batches before matching.
+	const [reading, setReading] = useState<ReadProgress | null>(null);
+
+	// Track links (not a playlist link) → the import needs a playlist name.
+	const trackCount = useMemo(() => (parsePlaylistInput(url) ? 0 : parseTrackLinks(url).length), [url]);
 
 	const reset = () => {
 		setUrl("");
+		setTitle("");
 		setLoading(false);
 		setError(null);
 		setResult(null);
 		setShowAllMisses(false);
+		setReading(null);
 	};
 
 	const handleOpenChange = (next: boolean) => {
@@ -97,7 +112,26 @@ export function ImportSpotifyDialog({
 		setLoading(true);
 		setError(null);
 		try {
-			const data: ImportResponse = await postToServer("playlists/import/spotify", { url: url.trim() });
+			let data: ImportResponse;
+			if (trackCount > 0) {
+				const ids = parseTrackLinks(url);
+				const { tracks, failed } = await readTrackLinks(ids.slice(0, MAX_TRACKS), {
+					fetchBatch: (chunk): Promise<TrackLinkBatch> => postToServer("playlists/import/spotify/tracks", { ids: chunk }),
+					onProgress: setReading,
+				});
+				setReading(null);
+				if (tracks.length === 0) {
+					throw Object.assign(new Error("Couldn't read any of these tracks from Spotify. Try again in a few minutes."), { code: "" });
+				}
+				data = await postToServer("playlists/import/spotify", {
+					tracks,
+					unreadable: failed,
+					total: ids.length,
+					...(title.trim() ? { title: title.trim() } : {}),
+				});
+			} else {
+				data = await postToServer("playlists/import/spotify", { url: url.trim() });
+			}
 			setResult(data);
 			if (data.playlist) {
 				onImported?.();
@@ -112,6 +146,7 @@ export function ImportSpotifyDialog({
 			setError((err.code && FRIENDLY_ERRORS[err.code]) || err.message || "Import failed");
 		} finally {
 			setLoading(false);
+			setReading(null);
 		}
 	};
 
@@ -137,7 +172,7 @@ export function ImportSpotifyDialog({
 							<M3DialogBody
 								badge={<DialogBadge icon={Download} tone="spotify" />}
 								title="Import from Spotify"
-								description="Paste a public Spotify playlist link. Tracks are matched on Deezer (up to 500)."
+								description="Paste a public playlist link, or its track links for the full list. Tracks are matched on Deezer (up to 500)."
 								actions={
 									<>
 										<button type="button" className={textButton} disabled={loading} onClick={() => handleOpenChange(false)}>
@@ -161,9 +196,8 @@ export function ImportSpotifyDialog({
 							>
 								<FilledField
 									autoFocus
-									type="url"
-									inputMode="url"
-									label="Playlist URL"
+									multiline
+									label="Playlist or track links"
 									placeholder="https://open.spotify.com/playlist/…"
 									icon={Link2}
 									value={url}
@@ -174,7 +208,10 @@ export function ImportSpotifyDialog({
 									error={error}
 									disabled={loading}
 									onKeyDown={(e) => {
-										if (e.key === "Enter") void handleImport();
+										if (e.key === "Enter" && !e.shiftKey) {
+											e.preventDefault();
+											void handleImport();
+										}
 									}}
 									suffix={
 										<button
@@ -193,23 +230,24 @@ export function ImportSpotifyDialog({
 										</button>
 									}
 								/>
+								<AnimatePresence mode="wait" initial={false}>
+									{trackCount > 0 ? (
+										<motion.div key="tracks" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }} className="overflow-hidden">
+											<p className="px-4 pt-2 text-xs font-medium text-primary tabular-nums">
+												{trackCount} track{trackCount === 1 ? "" : "s"} detected{trackCount > 500 ? " · the first 500 will be imported" : ""}
+											</p>
+											<FilledField className="pt-3" label="Playlist name" placeholder="Spotify import" icon={Pencil} value={title} onValueChange={setTitle} disabled={loading} maxLength={200} />
+										</motion.div>
+									) : (
+										<motion.p key="tip" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="px-4 pt-2 text-xs text-muted-foreground">
+											A playlist link brings the first 100 tracks. For all of them, open the playlist in the Spotify desktop app, press <kbd className="font-sans font-semibold">Ctrl+A</kbd> then <kbd className="font-sans font-semibold">Ctrl+C</kbd> (<kbd className="font-sans font-semibold">⌘A</kbd> / <kbd className="font-sans font-semibold">⌘C</kbd> on Mac) and paste here.
+										</motion.p>
+									)}
+								</AnimatePresence>
 								<AnimatePresence initial={false}>
 									{loading && (
 										<motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: [0.2, 0, 0, 1] }} className="overflow-hidden">
-											<div className="pt-4">
-												<div className="relative h-1.5 overflow-hidden rounded-full bg-primary/15">
-													<motion.span
-														className="absolute inset-y-0 w-2/5 rounded-full bg-primary"
-														initial={{ left: "-40%" }}
-														animate={{ left: "100%" }}
-														transition={{ repeat: Infinity, duration: 1.3, ease: [0.4, 0, 0.2, 1] }}
-													/>
-												</div>
-												<p className="mt-2.5 flex items-center gap-2.5 text-xs text-muted-foreground">
-													<Equalizer playing className="h-4 text-primary" />
-													Matching tracks… this can take a while.
-												</p>
-											</div>
+											<ImportProgress reading={reading} />
 										</motion.div>
 									)}
 								</AnimatePresence>
@@ -226,8 +264,60 @@ export function ImportSpotifyDialog({
 	);
 }
 
+/**
+ * Reading (pasted links): a determinate bar with a countdown while Spotify
+ * makes us wait. Matching: an indeterminate bar.
+ */
+function ImportProgress({ reading }: { reading: ReadProgress | null }) {
+	const resumeAt = reading?.resumeAt ?? null;
+
+	return (
+		<div className="pt-4">
+			<div className="relative h-1.5 overflow-hidden rounded-full bg-primary/15">
+				{reading ? (
+					<motion.span
+						className="absolute inset-y-0 left-0 rounded-full bg-primary"
+						animate={{ width: `${reading.total ? (reading.done / reading.total) * 100 : 0}%` }}
+						transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
+					/>
+				) : (
+					<motion.span
+						className="absolute inset-y-0 w-2/5 rounded-full bg-primary"
+						initial={{ left: "-40%" }}
+						animate={{ left: "100%" }}
+						transition={{ repeat: Infinity, duration: 1.3, ease: [0.4, 0, 0.2, 1] }}
+					/>
+				)}
+			</div>
+			<p className="mt-2.5 flex items-center gap-2.5 text-xs text-muted-foreground" aria-live="polite">
+				<Equalizer playing={!resumeAt} className="h-4 text-primary" />
+				{!reading ? (
+					"Matching tracks on Deezer… this can take a minute."
+				) : resumeAt ? (
+					<span>
+						Spotify asked us to slow down · resuming in <Countdown key={resumeAt} until={resumeAt} />
+					</span>
+				) : (
+					<span>
+						Reading tracks from Spotify… <span className="tabular-nums">{reading.done} / {reading.total}</span>
+					</span>
+				)}
+			</p>
+		</div>
+	);
+}
+
+function Countdown({ until }: { until: number }) {
+	const [now, setNow] = useState(() => Date.now());
+	useEffect(() => {
+		const id = setInterval(() => setNow(Date.now()), 1000);
+		return () => clearInterval(id);
+	}, []);
+	return <span className="tabular-nums">{Math.max(0, Math.ceil((until - now) / 1000))}s</span>;
+}
+
 /** Ring filling up to matched / processed while the number counts up. */
-function MatchRing({ matched, total, failed }: { matched: number; total: number; failed: boolean }) {
+export function MatchRing({ matched, total, failed }: { matched: number; total: number; failed: boolean }) {
 	const ratio = total > 0 ? matched / total : 0;
 	const progress = useMotionValue(0);
 	const shown = useTransform(progress, (v) => Math.round(v * total));
@@ -240,11 +330,13 @@ function MatchRing({ matched, total, failed }: { matched: number; total: number;
 	const r = 56;
 	const c = 2 * Math.PI * r;
 	const dash = useTransform(progress, (v) => `${v * c} ${c}`);
+	// The round cap draws a dot at 0 — hide the arc until it has length.
+	const arcOpacity = useTransform(progress, (v) => (v > 0 ? 1 : 0));
 	return (
 		<div className="relative mx-auto size-[132px]">
 			<svg viewBox="0 0 132 132" className="size-full -rotate-90">
 				<circle cx="66" cy="66" r={r} fill="none" strokeWidth="10" className="stroke-surface-highest" />
-				<motion.circle cx="66" cy="66" r={r} fill="none" strokeWidth="10" strokeLinecap="round" className={failed ? "stroke-destructive" : "stroke-primary"} style={{ strokeDasharray: dash }} />
+				<motion.circle cx="66" cy="66" r={r} fill="none" strokeWidth="10" strokeLinecap="round" className={failed ? "stroke-destructive" : "stroke-primary"} style={{ strokeDasharray: dash, opacity: arcOpacity }} data-testid="match-arc" />
 			</svg>
 			<div className="absolute inset-0 flex flex-col items-center justify-center">
 				<span className="text-3xl font-semibold tabular-nums tracking-tight">{n}</span>
@@ -297,7 +389,7 @@ function ImportReportView({
 			</p>
 			{report.limited && !report.truncated && (
 				<p className="mt-1 text-center text-xs text-muted-foreground">
-					Spotify only shares the first {report.processed} tracks of a playlist without API access.
+					Spotify only shares the first {report.processed} tracks of a playlist link. To get them all, paste the track links instead (Ctrl+A, Ctrl+C in the Spotify desktop app).
 				</p>
 			)}
 			{report.truncated && (

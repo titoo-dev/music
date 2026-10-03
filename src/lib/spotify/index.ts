@@ -1,4 +1,5 @@
-export { parsePlaylistInput } from "./parse-url";
+export { parsePlaylistInput, parseTrackLinks } from "./parse-url";
+export { fetchTracksFromEmbed } from "./embed";
 export { fetchPlaylist } from "./playlist";
 export {
 	spotifyGet,

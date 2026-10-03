@@ -50,3 +50,40 @@ export function embedHtml({
 		data
 	)}</script></body></html>`;
 }
+
+// Same, for https://open.spotify.com/embed/track/{id}.
+export function trackEmbedHtml({
+	id,
+	name,
+	artists,
+	duration,
+}: {
+	id: string;
+	name: string;
+	artists: string[];
+	duration: number;
+}): string {
+	const data = {
+		props: {
+			pageProps: {
+				state: {
+					data: {
+						entity: {
+							type: "track",
+							name,
+							title: name,
+							uri: `spotify:track:${id}`,
+							id,
+							artists: artists.map((a) => ({ name: a, uri: "spotify:artist:x" })),
+							duration,
+							isPlayable: true,
+						},
+					},
+				},
+			},
+		},
+	};
+	return `<!DOCTYPE html><html><body><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(
+		data
+	)}</script></body></html>`;
+}
