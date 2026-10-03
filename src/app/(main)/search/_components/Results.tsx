@@ -32,6 +32,7 @@ import {
 } from "../_lib/search-model";
 import { useTypedSearch } from "../_lib/useSearch";
 import { KindPill } from "./bits";
+import { VirtualRows } from "@/components/virtual/VirtualRows";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- raw Deezer GW/API payloads */
 
@@ -455,11 +456,7 @@ function TrackResults({ tracks, total }: { tracks: any[]; total?: number }) {
 					Download {normalized.length} tracks
 				</motion.button>
 			</div>
-			<div className="-mx-2 space-y-px">
-				{normalized.map((t) => (
-					<TrackRow key={t.trackId} track={t} queue={normalized} />
-				))}
-			</div>
+			<VirtualRows className="-mx-2" gap={1} items={normalized} getKey={(t) => t.trackId} render={(t) => <TrackRow track={t} queue={normalized} />} />
 		</div>
 	);
 }

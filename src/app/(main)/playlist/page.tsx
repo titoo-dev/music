@@ -10,6 +10,7 @@ import { PlaylistDetailSkeleton } from "@/components/skeletons";
 import { AddTracksToPlaylist, DownloadCollectionButton, useCollectionPlayback } from "@/components/collection/CollectionActions";
 import { CollectionScaffold, Medallion, swap } from "@/components/expressive";
 import { formatTotal, parsePlaylistPage, plural, trackCovers, type PlaylistPageData } from "@/lib/collection-page";
+import { VirtualRows } from "@/components/virtual/VirtualRows";
 
 const rowReveal = {
 	initial: { opacity: 0.2, y: 12 },
@@ -71,13 +72,17 @@ function PlaylistView({ page }: { page: PlaylistPageData }) {
 				{tracks.length === 0 ? (
 					<Medallion icon={ListMusic} title="This playlist is empty" />
 				) : (
-					<div className="-mx-2 space-y-0.5">
-						{tracks.map((t, i) => (
-							<motion.div key={`${t.trackId}-${i}`} {...rowReveal}>
+					<VirtualRows
+						className="-mx-2"
+						gap={2}
+						items={tracks}
+						getKey={(t, i) => `${t.trackId}-${i}`}
+						render={(t) => (
+							<motion.div {...rowReveal}>
 								<TrackRow track={t} queue={tracks} />
 							</motion.div>
-						))}
-					</div>
+						)}
+					/>
 				)}
 			</section>
 		</CollectionScaffold>

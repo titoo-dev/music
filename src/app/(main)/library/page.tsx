@@ -22,6 +22,7 @@ import { PlaylistEditDialog, filledButton, tonalButton } from "@/components/play
 import { CardGridSkeleton, NewPlaylistTile, TrackRowsSkeleton } from "@/components/playlists/PlaylistTiles";
 import { formatRelative, formatTotal, groupByDay, plural, relativePhrase, uniqueCovers } from "@/components/playlists/format";
 import { ArtistLink } from "@/components/links/EntityLink";
+import { VirtualRows } from "@/components/virtual/VirtualRows";
 
 interface UserPlaylist {
 	id: string;
@@ -308,23 +309,34 @@ function PaletteAction() {
 
 function RecentTab({ plays }: { plays: RecentPlayItem[] }) {
 	const rows = useMemo(() => plays.map(toRow), [plays]);
-	const groups = useMemo(() => groupByDay(plays, (p) => p.playedAt), [plays]);
+	// Day labels and rows flattened into one list so it can be virtualized.
+	const entries = useMemo(
+		() =>
+			groupByDay(plays, (p) => p.playedAt).flatMap((g, gi) => [
+				{ kind: "label" as const, key: `label-${g.label}`, label: g.label, count: g.items.length, first: gi === 0 },
+				...g.items.map(({ item, index }) => ({ kind: "row" as const, key: item.id, item, index })),
+			]),
+		[plays]
+	);
 	if (plays.length === 0) {
 		return <Medallion icon={History} title="Nothing played yet" message="Play a track for at least 30 seconds and it’ll show up here." action={<PaletteAction />} />;
 	}
 	return (
-		<div>
-			{groups.map((g, gi) => (
-				<section key={g.label}>
-					<GroupLabel label={g.label} count={g.items.length} first={gi === 0} />
-					<div className="-mx-2 space-y-0.5">
-						{g.items.map(({ item, index }) => (
-							<NotedRow key={item.id} track={rows[index]} queue={rows} note={formatRelative(item.playedAt)} />
-						))}
+		<VirtualRows
+			gap={2}
+			items={entries}
+			getKey={(e) => e.key}
+			estimateSize={(e) => (e.kind === "label" ? 44 : 60)}
+			render={(e) =>
+				e.kind === "label" ? (
+					<GroupLabel label={e.label} count={e.count} first={e.first} />
+				) : (
+					<div className="-mx-2">
+						<NotedRow track={rows[e.index]} queue={rows} note={formatRelative(e.item.playedAt)} />
 					</div>
-				</section>
-			))}
-		</div>
+				)
+			}
+		/>
 	);
 }
 
@@ -398,11 +410,13 @@ function LikedTab({ tracks }: { tracks: SavedTrackItem[] }) {
 	return (
 		<div>
 			<LikedBanner rows={rows} />
-			<div className="-mx-2 space-y-0.5">
-				{tracks.map((t, i) => (
-					<NotedRow key={t.id} track={rows[i]} queue={rows} number={i + 1} note={formatRelative(t.savedAt)} />
-				))}
-			</div>
+			<VirtualRows
+				className="-mx-2"
+				gap={2}
+				items={tracks}
+				getKey={(t) => t.id}
+				render={(t, i) => <NotedRow track={rows[i]} queue={rows} number={i + 1} note={formatRelative(t.savedAt)} />}
+			/>
 		</div>
 	);
 }

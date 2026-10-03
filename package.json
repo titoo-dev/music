@@ -26,6 +26,7 @@
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
     "@spotify/web-api-ts-sdk": "^1.2.0",
+    "@tanstack/react-virtual": "^3.14.13",
     "@vercel/functions": "^3.9.9",
     "async": "^3.2.6",
     "aws4fetch": "^1.0.20",

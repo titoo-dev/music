@@ -19,6 +19,11 @@ import {
 	cacheTrack,
 	setCacheLimit,
 } from "@/lib/audio-cache";
+import {
+	PREFETCH_LIMIT,
+	queuePrefetchWindow,
+	createPrefetchBudget,
+} from "@/lib/prefetch-budget";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-failure";
@@ -161,9 +166,12 @@ const warmInflight = new Set<string>();
 
 const hoverPreloadCache = new Map<string, HTMLAudioElement>();
 const MAX_HOVER_PRELOADED = 3;
-// Larger window for visibility-driven head prefetch — bytes per slot are tiny
+// Visibility-driven head prefetch. Each slot is small, but every one is a
+// storage request — capped like the other pools, and budgeted per page so
+// scrolling a long playlist doesn't head-prefetch every row.
 const headPreloadCache = new Map<string, HTMLAudioElement>();
-const MAX_HEAD_PRELOADED = 8;
+const MAX_HEAD_PRELOADED = PREFETCH_LIMIT;
+const headBudget = createPrefetchBudget();
 // Tracks whose prefetched audio element is head-capped (ends after ~64 KB).
 // On swap-to-play, AudioEngine seamlessly switches to the full stream so
 // playback continues past the head segment.
@@ -271,6 +279,10 @@ export function warmTrack(trackId: string, opts: WarmOptions = {}) {
 	// Skip if we already prefetched at the same or stronger level
 	if (prevLevel && rank[prevLevel] >= rank[desired]) return;
 
+	// Head prefetch is opportunistic (a row scrolled into view): only the
+	// first PREFETCH_LIMIT rows per page get one. Hover isn't budgeted.
+	if (desired === "head" && !headBudget.take(trackId, window.location.pathname)) return;
+
 	// Metadata warm — only the first time we touch this track
 	if (!prevLevel && !warmInflight.has(trackId)) {
 		warmInflight.add(trackId);
@@ -300,7 +312,7 @@ export function clearHeadFlag(trackId: string) {
 
 // --- Audio Preload Cache (in-memory HTMLAudioElement pool) ---
 const preloadCache = new Map<string, HTMLAudioElement>();
-const MAX_PRELOADED = 6;
+const MAX_PRELOADED = PREFETCH_LIMIT;
 const evictedAudio = new WeakSet<HTMLAudioElement>();
 
 export function preloadTrack(trackId: string) {
@@ -340,19 +352,10 @@ function smartPrefetchQueue() {
 	const { queue, queueIndex } = usePlayerStore.getState();
 	if (queue.length === 0) return;
 
-	// Prefetch strategy: next 5 tracks, then previous 2
-	const prefetchIds: string[] = [];
+	// Next tracks first, then the previous one — PREFETCH_LIMIT in total
+	const prefetchIds = queuePrefetchWindow(queue, queueIndex);
 
-	// Next tracks (higher priority)
-	for (let i = 1; i <= 5 && queueIndex + i < queue.length; i++) {
-		prefetchIds.push(queue[queueIndex + i].trackId);
-	}
-	// Previous tracks (lower priority)
-	for (let i = 1; i <= 2 && queueIndex - i >= 0; i++) {
-		prefetchIds.push(queue[queueIndex - i].trackId);
-	}
-
-	// Background prefetch with concurrency=2, respecting abort
+	// Sequential background prefetch, respecting abort
 	(async () => {
 		for (const trackId of prefetchIds) {
 			if (signal.aborted) return;
@@ -885,7 +888,7 @@ export function AudioEngine() {
 		if (queueIndex - 1 >= 0) upcoming.push(queue[queueIndex - 1].trackId);
 		prefetchPresignedUrls(upcoming);
 
-		// Background IndexedDB prefetch: next 5 + prev 2 tracks
+		// Background IndexedDB prefetch: PREFETCH_LIMIT tracks around the cursor
 		smartPrefetchQueue();
 
 		// Cache current track if not already cached

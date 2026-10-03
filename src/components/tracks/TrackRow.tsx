@@ -223,8 +223,8 @@ export function TrackRow({
 	};
 
 	// Sliding-window prefetch: when this row scrolls into view, kick off a
-	// light "head" prefetch (~3s of audio + server cache warm). Cheap enough
-	// to apply to every visible item; the LRU caps total bandwidth.
+	// light "head" prefetch (~3s of audio + server cache warm). warmTrack
+	// budgets these per page (PREFETCH_LIMIT), so only the first rows fetch.
 	const rowRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		if (isPlayerLoaded) return;

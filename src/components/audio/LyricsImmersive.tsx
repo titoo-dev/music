@@ -151,7 +151,7 @@ export function LyricsImmersive() {
 					{currentTrack.cover && (
 						<>
 							<div className="absolute -inset-[10%] opacity-60" aria-hidden>
-								<CoverImage src={currentTrack.cover} className="h-full w-full scale-110 rounded-none blur-[110px] saturate-[1.6]" />
+								<CoverImage src={currentTrack.cover} size={40} loading="eager" className="h-full w-full scale-110 rounded-none blur-[110px] saturate-[1.6]" />
 							</div>
 							<div className="absolute inset-0 bg-gradient-to-b from-background/35 via-background/60 to-background/92" aria-hidden />
 						</>

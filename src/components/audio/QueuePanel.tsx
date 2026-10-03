@@ -12,6 +12,7 @@ import { Equalizer } from "@/components/motion/icons";
 import { CountPill, CoverTheme, Medallion, entrance } from "@/components/expressive";
 import { PlaybackIndicator } from "./PlaybackIndicator";
 import { cn } from "@/lib/utils";
+import { useScrollerRows } from "@/hooks/useVirtualRows";
 import { toast } from "sonner";
 
 /** Floating panel shell shared by the queue and the lyrics (rounded 28, surfaceContainer). */
@@ -183,40 +184,19 @@ export function QueuePanel() {
 							{upNext.length > 0 && (
 								<section>
 									<SectionLabel count={upNext.length}>Up next</SectionLabel>
-									<Reorder.Group
-										axis="y"
-										values={upNext.map((t) => t.trackId)}
+									<UpNextList
+										tracks={upNext}
 										onReorder={handleReorder}
-										className="flex flex-col gap-1"
-									>
-										{upNext.map((track, i) => (
-											<Reorder.Item
-												key={track.trackId}
-												value={track.trackId}
-												className="cursor-grab rounded-2xl active:cursor-grabbing"
-												whileDrag={{ scale: 1.02, boxShadow: "0 12px 28px -8px rgb(0 0 0 / 0.35)" }}
-											>
-												<QueueRow
-													track={track}
-													index={i}
-													onJump={() => jumpToIndex(queueIndex + 1 + i)}
-													onRemove={() => removeFromQueue(queueIndex + 1 + i)}
-													showHandle
-												/>
-											</Reorder.Item>
-										))}
-									</Reorder.Group>
+										onJump={(i) => jumpToIndex(queueIndex + 1 + i)}
+										onRemove={(i) => removeFromQueue(queueIndex + 1 + i)}
+									/>
 								</section>
 							)}
 
 							{played.length > 0 && (
 								<section>
 									<SectionLabel count={played.length}>History</SectionLabel>
-									<div className="flex flex-col gap-1 opacity-55 transition-opacity hover:opacity-80">
-										{played.map((track, i) => (
-											<QueueRow key={`played-${i}-${track.trackId}`} track={track} index={i} onJump={() => jumpToIndex(i)} />
-										))}
-									</div>
+									<HistoryList tracks={played} onJump={jumpToIndex} />
 								</section>
 							)}
 
@@ -236,6 +216,76 @@ export function QueuePanel() {
 				</motion.aside>
 			)}
 		</AnimatePresence>
+	);
+}
+
+// Queue rows scroll inside the panel's ScrollArea viewport.
+const viewportOf = (list: HTMLElement) => list.closest("[data-slot=\"scroll-area-viewport\"]");
+const QUEUE_ROW = 60;
+const queueRowSize = () => QUEUE_ROW;
+
+/** Draggable "Up next" rows, virtualized for long queues. Motion's Reorder
+ *  swaps within the full `values`, so unmounted rows keep their place. */
+function UpNextList({
+	tracks,
+	onReorder,
+	onJump,
+	onRemove,
+}: {
+	tracks: PlayerTrack[];
+	onReorder: (trackIds: string[]) => void;
+	onJump: (i: number) => void;
+	onRemove: (i: number) => void;
+}) {
+	const { listRef, rows, measureRef, style } = useScrollerRows({
+		scroller: viewportOf,
+		count: tracks.length,
+		estimateSize: queueRowSize,
+		getItemKey: (i) => tracks[i].trackId,
+		gap: 4,
+	});
+	return (
+		<Reorder.Group
+			ref={listRef}
+			axis="y"
+			values={tracks.map((t) => t.trackId)}
+			onReorder={onReorder}
+			className="flex flex-col gap-1"
+			style={style}
+		>
+			{rows.map(({ index: i }) => (
+				<Reorder.Item
+					key={tracks[i].trackId}
+					ref={measureRef}
+					data-index={i}
+					value={tracks[i].trackId}
+					className="cursor-grab rounded-2xl active:cursor-grabbing"
+					whileDrag={{ scale: 1.02, boxShadow: "0 12px 28px -8px rgb(0 0 0 / 0.35)" }}
+				>
+					<QueueRow track={tracks[i]} index={i} onJump={() => onJump(i)} onRemove={() => onRemove(i)} showHandle />
+				</Reorder.Item>
+			))}
+		</Reorder.Group>
+	);
+}
+
+/** Already-played rows, virtualized for long sessions. */
+function HistoryList({ tracks, onJump }: { tracks: PlayerTrack[]; onJump: (i: number) => void }) {
+	const { listRef, rows, measureRef, style } = useScrollerRows({
+		scroller: viewportOf,
+		count: tracks.length,
+		estimateSize: queueRowSize,
+		getItemKey: (i) => `played-${i}-${tracks[i].trackId}`,
+		gap: 4,
+	});
+	return (
+		<div ref={listRef} className="flex flex-col gap-1 opacity-55 transition-opacity hover:opacity-80" style={style}>
+			{rows.map(({ index: i, key }) => (
+				<div key={key} ref={measureRef} data-index={i}>
+					<QueueRow track={tracks[i]} index={i} onJump={() => onJump(i)} />
+				</div>
+			))}
+		</div>
 	);
 }
 
@@ -293,7 +343,8 @@ function QueueRow({ track, index, active, isPlaying, showHandle, onJump, onRemov
 	const interactive = !!onJump;
 	return (
 		<motion.div
-			{...entrance(index, 8)}
+			// Rows scrolled into a virtualized list rise in without the stagger delay.
+			{...entrance(index < 12 ? index : 0, 8)}
 			role={interactive ? "button" : undefined}
 			tabIndex={interactive ? 0 : undefined}
 			onClick={interactive ? onJump : undefined}

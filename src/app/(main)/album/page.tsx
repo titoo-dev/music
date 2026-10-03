@@ -18,6 +18,7 @@ import { albumRows, formatReleaseDate, formatTotal, parseAlbumPage, plural, type
 import { artistHref, pickAlbumId } from "@/lib/entity-links";
 import { fetchData } from "@/utils/api";
 import { ArtistLink } from "@/components/links/EntityLink";
+import { VirtualRows } from "@/components/virtual/VirtualRows";
 
 /** Rows rise in as they scroll into view (Flutter `ScrollReveal`, lighter for lists). */
 const rowReveal = {
@@ -176,12 +177,17 @@ function AlbumView({ page }: { page: AlbumPageData }) {
 					{tracks.length === 0 ? (
 						<Medallion icon={Disc3} title="No tracks" message="The tracklist for this album is unavailable." />
 					) : (
-						<div className="-mx-2 space-y-0.5">
-							{rows.map((row) =>
+						<VirtualRows
+							className="-mx-2"
+							gap={2}
+							items={rows}
+							getKey={(row) => (row.kind === "disc" ? `disc-${row.disc}` : `${tracks[row.index].trackId}-${row.index}`)}
+							estimateSize={(row) => (row.kind === "disc" ? 56 : 60)}
+							render={(row) =>
 								row.kind === "disc" ? (
-									<DiscHeader key={`disc-${row.disc}`} disc={row.disc} first={row === rows[0]} />
+									<DiscHeader disc={row.disc} first={row === rows[0]} />
 								) : (
-									<motion.div key={`${tracks[row.index].trackId}-${row.index}`} {...rowReveal}>
+									<motion.div {...rowReveal}>
 										<TrackRow
 											track={tracks[row.index]}
 											trackNumber={Number((page.tracks[row.index] as { TRACK_NUMBER?: string })?.TRACK_NUMBER) || row.index + 1}
@@ -191,8 +197,8 @@ function AlbumView({ page }: { page: AlbumPageData }) {
 										/>
 									</motion.div>
 								)
-							)}
-						</div>
+							}
+						/>
 					)}
 				</section>
 				<Credits page={page} />

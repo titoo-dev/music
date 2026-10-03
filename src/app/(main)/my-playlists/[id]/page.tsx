@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { usePrefetch } from "@/hooks/usePrefetch";
+import { useWindowRows } from "@/hooks/useVirtualRows";
 import { DeletePlaylistDialog, PlaylistEditDialog, tonalButton } from "@/components/playlists/PlaylistDialogs";
 import { PlaylistDetailSkeleton } from "@/components/playlists/PlaylistTiles";
 import { formatRelative, formatTotal, plural, uniqueCovers } from "@/components/playlists/format";
@@ -358,19 +359,7 @@ export default function PlaylistDetailPage() {
 									/>
 								)}
 							</div>
-							<Reorder.Group as="div" axis="y" values={sortedTracks.map((t) => t.trackId)} onReorder={handleReorder} className="-mx-2 space-y-0.5">
-								{sortedTracks.map((track, idx) => (
-									<DraggableRow
-										key={track.id}
-										trackId={track.trackId}
-										idx={idx}
-										normalized={normalized[idx]}
-										queue={normalized}
-										onDelete={() => handleRemoveTrack(track.trackId)}
-										canDrag={reorderEnabled}
-									/>
-								))}
-							</Reorder.Group>
+							<PlaylistTrackList tracks={sortedTracks} normalized={normalized} onReorder={handleReorder} onRemove={handleRemoveTrack} canDrag={reorderEnabled} />
 						</motion.div>
 					)}
 				</AnimatePresence>
@@ -382,11 +371,61 @@ export default function PlaylistDetailPage() {
 	);
 }
 
+/** The reorderable tracklist, virtualized once it grows long. Motion's
+ *  Reorder swaps within the full `values`, so dragging among the mounted
+ *  rows keeps the unmounted ones in place. */
+function PlaylistTrackList({
+	tracks,
+	normalized,
+	onReorder,
+	onRemove,
+	canDrag,
+}: {
+	tracks: PlaylistTrack[];
+	normalized: TrackRowTrack[];
+	onReorder: (trackIds: string[]) => void;
+	onRemove: (trackId: string) => void;
+	canDrag: boolean;
+}) {
+	const { listRef, rows, measureRef, style } = useWindowRows({
+		count: tracks.length,
+		estimateSize: () => 60,
+		getItemKey: (i) => tracks[i].id,
+		gap: 2,
+	});
+
+	return (
+		<Reorder.Group
+			ref={listRef}
+			as="div"
+			axis="y"
+			values={tracks.map((t) => t.trackId)}
+			onReorder={onReorder}
+			className="-mx-2 space-y-0.5"
+			style={style}
+		>
+			{rows.map(({ index }) => (
+				<DraggableRow
+					key={tracks[index].id}
+					measureRef={measureRef}
+					trackId={tracks[index].trackId}
+					idx={index}
+					normalized={normalized[index]}
+					queue={normalized}
+					onDelete={() => onRemove(tracks[index].trackId)}
+					canDrag={canDrag}
+				/>
+			))}
+		</Reorder.Group>
+	);
+}
+
 /** One reorderable row. Each instance owns a `useDragControls` so the drag
  *  surface stays scoped to the grip handle — touching the cover, title, or
  *  three-dot menu never starts a drag and never collides with long-press →
  *  TrackActionSheet on the underlying TrackRow. */
 function DraggableRow({
+	measureRef,
 	trackId,
 	idx,
 	normalized,
@@ -394,6 +433,7 @@ function DraggableRow({
 	onDelete,
 	canDrag,
 }: {
+	measureRef?: (el: Element | null) => void;
 	trackId: string;
 	idx: number;
 	normalized: TrackRowTrack;
@@ -405,6 +445,8 @@ function DraggableRow({
 
 	return (
 		<Reorder.Item
+			ref={measureRef}
+			data-index={idx}
 			as="div"
 			value={trackId}
 			dragListener={false}
