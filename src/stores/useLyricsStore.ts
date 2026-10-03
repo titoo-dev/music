@@ -1,10 +1,8 @@
 import { create } from "zustand";
 import { usePlayerStore } from "./usePlayerStore";
+import { parseLrc, type LyricLine } from "@/lib/lyrics/lrc";
 
-export interface LyricLine {
-	time: number; // seconds
-	text: string;
-}
+export type { LyricLine };
 
 interface LyricsState {
 	trackId: string | null;
@@ -24,18 +22,18 @@ interface LyricsState {
 	reset: () => void;
 }
 
-function parseLrc(lrc: string): LyricLine[] {
-	const lines: LyricLine[] = [];
-	for (const raw of lrc.split("\n")) {
-		const match = raw.match(/^\[(\d{2}):(\d{2})\.(\d{2,3})\]\s?(.*)/);
-		if (!match) continue;
-		const min = parseInt(match[1]);
-		const sec = parseInt(match[2]);
-		const ms = parseInt(match[3].padEnd(3, "0"));
-		const time = min * 60 + sec + ms / 1000;
-		lines.push({ time, text: match[4] });
+/** Query string with the playing track's metadata, so the server can match even unsaved tracks. */
+function lyricsQuery(trackId: string, duration?: number | null): string {
+	const qs = new URLSearchParams();
+	const track = usePlayerStore.getState().currentTrack;
+	if (track?.trackId === trackId) {
+		if (track.title) qs.set("title", track.title);
+		if (track.artist) qs.set("artist", track.artist);
 	}
-	return lines.sort((a, b) => a.time - b.time);
+	const d = duration ?? (track?.trackId === trackId ? track.duration : null);
+	if (d) qs.set("duration", String(Math.round(d)));
+	const s = qs.toString();
+	return s ? `?${s}` : "";
 }
 
 export const useLyricsStore = create<LyricsState>()((set, get) => ({
@@ -63,13 +61,15 @@ export const useLyricsStore = create<LyricsState>()((set, get) => ({
 		});
 
 		try {
-			const params = duration ? `?duration=${Math.round(duration)}` : "";
-			const res = await fetch(`/api/v1/lyrics/${encodeURIComponent(trackId)}${params}`);
+			const res = await fetch(`/api/v1/lyrics/${encodeURIComponent(trackId)}${lyricsQuery(trackId, duration)}`);
+			// The track changed while this request was in flight — drop the stale answer.
+			if (get().trackId !== trackId) return;
 			if (!res.ok) {
 				set({ isLoading: false, error: "Failed to fetch lyrics" });
 				return;
 			}
 			const json = await res.json();
+			if (get().trackId !== trackId) return;
 			const data = json.data;
 
 			if (!data.source && !data.instrumental) {
@@ -85,6 +85,7 @@ export const useLyricsStore = create<LyricsState>()((set, get) => ({
 				syncedLines: data.syncedLyrics ? parseLrc(data.syncedLyrics) : [],
 			});
 		} catch {
+			if (get().trackId !== trackId) return;
 			set({ isLoading: false, error: "Failed to fetch lyrics" });
 		}
 	},

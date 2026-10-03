@@ -61,6 +61,9 @@ export default defineConfig({
 				"src/lib/auth.ts",
 				"src/lib/cover-palette.ts",
 				"src/lib/discover.ts",
+				"src/lib/lyrics/**",
+				"src/app/api/v1/lyrics/**",
+				"src/stores/useLyricsStore.ts",
 			],
 			exclude: [
 				"**/*.test.{ts,tsx}",

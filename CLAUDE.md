@@ -110,6 +110,7 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Cover palette (CoverTheme seed) | `src/lib/cover-palette.ts` | `cover-palette.test.ts` |
 | Home discover parsing | `src/lib/discover.ts` (used by `hooks/useDiscover.ts`) | `discover.test.ts` |
 | Bearer auth (native clients) | `src/lib/auth.ts` (better-auth `bearer()` plugin) | `auth.test.ts` |
+| Lyrics lookup (LRCLIB get → Deezer → scored search) | `src/lib/lyrics/{match,lrc,deezer-sync,resolve,cache}.ts`, `src/app/api/v1/lyrics/[trackId]/route.ts`, `src/stores/useLyricsStore.ts` | `match.test.ts`, `lrc.test.ts`, `resolve.test.ts`, `cache.test.ts`, `route.test.ts`, `useLyricsStore.test.ts` |
 
 ### Fix-bug-once strategy (read this before fixing anything)
 
@@ -138,9 +139,9 @@ Examples already in the suite (search for `TODO` in `*.test.ts`):
 ### Out of scope (still to be locked)
 
 - `AudioEngine.tsx` and audio prefetch helpers (`getTrackUrl`, `fetchPresignedUrl`, `preloadAudio`) — too coupled to `HTMLAudioElement` / `IndexedDB` for unit tests. Plan: extract pure helpers, then add Playwright for the full flow.
-- Routes: `playlists/**`, `shares/**`, `search/**`, `lyrics/**`, `auth/**`, `settings/**`, `content/**`, `stream-warm/**`.
+- Routes: `playlists/**`, `shares/**`, `search/**`, `auth/**`, `settings/**`, `content/**`, `stream-warm/**`.
 - Wavelet engine: `decryption.ts`, `tagger.ts`, `progressive-stream.ts`, `downloader.ts` (need real Deezer/R2 — gate them behind `[skip]` until we have a recorded-cassette setup).
-- Stores: `useAuthStore`, `useAppStore`, `useShareStore`, `useLyricsStore`, `useLoginStore`, `useErrorStore`.
+- Stores: `useAuthStore`, `useAppStore`, `useShareStore`, `useLoginStore`, `useErrorStore`.
 
 When you finish locking in any of the above, append it to the table above and to `vitest.config.ts` `coverage.include`.
 

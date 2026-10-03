@@ -1160,14 +1160,14 @@ const paths = {
 		get: {
 			tags: ["Lyrics"],
 			operationId: "getLyrics",
-			summary: "Lyrics (LRCLIB first, Deezer fallback)",
-			description: "Pass title/artist when the track is not in the library nor recent plays. No lyrics → 200 with `source: null`.",
+			summary: "Lyrics (LRCLIB exact → Deezer → LRCLIB fuzzy search)",
+			description: "Send title/artist/album/duration of the playing track for the best match; otherwise they come from the library, recent plays or the Deezer track API. Synced lyrics are only returned when the matched recording's length is within 3 s. No lyrics → 200 with `source: null`. 400 MISSING_METADATA only when there is no metadata and no Deezer session.",
 			security: userAuth,
 			parameters: [
 				query("title", str(), "Track title"),
 				query("artist", str(), "Artist name"),
 				query("album", str(), "Album title"),
-				query("duration", int(), "Duration in seconds (improves matching)"),
+				query("duration", int(), "Duration in seconds (aligns synced lyrics; strongly recommended)"),
 			],
 			responses: { ...okRes("LyricsEnvelope", ref("Lyrics")), ...E_400, ...E_USER },
 			"x-error-codes": ["MISSING_METADATA"],
