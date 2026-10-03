@@ -395,8 +395,30 @@ const schemas = {
 				)
 			),
 			truncated: bool({ description: "true when the playlist had more than 500 tracks" }),
+			limited: bool({ description: "true when Spotify only exposed the first 100 tracks of a playlist link (paste track links for the full list)" }),
 		},
 		["totalSpotify", "processed", "matched", "notFound", "truncated"]
+	),
+	SpotifyTrack: obj(
+		{
+			spotifyId: str({ description: "22-char Spotify track id" }),
+			title: str(),
+			artists: arr(str()),
+			album: str(),
+			albumId: nstr(),
+			durationMs: int(),
+			isrc: nstr(),
+			coverUrl: nstr(),
+		},
+		["spotifyId", "title", "artists", "durationMs"]
+	),
+	SpotifyTrackBatch: obj(
+		{
+			tracks: arr(ref("SpotifyTrack")),
+			failed: arr(str(), { description: "ids Spotify did not return (removed, region-locked)" }),
+			rateLimited: arr(str(), { description: "ids not read because Spotify started refusing — retry after a pause" }),
+		},
+		["tracks", "failed", "rateLimited"]
 	),
 	SpotifyImportResult: obj(
 		{
@@ -411,7 +433,7 @@ const schemas = {
 		{
 			playlistSortOrder: str({ enum: ["asc", "desc"] }),
 			albumSortOrder: str({ enum: ["asc", "desc"] }),
-			preCacheSaved: bool({ description: "Warm the Blob cache when saving a track/album" }),
+			preCacheSaved: bool({ description: "Warm the R2 cache when saving a track/album" }),
 		},
 		[],
 		{ additionalProperties: false }
@@ -512,7 +534,7 @@ const schemas = {
 	// Streaming
 	StreamUrl: obj(
 		{
-			url: nstr({ format: "uri", description: "Presigned Vercel Blob URL, valid ~15 min. null → use /stream-progressive." }),
+			url: nstr({ format: "uri", description: "Presigned Cloudflare R2 URL, valid ~15 min. null → use /stream-progressive." }),
 			contentType: str({ example: "audio/mpeg" }),
 			status: str({
 				enum: ["not_cached", "unsupported_storage", "file_missing", "presigned_disabled"],
@@ -1000,7 +1022,20 @@ const paths = {
 			summary: "Import a Spotify playlist (matched to Deezer, max 500 tracks)",
 			description: "Synchronous; can take tens of seconds on large playlists — use a long client timeout.",
 			security: userAuth,
-			requestBody: body(obj({ url: str({ description: "Spotify playlist URL, URI or id", example: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M" }) }, ["url"])),
+			requestBody: body({
+				oneOf: [
+					obj({ url: str({ description: "Spotify playlist URL, URI or id (first 100 tracks without API access)", example: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M" }) }, ["url"]),
+					obj(
+						{
+							tracks: arr(ref("SpotifyTrack"), { minItems: 1, description: "tracks read with POST /playlists/import/spotify/tracks" }),
+							unreadable: arr(str(), { description: "track ids that could not be read (reported as not found)" }),
+							total: int({ description: "number of pasted links, for the truncated flag" }),
+							title: str({ description: "name of the new playlist (default \"Spotify import\")" }),
+						},
+						["tracks"]
+					),
+				],
+			}),
 			responses: {
 				...okRes("SpotifyImportEnvelope", ref("SpotifyImportResult")),
 				400: err("BadRequest"),
@@ -1008,13 +1043,25 @@ const paths = {
 				404: err("NotFound"),
 				429: err("RateLimited"),
 				502: err("UpstreamError"),
-				503: err("ServiceUnavailable"),
 				...E_DEEZER,
 			},
 			"x-error-codes": [
-				"MISSING_URL", "INVALID_URL", "EMPTY_PLAYLIST", "SPOTIFY_NOT_CONFIGURED", "SPOTIFY_NOT_FOUND",
+				"MISSING_URL", "INVALID_URL", "INVALID_TRACKS", "EMPTY_PLAYLIST", "SPOTIFY_NOT_FOUND",
 				"SPOTIFY_FORBIDDEN", "SPOTIFY_RATE_LIMITED", "SPOTIFY_ERROR", "NO_DEEZER_ARL", "DEEZER_LOGIN_FAILED",
 			],
+		},
+	},
+
+	"/api/v1/playlists/import/spotify/tracks": {
+		post: {
+			tags: ["Playlists"],
+			operationId: "readSpotifyTracks",
+			summary: "Read up to 50 Spotify tracks from their public pages",
+			description: "Step 1 of importing pasted track links. Call in batches; when `rateLimited` is non-empty, pause (20 s, then longer) and resend those ids, then send all tracks to POST /playlists/import/spotify.",
+			security: userAuth,
+			requestBody: body(obj({ ids: arr(str(), { minItems: 1, maxItems: 50 }) }, ["ids"])),
+			responses: { ...okRes("SpotifyTrackBatchEnvelope", ref("SpotifyTrackBatch")), ...E_400, ...E_USER },
+			"x-error-codes": ["INVALID_IDS", "TOO_MANY_IDS"],
 		},
 	},
 
@@ -1198,7 +1245,7 @@ const paths = {
 			operationId: "getStreamUrl",
 			summary: "Step 1 — presigned direct URL if the track is cached",
 			description:
-				"Recommended playback flow:\n1. `GET /stream-url/{id}` → if `url` is set, play it directly (CDN, Range-capable, ~15 min validity).\n2. Otherwise play `GET /stream-progressive/{id}` (live from Deezer, persisted to Blob in the background).\n`/stream/{id}` is the same-origin proxy for cached files.",
+				"Recommended playback flow:\n1. `GET /stream-url/{id}` → if `url` is set, play it directly (CDN, Range-capable, ~15 min validity).\n2. Otherwise play `GET /stream-progressive/{id}` (live from Deezer, persisted to R2 in the background).\n`/stream/{id}` is the same-origin proxy for cached files.",
 			security: userAuth,
 			responses: { ...okRes("StreamUrlEnvelope", ref("StreamUrl")), ...E_USER },
 		},
@@ -1209,7 +1256,7 @@ const paths = {
 			tags: ["Streaming"],
 			operationId: "streamCached",
 			summary: "Stream a cached track (Range supported)",
-			description: "Cache miss / storage down → 302 to `/api/v1/stream-progressive/{trackId}`. The audio player must follow redirects and keep sending the session cookie.",
+			description: "Cache miss → 302 to `/api/v1/stream-progressive/{trackId}`; storage down or refusing reads → 302 to `/api/v1/stream-progressive/{trackId}?live=1`. The audio player must follow redirects and keep sending the session cookie.",
 			security: userAuth,
 			parameters: [{ name: "Range", in: "header", required: false, schema: str({ example: "bytes=0-" }) }],
 			responses: {
@@ -1231,6 +1278,7 @@ const paths = {
 			parameters: [
 				query("preview", str({ enum: ["1"] }), "Prefetch mode: no persistence, no download lock"),
 				query("head", str({ enum: ["1"] }), "With preview=1: cap response at ~64 KB"),
+				query("live", str({ enum: ["1"] }), "Skip the cache check and stream from Deezer (sent by /stream when storage refuses reads)"),
 			],
 			responses: {
 				200: { description: "Audio body (chunked or with Content-Length)", content: audioBinary },

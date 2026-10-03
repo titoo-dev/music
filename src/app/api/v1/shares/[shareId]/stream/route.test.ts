@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
 import { makeNextRequest, makeParams } from "@/test/helpers/nextRequest";
-import { StorageNotFoundError } from "@/lib/wavelet/storage/blob";
+import { StorageNotFoundError } from "@/lib/wavelet/storage/objects";
 
 const { afterMock, streamObjectMock, startProgressiveStreamMock, serverStateMock } = vi.hoisted(() => ({
 	afterMock: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock("next/server", async (importOriginal) => ({
 	...(await importOriginal<typeof import("next/server")>()),
 	after: afterMock,
 }));
-vi.mock("@/lib/blob-stream", () => ({ streamObject: streamObjectMock }));
+vi.mock("@/lib/object-stream", () => ({ streamObject: streamObjectMock }));
 vi.mock("@/lib/wavelet/progressive-stream", () => ({
 	startProgressiveStream: startProgressiveStreamMock,
 }));
@@ -43,7 +43,7 @@ function share(storedTrack: unknown) {
 	} as any;
 }
 
-const blobStored = { storagePath: "music/x.mp3", storageType: "blob" };
+const blobStored = { storagePath: "music/x.mp3", storageType: "r2" };
 
 function arrangeProgressive() {
 	const persisted = Promise.resolve();

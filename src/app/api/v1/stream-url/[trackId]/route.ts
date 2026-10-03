@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, ok, handleError } from "../../_lib/helpers";
-import { getPresignedUrl } from "@/lib/blob-stream";
-import { BLOB_STORAGE_TYPE, isStorageNotFound } from "@/lib/wavelet/storage/blob";
+import { getPresignedUrl } from "@/lib/object-stream";
+import { STORAGE_TYPE, isStorageNotFound } from "@/lib/wavelet/storage/objects";
 
-// GET /api/v1/stream-url/[trackId] — return a presigned Blob URL for direct
+// GET /api/v1/stream-url/[trackId] — return a presigned R2 URL for direct
 // browser playback. Returns { url: null } when the track isn't cached so
 // the client can fall through to /api/v1/stream-progressive without a 404
 // in the Network tab.
@@ -20,7 +20,7 @@ export async function GET(
 
 		// Escape hatch: WAVELET_DISABLE_PRESIGNED_URLS=1 forces every client to
 		// stream through the same-origin proxy at /api/v1/stream/[trackId]
-		// (e.g. if the Blob CDN ever rejects the player's CORS requests).
+		// (e.g. if R2 ever rejects the player's CORS requests).
 		if (process.env.WAVELET_DISABLE_PRESIGNED_URLS === "1") {
 			return ok({ url: null, status: "presigned_disabled" });
 		}
@@ -34,7 +34,7 @@ export async function GET(
 			return ok({ url: null, status: "not_cached" });
 		}
 
-		if (stored.storageType !== BLOB_STORAGE_TYPE) {
+		if (stored.storageType !== STORAGE_TYPE) {
 			return ok({ url: null, status: "unsupported_storage" });
 		}
 

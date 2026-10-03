@@ -1,6 +1,6 @@
 import type { StorageProvider } from "./StorageProvider";
-import { BlobStorageProvider } from "./BlobStorageProvider";
+import { R2StorageProvider } from "./R2StorageProvider";
 
 export function createStorageProvider(): StorageProvider {
-	return new BlobStorageProvider();
+	return new R2StorageProvider();
 }

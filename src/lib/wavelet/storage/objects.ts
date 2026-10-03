@@ -1,20 +1,21 @@
-// Pure helpers shared by BlobStorageProvider (writes) and src/lib/blob-stream.ts
-// (reads). Kept free of @vercel/blob imports so route tests can mock the
-// network layer while still using the real error guards.
+// Pure helpers shared by R2StorageProvider (writes) and src/lib/object-stream.ts
+// (reads). Kept free of network code so route tests can mock the R2 layer
+// while still using the real error guards.
 
-/** Value written to StoredTrack.storageType for files living in Vercel Blob. */
-export const BLOB_STORAGE_TYPE = "blob";
-
-/** Every file is private: browsers only ever get short-lived presigned URLs. */
-export const BLOB_ACCESS = "private" as const;
+/**
+ * Value written to StoredTrack.storageType for files in the R2 bucket. Rows
+ * with any other value (the suspended Vercel Blob store's "blob", older
+ * "s3" / "local") are stale: routes drop them and re-stream the track live.
+ */
+export const STORAGE_TYPE = "r2";
 
 /**
  * Map a storagePath (as saved in StoredTrack, e.g. "music/Artist/Album/Track.mp3")
- * to a Blob pathname. Blob has no notion of absolute paths, so leading slashes
+ * to an object key. Keys have no notion of absolute paths, so leading slashes
  * are dropped, Windows separators normalized and repeated slashes collapsed
- * (Blob rejects "//", which generatePath produces from downloadLocation "music/").
+ * (generatePath produces "//" from downloadLocation "music/").
  */
-export function toBlobPathname(storagePath: string): string {
+export function toObjectKey(storagePath: string): string {
 	return storagePath.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^\//, "");
 }
 
@@ -35,19 +36,19 @@ export function inferContentType(path: string): string {
 	}
 }
 
-/** The blob does not exist (deleted, never uploaded, stale DB row). */
+/** The object does not exist (deleted, never uploaded, stale DB row). */
 export class StorageNotFoundError extends Error {
 	readonly name = "NotFound";
-	constructor(pathname: string) {
-		super(`Blob not found: ${pathname}`);
+	constructor(key: string) {
+		super(`Object not found: ${key}`);
 	}
 }
 
-/** Blob is unreachable right now — the file may still exist. */
+/** Storage is unreachable or refusing right now — the file may still exist. */
 export class StorageUnavailableError extends Error {
 	readonly name = "StorageUnavailable";
 	constructor(cause: unknown) {
-		super("Blob storage unavailable", { cause });
+		super("Object storage unavailable", { cause });
 	}
 }
 

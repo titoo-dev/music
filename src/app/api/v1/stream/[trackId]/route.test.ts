@@ -2,16 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
 import { authMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
 import { makeNextRequest, makeParams, readJson } from "@/test/helpers/nextRequest";
-import { StorageNotFoundError, StorageUnavailableError } from "@/lib/wavelet/storage/blob";
+import { StorageNotFoundError, StorageUnavailableError } from "@/lib/wavelet/storage/objects";
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
-vi.mock("@/lib/blob-stream", () => ({
+vi.mock("@/lib/object-stream", () => ({
 	streamObject: vi.fn(),
 }));
 
 import { GET } from "./route";
-import { streamObject } from "@/lib/blob-stream";
+import { streamObject } from "@/lib/object-stream";
 
 const streamObjectMock = vi.mocked(streamObject);
 
@@ -20,7 +20,7 @@ const blobRow = {
 	trackId: "1",
 	bitrate: 320,
 	storagePath: "music/foo.mp3",
-	storageType: "blob",
+	storageType: "r2",
 } as any;
 
 function fakeBody() {
@@ -56,8 +56,8 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		expect(streamObjectMock).not.toHaveBeenCalled();
 	});
 
-	it.each(["s3", "local"])(
-		"drops pre-Blob %s rows and 302s to /stream-progressive (was: 400 UNSUPPORTED_STORAGE)",
+	it.each(["s3", "local", "blob"])(
+		"drops pre-R2 %s rows and 302s to /stream-progressive (was: 400 UNSUPPORTED_STORAGE; blob: unreadable suspended Vercel Blob store)",
 		async (storageType) => {
 			setSessionUser("u1");
 			prismaMock.storedTrack.findFirst.mockResolvedValue({ ...blobRow, storageType });
@@ -138,14 +138,14 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		expect(res.headers.get("Location")).toBe("/api/v1/stream-progressive/1");
 	});
 
-	it("on StorageUnavailableError: 302 to /stream-progressive WITHOUT deleting the row", async () => {
+	it("on StorageUnavailableError: 302 to a live-only /stream-progressive WITHOUT deleting the row (was: progressive's head() passed on the suspended store and bounced back here — 500 'Your store is blocked')", async () => {
 		setSessionUser("u1");
 		prismaMock.storedTrack.findFirst.mockResolvedValue(blobRow);
-		streamObjectMock.mockRejectedValue(new StorageUnavailableError(new Error("503")));
+		streamObjectMock.mockRejectedValue(new StorageUnavailableError(new Error("403")));
 
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(302);
-		expect(res.headers.get("Location")).toBe("/api/v1/stream-progressive/1");
+		expect(res.headers.get("Location")).toBe("/api/v1/stream-progressive/1?live=1");
 		expect(prismaMock.storedTrack.deleteMany).not.toHaveBeenCalled();
 	});
 

@@ -1,190 +1,144 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { headObject, streamObject, getPresignedUrl } from "./object-stream";
+import { isStorageNotFound, isStorageUnavailable } from "@/lib/wavelet/storage/objects";
+import { _resetR2Client } from "@/lib/wavelet/storage/r2";
 
-const { blobMock } = vi.hoisted(() => {
-	class BlobError extends Error {}
-	class BlobNotFoundError extends BlobError {}
-	class BlobServiceNotAvailable extends BlobError {}
-	class BlobServiceRateLimited extends BlobError {}
-	class BlobStoreSuspendedError extends BlobError {}
-	return {
-		blobMock: {
-			get: vi.fn(),
-			head: vi.fn(),
-			issueSignedToken: vi.fn(),
-			presignUrl: vi.fn(),
-			BlobError,
-			BlobNotFoundError,
-			BlobServiceNotAvailable,
-			BlobServiceRateLimited,
-			BlobStoreSuspendedError,
-		},
-	};
-});
+const ENV = {
+	R2_ACCOUNT_ID: "acct",
+	R2_BUCKET: "bucket",
+	R2_ACCESS_KEY_ID: "AKID",
+	R2_SECRET_ACCESS_KEY: "secret",
+};
+const BASE = "https://acct.r2.cloudflarestorage.com/bucket";
 
-vi.mock("@vercel/blob", () => blobMock);
+const fetchMock = vi.fn<(req: Request) => Promise<Response>>();
+const lastRequest = () => fetchMock.mock.calls.at(-1)![0];
 
-import { headObject, streamObject, getPresignedUrl } from "./blob-stream";
-import { isStorageNotFound, isStorageUnavailable } from "@/lib/wavelet/storage/blob";
-
-function blobResult(headers: Record<string, string>, contentType = "audio/flac") {
-	return {
-		statusCode: 200,
-		stream: new ReadableStream(),
-		headers: new Headers(headers),
-		blob: { contentType, size: 999 },
-	};
-}
-
-describe("blob-stream", () => {
+describe("object-stream (R2)", () => {
 	beforeEach(() => {
-		vi.clearAllMocks();
+		fetchMock.mockReset();
+		vi.stubGlobal("fetch", fetchMock);
+		for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
+		_resetR2Client();
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
 	});
 
 	describe("headObject", () => {
-		it("normalizes the storage path and returns size + content type", async () => {
-			blobMock.head.mockResolvedValue({ size: 42, contentType: "audio/flac" });
+		it("normalizes the storage path, signs a HEAD and returns size + content type", async () => {
+			fetchMock.mockResolvedValue(new Response(null, { status: 200, headers: { "content-length": "42", "content-type": "audio/flac" } }));
 
-			await expect(headObject("/music/a/b.flac")).resolves.toEqual({
-				contentLength: 42,
-				contentType: "audio/flac",
-			});
-			expect(blobMock.head).toHaveBeenCalledWith("music/a/b.flac");
+			await expect(headObject("/music//a/b c.flac")).resolves.toEqual({ contentLength: 42, contentType: "audio/flac" });
+			const req = lastRequest();
+			expect(req.method).toBe("HEAD");
+			expect(req.url).toBe(`${BASE}/music/a/b%20c.flac`);
+			expect(req.headers.get("authorization")).toMatch(/^AWS4-HMAC-SHA256 Credential=AKID\/\d{8}\/auto\/s3\//);
 		});
 
-		it("infers the content type when Blob doesn't report one", async () => {
-			blobMock.head.mockResolvedValue({ size: 1, contentType: "" });
-			const meta = await headObject("music/b.mp3");
-			expect(meta.contentType).toBe("audio/mpeg");
+		it("infers the content type when R2 doesn't report one", async () => {
+			fetchMock.mockResolvedValue(new Response(null, { status: 200, headers: { "content-length": "1" } }));
+			expect((await headObject("music/b.mp3")).contentType).toBe("audio/mpeg");
 		});
 
-		it("maps BlobNotFoundError to StorageNotFoundError", async () => {
-			blobMock.head.mockRejectedValue(new blobMock.BlobNotFoundError());
-			const err = await headObject("music/x.mp3").catch((e) => e);
-			expect(isStorageNotFound(err)).toBe(true);
+		it("maps 404 to StorageNotFoundError", async () => {
+			fetchMock.mockResolvedValue(new Response("", { status: 404 }));
+			const e = await headObject("music/x.mp3").catch((err) => err);
+			expect(isStorageNotFound(e)).toBe(true);
 		});
 
-		it.each(["BlobServiceNotAvailable", "BlobServiceRateLimited", "BlobStoreSuspendedError"] as const)(
-			"maps %s to StorageUnavailableError",
-			async (name) => {
-				blobMock.head.mockRejectedValue(new blobMock[name]());
-				const err = await headObject("music/x.mp3").catch((e) => e);
-				expect(isStorageUnavailable(err)).toBe(true);
-			}
-		);
+		it.each([401, 403, 429, 500, 503])("maps %i to StorageUnavailableError (was: a refused store surfaced as a 500 and deleted nothing useful)", async (status) => {
+			fetchMock.mockResolvedValue(new Response("nope", { status }));
+			const e = await headObject("music/x.mp3").catch((err) => err);
+			expect(isStorageUnavailable(e)).toBe(true);
+		});
 
-		it.each(["ENOTFOUND", "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN"])(
-			"maps a fetch failure with cause %s to StorageUnavailableError",
-			async (code) => {
-				blobMock.head.mockRejectedValue(
-					Object.assign(new TypeError("fetch failed"), { cause: { code } })
-				);
-				const err = await headObject("music/x.mp3").catch((e) => e);
-				expect(isStorageUnavailable(err)).toBe(true);
-			}
-		);
+		it("maps network failures to StorageUnavailableError", async () => {
+			fetchMock.mockRejectedValue(Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }));
+			const e = await headObject("music/x.mp3").catch((err) => err);
+			expect(isStorageUnavailable(e)).toBe(true);
+		});
 
-		it("rethrows unrelated errors untouched", async () => {
-			const boom = new Error("No token found");
-			blobMock.head.mockRejectedValue(boom);
-			await expect(headObject("music/x.mp3")).rejects.toBe(boom);
+		it("treats missing R2 config as unavailable, never as missing", async () => {
+			vi.stubEnv("R2_SECRET_ACCESS_KEY", "");
+			_resetR2Client();
+			const e = await headObject("music/x.mp3").catch((err) => err);
+			expect(isStorageUnavailable(e)).toBe(true);
+			expect(fetchMock).not.toHaveBeenCalled();
+		});
+
+		it("lets other client errors through untouched", async () => {
+			fetchMock.mockResolvedValue(new Response("bad", { status: 400 }));
+			const e = await headObject("music/x.mp3").catch((err) => err);
+			expect(isStorageNotFound(e) || isStorageUnavailable(e)).toBe(false);
+			expect(e.message).toContain("400");
 		});
 	});
 
 	describe("streamObject", () => {
-		it("streams the whole blob with status 200 when no range is given", async () => {
-			blobMock.get.mockResolvedValue(blobResult({ "content-length": "1234" }));
+		it("streams the whole object with status 200 when no range is given", async () => {
+			fetchMock.mockResolvedValue(new Response("abc", { status: 200, headers: { "content-length": "3", "content-type": "audio/mpeg" } }));
 
-			const res = await streamObject("music/a.flac");
-			expect(res.statusCode).toBe(200);
-			expect(res.contentLength).toBe(1234);
-			expect(res.contentRange).toBeUndefined();
-			expect(res.contentType).toBe("audio/flac");
-			expect(blobMock.get).toHaveBeenCalledWith("music/a.flac", { access: "private" });
+			const res = await streamObject("music/a.mp3");
+			expect(res).toMatchObject({ contentLength: 3, contentType: "audio/mpeg", statusCode: 200, contentRange: undefined });
+			expect(await new Response(res.body).text()).toBe("abc");
+			expect(lastRequest().headers.get("range")).toBeNull();
 		});
 
 		it("forwards the Range header and reports 206 + Content-Range", async () => {
-			blobMock.get.mockResolvedValue(
-				blobResult({ "content-length": "100", "content-range": "bytes 0-99/1234" })
+			fetchMock.mockResolvedValue(
+				new Response("ab", { status: 206, headers: { "content-length": "2", "content-range": "bytes 0-1/10", "content-type": "audio/flac" } })
 			);
 
-			const res = await streamObject("music/a.flac", "bytes=0-99");
-			expect(res.statusCode).toBe(206);
-			expect(res.contentLength).toBe(100);
-			expect(res.contentRange).toBe("bytes 0-99/1234");
-			expect(blobMock.get).toHaveBeenCalledWith("music/a.flac", {
-				access: "private",
-				headers: { range: "bytes=0-99" },
-			});
+			const res = await streamObject("music/a.flac", "bytes=0-1");
+			expect(res).toMatchObject({ statusCode: 206, contentRange: "bytes 0-1/10", contentLength: 2 });
+			expect(lastRequest().headers.get("range")).toBe("bytes=0-1");
 		});
 
-		it("falls back to blob.size and the inferred type when headers are missing", async () => {
-			blobMock.get.mockResolvedValue(blobResult({}, ""));
-			const res = await streamObject("music/a.mp4");
-			expect(res.contentLength).toBe(999);
-			expect(res.contentType).toBe("audio/mp4");
+		it("infers the type when R2 omits it", async () => {
+			fetchMock.mockResolvedValue(new Response(new Uint8Array([1]), { status: 200 }));
+			expect((await streamObject("music/a.flac")).contentType).toBe("audio/flac");
 		});
 
-		it("throws StorageNotFoundError when get() returns null (404)", async () => {
-			blobMock.get.mockResolvedValue(null);
-			const err = await streamObject("music/a.flac").catch((e) => e);
-			expect(isStorageNotFound(err)).toBe(true);
+		it("throws StorageNotFoundError on 404", async () => {
+			fetchMock.mockResolvedValue(new Response("", { status: 404 }));
+			const e = await streamObject("music/x.mp3").catch((err) => err);
+			expect(isStorageNotFound(e)).toBe(true);
 		});
 
-		it("maps a 5xx BlobError from get() to StorageUnavailableError", async () => {
-			blobMock.get.mockRejectedValue(
-				new blobMock.BlobError("Failed to fetch blob: 503 Service Unavailable")
-			);
-			const err = await streamObject("music/a.flac").catch((e) => e);
-			expect(isStorageUnavailable(err)).toBe(true);
+		it("throws StorageUnavailableError when storage refuses reads (was: Vercel Blob 'Your store is blocked' 403 → 500)", async () => {
+			fetchMock.mockResolvedValue(new Response("Your store is blocked", { status: 403 }));
+			const e = await streamObject("music/x.mp3").catch((err) => err);
+			expect(isStorageUnavailable(e)).toBe(true);
 		});
 	});
 
 	describe("getPresignedUrl", () => {
-		it("signs a private GET URL and reuses the store-wide token while it is valid", async () => {
-			blobMock.issueSignedToken.mockResolvedValue({
-				delegationToken: "d",
-				clientSigningToken: "c",
-				validUntil: Date.now() + 60 * 60 * 1000,
-			});
-			blobMock.presignUrl.mockResolvedValue({ presignedUrl: "https://blob/x?sig" });
+		it("signs a query-string GET URL with the requested expiry, without a network call", async () => {
+			const { url, contentType } = await getPresignedUrl("/music/a b.flac", 900);
 
-			const first = await getPresignedUrl("/music/a.flac", 900);
-			const second = await getPresignedUrl("music/b.mp3", 900);
-
-			expect(first).toEqual({ url: "https://blob/x?sig", contentType: "audio/flac" });
-			expect(second.contentType).toBe("audio/mpeg");
-			expect(blobMock.issueSignedToken).toHaveBeenCalledTimes(1);
-			expect(blobMock.issueSignedToken).toHaveBeenCalledWith(
-				expect.objectContaining({ pathname: "*", operations: ["get"] })
-			);
-			expect(blobMock.presignUrl).toHaveBeenCalledWith(
-				expect.objectContaining({ delegationToken: "d" }),
-				expect.objectContaining({ operation: "get", pathname: "music/a.flac", access: "private" })
-			);
+			const u = new URL(url);
+			expect(`${u.origin}${u.pathname}`).toBe(`${BASE}/music/a%20b.flac`);
+			expect(u.searchParams.get("X-Amz-Expires")).toBe("900");
+			expect(u.searchParams.get("X-Amz-Algorithm")).toBe("AWS4-HMAC-SHA256");
+			expect(u.searchParams.get("X-Amz-Credential")).toMatch(/^AKID\//);
+			expect(u.searchParams.get("X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
+			expect(contentType).toBe("audio/flac");
+			expect(fetchMock).not.toHaveBeenCalled();
 		});
 
-		it("re-issues the token once it can't cover the requested expiry", async () => {
-			// Cached token from the previous test is still valid for ~1h; asking
-			// for a 2h URL forces a refresh.
-			blobMock.issueSignedToken.mockResolvedValue({
-				delegationToken: "d2",
-				clientSigningToken: "c2",
-				validUntil: Date.now() + 4 * 60 * 60 * 1000,
-			});
-			blobMock.presignUrl.mockResolvedValue({ presignedUrl: "https://blob/y?sig" });
-
-			await getPresignedUrl("music/a.flac", 2 * 60 * 60);
-			expect(blobMock.issueSignedToken).toHaveBeenCalledTimes(1);
-			expect(blobMock.presignUrl).toHaveBeenCalledWith(
-				expect.objectContaining({ delegationToken: "d2" }),
-				expect.anything()
-			);
+		it("clamps the expiry to S3's 7-day maximum", async () => {
+			const { url } = await getPresignedUrl("music/a.mp3", 10 * 86_400);
+			expect(new URL(url).searchParams.get("X-Amz-Expires")).toBe("604800");
 		});
 
-		it("maps signing outages to StorageUnavailableError", async () => {
-			blobMock.presignUrl.mockRejectedValue(new blobMock.BlobServiceNotAvailable());
-			const err = await getPresignedUrl("music/a.flac").catch((e) => e);
-			expect(isStorageUnavailable(err)).toBe(true);
+		it("reports missing config as unavailable", async () => {
+			vi.stubEnv("R2_ACCOUNT_ID", "");
+			_resetR2Client();
+			const e = await getPresignedUrl("music/a.mp3").catch((err) => err);
+			expect(isStorageUnavailable(e)).toBe(true);
 		});
 	});
 });

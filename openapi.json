@@ -1884,16 +1884,51 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"type": "object",
-								"properties": {
-									"url": {
-										"type": "string",
-										"description": "Spotify playlist URL, URI or id",
-										"example": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+								"oneOf": [
+									{
+										"type": "object",
+										"properties": {
+											"url": {
+												"type": "string",
+												"description": "Spotify playlist URL, URI or id (first 100 tracks without API access)",
+												"example": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+											}
+										},
+										"required": [
+											"url"
+										]
+									},
+									{
+										"type": "object",
+										"properties": {
+											"tracks": {
+												"type": "array",
+												"items": {
+													"$ref": "#/components/schemas/SpotifyTrack"
+												},
+												"minItems": 1,
+												"description": "tracks read with POST /playlists/import/spotify/tracks"
+											},
+											"unreadable": {
+												"type": "array",
+												"items": {
+													"type": "string"
+												},
+												"description": "track ids that could not be read (reported as not found)"
+											},
+											"total": {
+												"type": "integer",
+												"description": "number of pasted links, for the truncated flag"
+											},
+											"title": {
+												"type": "string",
+												"description": "name of the new playlist (default \"Spotify import\")"
+											}
+										},
+										"required": [
+											"tracks"
+										]
 									}
-								},
-								"required": [
-									"url"
 								]
 							}
 						}
@@ -1930,22 +1965,85 @@
 					},
 					"502": {
 						"$ref": "#/components/responses/UpstreamError"
-					},
-					"503": {
-						"$ref": "#/components/responses/ServiceUnavailable"
 					}
 				},
 				"x-error-codes": [
 					"MISSING_URL",
 					"INVALID_URL",
+					"INVALID_TRACKS",
 					"EMPTY_PLAYLIST",
-					"SPOTIFY_NOT_CONFIGURED",
 					"SPOTIFY_NOT_FOUND",
 					"SPOTIFY_FORBIDDEN",
 					"SPOTIFY_RATE_LIMITED",
 					"SPOTIFY_ERROR",
 					"NO_DEEZER_ARL",
 					"DEEZER_LOGIN_FAILED"
+				]
+			}
+		},
+		"/api/v1/playlists/import/spotify/tracks": {
+			"post": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "readSpotifyTracks",
+				"summary": "Read up to 50 Spotify tracks from their public pages",
+				"description": "Step 1 of importing pasted track links. Call in batches; when `rateLimited` is non-empty, pause (20 s, then longer) and resend those ids, then send all tracks to POST /playlists/import/spotify.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"ids": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"minItems": 1,
+										"maxItems": 50
+									}
+								},
+								"required": [
+									"ids"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SpotifyTrackBatchEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"INVALID_IDS",
+					"TOO_MANY_IDS"
 				]
 			}
 		},
@@ -2734,7 +2832,7 @@
 				],
 				"operationId": "getStreamUrl",
 				"summary": "Step 1 — presigned direct URL if the track is cached",
-				"description": "Recommended playback flow:\n1. `GET /stream-url/{id}` → if `url` is set, play it directly (CDN, Range-capable, ~15 min validity).\n2. Otherwise play `GET /stream-progressive/{id}` (live from Deezer, persisted to Blob in the background).\n`/stream/{id}` is the same-origin proxy for cached files.",
+				"description": "Recommended playback flow:\n1. `GET /stream-url/{id}` → if `url` is set, play it directly (CDN, Range-capable, ~15 min validity).\n2. Otherwise play `GET /stream-progressive/{id}` (live from Deezer, persisted to R2 in the background).\n`/stream/{id}` is the same-origin proxy for cached files.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -2781,7 +2879,7 @@
 				],
 				"operationId": "streamCached",
 				"summary": "Stream a cached track (Range supported)",
-				"description": "Cache miss / storage down → 302 to `/api/v1/stream-progressive/{trackId}`. The audio player must follow redirects and keep sending the session cookie.",
+				"description": "Cache miss → 302 to `/api/v1/stream-progressive/{trackId}`; storage down or refusing reads → 302 to `/api/v1/stream-progressive/{trackId}?live=1`. The audio player must follow redirects and keep sending the session cookie.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -2917,6 +3015,18 @@
 						"in": "query",
 						"required": false,
 						"description": "With preview=1: cap response at ~64 KB",
+						"schema": {
+							"type": "string",
+							"enum": [
+								"1"
+							]
+						}
+					},
+					{
+						"name": "live",
+						"in": "query",
+						"required": false,
+						"description": "Skip the cache check and stream from Deezer (sent by /stream when storage refuses reads)",
 						"schema": {
 							"type": "string",
 							"enum": [
@@ -4218,6 +4328,10 @@
 					"truncated": {
 						"type": "boolean",
 						"description": "true when the playlist had more than 500 tracks"
+					},
+					"limited": {
+						"type": "boolean",
+						"description": "true when Spotify only exposed the first 100 tracks of a playlist link (paste track links for the full list)"
 					}
 				},
 				"required": [
@@ -4226,6 +4340,78 @@
 					"matched",
 					"notFound",
 					"truncated"
+				]
+			},
+			"SpotifyTrack": {
+				"type": "object",
+				"properties": {
+					"spotifyId": {
+						"type": "string",
+						"description": "22-char Spotify track id"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artists": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"album": {
+						"type": "string"
+					},
+					"albumId": {
+						"type": "string",
+						"nullable": true
+					},
+					"durationMs": {
+						"type": "integer"
+					},
+					"isrc": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					}
+				},
+				"required": [
+					"spotifyId",
+					"title",
+					"artists",
+					"durationMs"
+				]
+			},
+			"SpotifyTrackBatch": {
+				"type": "object",
+				"properties": {
+					"tracks": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/SpotifyTrack"
+						}
+					},
+					"failed": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "ids Spotify did not return (removed, region-locked)"
+					},
+					"rateLimited": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "ids not read because Spotify started refusing — retry after a pause"
+					}
+				},
+				"required": [
+					"tracks",
+					"failed",
+					"rateLimited"
 				]
 			},
 			"SpotifyImportResult": {
@@ -4269,7 +4455,7 @@
 					},
 					"preCacheSaved": {
 						"type": "boolean",
-						"description": "Warm the Blob cache when saving a track/album"
+						"description": "Warm the R2 cache when saving a track/album"
 					}
 				},
 				"additionalProperties": false
@@ -4584,7 +4770,7 @@
 						"type": "string",
 						"nullable": true,
 						"format": "uri",
-						"description": "Presigned Vercel Blob URL, valid ~15 min. null → use /stream-progressive."
+						"description": "Presigned Cloudflare R2 URL, valid ~15 min. null → use /stream-progressive."
 					},
 					"contentType": {
 						"type": "string",
@@ -5375,6 +5561,24 @@
 					},
 					"data": {
 						"$ref": "#/components/schemas/SpotifyImportResult"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SpotifyTrackBatchEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/SpotifyTrackBatch"
 					}
 				},
 				"required": [

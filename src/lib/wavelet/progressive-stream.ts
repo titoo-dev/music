@@ -3,7 +3,7 @@
 // (b) a persistence pipeline (write → tag → finalize → DB upsert).
 // Goal: Spotify-like "play-while-downloading" — the user starts hearing audio
 // as soon as the first decrypted bytes arrive, while the file is persisted in
-// parallel so subsequent plays come from Vercel Blob.
+// parallel so subsequent plays come from R2.
 
 import { PassThrough, Readable } from "stream";
 import { TrackFormats, utils, type Deezer } from "@/lib/deezer";
@@ -19,7 +19,7 @@ import Track, { formatsName } from "./types/Track";
 import type { Settings } from "./types/Settings";
 import type { StorageProvider } from "./storage/StorageProvider";
 import { gwTrackCache } from "./cache/deezer-track-cache";
-import { BLOB_STORAGE_TYPE } from "./storage/blob";
+import { STORAGE_TYPE } from "./storage/objects";
 import { mkdirSync } from "fs";
 import { tmpdir } from "os";
 
@@ -45,7 +45,7 @@ export interface ProgressiveResult {
 	/** 0 when unknown — Chrome streams fine without Content-Length. */
 	contentLength: number;
 	/**
-	 * Settles once the persist pipeline (tag → Blob upload → DB row) is done.
+	 * Settles once the persist pipeline (tag → R2 upload → DB row) is done.
 	 * Never rejects. Callers must hand it to `after()` — on Vercel the
 	 * function is frozen as soon as the response ends otherwise.
 	 */
@@ -61,7 +61,7 @@ export interface ProgressiveOptions {
 	userId: string;
 	lock?: { release: () => void };
 	/**
-	 * Persist the decrypted bytes to Blob / DB as they flow.
+	 * Persist the decrypted bytes to R2 / DB as they flow.
 	 * Set false for hover-prefetch streams that should not pollute storage —
 	 * the bytes are streamed to the client only and discarded server-side.
 	 * Default true.
@@ -195,7 +195,7 @@ export async function startProgressiveStream(
 	artworkPromise.catch(() => {});
 
 	// Step 7 — Drive the source. In persist mode we tee into responseBranch
-	// (HTTP) and persistBranch (/tmp → Blob upload); in preview mode we only feed
+	// (HTTP) and persistBranch (/tmp → R2 upload); in preview mode we only feed
 	// responseBranch and discard the rest, so the client gets bytes immediately
 	// and nothing pollutes storage.
 	const responseBranch = new PassThrough();
@@ -301,7 +301,7 @@ export async function startProgressiveStream(
 					persistBranch.on("error", reject);
 				});
 
-				// Atomic rename: .part → final (Blob: just remaps the temp file mapping)
+				// Atomic rename: .part → final (R2: just remaps the temp file mapping)
 				await storageProvider.rename(partPath, writepath);
 
 				// Make sure the cover art finished downloading before tagging
@@ -311,7 +311,7 @@ export async function startProgressiveStream(
 				const localPath = storageProvider.getLocalPath(writepath);
 				await tagTrack(extension, localPath, track, settings.tags);
 
-				// Upload the tagged temp file to Blob
+				// Upload the tagged temp file to R2
 				await storageProvider.finalizeStream(writepath);
 
 				// Record the global StoredTrack so future plays hit the cached file.
@@ -320,12 +320,12 @@ export async function startProgressiveStream(
 				const { prisma } = await import("@/lib/prisma");
 				await prisma.storedTrack.upsert({
 					where: { trackId_bitrate: { trackId, bitrate: resolvedBitrate } },
-					update: { storagePath: writepath, storageType: BLOB_STORAGE_TYPE },
+					update: { storagePath: writepath, storageType: STORAGE_TYPE },
 					create: {
 						trackId,
 						bitrate: resolvedBitrate,
 						storagePath: writepath,
-						storageType: BLOB_STORAGE_TYPE,
+						storageType: STORAGE_TYPE,
 					},
 				});
 			} catch (e) {

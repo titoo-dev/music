@@ -1,8 +1,8 @@
 import { NextRequest, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { fail } from "../../../_lib/helpers";
-import { streamObject } from "@/lib/blob-stream";
-import { BLOB_STORAGE_TYPE, isStorageNotFound } from "@/lib/wavelet/storage/blob";
+import { streamObject } from "@/lib/object-stream";
+import { STORAGE_TYPE, isStorageNotFound } from "@/lib/wavelet/storage/objects";
 import { resolveShareForPlayback } from "@/lib/library";
 import { startProgressiveStream } from "@/lib/wavelet/progressive-stream";
 import { getWaveletApp, getOrLoginUserDz } from "@/lib/server-state";
@@ -12,7 +12,7 @@ export const maxDuration = 300;
 
 // GET /api/v1/shares/[shareId]/stream
 // Public, no auth. Resolves the share, then either:
-//   1. Streams the cached Blob file (fast path), OR
+//   1. Streams the cached R2 object (fast path), OR
 //   2. Re-streams via the progressive engine using the share creator's
 //      stored Deezer credentials (fallback when the file was evicted)
 export async function GET(
@@ -35,15 +35,15 @@ export async function GET(
 				.catch(() => {});
 		});
 
-		// Fast path: file already cached in Blob
-		if (share.storedTrack && share.storedTrack.storageType === BLOB_STORAGE_TYPE) {
+		// Fast path: file already cached in R2
+		if (share.storedTrack && share.storedTrack.storageType === STORAGE_TYPE) {
 			try {
-				return await streamFromBlob(request, share.storedTrack.storagePath);
+				return await streamFromStorage(request, share.storedTrack.storagePath);
 			} catch (e) {
 				// Fall through to progressive on 404 (file evicted between
-				// the DB lookup and the actual Blob fetch)
+				// the DB lookup and the actual R2 fetch)
 				if (!isStorageNotFound(e)) {
-					console.error("[shares/stream] Blob error, falling back:", e);
+					console.error("[shares/stream] storage error, falling back:", e);
 				}
 				// Detach the stale storedTrackId — next visit goes straight to progressive
 				await prisma.sharedTrack
@@ -59,7 +59,7 @@ export async function GET(
 	}
 }
 
-async function streamFromBlob(request: NextRequest, storagePath: string) {
+async function streamFromStorage(request: NextRequest, storagePath: string) {
 	const rangeHeader = request.headers.get("range") ?? undefined;
 	const { body, contentLength, contentRange, contentType, statusCode } =
 		await streamObject(storagePath, rangeHeader);

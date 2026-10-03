@@ -2,16 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
 import { authMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
 import { makeNextRequest, makeParams, readJson } from "@/test/helpers/nextRequest";
-import { StorageNotFoundError } from "@/lib/wavelet/storage/blob";
+import { StorageNotFoundError } from "@/lib/wavelet/storage/objects";
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
-vi.mock("@/lib/blob-stream", () => ({
+vi.mock("@/lib/object-stream", () => ({
 	getPresignedUrl: vi.fn(),
 }));
 
 import { GET } from "./route";
-import { getPresignedUrl } from "@/lib/blob-stream";
+import { getPresignedUrl } from "@/lib/object-stream";
 
 const getPresignedUrlMock = vi.mocked(getPresignedUrl);
 
@@ -78,7 +78,7 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 			trackId: "1",
 			bitrate: 320,
 			storagePath: "music/foo.mp3",
-			storageType: "blob",
+			storageType: "r2",
 		} as any);
 		getPresignedUrlMock.mockResolvedValue({
 			url: "https://example.com/foo.mp3?sig=abc",
@@ -100,7 +100,7 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 			trackId: "1",
 			bitrate: 320,
 			storagePath: "music/foo.mp3",
-			storageType: "blob",
+			storageType: "r2",
 		} as any);
 		getPresignedUrlMock.mockRejectedValue(new StorageNotFoundError("music/foo.mp3"));
 
@@ -118,7 +118,7 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 			trackId: "1",
 			bitrate: 320,
 			storagePath: "music/foo.mp3",
-			storageType: "blob",
+			storageType: "r2",
 		} as any);
 		getPresignedUrlMock.mockRejectedValue(new Error("No token found"));
 

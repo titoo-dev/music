@@ -1,17 +1,20 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, handleError } from "../../_lib/helpers";
-import { streamObject } from "@/lib/blob-stream";
+import { streamObject } from "@/lib/object-stream";
 import {
-	BLOB_STORAGE_TYPE,
+	STORAGE_TYPE,
 	isStorageNotFound,
 	isStorageUnavailable,
-} from "@/lib/wavelet/storage/blob";
+} from "@/lib/wavelet/storage/objects";
 
-function redirectToProgressive(trackId: string) {
+// `live` tells /stream-progressive to skip its cache check: storage is refusing
+// reads, and a HEAD there can still succeed (a suspended store answers HEAD
+// but blocks GET), which would bounce the player straight back here.
+function redirectToProgressive(trackId: string, { live = false } = {}) {
 	return new Response(null, {
 		status: 302,
-		headers: { Location: `/api/v1/stream-progressive/${trackId}` },
+		headers: { Location: `/api/v1/stream-progressive/${trackId}${live ? "?live=1" : ""}` },
 	});
 }
 
@@ -38,10 +41,10 @@ export async function GET(
 		// no recovery path, even though the track is fully streamable live.
 		if (!stored) return redirectToProgressive(trackId);
 
-		// Rows written before the move to Vercel Blob (storageType "s3" /
-		// "local") point at storage this deployment can't reach. Drop them so
-		// the live stream re-caches the file in Blob.
-		if (stored.storageType !== BLOB_STORAGE_TYPE) {
+		// Rows written for older storage (Vercel Blob "blob", "s3", "local")
+		// point at files this deployment can't read. Drop them so the live
+		// stream re-caches the file in R2.
+		if (stored.storageType !== STORAGE_TYPE) {
 			await prisma.storedTrack.deleteMany({ where: { trackId } });
 			return redirectToProgressive(trackId);
 		}
@@ -61,7 +64,7 @@ export async function GET(
 		return new Response(body, { status: statusCode, headers });
 	} catch (e) {
 		if (isStorageNotFound(e)) {
-			// Stale StoredTrack: DB row points to a blob that no longer exists.
+			// Stale StoredTrack: DB row points to an object that no longer exists.
 			// Drop every row for this trackId so the redirect falls through to
 			// a live Deezer stream in /stream-progressive.
 			try {
@@ -70,11 +73,11 @@ export async function GET(
 			return redirectToProgressive(trackId);
 		}
 		if (isStorageUnavailable(e)) {
-			// Blob is unreachable but the file might still exist. Bounce to
-			// /stream-progressive so the user keeps playing while storage is
-			// down. Don't delete the row: it's still valid once Blob is back.
+			// Storage is unreachable or refusing, but the file might still exist.
+			// Bounce to a live-only /stream-progressive so the user keeps playing.
+			// Don't delete the row: it's still valid once storage is back.
 			console.warn("[stream] storage unreachable — falling back to live stream:", e);
-			return redirectToProgressive(trackId);
+			return redirectToProgressive(trackId, { live: true });
 		}
 		return handleError(e);
 	}

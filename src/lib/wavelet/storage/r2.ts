@@ -1,0 +1,105 @@
+// Cloudflare R2 over its S3 API, signed with aws4fetch (fetch-based, no SDK).
+// Every failure is normalized to StorageNotFoundError / StorageUnavailableError
+// so callers can decide between "drop the stale row" and "fall back to live".
+
+import { AwsClient } from "aws4fetch";
+import { StorageNotFoundError, StorageUnavailableError } from "./objects";
+
+export interface R2Config {
+	accountId: string;
+	bucket: string;
+	accessKeyId: string;
+	secretAccessKey: string;
+}
+
+export function readR2Config(env: NodeJS.ProcessEnv = process.env): R2Config | null {
+	const { R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY } = env;
+	if (!R2_ACCOUNT_ID || !R2_BUCKET || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) return null;
+	return {
+		accountId: R2_ACCOUNT_ID,
+		bucket: R2_BUCKET,
+		accessKeyId: R2_ACCESS_KEY_ID,
+		secretAccessKey: R2_SECRET_ACCESS_KEY,
+	};
+}
+
+let cached: { signature: string; aws: AwsClient; base: string; bucket: string } | null = null;
+
+function client() {
+	const config = readR2Config();
+	// Missing config behaves like an outage: reads fall back to live streams
+	// instead of deleting rows that are fine once R2 is configured.
+	if (!config) throw new StorageUnavailableError(new Error("R2 is not configured (R2_* env vars)"));
+	const signature = `${config.accountId}/${config.bucket}/${config.accessKeyId}`;
+	if (cached?.signature !== signature) {
+		cached = {
+			signature,
+			aws: new AwsClient({
+				accessKeyId: config.accessKeyId,
+				secretAccessKey: config.secretAccessKey,
+				service: "s3",
+				region: "auto",
+				// aws4fetch retries 429/5xx itself; its default (10 retries,
+				// doubling from 50 ms) can stall a play for ~50 s before the
+				// live fallback kicks in.
+				retries: 2,
+			}),
+			base: `https://${config.accountId}.r2.cloudflarestorage.com/${config.bucket}`,
+			bucket: config.bucket,
+		};
+	}
+	return cached;
+}
+
+const encodeKey = (key: string) => key.split("/").map(encodeURIComponent).join("/");
+
+/** Absolute S3 URL of an object (or of the bucket itself when `key` is empty). */
+export function objectUrl(key: string): string {
+	const { base } = client();
+	return key ? `${base}/${encodeKey(key)}` : base;
+}
+
+/** `x-amz-copy-source` value for a server-side copy within the bucket. */
+export function copySource(key: string): string {
+	return `/${client().bucket}/${encodeKey(key)}`;
+}
+
+/** Signed request; network failures become StorageUnavailableError. */
+export async function r2Fetch(url: string, init: RequestInit = {}): Promise<Response> {
+	const { aws } = client();
+	try {
+		return await aws.fetch(url, init);
+	} catch (e) {
+		throw new StorageUnavailableError(e);
+	}
+}
+
+/**
+ * Throws unless `res` is 2xx: 404 → not found; auth, rate-limit and 5xx →
+ * unavailable (the object may be fine — a bad token or an outage must never
+ * make routes delete rows).
+ */
+export async function assertOk(res: Response, key: string): Promise<Response> {
+	if (res.ok) return res;
+	if (res.status === 404) throw new StorageNotFoundError(key);
+	const detail = await res.text().catch(() => "");
+	const error = new Error(`R2 ${res.status} for ${key}${detail ? `: ${detail.slice(0, 200)}` : ""}`);
+	if (res.status === 401 || res.status === 403 || res.status === 429 || res.status >= 500) {
+		throw new StorageUnavailableError(error);
+	}
+	throw error;
+}
+
+/** Presigned GET URL the browser can stream directly (Range + CORS enabled). */
+export async function presignGet(key: string, expiresIn: number): Promise<string> {
+	const { aws } = client();
+	const url = new URL(objectUrl(key));
+	url.searchParams.set("X-Amz-Expires", String(Math.max(1, Math.min(604_800, Math.round(expiresIn)))));
+	const signed = await aws.sign(new Request(url, { method: "GET" }), { aws: { signQuery: true } });
+	return signed.url;
+}
+
+/** Test hook: forget the client so a test can change R2_* env vars. */
+export function _resetR2Client() {
+	cached = null;
+}

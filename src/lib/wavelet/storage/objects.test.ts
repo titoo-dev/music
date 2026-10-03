@@ -5,27 +5,27 @@ import {
 	inferContentType,
 	isStorageNotFound,
 	isStorageUnavailable,
-	toBlobPathname,
-} from "./blob";
+	toObjectKey,
+} from "./objects";
 
-describe("toBlobPathname", () => {
+describe("toObjectKey", () => {
 	it("strips leading slashes", () => {
-		expect(toBlobPathname("/data/music/A/B.mp3")).toBe("data/music/A/B.mp3");
-		expect(toBlobPathname("///x.flac")).toBe("x.flac");
+		expect(toObjectKey("/data/music/A/B.mp3")).toBe("data/music/A/B.mp3");
+		expect(toObjectKey("///x.flac")).toBe("x.flac");
 	});
 
 	it("normalizes Windows separators", () => {
-		expect(toBlobPathname("music\\Artist\\Album\\T.flac")).toBe("music/Artist/Album/T.flac");
+		expect(toObjectKey("music\\Artist\\Album\\T.flac")).toBe("music/Artist/Album/T.flac");
 	});
 
 	it("collapses repeated slashes (was: 'Vercel Blob: pathname cannot contain \"//\"' on progressive-stream persist)", () => {
 		// downloadLocation defaults to "music/" and generatePath appends "/<album>".
-		expect(toBlobPathname("music//Album/CD1/T.flac")).toBe("music/Album/CD1/T.flac");
-		expect(toBlobPathname("music\\\\A//B///T.mp3")).toBe("music/A/B/T.mp3");
+		expect(toObjectKey("music//Album/CD1/T.flac")).toBe("music/Album/CD1/T.flac");
+		expect(toObjectKey("music\\\\A//B///T.mp3")).toBe("music/A/B/T.mp3");
 	});
 
 	it("leaves an already-relative pathname untouched", () => {
-		expect(toBlobPathname("music/A - B/01 - T.mp3")).toBe("music/A - B/01 - T.mp3");
+		expect(toObjectKey("music/A - B/01 - T.mp3")).toBe("music/A - B/01 - T.mp3");
 	});
 });
 

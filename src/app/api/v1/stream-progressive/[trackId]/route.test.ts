@@ -13,7 +13,7 @@ import {
 import {
 	StorageNotFoundError,
 	StorageUnavailableError,
-} from "@/lib/wavelet/storage/blob";
+} from "@/lib/wavelet/storage/objects";
 
 // ── Mock setup ──
 
@@ -45,7 +45,7 @@ vi.mock("next/server", async (importOriginal) => ({
 }));
 
 vi.mock("@/lib/server-state", () => serverStateMock);
-vi.mock("@/lib/blob-stream", () => blobStreamMock);
+vi.mock("@/lib/object-stream", () => blobStreamMock);
 vi.mock("@/lib/wavelet/progressive-stream", () => ({
 	startProgressiveStream: startProgressiveStreamMock,
 }));
@@ -59,7 +59,7 @@ const blobRow = {
 	trackId: "1",
 	bitrate: 320,
 	storagePath: "music/foo.mp3",
-	storageType: "blob",
+	storageType: "r2",
 } as any;
 
 
@@ -222,8 +222,31 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		expect(startProgressiveStreamMock).toHaveBeenCalled();
 	});
 
-	it.each(["s3", "local"])(
-		"drops pre-Blob %s rows and streams live (was: 302 to /stream for local rows)",
+	it("with live=1 streams from Deezer without touching the cache (was: /stream ↔ /stream-progressive redirect loop while storage refused reads)", async () => {
+		const { app } = makeApp();
+		arrangeAuthOk(app);
+		prismaMock.storedTrack.findFirst.mockResolvedValue(blobRow);
+		blobStreamMock.headObject.mockResolvedValue({ contentLength: 1, contentType: "audio/mpeg" });
+		startProgressiveStreamMock.mockResolvedValue({
+			body: fakeBody(),
+			contentType: "audio/mpeg",
+			contentLength: 0,
+		});
+
+		const res = await GET(
+			makeNextRequest({
+				url: "http://localhost:3000/api/v1/stream-progressive/1?live=1",
+			}),
+			makeParams({ trackId: "1" })
+		);
+		expect(res.status).toBe(200);
+		expect(blobStreamMock.headObject).not.toHaveBeenCalled();
+		expect(prismaMock.storedTrack.deleteMany).not.toHaveBeenCalled();
+		expect(startProgressiveStreamMock).toHaveBeenCalled();
+	});
+
+	it.each(["s3", "local", "blob"])(
+		"drops pre-R2 %s rows and streams live (was: 302 to /stream for local rows; blob: unreadable suspended Vercel Blob store)",
 		async (storageType) => {
 			const { app } = makeApp();
 			arrangeAuthOk(app);

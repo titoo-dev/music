@@ -1,3 +1,3 @@
 export type { StorageProvider } from "./StorageProvider";
-export { BlobStorageProvider } from "./BlobStorageProvider";
+export { R2StorageProvider } from "./R2StorageProvider";
 export { createStorageProvider } from "./factory";

@@ -2,17 +2,18 @@ import { NextRequest, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireDeezerAndApp, fail, handleError } from "../../_lib/helpers";
 import { startProgressiveStream } from "@/lib/wavelet/progressive-stream";
-import { headObject } from "@/lib/blob-stream";
-import { BLOB_STORAGE_TYPE, isStorageNotFound } from "@/lib/wavelet/storage/blob";
+import { headObject } from "@/lib/object-stream";
+import { STORAGE_TYPE, isStorageNotFound } from "@/lib/wavelet/storage/objects";
 
-// The persist pipeline (tag + Blob upload) runs in after() once the audio
+// The persist pipeline (tag + R2 upload) runs in after() once the audio
 // response ends; give it room on long FLAC tracks.
 export const maxDuration = 300;
 
 // GET /api/v1/stream-progressive/[trackId]
 // Spotify-like progressive playback: streams live from Deezer, decrypts
-// on the fly, persists to Vercel Blob in parallel. If the file is already cached
-// (StoredTrack exists), redirects to /api/v1/stream for fast Range support.
+// on the fly, persists to R2 in parallel. If the file is already cached
+// (StoredTrack exists), redirects to /api/v1/stream for fast Range support —
+// unless `live=1`: /stream sends that when storage refuses reads.
 export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ trackId: string }> }
@@ -24,7 +25,7 @@ export async function GET(
 
 		const { trackId } = await params;
 		// Preview mode: hover-prefetch from the client. Streams audio bytes
-		// to the browser without persisting to Blob / DB and without taking
+		// to the browser without persisting to storage / DB and without taking
 		// the per-track download lock — so it never blocks a real play.
 		const preview = request.nextUrl.searchParams.get("preview") === "1";
 		// Head mode (only valid with preview=1): cap the response at ~64 KB
@@ -34,18 +35,19 @@ export async function GET(
 		// gets to readyState >= 2 (canplay) and fires duration metadata.
 		const head = preview && request.nextUrl.searchParams.get("head") === "1";
 		const headBytes = head ? 64 * 1024 : 0;
+		const live = request.nextUrl.searchParams.get("live") === "1";
 
-		// Already cached → fast path through /stream. Verify the blob actually
+		// Already cached → fast path through /stream. Verify the object actually
 		// exists first; stale rows (file deleted, migration) would otherwise
 		// cause a redirect-then-404 loop and burn the audio element's retry budget.
 		const stored = await prisma.storedTrack.findFirst({
 			where: { trackId },
 			orderBy: { bitrate: "desc" },
 		});
-		if (stored) {
-			// Rows from before the move to Vercel Blob (storageType "s3" / "local")
-			// point at storage this deployment can't reach — treat them as missing.
-			let missing = stored.storageType !== BLOB_STORAGE_TYPE;
+		if (stored && !live) {
+			// Rows written for older storage (Vercel Blob "blob", "s3", "local")
+			// point at files this deployment can't read — treat them as missing.
+			let missing = stored.storageType !== STORAGE_TYPE;
 			let unreachable = false;
 			if (!missing) {
 				try {
@@ -54,10 +56,10 @@ export async function GET(
 					if (isStorageNotFound(e)) {
 						missing = true;
 					} else {
-						// Network / permissions failure (Blob down). Don't redirect to
+						// Network / permissions failure (storage down). Don't redirect to
 						// /stream — it would also fail. Fall through to the live Deezer
 						// stream so playback still works while storage is unreachable.
-						// Keep the row so the cached file is reused once Blob comes back.
+						// Keep the row so the cached file is reused once storage is back.
 						unreachable = true;
 					}
 				}

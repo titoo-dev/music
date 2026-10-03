@@ -15,7 +15,7 @@ const { mapGwTrackToDeezer } = utils;
 // (gw.get_track_with_fallback + media.deezer.com/v1/get_url).
 //
 // Crucially this does NOT open the encrypted audio stream and does NOT
-// persist to Blob — it only fills the in-memory metadata caches. So hovering
+// persist to storage — it only fills the in-memory metadata caches. So hovering
 // over many tracks costs almost nothing.
 export async function GET(
 	request: NextRequest,

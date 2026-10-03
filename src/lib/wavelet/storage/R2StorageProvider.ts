@@ -1,117 +1,108 @@
-import { put, head, get, del, list, copy, BlobNotFoundError } from "@vercel/blob";
 import fs from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { randomUUID } from "crypto";
 import type { StorageProvider } from "./StorageProvider";
-import { BLOB_ACCESS, StorageNotFoundError, inferContentType, toBlobPathname } from "./blob";
+import { StorageNotFoundError, inferContentType, toObjectKey } from "./objects";
+import { assertOk, copySource, objectUrl, r2Fetch } from "./r2";
 
 // Streams are buffered to /tmp (the only writable path on Vercel Functions)
-// so the tagger can edit the file in place before it is uploaded.
-const BLOB_TEMP_DIR = path.join(tmpdir(), "wavelet-blob");
-fs.mkdirSync(BLOB_TEMP_DIR, { recursive: true });
+// so the tagger can edit the file in place before it is uploaded. A single
+// PUT takes objects up to 5 GB — far above any track — so no multipart.
+const TEMP_DIR = path.join(tmpdir(), "wavelet-r2");
+fs.mkdirSync(TEMP_DIR, { recursive: true });
 
-// Blob multipart uploads need parts of at least 5 MB; below that a single
-// PUT is both valid and cheaper.
-const MULTIPART_THRESHOLD = 8 * 1024 * 1024;
-
-function writeOptions(pathname: string) {
-	return {
-		access: BLOB_ACCESS,
-		addRandomSuffix: false,
-		allowOverwrite: true,
-		contentType: inferContentType(pathname),
-	};
-}
-
-export class BlobStorageProvider implements StorageProvider {
-	/** Blob pathname → pending /tmp file, keyed by normalized pathname. */
+export class R2StorageProvider implements StorageProvider {
+	/** Object key → pending /tmp file. */
 	private tempFiles: Map<string, string> = new Map();
 
 	async ensureDir(_dirPath: string): Promise<void> {
-		// No-op — Blob doesn't have directories
+		// No-op — object storage has no directories
 	}
 
 	async exists(filePath: string): Promise<boolean> {
+		const key = toObjectKey(filePath);
 		try {
-			await head(toBlobPathname(filePath));
+			await assertOk(await r2Fetch(objectUrl(key), { method: "HEAD" }), key);
 			return true;
 		} catch (e) {
-			if (e instanceof BlobNotFoundError) return false;
+			if (e instanceof StorageNotFoundError) return false;
 			throw e;
 		}
 	}
 
 	async readFile(filePath: string): Promise<Buffer> {
-		const pathname = toBlobPathname(filePath);
-		const result = await get(pathname, { access: BLOB_ACCESS });
-		if (!result || result.statusCode !== 200) throw new StorageNotFoundError(pathname);
-		return Buffer.from(await new Response(result.stream).arrayBuffer());
+		const key = toObjectKey(filePath);
+		const res = await assertOk(await r2Fetch(objectUrl(key)), key);
+		return Buffer.from(await res.arrayBuffer());
 	}
 
 	async writeFile(filePath: string, data: Buffer | string): Promise<void> {
-		const pathname = toBlobPathname(filePath);
-		await put(pathname, data, writeOptions(pathname));
+		const key = toObjectKey(filePath);
+		await this.put(key, typeof data === "string" ? Buffer.from(data) : data);
 	}
 
 	createWriteStream(filePath: string): NodeJS.WritableStream {
-		const tempPath = path.join(BLOB_TEMP_DIR, randomUUID());
-		this.tempFiles.set(toBlobPathname(filePath), tempPath);
+		const tempPath = path.join(TEMP_DIR, randomUUID());
+		this.tempFiles.set(toObjectKey(filePath), tempPath);
 		return fs.createWriteStream(tempPath);
 	}
 
 	async finalizeStream(filePath: string): Promise<void> {
-		const pathname = toBlobPathname(filePath);
-		const tempPath = this.tempFiles.get(pathname);
+		const key = toObjectKey(filePath);
+		const tempPath = this.tempFiles.get(key);
 		if (!tempPath) return;
 
 		try {
-			const { size } = await fs.promises.stat(tempPath);
-			await put(pathname, fs.createReadStream(tempPath), {
-				...writeOptions(pathname),
-				multipart: size > MULTIPART_THRESHOLD,
-			});
+			await this.put(key, await fs.promises.readFile(tempPath));
 		} finally {
 			await fs.promises.rm(tempPath, { force: true });
-			this.tempFiles.delete(pathname);
+			this.tempFiles.delete(key);
 		}
 	}
 
 	async deleteFile(filePath: string): Promise<void> {
-		const pathname = toBlobPathname(filePath);
-		const tempPath = this.tempFiles.get(pathname);
+		const key = toObjectKey(filePath);
+		const tempPath = this.tempFiles.get(key);
 		if (tempPath) {
 			await fs.promises.rm(tempPath, { force: true });
-			this.tempFiles.delete(pathname);
+			this.tempFiles.delete(key);
 		}
 
 		try {
-			await del(pathname);
+			await r2Fetch(objectUrl(key), { method: "DELETE" });
 		} catch {
 			// Ignore delete errors
 		}
 	}
 
 	async deleteDirectory(dirPath: string): Promise<void> {
-		const prefix = toBlobPathname(dirPath).replace(/\/?$/, "/");
+		const prefix = toObjectKey(dirPath).replace(/\/?$/, "/");
 
-		let cursor: string | undefined;
+		let token: string | undefined;
 		do {
-			const page = await list({ prefix, cursor });
-			if (page.blobs.length > 0) {
-				await del(page.blobs.map((b) => b.url));
-			}
-			cursor = page.hasMore ? page.cursor : undefined;
-		} while (cursor);
+			const url = new URL(objectUrl(""));
+			url.searchParams.set("list-type", "2");
+			url.searchParams.set("prefix", prefix);
+			if (token) url.searchParams.set("continuation-token", token);
+			const xml = await (await assertOk(await r2Fetch(url.toString()), prefix)).text();
+
+			const keys = [...xml.matchAll(/<Key>([^<]+)<\/Key>/g)].map((m) => decodeXml(m[1]));
+			await Promise.all(keys.map((key) => r2Fetch(objectUrl(key), { method: "DELETE" })));
+			token = /<IsTruncated>true<\/IsTruncated>/.test(xml)
+				? decodeXml(xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)?.[1] ?? "") || undefined
+				: undefined;
+		} while (token);
 	}
 
 	async getFileSize(filePath: string): Promise<number> {
-		const meta = await head(toBlobPathname(filePath));
-		return meta.size;
+		const key = toObjectKey(filePath);
+		const res = await assertOk(await r2Fetch(objectUrl(key), { method: "HEAD" }), key);
+		return Number(res.headers.get("content-length")) || 0;
 	}
 
 	getLocalPath(filePath: string): string {
-		const tempPath = this.tempFiles.get(toBlobPathname(filePath));
+		const tempPath = this.tempFiles.get(toObjectKey(filePath));
 		if (tempPath) return tempPath;
 		throw new Error(
 			`No local temp file found for ${filePath}. Call createWriteStream first.`
@@ -119,18 +110,42 @@ export class BlobStorageProvider implements StorageProvider {
 	}
 
 	async rename(oldPath: string, newPath: string): Promise<void> {
+		const from = toObjectKey(oldPath);
+		const to = toObjectKey(newPath);
+
 		// If there's a local temp file mapping (pre-upload), just remap the reference
-		const tempPath = this.tempFiles.get(toBlobPathname(oldPath));
+		const tempPath = this.tempFiles.get(from);
 		if (tempPath) {
-			this.tempFiles.delete(toBlobPathname(oldPath));
-			this.tempFiles.set(toBlobPathname(newPath), tempPath);
+			this.tempFiles.delete(from);
+			this.tempFiles.set(to, tempPath);
 			return;
 		}
 
-		// Otherwise, rename on Blob via copy + delete
-		const from = toBlobPathname(oldPath);
-		const to = toBlobPathname(newPath);
-		await copy(from, to, writeOptions(to));
-		await del(from);
+		// Otherwise, rename in the bucket via server-side copy + delete
+		await assertOk(
+			await r2Fetch(objectUrl(to), { method: "PUT", headers: { "x-amz-copy-source": copySource(from) } }),
+			to
+		);
+		await r2Fetch(objectUrl(from), { method: "DELETE" });
 	}
+
+	private async put(key: string, body: Buffer): Promise<void> {
+		await assertOk(
+			await r2Fetch(objectUrl(key), {
+				method: "PUT",
+				body: new Uint8Array(body),
+				headers: { "Content-Type": inferContentType(key) },
+			}),
+			key
+		);
+	}
+}
+
+function decodeXml(s: string): string {
+	return s
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&apos;/g, "'")
+		.replace(/&amp;/g, "&");
 }
