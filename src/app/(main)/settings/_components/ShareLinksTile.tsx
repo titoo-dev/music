@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Copy, Headphones, Link2, Trash2 } from "lucide-react";
 import { useShareStore } from "@/stores/useShareStore";
 import { cn } from "@/lib/utils";
+import { ArtistLink } from "@/components/links/EntityLink";
 import { Art, DUR, EASE } from "@/components/expressive";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsTile, StatusPill, TilePanel } from "./SettingsTiles";
@@ -105,7 +106,9 @@ export function ShareLinksTile() {
 										</Link>
 										<div className="min-w-0 flex-1">
 											<p className="truncate text-sm font-semibold text-foreground">{s.title}</p>
-											<p className="truncate text-xs text-muted-foreground">{s.artist}</p>
+											<p className="truncate text-xs text-muted-foreground">
+												<ArtistLink name={s.artist} className="transition-colors hover:text-foreground" />
+											</p>
 											<div className="mt-1.5 flex flex-wrap gap-1.5">
 												<StatusPill label={e.label} tone={e.tone} />
 												<StatusPill label={`${s.plays} play${s.plays === 1 ? "" : "s"}`} icon={Headphones} tone="muted" />

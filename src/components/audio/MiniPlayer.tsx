@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback } from "react";
-import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import { X } from "lucide-react";
 import { usePreviewStore } from "@/stores/usePreviewStore";
@@ -11,6 +10,7 @@ import { CoverImage } from "@/components/ui/cover-image";
 import { Equalizer, PlayPauseIcon, ProgressRing } from "@/components/motion/icons";
 import { CoverTheme, EASE, SPRING } from "@/components/expressive";
 import { cn } from "@/lib/utils";
+import { ArtistLink } from "@/components/links/EntityLink";
 
 /**
  * 30-second preview pill. Floats bottom-center like the main player; when the
@@ -81,13 +81,7 @@ export function MiniPlayer() {
 										{isPlaying && <Equalizer playing className="h-2" />}
 										Preview
 									</span>
-									{currentTrack.artistId ? (
-										<Link href={`/artist?id=${currentTrack.artistId}`} className="truncate hover:text-on-primary-container hover:underline">
-											{currentTrack.artist}
-										</Link>
-									) : (
-										<span className="truncate">{currentTrack.artist}</span>
-									)}
+									<ArtistLink id={currentTrack.artistId} name={currentTrack.artist} className="truncate hover:text-on-primary-container" />
 								</p>
 							</div>
 

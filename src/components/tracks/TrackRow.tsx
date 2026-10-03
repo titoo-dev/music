@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Link from "next/link";
 import { MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { CoverImage } from "@/components/ui/cover-image";
@@ -18,6 +17,7 @@ import { usePreviewStore } from "@/stores/usePreviewStore";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { convertDuration } from "@/utils/helpers";
 import { getBitrateBadge } from "@/utils/track-format";
+import { AlbumLink, ArtistLink } from "@/components/links/EntityLink";
 
 export interface TrackRowTrack {
 	trackId: string;
@@ -143,6 +143,8 @@ export function TrackRow({
 			title: track.title,
 			artist: track.artist,
 			artistId: track.artistId ?? null,
+			album: track.album ?? null,
+			albumId: track.albumId ?? null,
 			cover: track.cover,
 			duration: track.duration ?? null,
 		};
@@ -152,6 +154,8 @@ export function TrackRow({
 				title: t.title,
 				artist: t.artist,
 				artistId: t.artistId ?? null,
+				album: t.album ?? null,
+				albumId: t.albumId ?? null,
 				cover: t.cover,
 				duration: t.duration ?? null,
 			}));
@@ -309,28 +313,14 @@ export function TrackRow({
 				<p className="mt-0.5 truncate text-xs leading-tight text-muted-foreground">
 					{subtitle ?? (
 						<>
-					{track.artistId ? (
-						<Link href={`/artist?id=${track.artistId}`} className="transition-colors hover:text-foreground hover:underline">
-							{track.artist}
-						</Link>
-					) : (
-						track.artist
-					)}
-					{track.album ? (
-						<>
-							{" · "}
-							{track.albumId ? (
-								<Link href={`/album?id=${track.albumId}`} className="transition-colors hover:text-foreground hover:underline">
-									{track.album}
-								</Link>
-							) : (
-								track.album
+							<ArtistLink id={track.artistId} name={track.artist} className="transition-colors hover:text-foreground" />
+							{track.album && (
+								<>
+									{" · "}
+									<AlbumLink id={track.albumId} title={track.album} artist={track.artist} className="transition-colors hover:text-foreground" />
+								</>
 							)}
 						</>
-					) : (
-						""
-					)}
-				</>
 					)}
 				</p>
 			</div>

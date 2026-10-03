@@ -15,6 +15,8 @@ import { useDownloadStore } from "@/stores/useDownloadStore";
 import { useDiscover } from "@/hooks/useDiscover";
 import { cn } from "@/lib/utils";
 import { sizedCover } from "@/lib/cover-palette";
+import { artistHref } from "@/lib/entity-links";
+import { ArtistLink } from "@/components/links/EntityLink";
 import {
 	ArtCarousel,
 	Art,
@@ -114,7 +116,7 @@ function toRow(t: SavedTrackItem | RecentPlayItem): TrackRowTrack {
 }
 
 function toPlayer(t: TrackRowTrack): PlayerTrack {
-	return { trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, cover: t.cover, duration: t.duration ?? null };
+	return { trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, album: t.album ?? null, albumId: t.albumId ?? null, cover: t.cover, duration: t.duration ?? null };
 }
 
 function TrackList({ tracks }: { tracks: TrackRowTrack[] }) {
@@ -283,27 +285,27 @@ function GreetingHero({
 				{/* What's playing, inside the hero; opens the player. */}
 				<AnimatePresence>
 					{current && (
-						<motion.button
-							type="button"
+						<motion.div
 							initial={{ opacity: 0, height: 0 }}
 							animate={{ opacity: 1, height: "auto" }}
 							exit={{ opacity: 0, height: 0 }}
 							whileTap={{ scale: 0.97 }}
-							onClick={() => setFullscreenOpen(true)}
-							className="flex w-full items-center gap-3 overflow-hidden rounded-[20px] bg-white/[0.14] p-2 text-left backdrop-blur-md transition-colors hover:bg-white/20 lg:w-[340px]"
+							className="relative flex w-full items-center gap-3 overflow-hidden rounded-[20px] bg-white/[0.14] p-2 text-left backdrop-blur-md transition-colors hover:bg-white/20 has-[>button:focus-visible]:ring-2 has-[>button:focus-visible]:ring-white/60 lg:w-[340px]"
 						>
+							{/* Opens the player; a layer under the click-through content so the artist name links on its own. */}
+							<button type="button" onClick={() => setFullscreenOpen(true)} aria-label={`Open player: ${current.title} · ${current.artist}`} className="absolute inset-0 rounded-[inherit] outline-none" />
 							{/* eslint-disable-next-line @next/next/no-img-element */}
-							<img src={current.cover ? sizedCover(current.cover, 120) : undefined} alt="" className="size-11 shrink-0 rounded-xl bg-white/10 object-cover" />
-							<span className="min-w-0 flex-1">
+							<img src={current.cover ? sizedCover(current.cover, 120) : undefined} alt="" className="pointer-events-none relative size-11 shrink-0 rounded-xl bg-white/10 object-cover" />
+							<span className="pointer-events-none relative min-w-0 flex-1">
 								<span className="type-eyebrow block text-[10px] text-white/70">{isPlaying ? "Now playing" : "Paused"}</span>
 								<AnimatePresence mode="popLayout" initial={false}>
 									<motion.span key={current.trackId} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="block truncate text-sm font-semibold text-white">
-										{current.title} · {current.artist}
+										{current.title} · <ArtistLink id={current.artistId} name={current.artist} className="pointer-events-auto" />
 									</motion.span>
 								</AnimatePresence>
 							</span>
-							<Equalizer playing={isPlaying} className="mr-2 h-4 text-white" />
-						</motion.button>
+							<Equalizer playing={isPlaying} className="pointer-events-none relative mr-2 h-4 text-white" />
+						</motion.div>
 					)}
 				</AnimatePresence>
 			</div>
@@ -327,7 +329,7 @@ function Discover({ savedAlbumIds }: { savedAlbumIds: Set<string> }) {
 						label="New releases"
 						height={280}
 						lead={1.9}
-						items={releases.slice(0, 30).map((a) => ({ key: a.id, title: a.title, subtitle: a.artist, image: a.cover }))}
+						items={releases.slice(0, 30).map((a) => ({ key: a.id, title: a.title, subtitle: a.artist, subtitleHref: artistHref(null, a.artist), image: a.cover }))}
 						onSelect={(i) => router.push(`/album?id=${releases[i].id}`)}
 					/>
 				</motion.section>
@@ -342,7 +344,7 @@ function Discover({ savedAlbumIds }: { savedAlbumIds: Set<string> }) {
 								index={i}
 								href={`/album?id=${a.id}`}
 								title={a.title}
-								subtitle={a.artist ?? undefined}
+								subtitle={a.artist ? <ArtistLink name={a.artist} className="transition-colors hover:text-foreground" /> : undefined}
 								cover={a.cover}
 								collection={{ type: "album", id: a.id }}
 								badge={savedAlbumIds.has(a.id) ? <SavedDot /> : undefined}
@@ -436,8 +438,8 @@ export function HomeContent({ playlists, albums, recentPlays, tracks, user }: Ho
 	const shortcuts = [
 		...(tracks.length ? [{ key: "liked", title: "Liked songs", subtitle: `${tracks.length} ${tracks.length === 1 ? "track" : "tracks"}`, art: <LikedArt className="size-full" />, onClick: () => setFilter("tracks") }] : []),
 		...playlists.slice(0, 2).map((p) => ({ key: `p${p.id}`, title: p.title, subtitle: `Playlist · ${p._count.tracks} tracks`, art: <Art covers={p.covers} className="size-full" size={120} />, href: `/my-playlists/${p.id}` })),
-		...sortedAlbums.slice(0, 2).map((a) => ({ key: `a${a.id}`, title: a.title, subtitle: a.artist, art: <Art src={a.coverUrl} className="size-full" size={120} />, href: `/album?id=${a.deezerAlbumId}` })),
-		...recentRows.map((t, i) => ({ key: `r${t.trackId}`, title: t.title, subtitle: t.artist, art: <Art src={t.cover} className="size-full" size={120} />, onClick: () => playRecent(i), trackId: t.trackId })),
+		...sortedAlbums.slice(0, 2).map((a) => ({ key: `a${a.id}`, title: a.title, subtitle: a.artist, subtitleHref: artistHref(null, a.artist), art: <Art src={a.coverUrl} className="size-full" size={120} />, href: `/album?id=${a.deezerAlbumId}` })),
+		...recentRows.map((t, i) => ({ key: `r${t.trackId}`, title: t.title, subtitle: t.artist, subtitleHref: artistHref(t.artistId, t.artist), art: <Art src={t.cover} className="size-full" size={120} />, onClick: () => playRecent(i), trackId: t.trackId })),
 	].slice(0, 6);
 
 	return (
@@ -486,6 +488,7 @@ export function HomeContent({ playlists, albums, recentPlays, tracks, user }: Ho
 											index={i + 2}
 											title={s.title}
 											subtitle={s.subtitle}
+											subtitleHref={"subtitleHref" in s ? s.subtitleHref : undefined}
 											art={s.art}
 											href={"href" in s ? s.href : undefined}
 											onClick={"onClick" in s ? s.onClick : undefined}
@@ -527,6 +530,7 @@ export function HomeContent({ playlists, albums, recentPlays, tracks, user }: Ho
 											key: t.trackId,
 											title: t.title,
 											subtitle: t.artist,
+											subtitleHref: artistHref(t.artistId, t.artist),
 											image: t.cover,
 											current: current?.trackId === t.trackId,
 											playing: isPlaying,
@@ -558,13 +562,13 @@ export function HomeContent({ playlists, albums, recentPlays, tracks, user }: Ho
 									{all ? (
 										<CardCarousel>
 											{sortedAlbums.slice(0, 10).map((a, i) => (
-												<MediaCard key={a.id} index={i} href={`/album?id=${a.deezerAlbumId}`} title={a.title} subtitle={a.artist} cover={a.coverUrl} collection={{ type: "album", id: a.deezerAlbumId }} />
+												<MediaCard key={a.id} index={i} href={`/album?id=${a.deezerAlbumId}`} title={a.title} subtitle={<ArtistLink name={a.artist} className="transition-colors hover:text-foreground" />} cover={a.coverUrl} collection={{ type: "album", id: a.deezerAlbumId }} />
 											))}
 										</CardCarousel>
 									) : (
 										<CardGrid>
 											{sortedAlbums.map((a, i) => (
-												<MediaCard key={a.id} index={i} href={`/album?id=${a.deezerAlbumId}`} title={a.title} subtitle={`${a.artist} · ${a.trackCount} tracks`} cover={a.coverUrl} collection={{ type: "album", id: a.deezerAlbumId }} />
+												<MediaCard key={a.id} index={i} href={`/album?id=${a.deezerAlbumId}`} title={a.title} subtitle={<><ArtistLink name={a.artist} className="transition-colors hover:text-foreground" />{` · ${a.trackCount} tracks`}</>} cover={a.coverUrl} collection={{ type: "album", id: a.deezerAlbumId }} />
 											))}
 										</CardGrid>
 									)}

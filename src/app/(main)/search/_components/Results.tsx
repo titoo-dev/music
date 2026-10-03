@@ -15,10 +15,10 @@ import { useDownloadStore } from "@/stores/useDownloadStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useCommandStore } from "@/stores/useCommandStore";
 import { cn } from "@/lib/utils";
+import { ArtistLink } from "@/components/links/EntityLink";
 import {
 	TABS,
 	albumProps,
-	albumSubtitle,
 	artistProps,
 	artistSubtitle,
 	isMainEmpty,
@@ -28,6 +28,7 @@ import {
 	trackCover,
 	type SearchTab,
 	type TopPick,
+	type AlbumCard,
 } from "../_lib/search-model";
 import { useTypedSearch } from "../_lib/useSearch";
 import { KindPill } from "./bits";
@@ -37,7 +38,18 @@ import { KindPill } from "./bits";
 const ARTIST_ITEM = "w-[128px] sm:w-[150px] lg:w-[164px]";
 
 function toPlayer(t: TrackRowTrack, cover?: string | null): PlayerTrack {
-	return { trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, cover: cover ?? t.cover, duration: t.duration ?? null };
+	return { trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, album: t.album ?? null, albumId: t.albumId ?? null, cover: cover ?? t.cover, duration: t.duration ?? null };
+}
+
+/** "Artist · 2001" under an album card, the artist linking to its page. */
+function albumByline(a: AlbumCard) {
+	if (!a.artist) return a.year ?? undefined;
+	return (
+		<>
+			<ArtistLink id={a.artistId} name={a.artist} className="transition-colors hover:text-foreground" />
+			{a.year && ` · ${a.year}`}
+		</>
+	);
 }
 
 function Retry({ onRetry, message }: { onRetry: () => void; message?: string | null }) {
@@ -151,7 +163,7 @@ function AllData({ term, main, tracks, onTab, albumMap }: { term: string; main: 
 								index={i}
 								href={`/album?id=${a.id}`}
 								title={a.title}
-								subtitle={albumSubtitle(a)}
+								subtitle={albumByline(a)}
 								cover={a.cover}
 								collection={{ type: "album", id: a.id }}
 								badge={albumMap.has(a.id) ? <SavedBadge /> : undefined}
@@ -188,14 +200,14 @@ function TopResult({ pick, queue }: { pick: NonNullable<TopPick>; queue: TrackRo
 	const view = useMemo(() => {
 		if (pick.kind === "artist") {
 			const a = artistProps(pick.raw);
-			return { image: a.picture, title: a.name, kind: "Artist", subtitle: a.fans != null ? artistSubtitle(a) : null, circle: true, href: `/artist?id=${a.id}`, track: null };
+			return { image: a.picture, title: a.name, kind: "Artist", subtitle: a.fans != null ? artistSubtitle(a) : null, artist: null, circle: true, href: `/artist?id=${a.id}`, track: null };
 		}
 		if (pick.kind === "album") {
 			const a = albumProps(pick.raw);
-			return { image: a.cover, title: a.title, kind: "Album", subtitle: a.artist, circle: false, href: `/album?id=${a.id}`, track: null };
+			return { image: a.cover, title: a.title, kind: "Album", subtitle: a.artist, artist: a.artist ? { id: a.artistId, name: a.artist } : null, circle: false, href: `/album?id=${a.id}`, track: null };
 		}
 		const t = trackFromDeezerRaw(pick.raw);
-		return { image: trackCover(pick.raw), title: t.title, kind: "Song", subtitle: t.artist, circle: false, href: null, track: t };
+		return { image: trackCover(pick.raw), title: t.title, kind: "Song", subtitle: t.artist, artist: t.artist ? { id: t.artistId, name: t.artist } : null, circle: false, href: null, track: t };
 	}, [pick]);
 
 	const isCurrent = !!view.track && current?.trackId === view.track.trackId;
@@ -261,7 +273,13 @@ function TopResult({ pick, queue }: { pick: NonNullable<TopPick>; queue: TrackRo
 					<p className="mt-1 line-clamp-2 text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.03em] lg:text-[2.25rem]">{view.title}</p>
 					<div className="mt-2.5 flex min-w-0 items-center gap-2">
 						<KindPill tone="primary">{view.kind}</KindPill>
-						{view.subtitle && <span className="truncate text-sm">{view.subtitle}</span>}
+						{view.artist ? (
+							<span className="truncate text-sm">
+								<ArtistLink id={view.artist.id} name={view.artist.name} className="pointer-events-auto" />
+							</span>
+						) : (
+							view.subtitle && <span className="truncate text-sm">{view.subtitle}</span>
+						)}
 					</div>
 				</div>
 			</motion.div>
@@ -343,7 +361,7 @@ export function TypedResults({ term, tab, albumMap }: { term: string; tab: Exclu
 										index={i % 20}
 										href={`/album?id=${a.id}`}
 										title={a.title}
-										subtitle={albumSubtitle(a)}
+										subtitle={albumByline(a)}
 										cover={a.cover}
 										collection={{ type: "album", id: a.id }}
 										badge={albumMap.has(a.id) ? <SavedBadge /> : undefined}

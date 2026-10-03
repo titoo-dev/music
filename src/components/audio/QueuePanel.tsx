@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence, Reorder, useDragControls } from "motion/react";
 import { CoverImage } from "@/components/ui/cover-image";
+import { ArtistLink } from "@/components/links/EntityLink";
+import { leavePlayer } from "./leave-player";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { GripVertical, ListMusic, Shuffle, X, Trash2 } from "lucide-react";
@@ -266,7 +268,9 @@ function NowCard({ track, isPlaying }: { track: PlayerTrack; isPlaying: boolean 
 					<AnimatePresence mode="popLayout" initial={false}>
 						<motion.div key={track.trackId} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
 							<p className="mt-1 truncate text-base font-semibold leading-tight tracking-[-0.01em]">{track.title}</p>
-							<p className="mt-0.5 truncate text-sm text-on-primary-container/75">{track.artist}</p>
+							<p className="mt-0.5 truncate text-sm text-on-primary-container/75">
+								<ArtistLink id={track.artistId} name={track.artist} onClick={leavePlayer} className="transition-colors hover:text-on-primary-container" />
+							</p>
 						</motion.div>
 					</AnimatePresence>
 				</div>
@@ -320,7 +324,9 @@ function QueueRow({ track, index, active, isPlaying, showHandle, onJump, onRemov
 
 			<div className="min-w-0 flex-1">
 				<p className={cn("truncate text-[15px] font-semibold leading-tight", active && "font-semibold text-primary")}>{track.title}</p>
-				<p className="mt-0.5 truncate text-[13px] leading-tight text-muted-foreground">{track.artist}</p>
+				<p className="mt-0.5 truncate text-[13px] leading-tight text-muted-foreground">
+					<ArtistLink id={track.artistId} name={track.artist} onClick={leavePlayer} className="transition-colors hover:text-foreground" />
+				</p>
 			</div>
 
 			{onRemove && (

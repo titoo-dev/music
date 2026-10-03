@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { fetchData } from "@/utils/api";
 import { cn } from "@/lib/utils";
+import { AlbumLink, ArtistLink, ArtistLinks } from "@/components/links/EntityLink";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useCommandStore, type CommandView } from "@/stores/useCommandStore";
 import {
@@ -65,7 +66,8 @@ interface Row {
 	key: string;
 	group: string;
 	title: string;
-	subtitle?: string | null;
+	/** Text, or artist / album links (they close the palette on their own). */
+	subtitle?: React.ReactNode;
 	cover?: string | null;
 	icon?: LucideIcon;
 	round?: boolean;
@@ -91,6 +93,8 @@ function toPlayerTrack(t: SuggestTrack): PlayerTrack {
 		title: t.title,
 		artist: t.artists.join(", "),
 		artistId: t.artistId,
+		album: t.album || null,
+		albumId: t.albumId,
 		cover: t.coverUrl,
 		duration: t.durationMs ? Math.round(t.durationMs / 1000) : null,
 	};
@@ -293,7 +297,7 @@ function PaletteBody() {
 					subtitle: info.title,
 					icon: ArrowRight,
 					onSelect: () => {
-						const q = info.tracks.map((t) => ({ trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, cover: t.cover, duration: t.duration ?? null }));
+						const q = info.tracks.map((t) => ({ trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, album: t.album ?? null, albumId: t.albumId ?? null, cover: t.cover, duration: t.duration ?? null }));
 						if (q.length) playQueue(q, 0);
 						close();
 					},
@@ -316,7 +320,17 @@ function PaletteBody() {
 					key: `t-${t.sourceId}`,
 					group: "Tracks",
 					title: t.title,
-					subtitle: `${t.artists.join(", ")}${t.album ? ` · ${t.album}` : ""}`,
+					subtitle: (
+						<>
+							<ArtistLinks artists={t.artists.map((name, i) => ({ id: i === 0 ? t.artistId : null, name }))} onClick={close} />
+							{t.album && (
+								<>
+									{" · "}
+									<AlbumLink id={t.albumId} title={t.album} artist={t.artists[0]} onClick={close} />
+								</>
+							)}
+						</>
+					),
 					cover: t.coverUrl,
 					onSelect: () => {
 						play(toPlayerTrack(t));
@@ -335,7 +349,7 @@ function PaletteBody() {
 					key: `a-${a.sourceId}`,
 					group: "Albums",
 					title: a.title,
-					subtitle: a.artists.join(", "),
+					subtitle: <ArtistLinks artists={a.artists.map((name) => ({ name }))} onClick={close} />,
 					cover: a.coverUrl,
 					onSelect: () => go(`/album?id=${a.deezerAlbumId}`),
 					onDownload: () => void downloadCollection("album", a.deezerAlbumId, a.title),
@@ -721,6 +735,7 @@ function formatBytes(n: number) {
 }
 
 function DownloadRow({ item }: { item: DownloadItem }) {
+	const close = useCommandStore((s) => s.close);
 	const cancel = useDownloadStore((s) => s.cancel);
 	const retry = useDownloadStore((s) => s.retry);
 	const remove = useDownloadStore((s) => s.remove);
@@ -775,7 +790,7 @@ function DownloadRow({ item }: { item: DownloadItem }) {
 			<span className="min-w-0 flex-1">
 				<span className="block truncate text-sm font-medium">{item.title}</span>
 				<span className="block truncate text-xs text-muted-foreground">
-					{item.artist}
+					<ArtistLink name={item.artist} onClick={close} className="transition-colors hover:text-foreground" />
 					{item.group ? ` · ${item.group}` : ""}
 				</span>
 				<span className="block truncate font-mono text-[11px] tabular-nums text-muted-foreground">{status}</span>

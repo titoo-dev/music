@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useLyricsStore, type LyricLine } from "@/stores/useLyricsStore";
 import { CoverImage } from "@/components/ui/cover-image";
+import { ArtistLink } from "@/components/links/EntityLink";
+import { leavePlayer } from "./leave-player";
 import { X } from "lucide-react";
 import { Spinner } from "@/components/motion/icons";
 import { formatTime } from "@/utils/format-time";
@@ -163,7 +165,9 @@ export function LyricsImmersive() {
 						<div className="min-w-0 flex-1">
 							<p className="type-eyebrow text-primary">Lyrics</p>
 							<p className="truncate text-base font-semibold tracking-[-0.01em]">{currentTrack.title}</p>
-							<p className="truncate text-sm font-semibold text-muted-foreground">{currentTrack.artist}</p>
+							<p className="truncate text-sm font-semibold text-muted-foreground">
+								<ArtistLink id={currentTrack.artistId} name={currentTrack.artist} onClick={leavePlayer} className="transition-colors hover:text-foreground" />
+							</p>
 						</div>
 						<div className="hidden h-9 items-center rounded-full bg-surface-highest/45 px-3.5 text-xs font-semibold tabular-nums text-foreground/80 backdrop-blur-md sm:flex">
 							{formatTime(currentTime)} / {formatTime(totalDuration)}

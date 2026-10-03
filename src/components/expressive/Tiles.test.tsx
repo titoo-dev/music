@@ -8,9 +8,9 @@ const art = <span data-testid="art" />;
 describe("QuickTile", () => {
 	it("shows the title and subtitle", () => {
 		render(<QuickTile title="L'adieu" subtitle="Garou" art={art} onClick={() => {}} />);
-		const tile = screen.getByRole("button", { name: /L'adieu/ });
-		expect(tile).toHaveTextContent("L'adieu");
-		expect(tile).toHaveTextContent("Garou");
+		expect(screen.getByRole("button", { name: "L'adieu · Garou" })).toBeInTheDocument();
+		expect(screen.getByText("L'adieu")).toBeInTheDocument();
+		expect(screen.getByText("Garou")).toBeInTheDocument();
 	});
 
 	it("plays on click", async () => {
@@ -24,6 +24,17 @@ describe("QuickTile", () => {
 		render(<QuickTile title="Liked songs" art={art} href="/library" />);
 		expect(screen.getByRole("link", { name: /Liked songs/ })).toHaveAttribute("href", "/library");
 		expect(screen.queryByRole("button")).toBeNull();
+	});
+
+	it("links the subtitle to the artist without playing the tile (was: artist name not clickable)", async () => {
+		const onClick = vi.fn();
+		render(<QuickTile title="L'adieu" subtitle="Garou" subtitleHref="/artist?name=Garou" art={art} onClick={onClick} />);
+		const link = screen.getByRole("link", { name: "Garou" });
+		expect(link).toHaveAttribute("href", "/artist?name=Garou");
+		expect(screen.getByRole("button", { name: "L'adieu · Garou" })).not.toContainElement(link);
+		link.addEventListener("click", (e) => e.preventDefault());
+		await userEvent.click(link);
+		expect(onClick).not.toHaveBeenCalled();
 	});
 
 	it("keeps the artwork wash visible only for the current track", () => {

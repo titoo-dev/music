@@ -30,7 +30,7 @@ const tonalIcon =
 	"flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground outline-none transition-[background-color,transform] duration-200 hover:bg-secondary/75 focus-visible:ring-4 focus-visible:ring-ring/40 active:scale-[0.88] disabled:pointer-events-none disabled:opacity-50 data-[popup-open]:bg-primary-container data-[popup-open]:text-on-primary-container [&_svg]:size-5";
 
 export function toPlayerTrack(t: TrackRowTrack): PlayerTrack {
-	return { trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, cover: t.cover, duration: t.duration ?? null };
+	return { trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, album: t.album ?? null, albumId: t.albumId ?? null, cover: t.cover, duration: t.duration ?? null };
 }
 
 /** Play / shuffle a whole collection (album, artist top tracks, playlist). */

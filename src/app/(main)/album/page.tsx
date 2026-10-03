@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { CalendarDays, Clock3, Copyright, Disc3, Music2, Tag } from "lucide-react";
@@ -15,6 +15,9 @@ import { AddTracksToPlaylist, DownloadCollectionButton, useCollectionPlayback } 
 import { CardCarousel, CollectionScaffold, Medallion, SPRING, SavedBadge, SectionTitle, TonalIconButton, swap } from "@/components/expressive";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { albumRows, formatReleaseDate, formatTotal, parseAlbumPage, plural, type AlbumPageData } from "@/lib/collection-page";
+import { artistHref, pickAlbumId } from "@/lib/entity-links";
+import { fetchData } from "@/utils/api";
+import { ArtistLink } from "@/components/links/EntityLink";
 
 /** Rows rise in as they scroll into view (Flutter `ScrollReveal`, lighter for lists). */
 const rowReveal = {
@@ -24,9 +27,43 @@ const rowReveal = {
 	transition: { duration: 0.36, ease: [0.05, 0.7, 0.1, 1] },
 } as const;
 
+/**
+ * `/album?title=…&artist=…` (shares and imports that never kept the album id):
+ * find the Deezer album through search and swap the URL for its `?id=`. Stays
+ * "loading" until the replace lands, "missing" when search has nothing.
+ */
+function useAlbumFromTitle(title: string | null, artist: string | null) {
+	const router = useRouter();
+	const [missing, setMissing] = useState<string | null>(null);
+	const key = title ? `${title}\u0000${artist ?? ""}` : null;
+
+	useEffect(() => {
+		if (!title) return;
+		let cancelled = false;
+		fetchData("search", { term: [artist, title].filter(Boolean).join(" "), type: "album", start: "0", nb: "10" })
+			.then((res) => {
+				if (cancelled) return;
+				const id = pickAlbumId(title, artist, Array.isArray(res?.data) ? res.data : []);
+				if (id) router.replace(`/album?id=${encodeURIComponent(id)}`);
+				else setMissing(`${title}\u0000${artist ?? ""}`);
+			})
+			.catch(() => !cancelled && setMissing(`${title}\u0000${artist ?? ""}`));
+		return () => {
+			cancelled = true;
+		};
+	}, [title, artist, router]);
+
+	return key && missing === key ? "missing" : "loading";
+}
+
 function AlbumContent() {
-	const id = useSearchParams().get("id");
-	const { page, status } = useTracklist("album", id, parseAlbumPage);
+	const params = useSearchParams();
+	const id = params.get("id");
+	const title = params.get("title");
+	const byTitle = useAlbumFromTitle(id ? null : title, params.get("artist"));
+	const tracklist = useTracklist("album", id, parseAlbumPage);
+	const page = tracklist.page;
+	const status = id ? tracklist.status : title ? byTitle : "missing";
 
 	return (
 		<AnimatePresence mode="wait" initial={false}>
@@ -120,7 +157,7 @@ function AlbumView({ page }: { page: AlbumPageData }) {
 			title={page.title}
 			cover={page.cover}
 			eyebrow={[page.recordType, page.year].filter(Boolean).join(" · ")}
-			subtitle={page.artist ? { label: page.artist, href: page.artistId ? `/artist?id=${page.artistId}` : undefined, image: page.artistPicture } : null}
+			subtitle={page.artist ? { label: page.artist, href: artistHref(page.artistId, page.artist) ?? undefined, image: page.artistPicture } : null}
 			stats={stats}
 			trackIds={trackIds}
 			onPlay={play}
@@ -150,7 +187,7 @@ function AlbumView({ page }: { page: AlbumPageData }) {
 											trackNumber={Number((page.tracks[row.index] as { TRACK_NUMBER?: string })?.TRACK_NUMBER) || row.index + 1}
 											queue={tracks}
 											showCover={false}
-											subtitle={tracks[row.index].artist}
+											subtitle={<ArtistLink id={tracks[row.index].artistId} name={tracks[row.index].artist} className="transition-colors hover:text-foreground" />}
 										/>
 									</motion.div>
 								)
@@ -167,7 +204,7 @@ function AlbumView({ page }: { page: AlbumPageData }) {
 						eyebrow="Discography"
 						title={page.artist ? `More by ${page.artist}` : "More albums"}
 						actionLabel="Artist"
-						href={page.artistId ? `/artist?id=${page.artistId}` : undefined}
+						href={artistHref(page.artistId, page.artist) ?? undefined}
 					/>
 					<CardCarousel>
 						{page.moreByArtist.slice(0, 12).map((a, i) => (

@@ -41,6 +41,8 @@ export function useCollectionActions() {
 				title: t.title,
 				artist: t.artist,
 				artistId: t.artistId ?? null,
+				album: t.album ?? null,
+				albumId: t.albumId ?? null,
 				cover: t.cover,
 				duration: t.duration ?? null,
 			})),
@@ -138,10 +140,20 @@ export function MediaCard({ href, title, subtitle, cover, covers, round, badge, 
 					</div>
 				)}
 			</div>
-			<Link href={href} className={cn("mt-2 block min-w-0 px-0.5 no-underline", round && "text-center")}>
-				<p className="truncate text-sm font-semibold text-foreground">{title}</p>
-				{subtitle && <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>}
-			</Link>
+			{typeof subtitle === "string" || !subtitle ? (
+				<Link href={href} className={cn("mt-2 block min-w-0 px-0.5 no-underline", round && "text-center")}>
+					<p className="truncate text-sm font-semibold text-foreground">{title}</p>
+					{subtitle && <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>}
+				</Link>
+			) : (
+				// A rich subtitle carries its own links (artist names) — it can't sit inside the card link.
+				<div className={cn("mt-2 min-w-0 px-0.5", round && "text-center")}>
+					<Link href={href} className="block truncate text-sm font-semibold text-foreground no-underline">
+						{title}
+					</Link>
+					<p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>
+				</div>
+			)}
 		</motion.div>
 	);
 }

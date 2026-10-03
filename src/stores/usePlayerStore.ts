@@ -7,6 +7,8 @@ export interface PlayerTrack {
 	title: string;
 	artist: string;
 	artistId?: string | null;
+	album?: string | null;
+	albumId?: string | null;
 	cover: string | null;
 	duration: number | null;
 }

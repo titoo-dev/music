@@ -124,6 +124,21 @@ describe("CommandPalette", () => {
 		expect(useCommandStore.getState().isOpen).toBe(false);
 	});
 
+	it("links a result's artist and album without playing it, and closes the palette (was: plain-text subtitle)", async () => {
+		fetchData.mockResolvedValue(SUGGEST);
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		const track = screen.getByText("One More Time").closest("[role=option]") as HTMLElement;
+		const artist = track.querySelector('a[href="/artist?id=27"]') as HTMLAnchorElement;
+		expect(artist).toHaveTextContent("Daft Punk");
+		expect(track.querySelector('a[href="/album?id=302127"]')).toHaveTextContent("Discovery");
+		artist.addEventListener("click", (e) => e.preventDefault());
+		await userEvent.click(artist);
+		expect(usePlayerStore.getState().currentTrack).toBeNull();
+		expect(useCommandStore.getState().isOpen).toBe(false);
+	});
+
 	it("Shift+Enter downloads the active track", async () => {
 		fetchData.mockResolvedValue(SUGGEST);
 		render(<CommandPalette />);

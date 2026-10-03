@@ -51,6 +51,7 @@ export function LikedArt({ className }: { className?: string }) {
 export function QuickTile({
 	title,
 	subtitle,
+	subtitleHref,
 	art,
 	href,
 	onClick,
@@ -60,6 +61,8 @@ export function QuickTile({
 }: {
 	title: string;
 	subtitle?: string | null;
+	/** Makes the subtitle (an artist name) its own link, apart from the tile's target. */
+	subtitleHref?: string | null;
 	art: ReactNode;
 	href?: string;
 	onClick?: () => void;
@@ -67,8 +70,25 @@ export function QuickTile({
 	playing?: boolean;
 	index?: number;
 }) {
-	const inner = (
-		<>
+	const label = subtitle ? `${title} · ${subtitle}` : title;
+	// The tile's target is a full-bleed layer under the (click-through) content,
+	// so the subtitle link can sit beside it instead of nested inside it.
+	const target = "absolute inset-0 z-0 rounded-[inherit] outline-none";
+	return (
+		<motion.div
+			initial={{ opacity: 0, y: 12 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ duration: 0.38, delay: Math.min(index, 10) * 0.05, ease: EASE.decelerate }}
+			whileTap={{ scale: 0.97 }}
+			className={cn(
+				"group relative isolate flex h-16 w-full items-center gap-3 overflow-hidden rounded-[18px] p-1.5 pr-2 ring-1 ring-inset transition-[background-color,box-shadow] duration-300",
+				"has-[>:first-child:focus-visible]:ring-2 has-[>:first-child:focus-visible]:ring-ring/50",
+				current
+					? "bg-surface-container ring-highlight/35 shadow-[0_10px_28px_-14px_var(--highlight)]"
+					: "bg-surface-container ring-border/60 hover:bg-surface-high hover:shadow-[0_10px_28px_-16px_rgb(0_0_0/0.35)]"
+			)}
+		>
+			{href ? <Link href={href} aria-label={label} className={target} /> : <button type="button" onClick={onClick} aria-label={label} className={target} />}
 			{/* Artwork wash: a blurred, saturated copy of the cover behind the tile's content. */}
 			<span
 				aria-hidden
@@ -80,7 +100,7 @@ export function QuickTile({
 			>
 				{art}
 			</span>
-			<span className="relative size-[52px] shrink-0 overflow-hidden rounded-[12px] shadow-[0_6px_14px_-6px_rgb(0_0_0/0.45)] transition-transform duration-300 ease-out group-hover:scale-[1.04]">
+			<span aria-hidden className="pointer-events-none relative size-[52px] shrink-0 overflow-hidden rounded-[12px] shadow-[0_6px_14px_-6px_rgb(0_0_0/0.45)] transition-transform duration-300 ease-out group-hover:scale-[1.04]">
 				{art}
 				<AnimatePresence>
 					{current && (
@@ -90,45 +110,31 @@ export function QuickTile({
 					)}
 				</AnimatePresence>
 			</span>
-			<span className="min-w-0 flex-1 text-left">
+			<span className="pointer-events-none relative min-w-0 flex-1 text-left">
 				<span className={cn("block truncate text-sm font-semibold leading-tight tracking-[-0.01em]", current ? "text-highlight" : "text-foreground")}>{title}</span>
-				{subtitle && <span className="mt-1 block truncate text-xs leading-tight text-muted-foreground">{subtitle}</span>}
+				{subtitle &&
+					(subtitleHref ? (
+						<span className="mt-1 block truncate text-xs leading-tight text-muted-foreground">
+							<Link href={subtitleHref} className="pointer-events-auto no-underline underline-offset-2 transition-colors hover:text-foreground hover:underline">
+								{subtitle}
+							</Link>
+						</span>
+					) : (
+						<span className="mt-1 block truncate text-xs leading-tight text-muted-foreground">{subtitle}</span>
+					))}
 			</span>
 			{onClick && !href && (
 				<span
 					aria-hidden
 					className={cn(
-						"mr-1.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background shadow-[0_6px_14px_-6px_rgb(0_0_0/0.5)] transition-[opacity,translate,scale] duration-300 ease-out",
-						current ? "opacity-100" : "translate-x-2 scale-90 opacity-0 group-hover:translate-x-0 group-hover:scale-100 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:scale-100 group-focus-visible:opacity-100"
+						"pointer-events-none relative mr-1.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background shadow-[0_6px_14px_-6px_rgb(0_0_0/0.5)] transition-[opacity,translate,scale] duration-300 ease-out",
+						current
+							? "opacity-100"
+							: "translate-x-2 scale-90 opacity-0 group-hover:translate-x-0 group-hover:scale-100 group-hover:opacity-100 group-has-[>:first-child:focus-visible]:translate-x-0 group-has-[>:first-child:focus-visible]:scale-100 group-has-[>:first-child:focus-visible]:opacity-100"
 					)}
 				>
 					<PlayPauseIcon playing={current && playing} className="size-4" />
 				</span>
-			)}
-		</>
-	);
-	const cls = cn(
-		"group relative isolate flex h-16 w-full items-center gap-3 overflow-hidden rounded-[18px] p-1.5 pr-2 no-underline outline-none ring-1 ring-inset transition-[background-color,box-shadow] duration-300",
-		"focus-visible:ring-2 focus-visible:ring-ring/50",
-		current
-			? "bg-surface-container ring-highlight/35 shadow-[0_10px_28px_-14px_var(--highlight)]"
-			: "bg-surface-container ring-border/60 hover:bg-surface-high hover:shadow-[0_10px_28px_-16px_rgb(0_0_0/0.35)]"
-	);
-	return (
-		<motion.div
-			initial={{ opacity: 0, y: 12 }}
-			animate={{ opacity: 1, y: 0 }}
-			transition={{ duration: 0.38, delay: Math.min(index, 10) * 0.05, ease: EASE.decelerate }}
-			whileTap={{ scale: 0.97 }}
-		>
-			{href ? (
-				<Link href={href} className={cls}>
-					{inner}
-				</Link>
-			) : (
-				<button type="button" onClick={onClick} className={cls}>
-					{inner}
-				</button>
 			)}
 		</motion.div>
 	);

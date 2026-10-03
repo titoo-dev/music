@@ -62,6 +62,14 @@ describe("TrackActionSheet", () => {
 		expect(onDelete).toHaveBeenCalled();
 	});
 
+	it("links to the artist by name and the album by title when the ids are missing (was: no Go to artist / album for library tracks)", () => {
+		useTrackActionStore.setState({ track: { ...info, artistId: null, albumId: null } });
+		render(<TrackActionSheet />);
+		expect(screen.getByRole("link", { name: /Go to artist/ })).toHaveAttribute("href", "/artist?name=Hosea%20Marlyn");
+		expect(screen.getByRole("link", { name: "Hosea Marlyn" })).toHaveAttribute("href", "/artist?name=Hosea%20Marlyn");
+		expect(screen.getByRole("link", { name: /Go to album/ })).toHaveAttribute("href", "/album?title=Fitiavana&artist=Hosea%20Marlyn");
+	});
+
 	it("is not hidden on desktop (was: md:hidden, so right-click on a row did nothing on desktop)", () => {
 		render(<TrackActionSheet />);
 		const popup = document.querySelector("[data-slot=sheet-content]");

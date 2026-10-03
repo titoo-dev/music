@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlaylistEditDialog, filledButton, tonalButton } from "@/components/playlists/PlaylistDialogs";
 import { CardGridSkeleton, NewPlaylistTile, TrackRowsSkeleton } from "@/components/playlists/PlaylistTiles";
 import { formatRelative, formatTotal, groupByDay, plural, relativePhrase, uniqueCovers } from "@/components/playlists/format";
+import { ArtistLink } from "@/components/links/EntityLink";
 
 interface UserPlaylist {
 	id: string;
@@ -100,7 +101,7 @@ function toRow(t: TrackItem): TrackRowTrack {
 }
 
 function toPlayer(t: TrackRowTrack): PlayerTrack {
-	return { trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, cover: t.cover, duration: t.duration ?? null };
+	return { trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, album: t.album ?? null, albumId: t.albumId ?? null, cover: t.cover, duration: t.duration ?? null };
 }
 
 // ─── Hero ───────────────────────────────────────────────────────────────────
@@ -428,7 +429,9 @@ function FeaturedAlbum({ album }: { album: UserAlbum }) {
 				<div className="min-w-0 flex-1">
 					<p className="type-eyebrow text-white/75">Latest addition</p>
 					<h2 className="mt-1.5 line-clamp-2 text-xl font-semibold leading-tight tracking-tight sm:text-3xl lg:text-4xl">{album.title}</h2>
-					<p className="mt-1 truncate text-sm sm:text-base">{album.artist}</p>
+					<p className="mt-1 truncate text-sm sm:text-base">
+						<ArtistLink name={album.artist} className="pointer-events-auto" />
+					</p>
 					{meta && <p className="mt-2.5 text-xs font-medium text-white/75 sm:text-sm">{meta}</p>}
 				</div>
 				<div className="pointer-events-auto hidden items-center gap-2 sm:flex">
@@ -471,7 +474,7 @@ function AlbumsTab({ albums }: { albums: UserAlbum[] }) {
 					<GroupLabel label="All albums" count={sorted.length} />
 					<CardGrid>
 						{rest.map((a, i) => (
-							<MediaCard key={a.id} index={i} href={`/album?id=${a.deezerAlbumId}`} title={a.title} subtitle={`${a.artist} · ${plural(a.trackCount, "track")}`} cover={a.coverUrl} collection={{ type: "album", id: a.deezerAlbumId }} />
+							<MediaCard key={a.id} index={i} href={`/album?id=${a.deezerAlbumId}`} title={a.title} subtitle={<><ArtistLink name={a.artist} className="transition-colors hover:text-foreground" />{` · ${plural(a.trackCount, "track")}`}</>} cover={a.coverUrl} collection={{ type: "album", id: a.deezerAlbumId }} />
 						))}
 					</CardGrid>
 				</>

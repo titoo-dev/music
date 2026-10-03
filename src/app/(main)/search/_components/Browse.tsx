@@ -21,6 +21,7 @@ import {
 	type LucideIcon,
 } from "lucide-react";
 import { fetchData } from "@/utils/api";
+import { artistHref } from "@/lib/entity-links";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { useDiscover } from "@/hooks/useDiscover";
@@ -51,6 +52,8 @@ interface RecentPlay {
 	title: string;
 	artist: string;
 	artistId?: string | null;
+	album?: string | null;
+	albumId?: string | null;
 	coverUrl: string | null;
 	duration: number | null;
 }
@@ -199,7 +202,7 @@ function JumpBackIn() {
 		return plays
 			.filter((p) => (seen.has(p.trackId) ? false : (seen.add(p.trackId), true)))
 			.slice(0, 6)
-			.map((p) => ({ trackId: p.trackId, title: p.title, artist: p.artist, artistId: p.artistId ?? null, cover: p.coverUrl, duration: p.duration }));
+			.map((p) => ({ trackId: p.trackId, title: p.title, artist: p.artist, artistId: p.artistId ?? null, album: p.album ?? null, albumId: p.albumId ?? null, cover: p.coverUrl, duration: p.duration }));
 	}, [plays]);
 
 	if (!isAuthenticated || tracks.length === 0) return null;
@@ -213,6 +216,7 @@ function JumpBackIn() {
 						index={i}
 						title={t.title}
 						subtitle={t.artist}
+						subtitleHref={artistHref(t.artistId, t.artist)}
 						art={<Art src={t.cover} className="size-full" size={120} />}
 						current={current?.trackId === t.trackId}
 						playing={isPlaying}

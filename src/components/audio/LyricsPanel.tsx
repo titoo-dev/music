@@ -5,6 +5,8 @@ import { motion, AnimatePresence, useDragControls } from "motion/react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useLyricsStore } from "@/stores/useLyricsStore";
 import { CoverImage } from "@/components/ui/cover-image";
+import { ArtistLink } from "@/components/links/EntityLink";
+import { leavePlayer } from "./leave-player";
 import { LyricsDisplay } from "./LyricsDisplay";
 import { formatTime } from "@/utils/format-time";
 import { ArrowUpRight, X } from "lucide-react";
@@ -99,7 +101,9 @@ export function LyricsPanel() {
 							<div className="min-w-0 flex-1">
 								<p className="type-eyebrow text-primary">Lyrics</p>
 								<p className="truncate text-[15px] font-semibold leading-tight tracking-[-0.01em]">{currentTrack.title}</p>
-								<p className="truncate text-xs text-on-primary-container/75">{currentTrack.artist}</p>
+								<p className="truncate text-xs text-on-primary-container/75">
+									<ArtistLink id={currentTrack.artistId} name={currentTrack.artist} onClick={leavePlayer} className="transition-colors hover:text-on-primary-container" />
+								</p>
 							</div>
 							<button
 								type="button"

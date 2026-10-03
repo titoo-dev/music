@@ -91,13 +91,15 @@ describe("formatting", () => {
 describe("normalizers", () => {
 	it("reads GW albums with a year", () => {
 		const a = albumProps({ ALB_ID: "302127", ALB_TITLE: "Discovery", ART_NAME: "Daft Punk", ALB_PICTURE: "abc", PHYSICAL_RELEASE_DATE: "2001-03-07" });
-		expect(a).toEqual({ id: "302127", title: "Discovery", artist: "Daft Punk", cover: "https://e-cdns-images.dzcdn.net/images/cover/abc/500x500-000000-80-0-0.jpg", year: "2001" });
+		expect(a).toEqual({ id: "302127", title: "Discovery", artist: "Daft Punk", artistId: null, cover: "https://e-cdns-images.dzcdn.net/images/cover/abc/500x500-000000-80-0-0.jpg", year: "2001" });
 		expect(albumSubtitle(a)).toBe("Daft Punk · 2001");
 	});
 
 	it("reads public-API albums without a year", () => {
 		const a = albumProps({ id: 1, title: "X", artist: { name: "Y" }, cover_big: "http://c" });
 		expect(a).toMatchObject({ id: "1", artist: "Y", cover: "http://c", year: null });
+		expect(albumProps({ id: 1, artist: { id: 27, name: "Daft Punk" } }).artistId).toBe("27");
+		expect(albumProps({ ALB_ID: "1", ART_ID: "27" }).artistId).toBe("27");
 		expect(albumSubtitle(a)).toBe("Y");
 		expect(albumSubtitle(albumProps({ id: 2 }))).toBeUndefined();
 	});

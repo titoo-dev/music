@@ -22,6 +22,7 @@ export interface TrackInfo {
 	title: string;
 	artist: string;
 	album?: string | null;
+	albumId?: string | null;
 	coverUrl?: string | null;
 	duration?: number | null;
 }
@@ -73,6 +74,7 @@ export function AddToPlaylist({
 							title: track.title,
 							artist: track.artist,
 							album: track.album || null,
+							albumId: track.albumId || null,
 							coverUrl: track.coverUrl || null,
 							duration: track.duration || null,
 						},

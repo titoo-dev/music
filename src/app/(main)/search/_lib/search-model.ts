@@ -104,6 +104,7 @@ export interface AlbumCard {
 	id: string;
 	title: string;
 	artist: string | null;
+	artistId: string | null;
 	cover: string | null;
 	year: string | null;
 }
@@ -114,6 +115,7 @@ export function albumProps(a: any): AlbumCard {
 		id: String(a.ALB_ID ?? a.id),
 		title: a.ALB_TITLE || a.title || "",
 		artist: a.ART_NAME || a.artist?.name || null,
+		artistId: a.ART_ID != null ? String(a.ART_ID) : a.artist?.id != null ? String(a.artist.id) : null,
 		cover: a.cover_xl || a.cover_big || a.cover_medium || cdn("cover", a.ALB_PICTURE, 500),
 		year: date && /^\d{4}/.test(date) ? date.slice(0, 4) : null,
 	};

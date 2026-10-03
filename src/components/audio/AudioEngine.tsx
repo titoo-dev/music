@@ -370,6 +370,8 @@ async function logRecentPlay(track: {
 	trackId: string;
 	title: string;
 	artist: string;
+	album?: string | null;
+	albumId?: string | null;
 	cover: string | null;
 	duration: number | null;
 }) {
@@ -382,6 +384,8 @@ async function logRecentPlay(track: {
 				trackId: track.trackId,
 				title: track.title,
 				artist: track.artist,
+				album: track.album ?? null,
+				albumId: track.albumId ?? null,
 				coverUrl: track.cover,
 				duration: track.duration,
 			}),
@@ -1200,6 +1204,8 @@ export function AudioEngine() {
 				trackId: track.trackId,
 				title: track.title,
 				artist: track.artist,
+				album: track.album,
+				albumId: track.albumId,
 				cover: track.cover,
 				duration: track.duration,
 			});

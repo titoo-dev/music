@@ -9,6 +9,7 @@ import { WaveSeek } from "@/components/audio/WaveSeek";
 import { CoverTheme, DUR, EASE, EyebrowPill, StatBadge, entrance } from "@/components/expressive";
 import { sizedCover } from "@/lib/cover-palette";
 import { cn } from "@/lib/utils";
+import { AlbumLink, ArtistLink } from "@/components/links/EntityLink";
 
 function formatTime(seconds: number) {
 	if (!seconds || !isFinite(seconds)) return "0:00";
@@ -230,8 +231,13 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 							{title}
 						</motion.h1>
 						<motion.p {...entrance(3, 8)} className="mt-2 text-lg text-muted-foreground">
-							<span className="font-semibold text-foreground">{artist}</span>
-							{album && <> · {album}</>}
+							<ArtistLink name={artist} className="font-semibold text-foreground" />
+							{album && (
+								<>
+									{" · "}
+									<AlbumLink title={album} artist={artist} className="transition-colors hover:text-foreground" />
+								</>
+							)}
 						</motion.p>
 						<motion.div {...entrance(4, 8)} className="mt-4 flex justify-center md:justify-start">
 							<span className="inline-flex items-center gap-2 rounded-full bg-secondary-container py-1 pl-1 pr-3.5 text-sm text-on-secondary-container">

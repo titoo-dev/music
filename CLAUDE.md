@@ -111,6 +111,7 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Home discover parsing | `src/lib/discover.ts` (used by `hooks/useDiscover.ts`) | `discover.test.ts` |
 | Bearer auth (native clients) | `src/lib/auth.ts` (better-auth `bearer()` plugin) | `auth.test.ts` |
 | Lyrics lookup (LRCLIB get → Deezer → scored search) | `src/lib/lyrics/{match,lrc,deezer-sync,resolve,cache}.ts`, `src/app/api/v1/lyrics/[trackId]/route.ts`, `src/stores/useLyricsStore.ts` | `match.test.ts`, `lrc.test.ts`, `resolve.test.ts`, `cache.test.ts`, `route.test.ts`, `useLyricsStore.test.ts` |
+| Artist / album links (id, else name / title fallback) | `src/lib/entity-links.ts`, `src/components/links/EntityLink.tsx`, `src/components/audio/leave-player.ts` (resolved by `artist/page.tsx` `?name=`, `album/page.tsx` `?title=`) | `entity-links.test.ts`, `EntityLink.test.tsx`, `leave-player.test.ts` |
 
 ### Fix-bug-once strategy (read this before fixing anything)
 

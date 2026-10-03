@@ -64,6 +64,9 @@ export default defineConfig({
 				"src/lib/lyrics/**",
 				"src/app/api/v1/lyrics/**",
 				"src/stores/useLyricsStore.ts",
+				"src/lib/entity-links.ts",
+				"src/components/links/EntityLink.tsx",
+				"src/components/audio/leave-player.ts",
 			],
 			exclude: [
 				"**/*.test.{ts,tsx}",

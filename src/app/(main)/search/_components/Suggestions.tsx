@@ -22,6 +22,7 @@ import { useCommandStore } from "@/stores/useCommandStore";
 import { plural } from "../_lib/search-model";
 import { recentSearches, useRecentSearches } from "../_lib/useRecentSearches";
 import { KindPill } from "./bits";
+import { ArtistLinks } from "@/components/links/EntityLink";
 
 const MIN_QUERY = 2;
 
@@ -137,7 +138,7 @@ function SuggestList({ term, onSubmit }: { term: string; onSubmit: (term: string
 					</div>
 					{data.albums.map((a) => (
 						<motion.div key={`a${a.deezerAlbumId}`} {...entrance(i++, 10)}>
-							<SuggestionRow href={`/album?id=${a.deezerAlbumId}`} art={<Art src={a.coverUrl} className="size-12" rounded="rounded-lg" size={120} />} title={a.title} subtitle={a.artists.join(", ")} kind="Album" onOpen={() => recentSearches.add(term)} />
+							<SuggestionRow href={`/album?id=${a.deezerAlbumId}`} art={<Art src={a.coverUrl} className="size-12" rounded="rounded-lg" size={120} />} title={a.title} subtitle={<ArtistLinks artists={a.artists.map((name) => ({ name }))} className="transition-colors hover:text-foreground" onClick={() => recentSearches.add(term)} />} kind="Album" onOpen={() => recentSearches.add(term)} />
 						</motion.div>
 					))}
 					{data.artists.map((a) => (
@@ -174,20 +175,21 @@ function SearchFor({ term, onTap }: { term: string; onTap: () => void }) {
 	);
 }
 
-
-function SuggestionRow({ href, art, title, subtitle, kind, onOpen }: { href: string; art: React.ReactNode; title: string; subtitle?: string; kind: string; onOpen: () => void }) {
+function SuggestionRow({ href, art, title, subtitle, kind, onOpen }: { href: string; art: React.ReactNode; title: string; subtitle?: React.ReactNode; kind: string; onOpen: () => void }) {
 	return (
-		<Link href={href} onClick={onOpen} className="group flex items-center gap-3 rounded-2xl px-2 py-2 no-underline transition-colors hover:bg-surface-high active:scale-[0.99]">
-			<span className="shrink-0 overflow-hidden">{art}</span>
-			<span className="min-w-0 flex-1">
+		// The row's link is a layer under the click-through content, so artist names in the subtitle link on their own.
+		<div className="group relative flex items-center gap-3 rounded-2xl px-2 py-2 transition-colors hover:bg-surface-high has-[>a:focus-visible]:ring-2 has-[>a:focus-visible]:ring-ring/50 has-[>a:active]:scale-[0.99]">
+			<Link href={href} onClick={onOpen} aria-label={`${title} · ${kind}`} className="absolute inset-0 rounded-[inherit] outline-none" />
+			<span className="pointer-events-none relative shrink-0 overflow-hidden">{art}</span>
+			<span className="pointer-events-none relative min-w-0 flex-1">
 				<span className="block truncate text-[15px] text-foreground">{title}</span>
 				<span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
 					<KindPill>{kind}</KindPill>
-					{subtitle && <span className="truncate">{subtitle}</span>}
+					{subtitle && <span className="truncate [&_a]:pointer-events-auto">{subtitle}</span>}
 				</span>
 			</span>
-			<ChevronRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-		</Link>
+			<ChevronRight className="pointer-events-none relative size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+		</div>
 	);
 }
 
@@ -271,7 +273,7 @@ function CollectionLinkCard({ type, id }: { type: "album" | "playlist"; id: stri
 										whileTap={{ scale: 0.95 }}
 										disabled={!state.info.tracks.length}
 										onClick={() => {
-											const q = state.info!.tracks.map((t) => ({ trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, cover: t.cover, duration: t.duration ?? null }));
+											const q = state.info!.tracks.map((t) => ({ trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, album: t.album ?? null, albumId: t.albumId ?? null, cover: t.cover, duration: t.duration ?? null }));
 											if (q.length) playQueue(q, 0);
 										}}
 										className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-[0_6px_14px_-4px_color-mix(in_srgb,var(--primary)_50%,transparent)] disabled:opacity-50"

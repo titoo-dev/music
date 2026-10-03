@@ -231,6 +231,8 @@ export default function PlaylistDetailPage() {
 		title: t.title,
 		artist: t.artist,
 		artistId: null,
+		album: t.album,
+		albumId: t.albumId ?? null,
 		cover: t.coverUrl,
 		duration: t.duration,
 	}));

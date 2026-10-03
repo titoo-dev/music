@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import Link from "next/link";
+import { AlbumLink, ArtistLink } from "@/components/links/EntityLink";
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "motion/react";
 import { ChevronDown, ClipboardPaste, Download, Link2, ListMusic, Pencil, Search, X } from "lucide-react";
 import { toast } from "sonner";
@@ -413,8 +414,13 @@ function ImportReportView({
 								<div className="min-w-0 flex-1">
 									<p className="truncate text-sm font-medium">{m.title}</p>
 									<p className="truncate text-xs text-muted-foreground">
-										{m.artist}
-										{m.album ? ` — ${m.album}` : ""}
+										<ArtistLink name={m.artist} onClick={onClose} className="transition-colors hover:text-foreground" />
+										{m.album && (
+											<>
+												{" — "}
+												<AlbumLink title={m.album} artist={m.artist} onClick={onClose} className="transition-colors hover:text-foreground" />
+											</>
+										)}
 									</p>
 								</div>
 								<Link

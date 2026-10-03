@@ -17,6 +17,9 @@ import Link from "next/link";
 import { Equalizer, PlayPauseIcon, Spinner } from "@/components/motion/icons";
 import { Art, CoverTheme, entrance, swap, SPRING } from "@/components/expressive";
 import { cn } from "@/lib/utils";
+import { albumHref, artistHref } from "@/lib/entity-links";
+import { ArtistLink } from "@/components/links/EntityLink";
+import { leavePlayer } from "@/components/audio/leave-player";
 
 function formatDuration(seconds?: number | null) {
 	if (!seconds) return null;
@@ -336,16 +339,23 @@ export function TrackActionSheet() {
 		});
 	}
 
+	// Leaving for an artist / album page also drops Now Playing, the queue and lyrics if the sheet came from there.
+	const leave = () => {
+		closeSheet();
+		leavePlayer();
+	};
+	const albumLink = albumHref(track.albumId, track.albumTitle, track.artist);
+	const artistLink = artistHref(track.artistId, track.artist);
 	const rows: ReactNode[] = [];
-	if (track.albumId)
+	if (albumLink)
 		rows.push(
-			<Link key="album" href={`/album?id=${track.albumId}`} onClick={closeSheet} className="no-underline">
+			<Link key="album" href={albumLink} onClick={leave} className="no-underline">
 				<ActionRow icon={<Disc3 />} label="Go to album" sublabel={track.albumTitle || undefined} chevron />
 			</Link>
 		);
-	if (track.artistId)
+	if (artistLink)
 		rows.push(
-			<Link key="artist" href={`/artist?id=${track.artistId}`} onClick={closeSheet} className="no-underline">
+			<Link key="artist" href={artistLink} onClick={leave} className="no-underline">
 				<ActionRow icon={<User />} label="Go to artist" sublabel={track.artist} chevron />
 			</Link>
 		);
@@ -373,7 +383,9 @@ export function TrackActionSheet() {
 									<SheetTitle className="line-clamp-2 text-[22px] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
 										{track.title}
 									</SheetTitle>
-									<SheetDescription className="mt-0.5 truncate text-sm font-semibold text-muted-foreground">{track.artist}</SheetDescription>
+									<SheetDescription className="mt-0.5 truncate text-sm font-semibold text-muted-foreground">
+										<ArtistLink id={track.artistId} name={track.artist} onClick={leave} className="transition-colors hover:text-foreground" />
+									</SheetDescription>
 									{(isCurrent || durationStr) && (
 										<div className="mt-2 flex flex-wrap gap-1.5">
 											{isCurrent && (

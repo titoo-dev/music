@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { ChevronDown, Disc3, Quote, TrendingUp, UserCheck, UserPlus, UserRound, Users } from "lucide-react";
@@ -15,6 +15,8 @@ import { CardCarousel, CollectionScaffold, DUR, EASE, FilterPills, Medallion, SP
 import { useSavedAlbums } from "@/hooks/useLibrary";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { compactNumber, parseArtistPage, plural, type ArtistPageData } from "@/lib/collection-page";
+import { pickArtistId, primaryArtistName } from "@/lib/entity-links";
+import { fetchData } from "@/utils/api";
 
 const TOP = 10;
 const TOP_MORE = 25;
@@ -26,9 +28,42 @@ const rowReveal = {
 	transition: { duration: 0.36, ease: [0.05, 0.7, 0.1, 1] },
 } as const;
 
+/**
+ * `/artist?name=…` (library rows only keep the artist name): find the Deezer
+ * artist through search and swap the URL for its `?id=`. Stays "loading" until
+ * the replace lands, "missing" when search has nothing.
+ */
+function useArtistFromName(name: string | null) {
+	const router = useRouter();
+	const [missing, setMissing] = useState<string | null>(null);
+
+	useEffect(() => {
+		if (!name) return;
+		let cancelled = false;
+		fetchData("search", { term: primaryArtistName(name), type: "artist", start: "0", nb: "10" })
+			.then((res) => {
+				if (cancelled) return;
+				const id = pickArtistId(name, Array.isArray(res?.data) ? res.data : []);
+				if (id) router.replace(`/artist?id=${encodeURIComponent(id)}`);
+				else setMissing(name);
+			})
+			.catch(() => !cancelled && setMissing(name));
+		return () => {
+			cancelled = true;
+		};
+	}, [name, router]);
+
+	return name && missing === name ? "missing" : "loading";
+}
+
 function ArtistContent() {
-	const id = useSearchParams().get("id");
-	const { page, status } = useTracklist("artist", id, parseArtistPage);
+	const params = useSearchParams();
+	const id = params.get("id");
+	const name = params.get("name");
+	const byName = useArtistFromName(id ? null : name);
+	const tracklist = useTracklist("artist", id, parseArtistPage);
+	const page = tracklist.page;
+	const status = id ? tracklist.status : name ? byName : "missing";
 
 	return (
 		<AnimatePresence mode="wait" initial={false}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { motion } from "motion/react";
 import { ChevronLeft, ChevronRight, Music } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -74,6 +75,8 @@ export interface ArtItem {
 	key: string;
 	title: string;
 	subtitle?: string | null;
+	/** Makes the subtitle (an artist name) its own link, apart from the tile. */
+	subtitleHref?: string | null;
 	image?: string | null;
 	/** Shows a now-playing badge. */
 	current?: boolean;
@@ -111,16 +114,13 @@ export function ArtCarousel({
 				className="scrollbar-hide -mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:-mx-8 lg:scroll-px-8 lg:px-8 [--art-h-r:var(--art-h)] lg:[--art-h-r:calc(var(--art-h)*1.2)]"
 			>
 				{items.map((item, i) => (
-					<motion.button
+					<motion.div
 						key={item.key}
-						type="button"
-						onClick={() => onSelect(i)}
 						initial={{ opacity: 0, x: 24 }}
 						animate={{ opacity: 1, x: 0 }}
 						transition={{ duration: 0.45, delay: Math.min(i, 8) * 0.05, ease: EASE.decelerate }}
 						whileTap={{ scale: 0.97 }}
-						aria-label={item.subtitle ? `${item.title} · ${item.subtitle}` : item.title}
-						className="group/art relative shrink-0 snap-start overflow-hidden rounded-[28px] bg-surface-highest text-left outline-none focus-visible:ring-4 focus-visible:ring-ring/40"
+						className="group/art relative shrink-0 snap-start overflow-hidden rounded-[28px] bg-surface-highest text-left has-[>button:focus-visible]:ring-4 has-[>button:focus-visible]:ring-ring/40"
 						style={{
 							height: "var(--art-h-r)",
 							width: i === 0 ? `calc(var(--art-h-r) * ${lead})` : "calc(var(--art-h-r) * 0.82)",
@@ -140,17 +140,33 @@ export function ArtCarousel({
 							</span>
 						)}
 						<span className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_45%,rgb(0_0_0/0.85))]" />
-						<span className="absolute inset-x-4 bottom-3.5">
+						{/* The tile's target: a full-bleed layer under the click-through caption, so the subtitle can link on its own. */}
+						<button
+							type="button"
+							onClick={() => onSelect(i)}
+							aria-label={item.subtitle ? `${item.title} · ${item.subtitle}` : item.title}
+							className="absolute inset-0 rounded-[inherit] outline-none"
+						/>
+						<span className="pointer-events-none absolute inset-x-4 bottom-3.5">
 							<span className={cn("block truncate font-semibold text-white", i === 0 ? "text-lg sm:text-xl" : "text-base")}>{item.title}</span>
-							{item.subtitle && <span className="block truncate text-xs text-white/80 sm:text-sm">{item.subtitle}</span>}
+							{item.subtitle &&
+								(item.subtitleHref ? (
+									<span className="block truncate text-xs text-white/80 sm:text-sm">
+										<Link href={item.subtitleHref} className="pointer-events-auto text-inherit no-underline underline-offset-2 transition-colors hover:text-white hover:underline">
+											{item.subtitle}
+										</Link>
+									</span>
+								) : (
+									<span className="block truncate text-xs text-white/80 sm:text-sm">{item.subtitle}</span>
+								))}
 						</span>
 						{item.current && (
-							<span className="absolute left-3 top-3 flex size-8 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur">
+							<span className="pointer-events-none absolute left-3 top-3 flex size-8 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur">
 								<Equalizer playing={!!item.playing} className="h-3.5" />
 							</span>
 						)}
 						{item.badge && <span className="absolute right-3 top-3">{item.badge}</span>}
-					</motion.button>
+					</motion.div>
 				))}
 			</div>
 			<PagerButton dir={-1} hidden={edges.start} onClick={() => page(-1)} />

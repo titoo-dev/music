@@ -42,7 +42,8 @@ import {
 import { ChevronDown, Link as LinkIcon, ListMusic, MicVocal, MoreHorizontal, Share, SlidersHorizontal } from "lucide-react";
 import { useAudioLevel } from "@/hooks/useAudioLevel";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
+import { ArtistLink } from "@/components/links/EntityLink";
+import { leavePlayer } from "./leave-player";
 import type { PlayerTrack } from "@/stores/usePlayerStore";
 
 function seek(time: number) {
@@ -167,7 +168,6 @@ function CoverStage({ queue, level }: { queue: PlayerTrack[]; level: MotionValue
 /* ─── Track Info ─── */
 function TrackInfo({ onActions }: { onActions: () => void }) {
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
-	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
 	const handleContextMenu = useCallback(
@@ -194,17 +194,7 @@ function TrackInfo({ onActions }: { onActions: () => void }) {
 							{currentTrack.title}
 						</p>
 						<p className="mt-1.5 truncate text-base font-semibold text-muted-foreground min-[840px]:text-lg">
-							{currentTrack.artistId ? (
-								<Link
-									href={`/artist?id=${currentTrack.artistId}`}
-									onClick={() => setFullscreenOpen(false)}
-									className="rounded-md transition-colors hover:text-foreground hover:underline"
-								>
-									{currentTrack.artist}
-								</Link>
-							) : (
-								currentTrack.artist
-							)}
+							<ArtistLink id={currentTrack.artistId} name={currentTrack.artist} onClick={leavePlayer} className="rounded-md transition-colors hover:text-foreground" />
 						</p>
 					</motion.div>
 				</AnimatePresence>
@@ -216,8 +206,8 @@ function TrackInfo({ onActions }: { onActions: () => void }) {
 						trackId: currentTrack.trackId,
 						title: currentTrack.title,
 						artist: currentTrack.artist,
-						album: null,
-						albumId: null,
+						album: currentTrack.album ?? null,
+						albumId: currentTrack.albumId ?? null,
 						coverUrl: currentTrack.cover,
 						duration: currentTrack.duration ?? null,
 					}}
@@ -503,6 +493,8 @@ function ActionPill({ lyrics, onToggleLyrics }: { lyrics: boolean; onToggleLyric
 							trackId: currentTrack.trackId,
 							title: currentTrack.title,
 							artist: currentTrack.artist,
+							album: currentTrack.album ?? null,
+							albumId: currentTrack.albumId ?? null,
 							coverUrl: currentTrack.cover,
 							duration: currentTrack.duration,
 						}}
@@ -572,6 +564,8 @@ export function FullscreenPlayer() {
 			title: currentTrack.title,
 			artist: currentTrack.artist,
 			artistId: currentTrack.artistId ?? null,
+			albumId: currentTrack.albumId ?? null,
+			albumTitle: currentTrack.album ?? null,
 			cover: currentTrack.cover,
 			duration: currentTrack.duration,
 		});

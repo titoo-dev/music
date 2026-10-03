@@ -7,6 +7,7 @@ import { useErrorStore } from "@/stores/useErrorStore";
 import { cn } from "@/lib/utils";
 import { GlassIconBadge, GlassPill, HeroBanner, HeroEyebrow, HeroTitle, Medallion, entrance, heroGlassButton, swap } from "@/components/expressive";
 import { SettingsSection, StatusPill } from "../settings/_components/SettingsTiles";
+import { ArtistLink } from "@/components/links/EntityLink";
 
 export default function ErrorsPage() {
 	const { errors, downloadInfo, clearErrors } = useErrorStore();
@@ -46,7 +47,7 @@ export default function ErrorsPage() {
 						<div className="min-w-0 flex-1">
 							<p className="truncate text-base font-semibold text-foreground">{downloadInfo.title}</p>
 							<p className="truncate text-sm tabular-nums text-muted-foreground">
-								{downloadInfo.artist} · {downloadInfo.size} tracks
+								<ArtistLink name={downloadInfo.artist} className="transition-colors hover:text-foreground" /> · {downloadInfo.size} tracks
 							</p>
 						</div>
 					</div>
@@ -82,7 +83,7 @@ export default function ErrorsPage() {
 										<p className="text-base font-semibold leading-snug text-foreground">{error.message}</p>
 										{error.data && (
 											<p className="mt-0.5 truncate text-sm text-muted-foreground">
-												{error.data.artist} · {error.data.title} · <span className="font-mono text-xs">ID {error.data.id}</span>
+												<ArtistLink name={error.data.artist} className="transition-colors hover:text-foreground" /> · {error.data.title} · <span className="font-mono text-xs">ID {error.data.id}</span>
 											</p>
 										)}
 									</div>

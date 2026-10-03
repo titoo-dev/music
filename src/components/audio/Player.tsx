@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactElement } from "react";
-import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import { Maximize2, MoreHorizontal, SlidersHorizontal, X } from "lucide-react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
@@ -27,6 +26,7 @@ import { SaveButton } from "@/components/tracks/SaveButton";
 import { SeekBar } from "./SeekBar";
 import { WaveSeek } from "./WaveSeek";
 import { cn } from "@/lib/utils";
+import { ArtistLink } from "@/components/links/EntityLink";
 import { toast } from "sonner";
 
 function Tip({ label, trigger, children }: { label: string; trigger: ReactElement; children: React.ReactNode }) {
@@ -141,6 +141,8 @@ export function Player() {
 			title: currentTrack.title,
 			artist: currentTrack.artist,
 			artistId: currentTrack.artistId ?? null,
+			albumId: currentTrack.albumId ?? null,
+			albumTitle: currentTrack.album ?? null,
 			cover: currentTrack.cover,
 			duration: currentTrack.duration,
 		});
@@ -253,17 +255,7 @@ export function Player() {
 														</motion.span>
 													)}
 												</AnimatePresence>
-												{currentTrack.artistId ? (
-													<Link
-														href={`/artist?id=${currentTrack.artistId}`}
-														onClick={(e) => e.stopPropagation()}
-														className="truncate transition-colors hover:text-foreground hover:underline"
-													>
-														{currentTrack.artist}
-													</Link>
-												) : (
-													<span className="truncate">{currentTrack.artist}</span>
-												)}
+												<ArtistLink id={currentTrack.artistId} name={currentTrack.artist} className="truncate transition-colors hover:text-foreground" />
 											</p>
 										</motion.div>
 									</AnimatePresence>
@@ -275,8 +267,8 @@ export function Player() {
 											trackId: currentTrack.trackId,
 											title: currentTrack.title,
 											artist: currentTrack.artist,
-											album: null,
-											albumId: null,
+											album: currentTrack.album ?? null,
+											albumId: currentTrack.albumId ?? null,
 											coverUrl: currentTrack.cover,
 											duration: currentTrack.duration ?? null,
 										}}

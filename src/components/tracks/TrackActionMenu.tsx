@@ -34,6 +34,8 @@ import { Button } from "@/components/ui/button";
 import { DrawCheck, HeartGlyph, PlayPauseIcon, Spinner } from "@/components/motion/icons";
 import { CoverImage } from "@/components/ui/cover-image";
 import { cn } from "@/lib/utils";
+import { albumHref, artistHref } from "@/lib/entity-links";
+import { ArtistLink } from "@/components/links/EntityLink";
 
 /** Menu item shape: rounded-xl rows with a little more air (M3 menus). */
 const item = "gap-2.5 rounded-xl px-2.5 py-2 [&_svg:not([class*='text-'])]:text-muted-foreground";
@@ -291,6 +293,8 @@ export function TrackActionMenu({
 		if (!next) setView("main");
 	};
 	const close = () => changeOpen(false);
+	const albumLink = albumHref(track.albumId, track.albumTitle, track.artist);
+	const artistLink = artistHref(track.artistId, track.artist);
 
 	const toPlayerTrack = useCallback(
 		() => ({
@@ -387,7 +391,9 @@ export function TrackActionMenu({
 								<CoverImage src={track.cover ?? null} className="size-11 shrink-0 rounded-[10px]" />
 								<div className="min-w-0">
 									<p className="truncate text-sm font-semibold leading-tight tracking-[-0.01em]">{track.title}</p>
-									<p className="mt-0.5 truncate text-xs text-muted-foreground">{track.artist}</p>
+									<p className="mt-0.5 truncate text-xs text-muted-foreground">
+										<ArtistLink id={track.artistId} name={track.artist} onClick={close} className="transition-colors hover:text-foreground" />
+									</p>
 								</div>
 							</div>
 
@@ -437,14 +443,10 @@ export function TrackActionMenu({
 								</DropdownMenuItem>
 							)}
 
-							{(track.albumId || track.artistId) && <DropdownMenuSeparator />}
+							{(albumLink || artistLink) && <DropdownMenuSeparator />}
 
-							{track.albumId && (
-								<Link
-									href={`/album?id=${track.albumId}`}
-									onClick={close}
-									className="no-underline"
-								>
+							{albumLink && (
+								<Link href={albumLink} onClick={close} className="no-underline">
 									<DropdownMenuItem className={item}>
 										<Disc3 className="size-4" />
 										<span className="truncate">{track.albumTitle || "Go to album"}</span>
@@ -452,12 +454,8 @@ export function TrackActionMenu({
 								</Link>
 							)}
 
-							{track.artistId && (
-								<Link
-									href={`/artist?id=${track.artistId}`}
-									onClick={close}
-									className="no-underline"
-								>
+							{artistLink && (
+								<Link href={artistLink} onClick={close} className="no-underline">
 									<DropdownMenuItem className={item}>
 										<User className="size-4" />
 										<span className="truncate">{track.artist}</span>
