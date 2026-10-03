@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { render, act } from "@testing-library/react";
-import { MotionGlobalConfig } from "motion/react";
-import { LogoMark, PlayPauseIcon, ProgressRing, HeartGlyph, RepeatGlyph, ShuffleGlyph, waveLineFrames } from "./icons";
+import { AnimatePresence, MotionGlobalConfig, motion } from "motion/react";
+import { Equalizer, LogoMark, PlayPauseIcon, ProgressRing, HeartGlyph, RepeatGlyph, ShuffleGlyph, waveLineFrames } from "./icons";
 
 describe("LogoMark", () => {
 	it("gives each instance its own gradient ids (was: second logo on a page rendered blank)", () => {
@@ -29,6 +29,36 @@ describe("LogoMark", () => {
 
 // Motion applies updates on the next animation frame.
 const frame = () => act(() => new Promise<void>((r) => setTimeout(r, 30)));
+
+describe("Equalizer", () => {
+	const bars = (root: HTMLElement) => Array.from(root.querySelectorAll<HTMLElement>("[aria-hidden] > span"));
+
+	it("bounces when it mounts already playing (was: three static dots on the now-playing row)", () => {
+		const { container } = render(<Equalizer playing />);
+		expect(bars(container)).toHaveLength(3);
+		for (const b of bars(container)) expect(b.style.animationName).toBe("playback-eq");
+	});
+
+	it("bounces inside an AnimatePresence initial={false} (was: frozen dots in the floating player)", () => {
+		const { container } = render(
+			<AnimatePresence initial={false}>
+				<motion.span key="eq">
+					<Equalizer playing />
+				</motion.span>
+			</AnimatePresence>
+		);
+		for (const b of bars(container)) expect(b.style.animationName).toBe("playback-eq");
+	});
+
+	it("rests when paused", () => {
+		const { container, rerender } = render(<Equalizer playing />);
+		rerender(<Equalizer playing={false} />);
+		for (const b of bars(container)) {
+			expect(b.style.animationName).toBe("");
+			expect(b.style.height).toBe("35%");
+		}
+	});
+});
 
 describe("animated icons", () => {
 	beforeAll(() => {

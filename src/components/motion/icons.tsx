@@ -145,15 +145,23 @@ export function Equalizer({
 	return (
 		<span className={cn("inline-flex h-3 items-end gap-[2px]", className)} aria-hidden>
 			{Array.from({ length: bars }).map((_, i) => (
-				<motion.span
+				// A CSS loop (`playback-eq` in globals.css): Motion skips mount animations
+				// under `initial={false}` — the element's own or an ancestor AnimatePresence's —
+				// which froze the bars into three dots on rows and in the floating player.
+				<span
 					key={i}
-					className={cn("w-[3px] rounded-full", barClassName)}
-					initial={false}
-					animate={playing ? { height: ["30%", "100%", "45%", "85%", "30%"] } : { height: "35%" }}
-					transition={
+					className={cn("w-[3px] rounded-full transition-[height] duration-300 motion-reduce:animate-none", barClassName)}
+					style={
 						playing
-							? { repeat: Infinity, duration: 0.9 + i * 0.17, ease: "easeInOut", delay: i * 0.12 }
-							: { duration: 0.3 }
+							? {
+									height: "35%",
+									animationName: "playback-eq",
+									animationDuration: `${0.9 + i * 0.17}s`,
+									animationDelay: `${-i * 0.12}s`,
+									animationTimingFunction: "ease-in-out",
+									animationIterationCount: "infinite",
+								}
+							: { height: "35%" }
 					}
 				/>
 			))}
