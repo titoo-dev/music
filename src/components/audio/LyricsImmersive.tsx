@@ -9,6 +9,7 @@ import { ArtistLink } from "@/components/links/EntityLink";
 import { leavePlayer } from "./leave-player";
 import { X } from "lucide-react";
 import { Spinner } from "@/components/motion/icons";
+import { centerLine } from "@/lib/lyrics/scroll";
 import { formatTime } from "@/utils/format-time";
 import { coverThemeStyle, useCoverSeed } from "@/components/expressive";
 import { WaveSeek } from "./WaveSeek";
@@ -47,7 +48,7 @@ const ImmersiveLines = memo(function ImmersiveLines({ lines }: { lines: LyricLin
 				el.dataset.state = state;
 				el.dataset.distance = String(Math.min(dist, 5));
 				if (i === idx) {
-					el.scrollIntoView({ behavior: "smooth", block: "center" });
+					centerLine(container, el);
 				}
 			}
 		});
@@ -143,7 +144,7 @@ export function LyricsImmersive() {
 					transition={{ duration: 0.25 }}
 					role="dialog"
 					aria-label="Lyrics fullscreen"
-					className="cover-theme fixed inset-0 z-[71] isolate overflow-hidden bg-background text-foreground"
+					className="cover-theme fixed inset-0 z-[71] isolate overflow-clip bg-background text-foreground"
 					style={coverThemeStyle(seed)}
 				>
 					{/* Atmospheric backdrop: the artwork, hugely blurred, settling into the surface */}
@@ -182,7 +183,7 @@ export function LyricsImmersive() {
 					</div>
 
 					{/* Lyrics column */}
-					<div className="absolute inset-x-0 bottom-[104px] top-[88px] overflow-hidden">
+					<div className="absolute inset-x-0 bottom-[104px] top-[88px] overflow-clip">
 						{isLoading ? (
 							<div className="flex h-full items-center justify-center">
 								<span className="flex size-14 items-center justify-center rounded-full bg-primary-container text-on-primary-container">

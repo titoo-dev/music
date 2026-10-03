@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactElement } from "react";
+import { useEffect, useRef, type ReactElement } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Maximize2, MoreHorizontal, SlidersHorizontal, X } from "lucide-react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
@@ -84,11 +84,89 @@ function BufferRing({ show, className }: { show: boolean; className?: string }) 
 	);
 }
 
+/** Volume points per wheel notch. */
+const VOLUME_STEP = 5;
+
+/** Volume key with its slider popping above the card (a clear gap off the top edge) instead of widening the pill.
+ *  No tooltip on the key: it would open right over the slider. The wheel nudges the volume while hovering. */
+function VolumeControl() {
+	const volume = usePlayerStore((s) => s.volume);
+	const setVolume = usePlayerStore((s) => s.setVolume);
+	const toggleMute = usePlayerStore((s) => s.toggleMute);
+	const ref = useRef<HTMLDivElement>(null);
+
+	// Native, non-passive listener: React's wheel handler is passive, so it couldn't stop the page scrolling.
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		const onWheel = (e: WheelEvent) => {
+			if (e.deltaY === 0) return;
+			e.preventDefault();
+			const { volume, setVolume } = usePlayerStore.getState();
+			setVolume(Math.min(100, Math.max(0, volume + (e.deltaY < 0 ? VOLUME_STEP : -VOLUME_STEP))));
+		};
+		el.addEventListener("wheel", onWheel, { passive: false });
+		return () => el.removeEventListener("wheel", onWheel);
+	}, []);
+
+	const show =
+		"group-hover/vol:visible group-hover/vol:translate-y-0 group-hover/vol:scale-100 group-hover/vol:opacity-100 group-hover/vol:delay-0 " +
+		"group-has-[:active]/vol:visible group-has-[:active]/vol:translate-y-0 group-has-[:active]/vol:scale-100 group-has-[:active]/vol:opacity-100 " +
+		"group-has-[:focus-visible]/vol:visible group-has-[:focus-visible]/vol:translate-y-0 group-has-[:focus-visible]/vol:scale-100 group-has-[:focus-visible]/vol:opacity-100";
+
+	return (
+		<div ref={ref} data-testid="volume-control" className="group/vol relative">
+			<button
+				type="button"
+				onClick={toggleMute}
+				aria-label={volume === 0 ? "Unmute" : "Mute"}
+				aria-pressed={volume === 0}
+				className={cn(ctl, "size-9", volume === 0 && ctlOn)}
+			>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[18px]">
+					<path d="M11 5 6 9H2v6h4l5 4V5z" />
+					<motion.path d="M15.5 8.5a5 5 0 0 1 0 7" initial={false} animate={{ pathLength: volume > 0 ? 1 : 0, opacity: volume > 0 ? 1 : 0 }} />
+					<motion.path d="M19 5a10 10 0 0 1 0 14" initial={false} animate={{ pathLength: volume > 50 ? 1 : 0, opacity: volume > 50 ? 1 : 0 }} />
+					<motion.path d="m17 9 6 6M23 9l-6 6" initial={false} animate={{ pathLength: volume === 0 ? 1 : 0, opacity: volume === 0 ? 1 : 0 }} />
+				</svg>
+			</button>
+			{/* The padding is a hover bridge from the key up past the card's top edge, plus a 12px gap; `invisible`
+			    (not pointer-events) hides it, so the 200ms close delay doubles as a grace period for the pointer. */}
+			<div
+				className={cn(
+					"invisible absolute bottom-full left-1/2 origin-bottom -translate-x-1/2 translate-y-1.5 scale-95 pb-[calc((var(--player-h)-2.25rem)/2+12px)] opacity-0 transition-[opacity,visibility,translate,scale] delay-200 duration-200 ease-[cubic-bezier(0.2,0,0,1)]",
+					show
+				)}
+			>
+				<div className="glass flex items-center gap-3 rounded-full py-2.5 pl-4 pr-3.5 text-foreground shadow-popover">
+					<div className="group/slider relative h-1.5 w-32 rounded-full bg-primary/15">
+						<div className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${volume}%` }} />
+						<span
+							aria-hidden
+							className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow transition-[scale] duration-150 group-hover/slider:scale-115 group-has-[:active]/slider:scale-125"
+							style={{ left: `${volume}%` }}
+						/>
+						<input
+							type="range"
+							min={0}
+							max={100}
+							value={volume}
+							aria-label="Volume"
+							onChange={(e) => setVolume(parseInt(e.target.value))}
+							className="absolute -inset-y-3 inset-x-0 h-7 w-full cursor-pointer opacity-0"
+						/>
+					</div>
+					<span className="w-7 text-right text-xs font-semibold tabular-nums text-muted-foreground">{volume}</span>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 export function Player() {
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
 	const isBuffering = usePlayerStore((s) => s.isBuffering);
-	const volume = usePlayerStore((s) => s.volume);
 	const currentTime = usePlayerStore((s) => s.currentTime);
 	const duration = usePlayerStore((s) => s.duration);
 	const buffered = usePlayerStore((s) => s.buffered);
@@ -100,8 +178,6 @@ export function Player() {
 	const stop = usePlayerStore((s) => s.stop);
 	const next = usePlayerStore((s) => s.next);
 	const prev = usePlayerStore((s) => s.prev);
-	const setVolume = usePlayerStore((s) => s.setVolume);
-	const toggleMute = usePlayerStore((s) => s.toggleMute);
 	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
 	const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
@@ -410,47 +486,7 @@ export function Player() {
 									</svg>
 								</Tip>
 
-								{/* Volume — slider pops above the button instead of widening the pill */}
-								<div className="group/vol relative">
-									<Tip
-										label={volume === 0 ? "Unmute" : "Mute"}
-										trigger={
-											<button
-												type="button"
-												onClick={toggleMute}
-												aria-label={volume === 0 ? "Unmute" : "Mute"}
-												aria-pressed={volume === 0}
-												className={cn(ctl, "size-9")}
-											/>
-										}
-									>
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-[18px]">
-											<path d="M11 5 6 9H2v6h4l5 4V5z" />
-											<motion.path d="M15.5 8.5a5 5 0 0 1 0 7" initial={false} animate={{ pathLength: volume > 0 ? 1 : 0, opacity: volume > 0 ? 1 : 0 }} />
-											<motion.path d="M19 5a10 10 0 0 1 0 14" initial={false} animate={{ pathLength: volume > 50 ? 1 : 0, opacity: volume > 50 ? 1 : 0 }} />
-											<motion.path d="m17 9 6 6M23 9l-6 6" initial={false} animate={{ pathLength: volume === 0 ? 1 : 0, opacity: volume === 0 ? 1 : 0 }} />
-										</svg>
-									</Tip>
-									{/* pb-3 bridges the gap so the pointer can travel from button to slider. */}
-									<div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 translate-y-1 pb-3 opacity-0 transition-all duration-150 group-hover/vol:pointer-events-auto group-hover/vol:translate-y-0 group-hover/vol:opacity-100 group-focus-within/vol:pointer-events-auto group-focus-within/vol:translate-y-0 group-focus-within/vol:opacity-100">
-										<div className="flex items-center gap-2.5 rounded-full bg-surface-container px-3.5 py-2.5 text-foreground shadow-popover">
-											<div className="relative h-1.5 w-28 rounded-full bg-primary/15">
-												<div className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${volume}%` }} />
-												<span aria-hidden className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow" style={{ left: `${volume}%` }} />
-												<input
-													type="range"
-													min={0}
-													max={100}
-													value={volume}
-													aria-label="Volume"
-													onChange={(e) => setVolume(parseInt(e.target.value))}
-													className="absolute -inset-y-2 inset-x-0 h-5 w-full cursor-pointer opacity-0"
-												/>
-											</div>
-											<span className="w-6 text-right text-[11px] font-semibold tabular-nums text-muted-foreground">{volume}</span>
-										</div>
-									</div>
-								</div>
+								<VolumeControl />
 
 								{/* Less-used actions. Native title: nested Tooltip + Menu triggers swallow clicks. */}
 								<DropdownMenu>

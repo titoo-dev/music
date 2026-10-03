@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, memo } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useLyricsStore, type LyricLine } from "@/stores/useLyricsStore";
 import { Spinner } from "@/components/motion/icons";
+import { centerLine } from "@/lib/lyrics/scroll";
 
 function getActiveIndex(lines: LyricLine[], time: number): number {
 	let idx = -1;
@@ -43,7 +44,7 @@ const SyncedLyrics = memo(function SyncedLyrics({
 				const state = i === idx ? "active" : i < idx ? "past" : "future";
 				el.dataset.state = state;
 				if (i === idx) {
-					el.scrollIntoView({ behavior: "smooth", block: "center" });
+					centerLine(container, el);
 				}
 			}
 		});

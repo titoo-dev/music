@@ -83,6 +83,26 @@ describe("Player", () => {
 		expect(slider).toHaveAttribute("type", "range");
 	});
 
+	it("keeps the Mute tooltip off the volume slider (was: the tooltip popped over the slider it shares the spot with)", () => {
+		renderPlayer();
+		expect(screen.getByRole("button", { name: "Next track" })).toHaveAttribute("data-slot", "tooltip-trigger");
+		expect(screen.getByRole("button", { name: "Mute" })).not.toHaveAttribute("data-slot", "tooltip-trigger");
+	});
+
+	it("nudges the volume with the mouse wheel over the volume control", () => {
+		usePlayerStore.setState({ volume: 50 });
+		renderPlayer();
+		const control = screen.getByTestId("volume-control");
+		fireEvent.wheel(control, { deltaY: -100 });
+		expect(usePlayerStore.getState().volume).toBe(55);
+		fireEvent.wheel(control, { deltaY: 100 });
+		fireEvent.wheel(control, { deltaY: 100 });
+		expect(usePlayerStore.getState().volume).toBe(45);
+		usePlayerStore.setState({ volume: 98 });
+		fireEvent.wheel(control, { deltaY: -100 });
+		expect(usePlayerStore.getState().volume).toBe(100);
+	});
+
 	it("rides a wavy progress line along the phone card instead of the flat bar", () => {
 		usePlayerStore.setState({ currentTime: 60 });
 		renderPlayer();
