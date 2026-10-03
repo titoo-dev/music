@@ -43,7 +43,8 @@ export async function GET(
 		// Don't await any heavy / failure-prone work in the response path —
 		// run it in after() so a slow Deezer doesn't slow the hover handler
 		// and the function isn't frozen before the caches are filled.
-		after(() => warmInBackground(dz, trackId, app.settings.maxBitrate));
+		const { maxBitrate } = await app.freshSettings();
+		after(() => warmInBackground(dz, trackId, maxBitrate));
 
 		return new NextResponse(null, { status: 204 });
 	} catch (e) {

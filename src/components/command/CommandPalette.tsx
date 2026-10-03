@@ -129,7 +129,7 @@ export function CommandPalette() {
 				<div className="fixed inset-0 z-[70] flex items-start justify-center px-3 pt-[12vh] sm:pt-[14vh]">
 					<motion.div
 						key="overlay"
-						className="absolute inset-0 bg-background/60 backdrop-blur-[3px]"
+						className="absolute inset-0 bg-black/45 backdrop-blur-[6px]"
 						initial={{ opacity: 0 }}
 						animate={{ opacity: 1 }}
 						exit={{ opacity: 0 }}
@@ -141,11 +141,11 @@ export function CommandPalette() {
 						role="dialog"
 						aria-modal="true"
 						aria-label="Command palette"
-						initial={{ opacity: 0, scale: 0.97, y: -8 }}
+						initial={{ opacity: 0, scale: 0.94, y: -12 }}
 						animate={{ opacity: 1, scale: 1, y: 0 }}
-						exit={{ opacity: 0, scale: 0.98, y: -4 }}
-						transition={{ type: "spring", stiffness: 500, damping: 36 }}
-						className="relative flex max-h-[70vh] w-full max-w-[640px] flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-popover"
+						exit={{ opacity: 0, scale: 0.97, y: -6, transition: { duration: 0.15, ease: [0.3, 0, 0.8, 0.15] } }}
+						transition={{ type: "spring", stiffness: 420, damping: 32 }}
+						className="relative flex max-h-[72vh] w-full max-w-[680px] origin-top flex-col overflow-hidden rounded-[28px] bg-surface-container text-foreground shadow-popover ring-1 ring-outline-variant/40"
 					>
 						<PaletteBody />
 					</motion.div>
@@ -173,9 +173,8 @@ function PaletteBody() {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const listRef = useRef<HTMLDivElement>(null);
 	const [active, setActive] = useState(0);
-	const [data, setData] = useState<SuggestResponse | null>(null);
-	const [loading, setLoading] = useState(false);
-	const [collection, setCollection] = useState<{ link: DeezerLink; info: CollectionInfo | null; error?: string } | null>(null);
+	const [suggest, setSuggest] = useState<{ term: string; data: SuggestResponse | null } | null>(null);
+	const [loaded, setLoaded] = useState<{ key: string; info: CollectionInfo | null; error?: string } | null>(null);
 
 	const trimmed = query.trim();
 	const link = useMemo(() => parseDeezerLink(trimmed), [trimmed]);
@@ -188,39 +187,41 @@ function PaletteBody() {
 		inputRef.current?.select();
 	}, [view]);
 
-	// Suggestions
+	// Suggestions (state is keyed by term; data/loading are derived from it).
+	const suggesting = view === "search" && !link && debounced.length >= MIN_QUERY;
 	useEffect(() => {
-		if (view !== "search" || link || debounced.length < MIN_QUERY) {
-			setData(null);
-			setLoading(false);
-			return;
-		}
+		if (!suggesting) return;
 		let cancelled = false;
-		setLoading(true);
 		fetchData("search/suggest", { term: debounced })
-			.then((res: SuggestResponse) => !cancelled && setData(res))
-			.catch(() => !cancelled && setData(null))
-			.finally(() => !cancelled && setLoading(false));
+			.then((res: SuggestResponse) => !cancelled && setSuggest({ term: debounced, data: res }))
+			.catch(() => !cancelled && setSuggest({ term: debounced, data: null }));
 		return () => {
 			cancelled = true;
 		};
-	}, [debounced, link, view]);
+	}, [debounced, suggesting]);
+	const data = suggesting ? (suggest?.data ?? null) : null;
+	const loading = suggesting && suggest?.term !== debounced;
 
 	// Pasted Deezer link → preview the collection
+	const linkKey = link ? `${link.type}:${link.id}` : null;
+	const isCollectionLink = !!link && (link.type === "album" || link.type === "playlist");
 	useEffect(() => {
-		if (!link || (link.type !== "album" && link.type !== "playlist")) {
-			setCollection(link ? { link, info: null } : null);
-			return;
-		}
+		if (!link || !linkKey || (link.type !== "album" && link.type !== "playlist")) return;
 		let cancelled = false;
-		setCollection({ link, info: null });
 		fetchCollection(link.type, link.id)
-			.then((info) => !cancelled && setCollection({ link, info }))
-			.catch((e) => !cancelled && setCollection({ link, info: null, error: e instanceof Error ? e.message : "Not found" }));
+			.then((info) => !cancelled && setLoaded({ key: linkKey, info }))
+			.catch((e) => !cancelled && setLoaded({ key: linkKey, info: null, error: e instanceof Error ? e.message : "Not found" }));
 		return () => {
 			cancelled = true;
 		};
-	}, [link]);
+		// linkKey captures the link's identity; the object itself changes per keystroke.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [linkKey]);
+	const collection = useMemo<{ link: DeezerLink; info: CollectionInfo | null; error?: string } | null>(() => {
+		if (!link) return null;
+		if (!isCollectionLink || loaded?.key !== linkKey) return { link, info: null };
+		return { link, info: loaded.info, error: loaded.error };
+	}, [link, isCollectionLink, loaded, linkKey]);
 
 	const requireAuth = useCallback(() => {
 		if (isAuthenticated) return true;
@@ -384,7 +385,13 @@ function PaletteBody() {
 		return out;
 	}, [view, collection, trimmed, data, isAuthenticated, download, downloadCollection, go, play, playQueue, addToQueue, close]);
 
-	useEffect(() => setActive(0), [rows.length, trimmed, view]);
+	// Back to the first row whenever the list changes (adjusted during render).
+	const resetKey = `${rows.length}\u0000${trimmed}\u0000${view}`;
+	const [seenKey, setSeenKey] = useState(resetKey);
+	if (seenKey !== resetKey) {
+		setSeenKey(resetKey);
+		setActive(0);
+	}
 
 	// Keep the active row in view.
 	useEffect(() => {
@@ -424,8 +431,9 @@ function PaletteBody() {
 	return (
 		<div className="flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
 			{/* Input */}
-			<div className="flex items-center gap-3 border-b border-border px-4">
-				<SearchGlyph busy={busy} className="size-[18px] text-muted-foreground" />
+			<div className="p-3 pb-2">
+			<div className="flex h-14 items-center gap-3 rounded-full bg-surface-high pl-5 pr-2 shadow-[inset_0_0_0_2px_color-mix(in_srgb,var(--primary)_30%,transparent)]">
+				<SearchGlyph busy={busy} className="size-5 shrink-0 text-primary" />
 				<input
 					ref={inputRef}
 					value={query}
@@ -438,7 +446,7 @@ function PaletteBody() {
 					autoComplete="off"
 					autoCorrect="off"
 					spellCheck={false}
-					className="h-14 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground/70"
+					className="h-full min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
 				/>
 				{query && (
 					<button
@@ -448,29 +456,30 @@ function PaletteBody() {
 							setQuery("");
 							inputRef.current?.focus();
 						}}
-						className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+						className="flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground active:scale-90"
 					>
-						<X className="size-4" />
+						<X className="size-5" />
 					</button>
 				)}
-				<kbd className="kbd hidden sm:inline-flex">esc</kbd>
+				<kbd className="kbd mr-2 hidden sm:inline-flex">esc</kbd>
+			</div>
 			</div>
 
 			{/* View switch */}
 			<LayoutGroup id="palette-views">
-				<div className="flex items-center gap-1 border-b border-border px-2 py-1.5">
+				<div className="flex items-center gap-1.5 border-b border-outline-variant/40 px-3 pb-2.5">
 					{(["search", "downloads"] as CommandView[]).map((v) => (
 						<button
 							key={v}
 							type="button"
 							onClick={() => setView(v)}
 							className={cn(
-								"relative flex h-7 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors",
-								view === v ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+								"relative flex h-9 items-center gap-2 rounded-full px-4 text-sm transition-colors duration-300 active:scale-95",
+								view === v ? "font-semibold text-secondary-foreground" : "font-medium text-muted-foreground hover:bg-surface-high hover:text-foreground"
 							)}
 						>
 							{view === v && (
-								<motion.span layoutId="palette-view-pill" className="absolute inset-0 rounded-md bg-accent" transition={{ type: "spring", stiffness: 500, damping: 38 }} />
+								<motion.span layoutId="palette-view-pill" className="absolute inset-0 rounded-full bg-secondary" transition={{ type: "spring", stiffness: 420, damping: 30, mass: 0.9 }} />
 							)}
 							<span className="relative flex items-center gap-2">
 								{v === "search" ? "Search" : "Downloads"}
@@ -478,7 +487,7 @@ function PaletteBody() {
 									<ProgressRing value={overall ?? 0} size={16} stroke={2} className="text-highlight" />
 								)}
 								{v === "downloads" && items.length > 0 && (
-									<span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+									<span className="inline-flex h-5 items-center rounded-full bg-primary-container px-1.5 text-[11px] font-semibold tabular-nums text-on-primary-container">
 										<SlideSwap id={items.length}>{items.length}</SlideSwap>
 									</span>
 								)}
@@ -506,7 +515,7 @@ function PaletteBody() {
 			</div>
 
 			{/* Footer */}
-			<div className="hidden items-center gap-4 border-t border-border bg-muted/40 px-4 py-2 text-[11px] text-muted-foreground sm:flex">
+			<div className="hidden items-center gap-4 border-t border-outline-variant/40 bg-surface-low px-5 py-2.5 text-[11px] text-muted-foreground sm:flex">
 				<span className="flex items-center gap-1.5">
 					<kbd className="kbd">↑</kbd>
 					<kbd className="kbd">↓</kbd> navigate
@@ -558,11 +567,11 @@ function SearchRows({
 			{showSkeleton && (
 				<div className="space-y-1 p-1">
 					{Array.from({ length: 4 }).map((_, i) => (
-						<div key={i} className="flex items-center gap-3 px-2 py-2">
-							<div className="size-9 animate-pulse rounded-md bg-muted" />
-							<div className="flex-1 space-y-1.5">
-								<div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
-								<div className="h-2.5 w-1/3 animate-pulse rounded bg-muted" />
+						<div key={i} className="flex items-center gap-3 px-2.5 py-2">
+							<div className="size-11 animate-pulse rounded-xl bg-surface-highest" />
+							<div className="flex-1 space-y-2">
+								<div className="h-3 w-1/2 animate-pulse rounded-full bg-surface-highest" />
+								<div className="h-2.5 w-1/3 animate-pulse rounded-full bg-surface-highest" />
 							</div>
 						</div>
 					))}
@@ -580,7 +589,7 @@ function SearchRows({
 				const header = i === 0 || rows[i - 1].group !== row.group ? row.group : null;
 				return (
 					<div key={row.key}>
-						{header && <div className="px-2.5 pb-1 pt-3 text-[11px] font-medium text-muted-foreground first:pt-1">{header}</div>}
+						{header && <div className="type-eyebrow px-3 pb-1.5 pt-4 text-primary first:pt-1">{header}</div>}
 						<PaletteRow row={row} index={i} active={i === active} onHover={() => setActive(i)} />
 					</div>
 				);
@@ -598,23 +607,23 @@ function PaletteRow({ row, index, active, onHover }: { row: Row; index: number; 
 			aria-selected={active}
 			onMouseMove={onHover}
 			onClick={row.onSelect}
-			className="relative flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2"
+			className="relative flex cursor-pointer items-center gap-3 rounded-2xl px-2.5 py-2"
 		>
 			{active && (
-				<motion.span layoutId="palette-active-row" className="absolute inset-0 rounded-lg bg-accent" transition={{ type: "spring", stiffness: 600, damping: 42 }} />
+				<motion.span layoutId="palette-active-row" className="absolute inset-0 rounded-2xl bg-secondary" transition={{ type: "spring", stiffness: 600, damping: 42 }} />
 			)}
 			<span className="relative shrink-0">
 				{row.cover !== undefined ? (
-					<CoverImage src={row.cover} className={cn("size-9", row.round && "rounded-full")} />
+					<CoverImage src={row.cover} className={cn("size-11 rounded-xl", row.round && "rounded-full")} />
 				) : Icon ? (
-					<span className="flex size-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
-						<Icon className="size-4" />
+					<span className={cn("flex size-11 items-center justify-center rounded-xl transition-colors", active ? "bg-primary text-primary-foreground" : "bg-surface-high text-primary")}>
+						<Icon className="size-5" />
 					</span>
 				) : null}
 			</span>
 			<span className="relative min-w-0 flex-1">
-				<span className="block truncate text-sm text-foreground">{row.title}</span>
-				{row.subtitle && <span className="block truncate text-xs text-muted-foreground">{row.subtitle}</span>}
+				<span className={cn("block truncate text-sm font-medium", active ? "text-secondary-foreground" : "text-foreground")}>{row.title}</span>
+				{row.subtitle && <span className={cn("block truncate text-xs", active ? "text-secondary-foreground/75" : "text-muted-foreground")}>{row.subtitle}</span>}
 			</span>
 			<span className="relative flex shrink-0 items-center gap-0.5">
 				{row.onQueue && (
@@ -628,7 +637,7 @@ function PaletteRow({ row, index, active, onHover }: { row: Row; index: number; 
 					</RowAction>
 				)}
 				{active && row.hint && (
-					<motion.span initial={{ opacity: 0, x: 4 }} animate={{ opacity: 1, x: 0 }} className="ml-1 hidden items-center gap-1 text-[11px] text-muted-foreground sm:flex">
+					<motion.span initial={{ opacity: 0, x: 4 }} animate={{ opacity: 1, x: 0 }} className="ml-1 hidden h-6 items-center gap-1 rounded-full bg-surface-lowest/60 px-2 text-[11px] font-semibold text-secondary-foreground sm:flex">
 						{row.hint}
 						<CornerDownLeft className="size-3" />
 					</motion.span>
@@ -649,7 +658,7 @@ function RowAction({ label, onClick, visible, children }: { label: string; onCli
 				onClick();
 			}}
 			className={cn(
-				"flex size-8 items-center justify-center rounded-md text-muted-foreground transition-opacity hover:bg-background hover:text-foreground",
+				"flex size-9 items-center justify-center rounded-full text-muted-foreground transition-[opacity,background-color,transform] hover:bg-surface-lowest/70 hover:text-foreground active:scale-90",
 				visible ? "opacity-100" : "opacity-100 sm:opacity-0"
 			)}
 		>
@@ -667,11 +676,16 @@ function DownloadsView({ items }: { items: DownloadItem[] }) {
 	if (items.length === 0) {
 		return (
 			<div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-				<motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex size-12 items-center justify-center rounded-full border border-border text-muted-foreground">
-					<DownloadGlyph className="size-5" />
+				<motion.div
+					initial={{ scale: 0.6, opacity: 0 }}
+					animate={{ scale: 1, opacity: 1 }}
+					transition={{ type: "spring", stiffness: 260, damping: 14 }}
+					className="bg-tonal-gradient flex size-16 items-center justify-center rounded-full text-on-primary-container shadow-[0_0_32px_2px_color-mix(in_srgb,var(--primary)_22%,transparent)]"
+				>
+					<DownloadGlyph className="size-7" />
 				</motion.div>
 				<div>
-					<p className="text-sm font-medium">No downloads yet</p>
+					<p className="text-lg font-semibold tracking-tight">No downloads yet</p>
 					<p className="mt-1 text-sm text-muted-foreground">
 						Search a track and press <kbd className="kbd">⇧</kbd> <kbd className="kbd">↵</kbd>, or paste an album link.
 					</p>
@@ -683,9 +697,9 @@ function DownloadsView({ items }: { items: DownloadItem[] }) {
 	return (
 		<div className="p-2">
 			<div className="flex items-center justify-between px-2.5 pb-1 pt-1">
-				<span className="text-[11px] font-medium text-muted-foreground">{items.length} item{items.length === 1 ? "" : "s"}</span>
+				<span className="type-eyebrow text-primary">{items.length} item{items.length === 1 ? "" : "s"}</span>
 				{hasFinished && (
-					<button type="button" onClick={clearFinished} className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground">
+					<button type="button" onClick={clearFinished} className="h-8 rounded-full px-3 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 active:scale-95">
 						Clear finished
 					</button>
 				)}
@@ -738,11 +752,11 @@ function DownloadRow({ item }: { item: DownloadItem }) {
 			animate={{ opacity: 1, height: "auto" }}
 			exit={{ opacity: 0, height: 0 }}
 			transition={{ type: "spring", stiffness: 500, damping: 40 }}
-			className="group flex items-center gap-3 overflow-hidden rounded-lg px-2.5 py-2 hover:bg-accent/60"
+			className="group flex items-center gap-3 overflow-hidden rounded-2xl px-2.5 py-2 transition-colors hover:bg-surface-high"
 		>
 			<span className="relative shrink-0">
-				<CoverImage src={item.cover ?? null} className="size-9" />
-				<span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full border border-border bg-popover">
+				<CoverImage src={item.cover ?? null} className="size-11 rounded-xl" />
+				<span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full bg-surface-container ring-2 ring-surface-container">
 					{item.status === "downloading" ? (
 						item.total ? (
 							<ProgressRing value={pct} size={16} stroke={2} className="text-highlight" />
@@ -759,16 +773,16 @@ function DownloadRow({ item }: { item: DownloadItem }) {
 				</span>
 			</span>
 			<span className="min-w-0 flex-1">
-				<span className="block truncate text-sm">{item.title}</span>
+				<span className="block truncate text-sm font-medium">{item.title}</span>
 				<span className="block truncate text-xs text-muted-foreground">
 					{item.artist}
 					{item.group ? ` · ${item.group}` : ""}
 				</span>
 				<span className="block truncate font-mono text-[11px] tabular-nums text-muted-foreground">{status}</span>
 				{item.status === "downloading" && (
-					<span className="mt-1 block h-[2px] overflow-hidden rounded-full bg-border">
+					<span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-primary/15">
 						<motion.span
-							className="block h-full rounded-full bg-highlight"
+							className="block h-full rounded-full bg-primary"
 							initial={false}
 							animate={item.total ? { width: `${pct * 100}%`, x: 0 } : { width: "30%", x: ["-100%", "330%"] }}
 							transition={item.total ? { type: "spring", stiffness: 120, damping: 24 } : { repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
@@ -798,7 +812,7 @@ function DownloadRow({ item }: { item: DownloadItem }) {
 
 function IconBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
 	return (
-		<button type="button" aria-label={label} title={label} onClick={onClick} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground">
+		<button type="button" aria-label={label} title={label} onClick={onClick} className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-[background-color,transform] hover:bg-surface-highest hover:text-foreground active:scale-90">
 			{children}
 		</button>
 	);
@@ -831,12 +845,12 @@ export function CommandTrigger({ className }: { className?: string }) {
 					<motion.button
 						type="button"
 						initial={{ opacity: 0, scale: 0.6, width: 0 }}
-						animate={{ opacity: 1, scale: 1, width: 36 }}
+						animate={{ opacity: 1, scale: 1, width: 44 }}
 						exit={{ opacity: 0, scale: 0.6, width: 0 }}
 						onClick={() => open(undefined, "downloads")}
 						aria-label={activeCount > 0 ? `${activeCount} downloads in progress` : "Downloads"}
 						title="Downloads"
-						className="relative flex h-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+						className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-surface-high text-muted-foreground transition-colors hover:bg-surface-highest hover:text-foreground"
 					>
 						{activeCount > 0 ? (
 							<ProgressRing value={overall ?? 0} size={22} stroke={2} className="text-highlight">

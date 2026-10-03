@@ -1,88 +1,89 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { motion } from "motion/react";
+import { AudioLines, BadgeCheck, Database, Layers, Rocket, Server, Sparkles, Tag } from "lucide-react";
 import { useAppStore } from "@/stores/useAppStore";
+import { useDiscover } from "@/hooks/useDiscover";
 import { LogoMark } from "@/components/motion/icons";
+import { GlassPill, HeroBanner, entrance } from "@/components/expressive";
+import { SettingsSection, SettingsTile, StatusPill } from "../settings/_components/SettingsTiles";
 
-const STACK: { k: string; v: string }[] = [
-	{ k: "Runtime", v: "Next.js 16" },
-	{ k: "Database", v: "Postgres · Prisma 7" },
-	{ k: "UI", v: "React 19 · Tailwind 4" },
+/** Fallback when the registry check hasn't reported a build (package.json version). */
+const APP_VERSION = "0.1.0";
+
+const STACK = [
+	{ icon: Rocket, k: "Runtime", v: "Next.js 16" },
+	{ icon: Database, k: "Database", v: "Postgres · Prisma 7" },
+	{ icon: Layers, k: "UI", v: "React 19 · Tailwind 4" },
 ];
 
-function Row({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
-	return (
-		<div className="flex items-center justify-between gap-5 px-4 py-4">
-			<div className="flex-1 min-w-0">
-				<p className="text-sm font-medium">{label}</p>
-				<p className="text-sm text-muted-foreground mt-0.5">{hint}</p>
-			</div>
-			{children}
-		</div>
-	);
+const noop = () => () => {};
+
+function Value({ children }: { children: React.ReactNode }) {
+	return <span className="shrink-0 rounded-full bg-surface-high px-3 py-1 font-mono text-xs font-semibold tabular-nums text-foreground">{children}</span>;
 }
 
 export default function AboutPage() {
 	const { currentVersion, latestVersion, updateAvailable } = useAppStore();
+	const { showcase } = useDiscover();
+	const origin = useSyncExternalStore(noop, () => window.location.origin, () => "");
+	const version = currentVersion || APP_VERSION;
 
 	return (
-		<motion.div
-			initial={{ opacity: 0, y: 8 }}
-			animate={{ opacity: 1, y: 0 }}
-			transition={{ duration: 0.3, ease: "easeOut" }}
-			className="max-w-2xl mx-auto pt-2"
-		>
-			{/* Page header */}
-			<div className="mb-10 flex items-center gap-4">
-				<LogoMark animated className="size-12 shrink-0" />
-				<div className="min-w-0 flex-1">
-					<h1 className="text-2xl sm:text-3xl font-semibold tracking-tight m-0">wavelet</h1>
-					<p className="mt-1 text-sm text-muted-foreground">
-						Self-hosted music downloader, web edition.
-					</p>
-				</div>
+		<div className="mx-auto max-w-5xl pb-6 pt-2">
+			<motion.div {...entrance(0)}>
+				<HeroBanner covers={showcase} minCovers={8} contentClassName="flex min-h-[300px] flex-col justify-end p-6 pt-8 sm:min-h-[360px] sm:p-10">
+					<motion.div initial={{ scale: 0.6, opacity: 0, rotate: -8 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 240, damping: 16 }}>
+						<LogoMark animated className="size-[72px] drop-shadow-[0_10px_24px_rgb(129_140_248/0.45)]" />
+					</motion.div>
+					<motion.h1 {...entrance(1, 12)} className="type-display mt-6 text-5xl text-white sm:text-6xl lg:text-7xl">
+						wavelet
+					</motion.h1>
+					<motion.p {...entrance(2, 8)} className="mt-2 max-w-lg text-base text-white/80 sm:text-lg">
+						A Material 3 music client for your own server.
+					</motion.p>
+					<div className="mt-5 flex flex-wrap gap-2">
+						<motion.span {...entrance(3, 8)}>
+							<GlassPill icon={BadgeCheck} value={version} label="version" />
+						</motion.span>
+						<motion.span {...entrance(4, 8)}>
+							<GlassPill icon={AudioLines} label="Lossless ready" />
+						</motion.span>
+						{updateAvailable && (
+							<motion.span {...entrance(5, 8)}>
+								<GlassPill icon={Sparkles} label="Update available" />
+							</motion.span>
+						)}
+					</div>
+				</HeroBanner>
+			</motion.div>
+
+			<div className="grid items-start gap-x-6 lg:grid-cols-2">
+				<SettingsSection title="Details" index={1}>
+					<SettingsTile icon={Tag} title="Current build" subtitle="The version of wavelet you’re running." trailing={<Value>{version}</Value>} />
+					{latestVersion && <SettingsTile icon={BadgeCheck} title="Latest release" subtitle="Most recent published version." tone="tertiary" trailing={<Value>{latestVersion}</Value>} />}
+					{updateAvailable && (
+						<SettingsTile icon={Sparkles} title="Update available" subtitle="A newer build is published. Pull to refresh." tone="tertiary" trailing={<StatusPill label="New" tone="tertiary" />} />
+					)}
+					<SettingsTile
+						icon={Server}
+						title="Server"
+						subtitle={<span className="block truncate">{origin || "—"}</span>}
+						tone="secondary"
+					/>
+				</SettingsSection>
+
+				<SettingsSection title="Built with" index={2}>
+					{STACK.map((s) => (
+						<SettingsTile key={s.k} icon={s.icon} title={s.k} subtitle={s.v} tone="muted" />
+					))}
+				</SettingsSection>
 			</div>
 
-			{/* Version */}
-			<section className="mb-10">
-				<h2 className="mb-3 text-sm font-medium">Version</h2>
-				<div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
-					{currentVersion && (
-						<Row label="Current build" hint="Currently installed version of wavelet.">
-							<span className="text-sm font-mono tabular-nums">{currentVersion}</span>
-						</Row>
-					)}
-					{latestVersion && (
-						<Row label="Latest release" hint="Most recent published version on the registry.">
-							<span className="text-sm font-mono tabular-nums">{latestVersion}</span>
-						</Row>
-					)}
-					{updateAvailable && (
-						<div className="flex items-center justify-between gap-5 px-4 py-4 bg-highlight/5">
-							<div className="flex-1 min-w-0">
-								<p className="text-sm font-medium text-highlight">Update available</p>
-								<p className="text-sm text-muted-foreground mt-0.5">A newer build is published. Pull to refresh.</p>
-							</div>
-							<span className="rounded-full bg-highlight/10 px-2.5 py-0.5 text-xs font-medium text-highlight">New</span>
-						</div>
-					)}
-				</div>
-			</section>
-
-			{/* Credits */}
-			<section>
-				<h2 className="mb-3 text-sm font-medium">Credits</h2>
-				<div className="rounded-xl border border-border bg-card">
-					<dl className="divide-y divide-border">
-						{STACK.map((s) => (
-							<div key={s.k} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
-								<dt className="text-muted-foreground">{s.k}</dt>
-								<dd className="m-0 font-medium">{s.v}</dd>
-							</div>
-						))}
-					</dl>
-				</div>
-			</section>
-		</motion.div>
+			<motion.p {...entrance(3)} className="mx-auto mt-10 max-w-md px-6 text-center text-xs leading-relaxed text-muted-foreground">
+				wavelet is not affiliated with Deezer. Music is streamed through your own Deezer account.
+			</motion.p>
+		</div>
 	);
 }

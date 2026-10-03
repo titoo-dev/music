@@ -10,14 +10,18 @@ import {
 } from "@/components/ui/tooltip";
 import { useShareStore } from "@/stores/useShareStore";
 import { ShareDialog } from "./ShareDialog";
+import { cn } from "@/lib/utils";
 
 interface ShareButtonProps {
 	trackId: string;
 	duration?: number | null;
+	title?: string | null;
+	artist?: string | null;
+	cover?: string | null;
 	className?: string;
 }
 
-export function ShareButton({ trackId, duration, className }: ShareButtonProps) {
+export function ShareButton({ trackId, duration, title, artist, cover, className }: ShareButtonProps) {
 	const isShared = useShareStore((s) => s.shared.has(trackId));
 	const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -29,15 +33,16 @@ export function ShareButton({ trackId, duration, className }: ShareButtonProps) 
 						<Button
 							variant="ghost"
 							size="icon"
-							className={className}
+							aria-label={isShared ? "Manage share link" : "Share track"}
+							className={cn("rounded-full active:scale-90", isShared && "bg-primary-container text-on-primary-container hover:bg-primary-container/80", className)}
 							onClick={() => setDialogOpen(true)}
 						/>
 					}
 				>
 					{isShared ? (
-						<LinkIcon className="size-3.5 text-highlight" />
+						<LinkIcon className="size-4" />
 					) : (
-						<Share2 className="size-3.5" />
+						<Share2 className="size-4" />
 					)}
 				</TooltipTrigger>
 				<TooltipContent>{isShared ? "Manage share link" : "Share track"}</TooltipContent>
@@ -48,6 +53,9 @@ export function ShareButton({ trackId, duration, className }: ShareButtonProps) 
 				onOpenChange={setDialogOpen}
 				trackId={trackId}
 				duration={duration}
+				title={title}
+				artist={artist}
+				cover={cover}
 			/>
 		</>
 	);

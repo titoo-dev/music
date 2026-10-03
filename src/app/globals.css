@@ -4,11 +4,14 @@
 
 /* Dark mode = `.dark` on <html>, set before first paint by the theme script in app/layout.tsx. */
 @custom-variant dark (&:where(.dark, .dark *));
-
 /* ─────────────────────────────────────────────────────────────────────────
- * Design language — "Geist minimal"
- * Monochrome surfaces, hairline borders, generous whitespace, one accent
- * (blue) reserved for focus / progress. Motion does the talking.
+ * Design language — "Geist minimal", with the expressive moments of the
+ * Flutter client layered on top.
+ * Base: monochrome surfaces, hairline borders, generous whitespace, one
+ * accent (blue) reserved for focus / progress. Expressive layer: aurora +
+ * artwork-wall heroes, the sky → indigo → pink logo gradient, artwork-driven
+ * colour (CoverTheme) on collection pages and the player, glowing play
+ * buttons, carousels and motion on every state change.
  * ───────────────────────────────────────────────────────────────────────── */
 :root {
 	--radius: 0.625rem;
@@ -47,7 +50,35 @@
 	--sidebar-border: #e8e8ea;
 	--sidebar-ring: #a1a1aa;
 
-	--surface-glass: rgb(255 255 255 / 0.72);
+	/* Expressive roles, on the Geist palette: neutral surfaces, and faint
+	 * brand tints for the containers that carry emphasis. CoverTheme swaps
+	 * these for the artwork's own colours. */
+	--m3-primary: #0a0a0a;
+	--m3-on-primary: #fafafa;
+	--m3-primary-container: #eef0ff;
+	--m3-on-primary-container: #3b3f9e;
+	--m3-secondary-container: #f4f4f5;
+	--m3-on-secondary-container: #0a0a0a;
+	--m3-tertiary: #db2777;
+	--m3-tertiary-container: #fdf0f7;
+	--m3-on-tertiary-container: #9d174d;
+	--m3-surface-container-lowest: #ffffff;
+	--m3-surface-container-low: #fafafa;
+	--m3-surface-container: #f6f6f7;
+	--m3-surface-container-high: #f4f4f5;
+	--m3-surface-container-highest: #ebebed;
+	--m3-outline: #a1a1aa;
+	--m3-outline-variant: #e8e8ea;
+	--m3-error-container: #fdecec;
+	--m3-on-error-container: #b42318;
+
+	/* Brand palette (logo gradient): fixed, for hero banners and accents. */
+	--brand-sky: #38bdf8;
+	--brand-indigo: #818cf8;
+	--brand-pink: #f472b6;
+	--brand-night: #1a1440;
+
+	--surface-glass: rgb(255 255 255 / 0.6);
 	--grid-line: rgb(0 0 0 / 0.05);
 
 	/* Legacy tokens — kept so older markup degrades to soft, flat styling. */
@@ -59,19 +90,25 @@
 
 	--shadow-float: 0 0 0 1px rgb(0 0 0 / 0.06), 0 12px 40px -8px rgb(0 0 0 / 0.18);
 	--shadow-popover: 0 0 0 1px rgb(0 0 0 / 0.06), 0 24px 64px -12px rgb(0 0 0 / 0.25);
+	--shadow-glow: 0 14px 32px -6px color-mix(in srgb, var(--brand-indigo) 40%, transparent);
 
-	/* ─── CHROME TOKENS ─── */
-	--header-h: 56px;
+	/* ─── CHROME TOKENS ───
+	 * `--header-h` is the full sticky header: the bar plus, on phones, the nav
+	 * row under it — sticky sub-bars sit right below it. */
+	--header-h: 100px;
 	--player-h: 64px;
 	--player-offset: calc(16px + env(safe-area-inset-bottom));
-	/* Kept for components that still reference it (no bottom nav anymore). */
+	/* Kept for components that still reference them (no bottom nav / rail). */
 	--mini-player-h: var(--player-h);
 	--bottom-nav-h: 0px;
+	--nav-h: 0px;
+	--rail-w: 0px;
 }
 
-/* Desktop pill stacks transport over the seek bar. */
+/* Desktop: single-row header; the player pill stacks transport over the seek bar. */
 @media (min-width: 48rem) {
 	:root {
+		--header-h: 56px;
 		--player-h: 76px;
 	}
 }
@@ -109,12 +146,32 @@ html.dark {
 		--sidebar-border: #232323;
 		--sidebar-ring: #525252;
 
-		--surface-glass: rgb(17 17 17 / 0.72);
+		--m3-primary: #ededed;
+		--m3-on-primary: #0a0a0a;
+		--m3-primary-container: #181a33;
+		--m3-on-primary-container: #c7cbff;
+		--m3-secondary-container: #1a1a1a;
+		--m3-on-secondary-container: #ededed;
+		--m3-tertiary: #f472b6;
+		--m3-tertiary-container: #2a1424;
+		--m3-on-tertiary-container: #fbcfe8;
+		--m3-surface-container-lowest: #000000;
+		--m3-surface-container-low: #0f0f0f;
+		--m3-surface-container: #111111;
+		--m3-surface-container-high: #1a1a1a;
+		--m3-surface-container-highest: #242424;
+		--m3-outline: #6b6b6b;
+		--m3-outline-variant: #232323;
+		--m3-error-container: #3a1214;
+		--m3-on-error-container: #ffb4ab;
+
+		--surface-glass: rgb(17 17 17 / 0.58);
 		--grid-line: rgb(255 255 255 / 0.045);
 
 		--shadow-brutal-hover: 0 8px 30px rgb(0 0 0 / 0.5);
 		--shadow-float: 0 0 0 1px rgb(255 255 255 / 0.08), 0 16px 48px -8px rgb(0 0 0 / 0.7);
 		--shadow-popover: 0 0 0 1px rgb(255 255 255 / 0.08), 0 32px 80px -12px rgb(0 0 0 / 0.8);
+		--shadow-glow: 0 14px 36px -6px color-mix(in srgb, var(--brand-indigo) 32%, transparent);
 	}
 }
 
@@ -154,6 +211,32 @@ html.dark {
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
 	--color-highlight: var(--highlight);
+	--color-primary-container: var(--m3-primary-container);
+	--color-on-primary-container: var(--m3-on-primary-container);
+	--color-secondary-container: var(--m3-secondary-container);
+	--color-on-secondary-container: var(--m3-on-secondary-container);
+	--color-tertiary: var(--m3-tertiary);
+	--color-tertiary-container: var(--m3-tertiary-container);
+	--color-on-tertiary-container: var(--m3-on-tertiary-container);
+	--color-surface: var(--background);
+	--color-surface-lowest: var(--m3-surface-container-lowest);
+	--color-surface-low: var(--m3-surface-container-low);
+	--color-surface-container: var(--m3-surface-container);
+	--color-surface-high: var(--m3-surface-container-high);
+	--color-surface-highest: var(--m3-surface-container-highest);
+	--color-outline: var(--m3-outline);
+	--color-error-container: var(--m3-error-container);
+	--color-on-error-container: var(--m3-on-error-container);
+	--color-outline-variant: var(--m3-outline-variant);
+	--color-brand-sky: var(--brand-sky);
+	--color-brand-indigo: var(--brand-indigo);
+	--color-brand-pink: var(--brand-pink);
+	--color-brand-night: var(--brand-night);
+	--shadow-glow: var(--shadow-glow);
+	--radius-hero: 28px;
+	--ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+	--ease-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+	--ease-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
 	--color-success: var(--success);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
@@ -172,6 +255,8 @@ html.dark {
 	}
 	html {
 		@apply font-sans antialiased;
+		/* Full-bleed heroes reach the viewport edges; clip (not hidden) keeps sticky working. */
+		overflow-x: clip;
 		color-scheme: light dark;
 	}
 	body {
@@ -189,13 +274,44 @@ html.dark {
 		background-size: 48px 48px;
 		mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
 	}
+	/* Frosted glass (header, floating player). Only the unprefixed property: Lightning CSS keeps just one of a
+	   prefixed/unprefixed pair, and keeping -webkit- alone left Chrome with no blur at all (globals.test.ts). */
 	.glass {
 		background: var(--surface-glass);
-		backdrop-filter: saturate(180%) blur(16px);
-		-webkit-backdrop-filter: saturate(180%) blur(16px);
+		backdrop-filter: saturate(180%) blur(24px);
 	}
 	.text-balance {
 		text-wrap: balance;
+	}
+
+	/* ─── Expressive bits (mirrors the Flutter client) ─── */
+	.bg-brand-gradient {
+		background-image: linear-gradient(90deg, var(--brand-sky), var(--brand-indigo), var(--brand-pink));
+	}
+	.brand-text {
+		background-image: linear-gradient(90deg, var(--brand-sky), var(--brand-indigo), var(--brand-pink));
+		-webkit-background-clip: text;
+		background-clip: text;
+		color: transparent;
+	}
+	/* Tonal gradient used by the selected nav indicator and liked art. */
+	.bg-tonal-gradient {
+		background-image: linear-gradient(90deg, var(--m3-primary-container), var(--m3-tertiary-container));
+	}
+	.bg-liked-gradient {
+		background-image: linear-gradient(135deg, #0284c7, #4f46e5, #db2777);
+	}
+	/* Display type: Geist semibold, tighter — the hero voice. */
+	.type-display {
+		font-weight: 600;
+		letter-spacing: -0.045em;
+		line-height: 1.04;
+	}
+	.type-eyebrow {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
 	}
 	.kbd {
 		display: inline-flex;
@@ -289,6 +405,97 @@ html.dark {
 	50% { height: 12px; }
 }
 
+/* ─── COVER THEME ───
+ * The web `CoverTheme`: `--cv-h` (OKLCH hue) and `--cv-c` (0–1 colourfulness)
+ * come from the artwork (lib/cover-palette); this re-derives the accent roles
+ * for the subtree. Registered, so palettes glide into each other. */
+@property --cv-h {
+	syntax: "<number>";
+	inherits: true;
+	initial-value: 277;
+}
+@property --cv-c {
+	syntax: "<number>";
+	inherits: true;
+	initial-value: 1;
+}
+.cover-theme {
+	transition: --cv-h 600ms cubic-bezier(0.2, 0, 0, 1), --cv-c 600ms cubic-bezier(0.2, 0, 0, 1);
+	--cv-k: calc(0.25 + 0.75 * var(--cv-c));
+	--cv-t: calc(var(--cv-h) + 60);
+
+	--m3-primary: oklch(0.47 calc(0.13 * var(--cv-k)) var(--cv-h));
+	--m3-on-primary: #ffffff;
+	--m3-primary-container: oklch(0.91 calc(0.06 * var(--cv-k)) var(--cv-h));
+	--m3-on-primary-container: oklch(0.36 calc(0.1 * var(--cv-k)) var(--cv-h));
+	--m3-secondary-container: oklch(0.91 calc(0.03 * var(--cv-k)) var(--cv-h));
+	--m3-on-secondary-container: oklch(0.37 calc(0.04 * var(--cv-k)) var(--cv-h));
+	--m3-tertiary: oklch(0.47 calc(0.1 * var(--cv-k)) var(--cv-t));
+	--m3-tertiary-container: oklch(0.91 calc(0.06 * var(--cv-k)) var(--cv-t));
+	--m3-on-tertiary-container: oklch(0.36 calc(0.08 * var(--cv-k)) var(--cv-t));
+	--m3-surface-container-high: oklch(0.925 calc(0.012 * var(--cv-k)) var(--cv-h));
+	--m3-surface-container-highest: oklch(0.905 calc(0.014 * var(--cv-k)) var(--cv-h));
+
+	/* Mapped tokens resolve where they are declared: re-point them here. */
+	--primary: var(--m3-primary);
+	--primary-foreground: var(--m3-on-primary);
+	--secondary: var(--m3-secondary-container);
+	--secondary-foreground: var(--m3-on-secondary-container);
+	--muted: var(--m3-surface-container-high);
+	--accent: var(--m3-surface-container-highest);
+	--ring: var(--m3-primary);
+	--highlight: var(--m3-primary);
+	--shadow-glow: 0 14px 32px -6px color-mix(in oklch, var(--m3-primary) 45%, transparent);
+}
+html.dark .cover-theme {
+	--m3-primary: oklch(0.84 calc(0.09 * var(--cv-k)) var(--cv-h));
+	--m3-on-primary: oklch(0.3 calc(0.09 * var(--cv-k)) var(--cv-h));
+	--m3-primary-container: oklch(0.38 calc(0.09 * var(--cv-k)) var(--cv-h));
+	--m3-on-primary-container: oklch(0.92 calc(0.045 * var(--cv-k)) var(--cv-h));
+	--m3-secondary-container: oklch(0.36 calc(0.035 * var(--cv-k)) var(--cv-h));
+	--m3-on-secondary-container: oklch(0.91 calc(0.025 * var(--cv-k)) var(--cv-h));
+	--m3-tertiary: oklch(0.84 calc(0.07 * var(--cv-k)) var(--cv-t));
+	--m3-tertiary-container: oklch(0.38 calc(0.07 * var(--cv-k)) var(--cv-t));
+	--m3-on-tertiary-container: oklch(0.92 calc(0.04 * var(--cv-k)) var(--cv-t));
+	--m3-surface-container-high: oklch(0.27 calc(0.012 * var(--cv-k)) var(--cv-h));
+	--m3-surface-container-highest: oklch(0.31 calc(0.014 * var(--cv-k)) var(--cv-h));
+	--shadow-glow: 0 14px 36px -6px color-mix(in oklch, var(--m3-primary) 35%, transparent);
+}
+
+/* Aurora: drifting light blobs (see components/expressive/Aurora). */
+@keyframes aurora-a {
+	0%, 100% { transform: translate(-20%, -15%) scale(1); }
+	33% { transform: translate(25%, 10%) scale(1.15); }
+	66% { transform: translate(-5%, 25%) scale(0.95); }
+}
+@keyframes aurora-b {
+	0%, 100% { transform: translate(25%, 20%) scale(1.1); }
+	33% { transform: translate(-25%, -5%) scale(0.95); }
+	66% { transform: translate(10%, -25%) scale(1.2); }
+}
+@keyframes aurora-c {
+	0%, 100% { transform: translate(0%, 30%) scale(0.95); }
+	50% { transform: translate(-10%, -30%) scale(1.15); }
+}
+/* Artwork wall columns: each translates by exactly one run, so it loops. */
+@keyframes wall-rise {
+	from { transform: translateY(0); }
+	to { transform: translateY(-50%); }
+}
+@keyframes wall-fall {
+	from { transform: translateY(-50%); }
+	to { transform: translateY(0); }
+}
+@keyframes shimmer {
+	from { background-position: 150% 0; }
+	to { background-position: -50% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.motion-drift {
+		animation: none !important;
+	}
+}
+
 @keyframes ticker {
 	0% { transform: translateX(0); }
 	100% { transform: translateX(-50%); }
@@ -350,3 +557,4 @@ html.dark {
 		-webkit-app-region: no-drag;
 	}
 }
+

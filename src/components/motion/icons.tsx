@@ -176,7 +176,7 @@ const LOGO_FRAMES = Array.from({ length: 9 }, (_, i) => waveletPath({ phase: (i 
  * itself in on mount; `animated` makes the carrier travel under its envelope.
  */
 export function LogoMark({ animated = false, className }: { animated?: boolean; className?: string }) {
-	const uid = useId().replace(/[^w-]/g, "");
+	const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 	const [g0, g1, g2] = LOGO_GRADIENT;
 	const [b0, b1] = LOGO_BG;
 	return (
@@ -201,7 +201,7 @@ export function LogoMark({ animated = false, className }: { animated?: boolean; 
 				strokeWidth={5.5}
 				strokeLinecap="round"
 				strokeLinejoin="round"
-				initial={{ pathLength: 0 }}
+				initial={{ pathLength: 0, d: LOGO_FRAMES[0] }}
 				animate={animated ? { pathLength: 1, d: LOGO_FRAMES } : { pathLength: 1, d: LOGO_FRAMES[0] }}
 				transition={{
 					pathLength: { duration: 0.7, ease: "easeOut" },
@@ -383,7 +383,7 @@ export function RepeatGlyph({ mode, className }: { mode: "off" | "all" | "one"; 
 						animate={{ scale: 1 }}
 						exit={{ scale: 0 }}
 						transition={SPRING}
-						className="absolute inset-0 flex items-center justify-center text-[8px] font-bold leading-none"
+						className="absolute inset-0 flex items-center justify-center text-[8px] font-semibold leading-none"
 					>
 						1
 					</motion.span>

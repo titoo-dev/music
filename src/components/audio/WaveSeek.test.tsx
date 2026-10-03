@@ -126,4 +126,25 @@ describe("WaveSeek", () => {
 		fireEvent.pointerLeave(slider);
 		expect(slider).toBeInTheDocument();
 	});
+
+	it("draws around the middle of a custom height and can drop the labels and thumb (mini player line)", () => {
+		setup({ height: 10, showTimes: false, thumb: false });
+		expect(screen.getByTestId("wave-played").getAttribute("d")).toMatch(/^M0 5 .* L75 5$/);
+		expect(screen.queryByText("0:30")).toBeNull();
+		expect(screen.queryByText("-1:30")).toBeNull();
+		expect(screen.getByTestId("wave-seek").querySelector("rect")).toBeNull();
+	});
+
+	it("paints the played wave in primary with the primary tone", () => {
+		setup({ tone: "primary" });
+		expect(screen.getByTestId("wave-played")).toHaveClass("text-primary");
+		expect(screen.getByTestId("wave-buffered")).toHaveClass("text-primary/35");
+	});
+
+	it("highlights the elapsed label while dragging", () => {
+		const { slider } = setup();
+		fireEvent.pointerDown(slider, { clientX: 225, pointerId: 1 });
+		expect(screen.getByText("1:30")).toHaveClass("text-primary");
+		fireEvent.pointerUp(slider, { clientX: 225, pointerId: 1 });
+	});
 });

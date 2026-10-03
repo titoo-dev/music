@@ -1,177 +1,92 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchData } from "@/utils/api";
-import { Button } from "@/components/ui/button";
-import { Shuffle } from "lucide-react";
-import { EntityHero, HeroPlayButton } from "@/components/layout/EntityHero";
-import { EmptyState, Spinner } from "@/components/motion/icons";
-import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
-import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
+import { AnimatePresence, motion } from "motion/react";
+import { Clock3, ListMusic, Music2 } from "lucide-react";
+import { TrackRow, trackFromDeezerRaw, type TrackRowTrack } from "@/components/tracks/TrackRow";
+import { useTracklist } from "@/components/collection/useTracklist";
+import { PlaylistDetailSkeleton } from "@/components/skeletons";
+import { AddTracksToPlaylist, DownloadCollectionButton, useCollectionPlayback } from "@/components/collection/CollectionActions";
+import { CollectionScaffold, Medallion, swap } from "@/components/expressive";
+import { formatTotal, parsePlaylistPage, plural, trackCovers, type PlaylistPageData } from "@/lib/collection-page";
 
-function getCoverUrl(hash: string, size = 500) {
-	if (!hash) return "";
-	if (hash.startsWith("http")) return hash;
-	return `https://e-cdns-images.dzcdn.net/images/cover/${hash}/${size}x${size}-000000-80-0-0.jpg`;
-}
+const rowReveal = {
+	initial: { opacity: 0.2, y: 12 },
+	whileInView: { opacity: 1, y: 0 },
+	viewport: { once: true, margin: "0px 0px -24px 0px" },
+	transition: { duration: 0.36, ease: [0.05, 0.7, 0.1, 1] },
+} as const;
 
 function PlaylistContent() {
-	const searchParams = useSearchParams();
-	const id = searchParams.get("id");
-	const [playlist, setPlaylist] = useState<any>(null);
-	const [tracks, setTracks] = useState<any[]>([]);
-	const [loading, setLoading] = useState(true);
-	const playerPlay = usePlayerStore((s) => s.play);
-	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
-
-	useEffect(() => {
-		if (!id) return;
-		async function loadPlaylist() {
-			try {
-				const data = await fetchData("content/tracklist", { id, type: "playlist" });
-				const playlistData = data?.DATA || data;
-				setPlaylist(playlistData);
-				setTracks(data?.tracks || data?.SONGS?.data || []);
-			} catch {
-				// ignore
-			}
-			setLoading(false);
-		}
-		loadPlaylist();
-	}, [id]);
-
-
-	if (loading)
-		return (
-			<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
-				<Spinner size={20} />
-			</div>
-		);
-	if (!playlist)
-		return (
-			<EmptyState
-				className="mt-8"
-				title="Playlist not found"
-				description="The playlist you're looking for doesn't exist or is unavailable."
-			/>
-		);
-
-	const playlistCover =
-		playlist.picture_xl ||
-		playlist.picture_big ||
-		playlist.picture_medium ||
-		getCoverUrl(playlist.PLAYLIST_PICTURE, 500) ||
-		"/placeholder.jpg";
-
-	const playlistTitle = playlist.title || playlist.TITLE || "Playlist";
-	const creatorName = playlist.creator?.name;
-
-	const playableTracks: PlayerTrack[] = tracks.map((t: any) => {
-		const n = trackFromDeezerRaw(t);
-		return {
-			trackId: n.trackId,
-			title: n.title,
-			artist: n.artist,
-			artistId: n.artistId ?? null,
-			cover: n.cover,
-			duration: n.duration ?? null,
-		};
-	});
-
-	const handlePlayAll = () => {
-		if (playableTracks.length === 0) return;
-		playerPlay(playableTracks[0], playableTracks);
-	};
-
-	const handleShuffleAll = () => {
-		if (playableTracks.length === 0) return;
-		const wasShuffled = usePlayerStore.getState().shuffle;
-		if (!wasShuffled) toggleShuffle();
-		playerPlay(playableTracks[0], playableTracks);
-	};
+	const id = useSearchParams().get("id");
+	const { page, status } = useTracklist("playlist", id, parsePlaylistPage);
 
 	return (
-		<div className="space-y-10">
-			<EntityHero
-				eyebrow="Playlist"
-				title={playlistTitle}
-				subtitle={
-					creatorName ? (
-						<span>
-							By <span className="font-medium text-foreground">{creatorName}</span>
-						</span>
-					) : undefined
-				}
-				meta={`${playlist.nb_tracks || tracks.length} tracks`}
-				coverSrc={playlistCover}
-				coverAlt={playlistTitle}
-				primaryAction={
-					<HeroPlayButton
-						onPlay={handlePlayAll}
-						trackIds={playableTracks.map((t) => t.trackId)}
-						disabled={playableTracks.length === 0}
-						label="Play playlist"
-					/>
-				}
-				secondaryActions={
-					<Button
-						onClick={handleShuffleAll}
-						disabled={playableTracks.length === 0}
-						variant="outline"
-						size="icon-touch"
-						className="rounded-full"
-						aria-label="Shuffle playlist"
-					>
-						<Shuffle className="size-4" aria-hidden />
-					</Button>
-				}
-			/>
-
-			{/* Tracklist */}
-			<section>
-				<div className="mb-3 flex items-baseline gap-2">
-					<h2 className="text-sm font-medium m-0">Tracklist</h2>
-					<span className="text-xs text-muted-foreground tabular-nums">{tracks.length}</span>
-				</div>
-				{tracks.length === 0 ? (
-					<EmptyState
-						title="No tracks"
-						description="The tracklist for this playlist is unavailable."
-					/>
+		<AnimatePresence mode="wait" initial={false}>
+			<motion.div key={status === "ready" ? `playlist-${page?.id}` : status} variants={swap} initial="initial" animate="animate" exit="exit">
+				{status === "loading" ? (
+					<PlaylistDetailSkeleton />
+				) : status === "ready" && page ? (
+					<PlaylistView page={page} />
 				) : (
-				<div className="divide-y divide-border border-y border-border">
-					{(() => {
-						const normalizedTracks = tracks.map((t: any) => trackFromDeezerRaw(t));
-						return tracks.map((track: any, idx: number) => {
-							const normalized = normalizedTracks[idx];
-							const trackId = normalized.trackId;
-							return (
-								<TrackRow
-									key={trackId || idx}
-									track={normalized}
-									trackNumber={idx + 1}
-									queue={normalizedTracks}
-								/>
-							);
-						});
-					})()}
-				</div>
+					<Medallion icon={ListMusic} title="Playlist not found" message="The playlist you're looking for doesn't exist or is unavailable." className="mt-10" />
+				)}
+			</motion.div>
+		</AnimatePresence>
+	);
+}
+
+function PlaylistView({ page }: { page: PlaylistPageData }) {
+	const tracks = useMemo<TrackRowTrack[]>(() => page.tracks.map((t) => trackFromDeezerRaw(t)), [page]);
+	const covers = useMemo(() => trackCovers(tracks.map((t) => t.cover)), [tracks]);
+	const { play, shuffle, trackIds } = useCollectionPlayback(tracks);
+
+	const stats = [
+		{ icon: Music2, label: plural(tracks.length, "track") },
+		...(page.duration ? [{ icon: Clock3, label: formatTotal(page.duration) }] : []),
+	];
+
+	return (
+		<CollectionScaffold
+			title={page.title}
+			cover={page.cover}
+			eyebrow="Deezer playlist"
+			subtitle={page.creator ? { label: `By ${page.creator}` } : null}
+			stats={stats}
+			description={page.description ? <p className="line-clamp-3">{page.description}</p> : undefined}
+			backdropCovers={covers}
+			trackIds={trackIds}
+			onPlay={play}
+			onShuffle={shuffle}
+			playLabel="Play playlist"
+			actions={
+				<>
+					<AddTracksToPlaylist tracks={tracks} label="Copy to my playlist" />
+					<DownloadCollectionButton tracks={tracks} group={`Playlist · ${page.title}`} label="Download playlist" />
+				</>
+			}
+		>
+			<section aria-label="Tracklist" className="mt-6">
+				{tracks.length === 0 ? (
+					<Medallion icon={ListMusic} title="This playlist is empty" />
+				) : (
+					<div className="-mx-2 space-y-0.5">
+						{tracks.map((t, i) => (
+							<motion.div key={`${t.trackId}-${i}`} {...rowReveal}>
+								<TrackRow track={t} queue={tracks} />
+							</motion.div>
+						))}
+					</div>
 				)}
 			</section>
-		</div>
+		</CollectionScaffold>
 	);
 }
 
 export default function PlaylistPage() {
 	return (
-		<Suspense
-			fallback={
-				<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
-					<Spinner size={20} />
-				</div>
-			}
-		>
+		<Suspense fallback={<PlaylistDetailSkeleton />}>
 			<PlaylistContent />
 		</Suspense>
 	);

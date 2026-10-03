@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
+import { MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { CoverImage } from "@/components/ui/cover-image";
 import { PlaybackIndicator } from "@/components/audio/PlaybackIndicator";
@@ -48,7 +49,31 @@ export interface TrackRowProps {
 	 * omitted, only this track plays.
 	 */
 	queue?: TrackRowTrack[];
+	/** Show the artwork column (default true). Without it the number cell doubles as the play button. */
+	showCover?: boolean;
+	/** Overrides the default "artist · album" subtitle. */
+	subtitle?: React.ReactNode;
 }
+
+// Literal class strings so Tailwind picks them up. Key: number · cover · bitrate · duration.
+const GRID: Record<string, string> = {
+	"0000": "grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_auto]",
+	"0001": "grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_52px_auto]",
+	"0010": "grid-cols-[minmax(0,1fr)_auto_auto] sm:grid-cols-[minmax(0,1fr)_auto_auto]",
+	"0011": "grid-cols-[minmax(0,1fr)_auto_auto] sm:grid-cols-[minmax(0,1fr)_auto_52px_auto]",
+	"0100": "grid-cols-[48px_minmax(0,1fr)_auto] sm:grid-cols-[48px_minmax(0,1fr)_auto]",
+	"0101": "grid-cols-[48px_minmax(0,1fr)_auto] sm:grid-cols-[48px_minmax(0,1fr)_52px_auto]",
+	"0110": "grid-cols-[48px_minmax(0,1fr)_auto_auto] sm:grid-cols-[48px_minmax(0,1fr)_auto_auto]",
+	"0111": "grid-cols-[48px_minmax(0,1fr)_auto_auto] sm:grid-cols-[48px_minmax(0,1fr)_auto_52px_auto]",
+	"1000": "grid-cols-[28px_minmax(0,1fr)_auto] sm:grid-cols-[28px_minmax(0,1fr)_auto]",
+	"1001": "grid-cols-[28px_minmax(0,1fr)_auto] sm:grid-cols-[28px_minmax(0,1fr)_52px_auto]",
+	"1010": "grid-cols-[28px_minmax(0,1fr)_auto_auto] sm:grid-cols-[28px_minmax(0,1fr)_auto_auto]",
+	"1011": "grid-cols-[28px_minmax(0,1fr)_auto_auto] sm:grid-cols-[28px_minmax(0,1fr)_auto_52px_auto]",
+	"1100": "grid-cols-[28px_48px_minmax(0,1fr)_auto] sm:grid-cols-[28px_48px_minmax(0,1fr)_auto]",
+	"1101": "grid-cols-[28px_48px_minmax(0,1fr)_auto] sm:grid-cols-[28px_48px_minmax(0,1fr)_52px_auto]",
+	"1110": "grid-cols-[28px_48px_minmax(0,1fr)_auto_auto] sm:grid-cols-[28px_48px_minmax(0,1fr)_auto_auto]",
+	"1111": "grid-cols-[28px_48px_minmax(0,1fr)_auto_auto] sm:grid-cols-[28px_48px_minmax(0,1fr)_auto_52px_auto]",
+};
 
 /**
  * Convert a raw Deezer GW/API track into the normalized TrackRowTrack shape
@@ -88,6 +113,8 @@ export function TrackRow({
 	onDelete,
 	trackNumber,
 	queue,
+	showCover = true,
+	subtitle,
 }: TrackRowProps) {
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewPlaying = usePreviewStore((s) => s.isPlaying);
@@ -181,31 +208,9 @@ export function TrackRow({
 	const isFlac = bitrate === "FLAC";
 	const showBitrateCell = showBitrate && !!track.bitrateLabel;
 
-	// Static Tailwind class combos so the JIT picks them up. Mobile hides
-	// duration; desktop shows duration + bitrate when both enabled.
 	const hasNum = typeof trackNumber === "number";
-	let gridClass: string;
-	if (hasNum) {
-		if (showBitrateCell && showDuration) {
-			gridClass =
-				"grid-cols-[28px_44px_1fr_auto_44px] sm:grid-cols-[28px_44px_1fr_auto_60px_104px]";
-		} else if (showBitrateCell) {
-			gridClass = "grid-cols-[28px_44px_1fr_auto_44px] sm:grid-cols-[28px_44px_1fr_auto_104px]";
-		} else if (showDuration) {
-			gridClass = "grid-cols-[28px_44px_1fr_44px] sm:grid-cols-[28px_44px_1fr_60px_104px]";
-		} else {
-			gridClass = "grid-cols-[28px_44px_1fr_44px] sm:grid-cols-[28px_44px_1fr_104px]";
-		}
-	} else if (showBitrateCell && showDuration) {
-		gridClass =
-			"grid-cols-[44px_1fr_auto_44px] sm:grid-cols-[44px_1fr_auto_60px_104px]";
-	} else if (showBitrateCell) {
-		gridClass = "grid-cols-[44px_1fr_auto_44px] sm:grid-cols-[44px_1fr_auto_104px]";
-	} else if (showDuration) {
-		gridClass = "grid-cols-[44px_1fr_44px] sm:grid-cols-[44px_1fr_60px_104px]";
-	} else {
-		gridClass = "grid-cols-[44px_1fr_44px] sm:grid-cols-[44px_1fr_104px]";
-	}
+	const cover = showCover || !hasNum;
+	const gridClass = GRID[`${+hasNum}${+cover}${+showBitrateCell}${+showDuration}`];
 
 	const handleHoverWarm = () => {
 		if (isPlayerLoaded) return;
@@ -245,46 +250,65 @@ export function TrackRow({
 			ref={rowRef}
 			onMouseEnter={handleHoverWarm}
 			onFocus={handleHoverWarm}
-			className={`group relative grid ${gridClass} items-center gap-3 overflow-hidden rounded-lg px-2 py-1.5 transition-colors select-none ${
+			className={`group relative grid ${gridClass} items-center gap-3 overflow-hidden rounded-lg px-2 py-1.5 transition-colors duration-300 select-none ${
 				activeRow ? "bg-accent" : "hover:bg-accent/60"
 			}`}
 		>
-			{hasNum && (
+			{hasNum && !cover && (
+				<button
+					type="button"
+					onClick={handlePlay}
+					aria-label={isPlayerActive ? `Pause ${track.title}` : `Play ${track.title}`}
+					className="flex h-10 items-center justify-end rounded-md tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				>
+					{activeRow ? (
+						<PlaybackIndicator paused={isPaused} className="text-highlight" />
+					) : (
+						<>
+							<span className="text-sm text-muted-foreground group-hover:hidden">{trackNumber}</span>
+							<PlayPauseIcon playing={false} className="hidden size-4 text-foreground group-hover:block" />
+						</>
+					)}
+				</button>
+			)}
+			{hasNum && cover && (
 				<span className="flex items-center justify-end text-right tabular-nums">
 					{activeRow ? (
-						<PlaybackIndicator paused={isPaused} />
+						<PlaybackIndicator paused={isPaused} className="text-highlight" />
 					) : (
-						<span className="font-mono text-xs text-muted-foreground">{trackNumber}</span>
+						<span className="text-sm text-muted-foreground">{trackNumber}</span>
 					)}
 				</span>
 			)}
-			<button
-				type="button"
-				onClick={handlePlay}
-				aria-label={isPlayerActive ? `Pause ${track.title}` : `Play ${track.title}`}
-				className="relative m-0 size-11 shrink-0 cursor-pointer appearance-none overflow-hidden rounded-md border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring md:size-10"
-			>
-				<CoverImage
-					src={track.cover || ""}
-					className={`size-11 transition-[opacity,transform] duration-200 md:size-10 ${
-						activeRow ? "opacity-60" : "group-hover:scale-105 group-hover:opacity-70"
-					}`}
-				/>
-				{activeRow ? (
-					<span className="absolute inset-0 flex items-center justify-center bg-black/25">
-						<PlaybackIndicator paused={isPaused} className="text-white" />
-					</span>
-				) : (
-					<span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white opacity-0 transition-opacity group-hover:opacity-100">
-						<PlayPauseIcon playing={false} className="size-4" />
-					</span>
+			{cover && (
+				<button
+					type="button"
+					onClick={handlePlay}
+					aria-label={isPlayerActive ? `Pause ${track.title}` : `Play ${track.title}`}
+					className="relative m-0 size-12 shrink-0 cursor-pointer appearance-none overflow-hidden rounded-lg border-0 bg-transparent p-0 shadow-[0_2px_6px_-2px_rgb(0_0_0/0.3)] transition-transform active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				>
+					<CoverImage
+						src={track.cover || ""}
+						className={`size-12 rounded-lg transition-transform duration-300 ${activeRow ? "" : "group-hover:scale-105"}`}
+					/>
+					{activeRow ? (
+						<span className="absolute inset-0 flex items-center justify-center bg-black/55">
+							<PlaybackIndicator paused={isPaused} className="text-white" />
+						</span>
+					) : (
+						<span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+							<PlayPauseIcon playing={false} className="size-4" />
+						</span>
+					)}
+				</button>
 				)}
-			</button>
 			<div className="min-w-0">
-				<p className={`truncate text-sm font-medium leading-tight ${activeRow ? "text-highlight" : "text-foreground"}`}>
+				<p className={`truncate text-sm font-medium leading-tight transition-colors duration-300 ${activeRow ? "text-highlight" : "text-foreground"}`}>
 					{track.title}
 				</p>
 				<p className="mt-0.5 truncate text-xs leading-tight text-muted-foreground">
+					{subtitle ?? (
+						<>
 					{track.artistId ? (
 						<Link href={`/artist?id=${track.artistId}`} className="transition-colors hover:text-foreground hover:underline">
 							{track.artist}
@@ -305,6 +329,8 @@ export function TrackRow({
 						</>
 					) : (
 						""
+					)}
+				</>
 					)}
 				</p>
 			</div>
@@ -328,7 +354,7 @@ export function TrackRow({
 					aria-label={`Download ${track.title}`}
 					title="Download"
 					onClick={handleDownload}
-					className="hidden size-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 sm:inline-flex"
+					className="hidden size-9 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 sm:inline-flex"
 				>
 					<DownloadGlyph />
 				</button>
@@ -345,6 +371,30 @@ export function TrackRow({
 						}}
 					/>
 				)}
+				<button
+					type="button"
+					aria-label={`More options for ${track.title}`}
+					onClick={(e) => {
+						e.stopPropagation();
+						openSheet(
+							{
+								id: track.trackId,
+								title: track.title,
+								artist: track.artist,
+								cover: track.cover || undefined,
+								duration: track.duration ?? undefined,
+								albumId: track.albumId ?? undefined,
+								albumTitle: track.album ?? undefined,
+								artistId: track.artistId ?? undefined,
+								previewUrl: track.previewUrl ?? undefined,
+							},
+							callbacks
+						);
+					}}
+					className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface-highest hover:text-foreground active:scale-90 md:hidden"
+				>
+					<MoreVertical className="size-5" />
+				</button>
 				<div className="hidden md:block">
 					<TrackActionMenu
 						track={{

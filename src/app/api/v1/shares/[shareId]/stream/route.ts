@@ -90,7 +90,7 @@ async function streamProgressive(share: { trackId: string; userId: string }) {
 		return fail("STORAGE_UNAVAILABLE", "Storage provider not initialized.", 500);
 	}
 
-	const settings = app.settings;
+	const settings = await app.freshSettings();
 	const preferredBitrate = settings.maxBitrate;
 
 	const { body, contentType, contentLength, persisted } = await startProgressiveStream({

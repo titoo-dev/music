@@ -82,6 +82,8 @@ interface FakeAppOptions {
 	storageProvider?: unknown;
 	lockAlreadyInProgress?: boolean;
 	maxBitrate?: number;
+	/** What the config store holds now (another instance may have changed it). */
+	savedBitrate?: number;
 }
 
 function makeApp(opts: FakeAppOptions = {}) {
@@ -91,8 +93,10 @@ function makeApp(opts: FakeAppOptions = {}) {
 		release: vi.fn(),
 	};
 	const acquireDownloadLock = vi.fn(() => lock);
+	const settings = { maxBitrate: opts.maxBitrate ?? 320 };
 	const app = {
-		settings: { maxBitrate: opts.maxBitrate ?? 320 },
+		settings,
+		freshSettings: vi.fn(async () => (opts.savedBitrate != null ? { ...settings, maxBitrate: opts.savedBitrate } : settings)),
 		acquireDownloadLock,
 		storageProvider:
 			opts.storageProvider === undefined ? {} : opts.storageProvider,
@@ -293,6 +297,18 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		expect(startProgressiveStreamMock).toHaveBeenCalledWith(
 			expect.objectContaining({ persist: true, trackId: "1", bitrate: 320 })
 		);
+	});
+
+	it("streams at the server quality saved since this instance started (was: kept the cold-start maxBitrate)", async () => {
+		const { app, acquireDownloadLock } = makeApp({ maxBitrate: 1, savedBitrate: 3 });
+		arrangeAuthOk(app);
+		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		startProgressiveStreamMock.mockResolvedValue({ body: fakeBody(), contentType: "audio/mpeg", contentLength: 0 });
+
+		const res = await GET(makeNextRequest({ url: "http://localhost:3000/api/v1/stream-progressive/1" }), makeParams({ trackId: "1" }));
+		expect(res.status).toBe(200);
+		expect(acquireDownloadLock).toHaveBeenCalledWith("1", 3);
+		expect(startProgressiveStreamMock).toHaveBeenCalledWith(expect.objectContaining({ bitrate: 3, settings: expect.objectContaining({ maxBitrate: 3 }) }));
 	});
 
 	it("preview mode: skips download lock and passes persist: false", async () => {

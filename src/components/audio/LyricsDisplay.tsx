@@ -55,11 +55,11 @@ const SyncedLyrics = memo(function SyncedLyrics({
 	}, []);
 
 	return (
-		<div className="relative flex-1 min-h-0">
+		<div className="relative min-h-0 flex-1">
 			<div
 				ref={containerRef}
-				className={`h-full overflow-y-auto overscroll-contain scrollbar-hide [mask-image:linear-gradient(to_bottom,transparent,black_4rem,black_calc(100%-4rem),transparent)] ${
-					compact ? "px-6 py-[40%]" : "px-8 py-[40%]"
+				className={`h-full overflow-y-auto overscroll-contain scrollbar-hide [mask-image:linear-gradient(to_bottom,transparent,black_18%,black_82%,transparent)] ${
+					compact ? "px-6 py-[40%]" : "px-6 py-[38%] min-[840px]:px-2"
 				}`}
 			>
 				{lines.map((line, i) => (
@@ -67,17 +67,14 @@ const SyncedLyrics = memo(function SyncedLyrics({
 						key={i}
 						data-state="future"
 						onClick={() => handleClick(line)}
-						className={`group relative cursor-pointer leading-[1.35] tracking-tight py-1.5 transition-all duration-300 ease-out
-							text-foreground font-semibold opacity-40 hover:opacity-70
-							data-[state=past]:opacity-30 data-[state=past]:text-muted-foreground
-							data-[state=active]:opacity-100 data-[state=active]:tracking-[-0.02em]
-							${compact ? "text-[17px] data-[state=active]:text-[20px]" : "text-[18px] data-[state=active]:text-[22px]"}
-							${line.text === "" ? "h-3.5" : ""}
+						className={`cursor-pointer origin-left py-2 font-semibold leading-[1.22] tracking-[-0.02em] text-balance text-foreground transition-[opacity,scale,color] duration-500 ease-[cubic-bezier(0.2,0,0,1)]
+							scale-[0.92] opacity-55 hover:opacity-80
+							data-[state=past]:opacity-35
+							data-[state=active]:scale-100 data-[state=active]:opacity-100
+							${compact ? "text-[22px]" : "text-[26px] min-[840px]:text-[34px]"}
+							${line.text === "" ? "h-4" : ""}
 						`}
 					>
-						{line.text && (
-							<span className="absolute left-[-12px] top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-highlight opacity-0 scale-y-50 group-data-[state=active]:opacity-100 group-data-[state=active]:scale-y-100 transition-[opacity,transform] duration-300" />
-						)}
 						{line.text || " "}
 					</p>
 				))}
@@ -94,14 +91,14 @@ const PlainLyrics = memo(function PlainLyrics({
 	compact?: boolean;
 }) {
 	return (
-		<div className="relative flex-1 min-h-0">
+		<div className="relative min-h-0 flex-1">
 			<div
 				className={`h-full overflow-y-auto overscroll-contain scrollbar-hide [mask-image:linear-gradient(to_bottom,transparent,black_3rem,black_calc(100%-3rem),transparent)] ${
-					compact ? "px-6 py-8" : "px-8 py-8"
+					compact ? "px-6 py-8" : "px-6 py-10 min-[840px]:px-2"
 				}`}
 			>
 				<pre
-					className="whitespace-pre-wrap font-sans text-base font-medium leading-relaxed text-foreground/80"
+					className={`whitespace-pre-wrap font-sans font-semibold leading-relaxed tracking-[-0.01em] text-foreground/85 ${compact ? "text-lg" : "text-xl min-[840px]:text-2xl"}`}
 				>
 					{text}
 				</pre>
@@ -140,30 +137,32 @@ export function LyricsDisplay({ compact = false }: { compact?: boolean }) {
 
 	if (isLoading) {
 		return (
-			<div className="flex-1 flex items-center justify-center">
-				<Spinner size={20} className="text-muted-foreground" />
+			<div className="flex flex-1 items-center justify-center">
+				<span className="flex size-14 items-center justify-center rounded-full bg-primary-container text-on-primary-container">
+					<Spinner size={22} />
+				</span>
 			</div>
 		);
 	}
 
 	if (error) {
 		return (
-			<div className="flex-1 flex flex-col items-center justify-center gap-3 px-8">
-				<MusicOffIcon className="text-muted-foreground/40" />
-				<p className="text-sm text-muted-foreground text-center">
-					{error}
-				</p>
+			<div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
+				<span className="bg-tonal-gradient flex size-20 items-center justify-center rounded-full text-on-primary-container shadow-[0_0_32px_2px_color-mix(in_srgb,var(--primary)_22%,transparent)]">
+					<MusicOffIcon />
+				</span>
+				<p className="max-w-60 text-base font-semibold text-foreground/80">{error}</p>
 			</div>
 		);
 	}
 
 	if (instrumental) {
 		return (
-			<div className="flex-1 flex flex-col items-center justify-center gap-3 px-8">
-				<MusicIcon className="text-muted-foreground/50" />
-				<p className="text-sm text-muted-foreground">
-					Instrumental
-				</p>
+			<div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
+				<span className="bg-tonal-gradient flex size-20 items-center justify-center rounded-full text-on-primary-container shadow-[0_0_32px_2px_color-mix(in_srgb,var(--primary)_22%,transparent)]">
+					<MusicIcon />
+				</span>
+				<p className="text-xl font-semibold tracking-tight">Instrumental</p>
 			</div>
 		);
 	}

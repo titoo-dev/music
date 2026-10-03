@@ -7,7 +7,6 @@ import { formatTime } from "@/utils/format-time";
 import { wavePath } from "@/lib/wave";
 
 const H = 28;
-const MID = H / 2;
 const AMPLITUDE = 3.5;
 const WAVELENGTH = 30;
 /** Radians per second the crests travel. */
@@ -21,6 +20,22 @@ interface WaveSeekProps {
 	playing: boolean;
 	onSeek: (time: number) => void;
 	className?: string;
+	/** Bar height in px (the wave oscillates around its middle). */
+	height?: number;
+	/** Stroke width of the line and the wave. */
+	stroke?: number;
+	/** Peak deviation of the wave while playing, in px. */
+	amplitude?: number;
+	/** Distance between two crests, in px. */
+	wavelength?: number;
+	/** Elapsed / remaining labels under the bar. */
+	showTimes?: boolean;
+	/** The pill playhead. */
+	thumb?: boolean;
+	/** `primary` paints the played part and the playhead in the accent colour. */
+	tone?: "foreground" | "primary";
+	/** Colour class for the unplayed line (defaults to a faint tone of the played colour). */
+	trackClassName?: string;
 }
 
 function useWidth(ref: React.RefObject<HTMLDivElement | null>) {
@@ -43,13 +58,30 @@ function useWidth(ref: React.RefObject<HTMLDivElement | null>) {
  * progress of modern mobile players). The wave is redrawn straight into the
  * DOM from an animation frame, so React never re-renders per frame.
  */
-export function WaveSeek({ currentTime, duration, buffered, playing, onSeek, className }: WaveSeekProps) {
+export function WaveSeek({
+	currentTime,
+	duration,
+	buffered,
+	playing,
+	onSeek,
+	className,
+	height = H,
+	stroke = 3,
+	amplitude = AMPLITUDE,
+	wavelength = WAVELENGTH,
+	showTimes = true,
+	thumb = true,
+	tone = "foreground",
+	trackClassName,
+}: WaveSeekProps) {
 	const ref = useRef<HTMLDivElement>(null);
 	const waveRef = useRef<SVGPathElement>(null);
 	const w = useWidth(ref);
 	const reduced = useReducedMotion();
 	const [drag, setDrag] = useState<number | null>(null);
 	const [hover, setHover] = useState(false);
+	const mid = height / 2;
+	const primary = tone === "primary";
 
 	const pct = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
 	const bufPct = duration > 0 ? Math.min(1, Math.max(0, buffered / duration)) : 0;
@@ -59,7 +91,7 @@ export function WaveSeek({ currentTime, duration, buffered, playing, onSeek, cla
 
 	// Animation state lives in a ref — read and written only from the frame loop.
 	const anim = useRef({ phase: 0, amp: 0 });
-	const target = playing && !reduced && drag === null ? AMPLITUDE : 0;
+	const target = playing && !reduced && drag === null ? amplitude : 0;
 
 	useAnimationFrame((_, delta) => {
 		const a = anim.current;
@@ -67,10 +99,7 @@ export function WaveSeek({ currentTime, duration, buffered, playing, onSeek, cla
 		const settled = Math.abs(a.amp - target) < 0.01;
 		a.amp = settled ? target : a.amp + (target - a.amp) * Math.min(1, dt * 6);
 		if (a.amp > 0) a.phase = (a.phase + dt * SPEED) % (Math.PI * 2);
-		waveRef.current?.setAttribute(
-			"d",
-			wavePath({ x0: 0, x1: x, mid: MID, amplitude: a.amp, wavelength: WAVELENGTH, phase: a.phase })
-		);
+		waveRef.current?.setAttribute("d", wavePath({ x0: 0, x1: x, mid, amplitude: a.amp, wavelength, phase: a.phase }));
 	});
 
 	const ratioFromEvent = (e: React.PointerEvent) => {
@@ -82,6 +111,9 @@ export function WaveSeek({ currentTime, duration, buffered, playing, onSeek, cla
 	const commit = (r: number) => {
 		if (duration > 0) onSeek(r * duration);
 	};
+
+	// The playhead pill scales with the stroke so thick bars keep a chunky thumb.
+	const thumbW = Math.max(5, stroke + 1);
 
 	return (
 		<div className={cn("select-none", className)}>
@@ -97,7 +129,7 @@ export function WaveSeek({ currentTime, duration, buffered, playing, onSeek, cla
 				data-testid="wave-seek"
 				data-playing={target > 0 || undefined}
 				className="relative cursor-pointer touch-none rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
-				style={{ height: H }}
+				style={{ height }}
 				onPointerEnter={() => setHover(true)}
 				onPointerLeave={() => setHover(false)}
 				onPointerDown={(e) => {
@@ -131,52 +163,65 @@ export function WaveSeek({ currentTime, duration, buffered, playing, onSeek, cla
 				}}
 			>
 				{w > 0 && (
-					<svg aria-hidden width={w} height={H} viewBox={`0 0 ${w} ${H}`} className="absolute inset-0 overflow-visible">
+					<svg aria-hidden width={w} height={height} viewBox={`0 0 ${w} ${height}`} className="absolute inset-0 overflow-visible">
 						{/* Unplayed track */}
-						<line x1={x} y1={MID} x2={w} y2={MID} stroke="currentColor" strokeWidth={3} strokeLinecap="round" className="text-foreground/15" />
+						<line
+							x1={x}
+							y1={mid}
+							x2={w}
+							y2={mid}
+							stroke="currentColor"
+							strokeWidth={stroke}
+							strokeLinecap="round"
+							className={trackClassName ?? (primary ? "text-primary/20" : "text-foreground/15")}
+						/>
 						{/* Buffered ahead of the playhead */}
 						{bufPct > shown && (
 							<line
 								x1={x}
-								y1={MID}
+								y1={mid}
 								x2={bufPct * w}
-								y2={MID}
+								y2={mid}
 								stroke="currentColor"
-								strokeWidth={3}
+								strokeWidth={stroke}
 								strokeLinecap="round"
-								className="text-foreground/25"
+								className={primary ? "text-primary/35" : "text-foreground/25"}
 								data-testid="wave-buffered"
 							/>
 						)}
 						{/* Played — the living wave */}
 						<path
 							ref={waveRef}
-							d={wavePath({ x0: 0, x1: x, mid: MID, amplitude: 0, wavelength: WAVELENGTH, phase: 0 })}
+							d={wavePath({ x0: 0, x1: x, mid, amplitude: 0, wavelength, phase: 0 })}
 							fill="none"
 							stroke="currentColor"
-							strokeWidth={3}
+							strokeWidth={stroke}
 							strokeLinecap="round"
 							strokeLinejoin="round"
-							className="text-foreground"
+							className={primary ? "text-primary" : "text-foreground"}
 							data-testid="wave-played"
 						/>
 						{/* Playhead — a pill that stretches while you grab it */}
-						<motion.rect
-							x={x - 2.5}
-							width={5}
-							rx={2.5}
-							className="fill-foreground"
-							initial={false}
-							animate={{ height: active ? 22 : 14, y: active ? MID - 11 : MID - 7 }}
-							transition={{ type: "spring", stiffness: 500, damping: 30 }}
-						/>
+						{thumb && (
+							<motion.rect
+								x={x - thumbW / 2}
+								width={thumbW}
+								rx={thumbW / 2}
+								className={primary ? "fill-primary" : "fill-foreground"}
+								initial={false}
+								animate={{ height: active ? height * 0.8 : height / 2, y: active ? mid - height * 0.4 : mid - height / 4 }}
+								transition={{ type: "spring", stiffness: 500, damping: 30 }}
+							/>
+						)}
 					</svg>
 				)}
 			</div>
-			<div className="mt-1.5 flex justify-between font-mono text-[11px] tabular-nums text-muted-foreground">
-				<span>{formatTime(shown * duration)}</span>
-				<span>-{formatTime(Math.max(0, duration - shown * duration))}</span>
-			</div>
+			{showTimes && (
+				<div className="mt-1.5 flex justify-between text-xs font-semibold tabular-nums text-muted-foreground">
+					<span className={cn("transition-colors duration-150", drag !== null && "font-semibold text-primary")}>{formatTime(shown * duration)}</span>
+					<span>-{formatTime(Math.max(0, duration - shown * duration))}</span>
+				</div>
+			)}
 		</div>
 	);
 }

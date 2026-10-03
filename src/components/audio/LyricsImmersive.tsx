@@ -8,6 +8,8 @@ import { CoverImage } from "@/components/ui/cover-image";
 import { X } from "lucide-react";
 import { Spinner } from "@/components/motion/icons";
 import { formatTime } from "@/utils/format-time";
+import { coverThemeStyle, useCoverSeed } from "@/components/expressive";
+import { WaveSeek } from "./WaveSeek";
 
 function getActiveIndex(lines: LyricLine[], time: number): number {
 	let idx = -1;
@@ -57,7 +59,7 @@ const ImmersiveLines = memo(function ImmersiveLines({ lines }: { lines: LyricLin
 	return (
 		<div
 			ref={containerRef}
-			className="h-full overflow-y-auto overscroll-contain scrollbar-hide px-[8vw] py-[35vh] [mask-image:linear-gradient(to_bottom,transparent,black_20%,black_80%,transparent)]"
+			className="mx-auto h-full max-w-5xl overflow-y-auto overscroll-contain px-[8vw] py-[35vh] scrollbar-hide [mask-image:linear-gradient(to_bottom,transparent,black_20%,black_80%,transparent)] lg:px-12"
 		>
 			{lines.map((line, i) => (
 				<p
@@ -65,15 +67,15 @@ const ImmersiveLines = memo(function ImmersiveLines({ lines }: { lines: LyricLin
 					data-state="future"
 					data-distance="5"
 					onClick={() => handleClick(line)}
-					className={`cursor-pointer leading-[1.18] tracking-[-0.03em] py-3 text-balance text-foreground transition-all duration-[380ms] ease-out
-						font-semibold text-[clamp(2rem,4.5vw,2.4rem)] opacity-35 hover:opacity-60
-						data-[state=past]:opacity-[0.18]
-						data-[state=active]:opacity-100 data-[state=active]:text-[clamp(2.6rem,6vw,3.5rem)]
-						data-[distance='3']:blur-[1px] data-[distance='4']:blur-[2px] data-[distance='5']:blur-[4px] data-[state=active]:!blur-0
+					className={`origin-left cursor-pointer py-3 text-balance font-semibold leading-[1.12] tracking-[-0.035em] text-foreground transition-[opacity,scale,filter] duration-500 ease-[cubic-bezier(0.2,0,0,1)]
+						scale-[0.92] text-[clamp(2rem,5vw,3.5rem)] opacity-55 hover:opacity-80
+						data-[state=past]:opacity-35
+						data-[state=active]:scale-100 data-[state=active]:opacity-100
+						data-[distance='3']:blur-[1px] data-[distance='4']:blur-[2px] data-[distance='5']:blur-[3px] data-[state=active]:!blur-0
 						${line.text === "" ? "h-6 py-0" : ""}
 					`}
 				>
-					{line.text || " "}
+					{line.text || " "}
 				</p>
 			))}
 		</div>
@@ -91,6 +93,9 @@ export function LyricsImmersive() {
 	const source = useLyricsStore((s) => s.source);
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
 	const duration = usePlayerStore((s) => s.duration);
+	const buffered = usePlayerStore((s) => s.buffered);
+	const audible = usePlayerStore((s) => s.isPlaying && !s.isBuffering);
+	const seed = useCoverSeed(currentTrack?.cover);
 
 	const [currentTime, setCurrentTime] = useState(usePlayerStore.getState().currentTime);
 	useEffect(() => {
@@ -124,14 +129,6 @@ export function LyricsImmersive() {
 	}, [open, setOpen]);
 
 	const totalDuration = duration || currentTrack?.duration || 0;
-	const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
-
-	const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-		if (totalDuration <= 0) return;
-		const rect = e.currentTarget.getBoundingClientRect();
-		const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-		usePlayerStore.getState().seek(pct * totalDuration);
-	};
 
 	return (
 		<AnimatePresence>
@@ -144,104 +141,90 @@ export function LyricsImmersive() {
 					transition={{ duration: 0.25 }}
 					role="dialog"
 					aria-label="Lyrics fullscreen"
-					className="fixed inset-0 z-[71] isolate bg-background text-foreground overflow-hidden"
+					className="cover-theme fixed inset-0 z-[71] isolate overflow-hidden bg-background text-foreground"
+					style={coverThemeStyle(seed)}
 				>
-					{/* Atmospheric backdrop */}
+					{/* Atmospheric backdrop: the artwork, hugely blurred, settling into the surface */}
 					{currentTrack.cover && (
 						<>
-							<div className="absolute -inset-[10%] opacity-40" aria-hidden>
-								<CoverImage
-									src={currentTrack.cover}
-									className="w-full h-full rounded-none blur-[120px] saturate-150 scale-110"
-								/>
+							<div className="absolute -inset-[10%] opacity-60" aria-hidden>
+								<CoverImage src={currentTrack.cover} className="h-full w-full scale-110 rounded-none blur-[110px] saturate-[1.6]" />
 							</div>
-							<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,var(--background)_85%)]" aria-hidden />
+							<div className="absolute inset-0 bg-gradient-to-b from-background/35 via-background/60 to-background/92" aria-hidden />
 						</>
 					)}
 
 					{/* Top bar */}
-					<div className="absolute top-0 left-0 right-0 z-10 flex items-center gap-4 px-5 sm:px-8 py-4 sm:py-5">
+					<div className="absolute left-0 right-0 top-0 z-10 flex items-center gap-4 px-5 py-4 sm:px-8 sm:py-5">
 						<CoverImage
 							src={currentTrack.cover}
-							className="h-11 w-11 shrink-0 rounded-md shadow-float"
+							className="size-12 shrink-0 rounded-[14px] shadow-[0_8px_20px_-6px_color-mix(in_oklch,var(--primary)_55%,transparent)]"
 						/>
-						<div className="flex-1 min-w-0">
-							<p className="truncate text-sm font-semibold tracking-tight">
-								{currentTrack.title}
-							</p>
-							<p className="mt-0.5 truncate text-xs text-muted-foreground">
-								{currentTrack.artist}
-							</p>
+						<div className="min-w-0 flex-1">
+							<p className="type-eyebrow text-primary">Lyrics</p>
+							<p className="truncate text-base font-semibold tracking-[-0.01em]">{currentTrack.title}</p>
+							<p className="truncate text-sm font-semibold text-muted-foreground">{currentTrack.artist}</p>
 						</div>
-						<div className="hidden sm:block rounded-full border border-border bg-background/60 px-3 py-1 font-mono text-xs tabular-nums text-muted-foreground">
+						<div className="hidden h-9 items-center rounded-full bg-surface-highest/45 px-3.5 text-xs font-semibold tabular-nums text-foreground/80 backdrop-blur-md sm:flex">
 							{formatTime(currentTime)} / {formatTime(totalDuration)}
 						</div>
 						<button
 							onClick={() => setOpen(false)}
 							aria-label="Close lyrics"
-							className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background/60 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
+							className="flex size-11 items-center justify-center rounded-full bg-surface-highest/45 text-foreground backdrop-blur-md transition-[background-color,scale] hover:bg-surface-highest/70 active:scale-90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
 						>
-							<X className="h-4 w-4" />
+							<X className="size-5" />
 						</button>
 					</div>
 
 					{/* Lyrics column */}
-					<div className="absolute inset-x-0 top-[88px] bottom-[88px] overflow-hidden">
+					<div className="absolute inset-x-0 bottom-[104px] top-[88px] overflow-hidden">
 						{isLoading ? (
 							<div className="flex h-full items-center justify-center">
-								<Spinner size={24} className="text-muted-foreground" />
+								<span className="flex size-14 items-center justify-center rounded-full bg-primary-container text-on-primary-container">
+									<Spinner size={22} />
+								</span>
 							</div>
 						) : error ? (
 							<div className="flex h-full items-center justify-center px-8">
-								<p className="text-sm text-muted-foreground text-center">
-									{error}
-								</p>
+								<p className="text-center text-xl font-semibold text-foreground/80">{error}</p>
 							</div>
 						) : syncedLines.length > 0 ? (
 							<ImmersiveLines lines={syncedLines} />
 						) : plainLyrics ? (
-							<div className="h-full overflow-y-auto overscroll-contain scrollbar-hide px-[8vw] py-[20vh]">
-								<pre className="whitespace-pre-wrap font-sans text-[clamp(1.25rem,2.5vw,1.6rem)] font-medium leading-relaxed text-foreground/80 text-balance">
+							<div className="mx-auto h-full max-w-5xl overflow-y-auto overscroll-contain px-[8vw] py-[20vh] scrollbar-hide lg:px-12">
+								<pre className="whitespace-pre-wrap text-balance font-sans text-[clamp(1.25rem,2.5vw,1.75rem)] font-semibold leading-relaxed text-foreground/85">
 									{plainLyrics}
 								</pre>
 							</div>
 						) : (
 							<div className="flex h-full items-center justify-center px-8">
-								<p className="text-sm text-muted-foreground">
-									No lyrics
-								</p>
+								<p className="text-xl font-semibold text-muted-foreground">No lyrics</p>
 							</div>
 						)}
 					</div>
 
-					{/* Bottom progress */}
-					<div className="absolute bottom-0 left-0 right-0 z-10 px-5 sm:px-8 pt-6 pb-5 bg-gradient-to-t from-background via-background/80 to-transparent">
-						<div className="flex items-center gap-4 mb-3">
-							{source && (
-								<span className="text-xs text-muted-foreground">
-									Source · {source}
+					{/* Bottom progress — the same living wave as Now Playing */}
+					<div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-background via-background/80 to-transparent px-5 pb-5 pt-6 sm:px-8">
+						<div className="mx-auto max-w-4xl">
+							<div className="mb-2 flex items-center gap-4">
+								{source && <span className="text-xs text-muted-foreground">Source · {source}</span>}
+								<span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+									<kbd className="kbd">Esc</kbd> to exit
 								</span>
-							)}
-							<span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-								<kbd className="kbd">Esc</kbd> to exit
-							</span>
-						</div>
-						<div
-							className="group relative h-1 cursor-pointer rounded-full bg-border transition-[height] hover:h-1.5 before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']"
-							onClick={handleSeek}
-						>
-							<div
-								className="absolute top-0 left-0 h-full rounded-full bg-foreground transition-[width] duration-100"
-								style={{ width: `${progress}%` }}
+							</div>
+							<WaveSeek
+								currentTime={currentTime}
+								duration={totalDuration}
+								buffered={buffered}
+								playing={audible}
+								onSeek={(t) => usePlayerStore.getState().seek(t)}
+								height={28}
+								stroke={4}
+								amplitude={3}
+								tone="primary"
+								trackClassName="text-foreground/15"
 							/>
-							<div
-								className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 size-3 rounded-full bg-foreground shadow-[0_0_0_3px_var(--background)] opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100 transition-[opacity,transform]"
-								style={{ left: `${progress}%` }}
-							/>
-						</div>
-						<div className="flex justify-between mt-2 font-mono text-[11px] tabular-nums text-muted-foreground">
-							<span>{formatTime(currentTime)}</span>
-							<span>{formatTime(totalDuration)}</span>
 						</div>
 					</div>
 				</motion.div>

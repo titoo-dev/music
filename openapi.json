@@ -1,0 +1,5623 @@
+{
+	"openapi": "3.0.3",
+	"info": {
+		"title": "Wavelet API",
+		"version": "1.0.0",
+		"description": "Music streaming / library API behind wavelet (Next.js on Vercel).\n\n## Response envelope\nEvery `/api/v1/*` JSON route returns `{ \"success\": true, \"data\": … }` or `{ \"success\": false, \"error\": { \"code\", \"message\" } }`.\nBranch on `error.code`, not on the message. `/api/auth/*` (better-auth) does NOT use this envelope.\n\n## Authentication\nbetter-auth session (Google only), accepted two ways:\n- **Bearer (native / Flutter)**: sign in with `POST /api/auth/sign-in/social` + Google `idToken`, read the `set-auth-token` response header, then send `Authorization: Bearer <token>` on every request — including the audio player's requests. Sessions last 30 days.\n- **Cookie (web)**: `__Secure-better-auth.session_token` (plus `__Secure-better-auth.session_data`, a 5-min signed cache).\nMany routes also need a connected Deezer account (`NO_DEEZER_ARL` → call `/api/v1/auth/login-arl`).\n\n## Ids\n`trackId`, `deezerAlbumId`, `deezerArtistId` are Deezer ids (as strings). `albumId` in `/library/albums/{albumId}` and playlist ids are internal cuids."
+	},
+	"servers": [
+		{
+			"url": "https://wavelet.titosy.dev",
+			"description": "Production"
+		},
+		{
+			"url": "http://localhost:3000",
+			"description": "Local dev (`npm run dev`)"
+		}
+	],
+	"tags": [
+		{
+			"name": "Auth (session)",
+			"description": "better-auth endpoints (not enveloped)"
+		},
+		{
+			"name": "Deezer account",
+			"description": "Connect / switch the Deezer account used for streaming"
+		},
+		{
+			"name": "Browse",
+			"description": "Raw Deezer content — works as guest"
+		},
+		{
+			"name": "Search",
+			"description": "Works as guest"
+		},
+		{
+			"name": "Library",
+			"description": "Liked tracks, saved albums, followed artists"
+		},
+		{
+			"name": "Playlists",
+			"description": "User playlists + Spotify import"
+		},
+		{
+			"name": "Recent plays",
+			"description": "Listening history (drives server-side file cache lifecycle)"
+		},
+		{
+			"name": "Lyrics",
+			"description": "Synced (LRC) and plain lyrics"
+		},
+		{
+			"name": "Shares",
+			"description": "Public track share links"
+		},
+		{
+			"name": "Streaming",
+			"description": "Audio playback endpoints"
+		},
+		{
+			"name": "Settings",
+			"description": "Engine settings and UI preferences"
+		}
+	],
+	"security": [
+		{
+			"bearerAuth": []
+		},
+		{
+			"sessionCookie": []
+		}
+	],
+	"paths": {
+		"/api/auth/sign-in/social": {
+			"post": {
+				"tags": [
+					"Auth (session)"
+				],
+				"operationId": "signInSocial",
+				"summary": "Sign in with Google (better-auth)",
+				"description": "Managed by better-auth (not the `{ success, data }` envelope). For Flutter, use the **idToken** flow: get a Google ID token with `google_sign_in` (with the web client ID as `serverClientId`), POST it here, read the `set-auth-token` response header and send it as `Authorization: Bearer <token>` on every subsequent call.",
+				"security": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SocialSignInInput"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Signed in (idToken) or redirect URL returned",
+						"headers": {
+							"set-auth-token": {
+								"description": "Session token for `Authorization: Bearer` (bearer plugin). Store it securely.",
+								"schema": {
+									"type": "string"
+								}
+							},
+							"Set-Cookie": {
+								"description": "`__Secure-better-auth.session_token` (+ `session_data` cache cookie)",
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SocialSignInResult"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Invalid provider / token"
+					},
+					"401": {
+						"description": "ID token rejected"
+					}
+				}
+			}
+		},
+		"/api/auth/get-session": {
+			"get": {
+				"tags": [
+					"Auth (session)"
+				],
+				"operationId": "getSession",
+				"summary": "Current better-auth session",
+				"description": "Returns `null` (JSON) when no valid session cookie is sent.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"responses": {
+					"200": {
+						"description": "Session or null",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"allOf": [
+										{
+											"$ref": "#/components/schemas/BetterAuthSession"
+										}
+									],
+									"nullable": true
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/auth/sign-out": {
+			"post": {
+				"tags": [
+					"Auth (session)"
+				],
+				"operationId": "signOut",
+				"summary": "Sign out (invalidate the session)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": false,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {}
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Signed out",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/auth/connect": {
+			"get": {
+				"tags": [
+					"Deezer account"
+				],
+				"operationId": "getConnectStatus",
+				"summary": "Bootstrap: session + Deezer status + app settings",
+				"description": "Call at app start. Works without auth (guest). When signed in, restores the Deezer session from the stored ARL (or the server's service ARL, which is then persisted for the user).",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConnectStatusEnvelope"
+								}
+							}
+						}
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/auth/login-arl": {
+			"post": {
+				"tags": [
+					"Deezer account"
+				],
+				"operationId": "loginDeezerArl",
+				"summary": "Connect a Deezer account with an ARL cookie",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"arl": {
+										"type": "string",
+										"description": "Deezer `arl` cookie value"
+									},
+									"child": {
+										"type": "integer",
+										"default": 0,
+										"description": "Child account index"
+									}
+								},
+								"required": [
+									"arl"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeezerLoginEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticatedOrDeezerLoginFailed"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"NOT_AUTHENTICATED",
+					"MISSING_ARL",
+					"LOGIN_FAILED",
+					"INTERNAL_ERROR"
+				]
+			}
+		},
+		"/api/v1/auth/login-email": {
+			"post": {
+				"tags": [
+					"Deezer account"
+				],
+				"operationId": "loginDeezerEmail",
+				"summary": "Connect a Deezer account with email/password",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"email": {
+										"type": "string",
+										"format": "email"
+									},
+									"password": {
+										"type": "string",
+										"format": "password"
+									}
+								},
+								"required": [
+									"email",
+									"password"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeezerLoginEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticatedOrDeezerLoginFailed"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"NOT_AUTHENTICATED",
+					"MISSING_CREDENTIALS",
+					"LOGIN_FAILED",
+					"INTERNAL_ERROR"
+				]
+			}
+		},
+		"/api/v1/auth/change-account": {
+			"post": {
+				"tags": [
+					"Deezer account"
+				],
+				"operationId": "changeDeezerAccount",
+				"summary": "Switch to another Deezer family/child account",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"child": {
+										"type": "integer",
+										"description": "Index in `childs`"
+									}
+								},
+								"required": [
+									"child"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ChangeAccountEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticatedOrDeezerLoginFailed"
+					},
+					"403": {
+						"$ref": "#/components/responses/NoDeezerArl"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_CHILD_INDEX",
+					"NOT_AUTHENTICATED",
+					"NO_DEEZER_ARL",
+					"DEEZER_LOGIN_FAILED"
+				]
+			}
+		},
+		"/api/v1/auth/logout": {
+			"post": {
+				"tags": [
+					"Deezer account"
+				],
+				"operationId": "logoutDeezer",
+				"summary": "Clear the in-memory Deezer session",
+				"description": "Does not delete the stored ARL nor the better-auth session (use `/api/auth/sign-out`).",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/MessageEnvelope"
+								}
+							}
+						}
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/content/home": {
+			"get": {
+				"tags": [
+					"Browse"
+				],
+				"operationId": "getHome",
+				"summary": "Deezer explore page (home feed)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeezerPageEnvelope"
+								}
+							}
+						}
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/NoDeezer"
+					}
+				}
+			}
+		},
+		"/api/v1/content/new-releases": {
+			"get": {
+				"tags": [
+					"Browse"
+				],
+				"operationId": "getNewReleases",
+				"summary": "Editorial new releases (100 max)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeezerApiListEnvelope"
+								}
+							}
+						}
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/NoDeezer"
+					}
+				}
+			}
+		},
+		"/api/v1/content/tracklist": {
+			"get": {
+				"tags": [
+					"Browse"
+				],
+				"operationId": "getTracklist",
+				"summary": "Album / playlist / artist page with tracks",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "query",
+						"required": true,
+						"description": "Deezer id",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "type",
+						"in": "query",
+						"required": true,
+						"description": "Entity type",
+						"schema": {
+							"type": "string",
+							"enum": [
+								"album",
+								"playlist",
+								"artist"
+							]
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeezerTracklistEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/NoDeezer"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_PARAMS",
+					"INVALID_TYPE",
+					"NO_DEEZER"
+				]
+			}
+		},
+		"/api/v1/search": {
+			"get": {
+				"tags": [
+					"Search"
+				],
+				"operationId": "search",
+				"summary": "Typed search (Deezer public API)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"parameters": [
+					{
+						"name": "term",
+						"in": "query",
+						"required": true,
+						"description": "Search query",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "type",
+						"in": "query",
+						"required": false,
+						"description": "Result type",
+						"schema": {
+							"type": "string",
+							"enum": [
+								"track",
+								"album",
+								"artist",
+								"playlist"
+							],
+							"default": "track"
+						}
+					},
+					{
+						"name": "start",
+						"in": "query",
+						"required": false,
+						"description": "Offset",
+						"schema": {
+							"type": "integer",
+							"default": 0
+						}
+					},
+					{
+						"name": "nb",
+						"in": "query",
+						"required": false,
+						"description": "Page size",
+						"schema": {
+							"type": "integer",
+							"default": 100
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeezerApiListEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/NoDeezer"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_TERM",
+					"INVALID_TYPE",
+					"NO_DEEZER"
+				]
+			}
+		},
+		"/api/v1/search/main": {
+			"get": {
+				"tags": [
+					"Search"
+				],
+				"operationId": "searchMain",
+				"summary": "Global search (all buckets, GW + API merged)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"parameters": [
+					{
+						"name": "term",
+						"in": "query",
+						"required": true,
+						"description": "Search query",
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeezerSearchMainEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/NoDeezer"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_TERM",
+					"NO_DEEZER"
+				]
+			}
+		},
+		"/api/v1/search/album": {
+			"get": {
+				"tags": [
+					"Search"
+				],
+				"operationId": "searchAlbum",
+				"summary": "Album search",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"parameters": [
+					{
+						"name": "term",
+						"in": "query",
+						"required": true,
+						"description": "Search query",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "start",
+						"in": "query",
+						"required": false,
+						"description": "Offset",
+						"schema": {
+							"type": "integer",
+							"default": 0
+						}
+					},
+					{
+						"name": "nb",
+						"in": "query",
+						"required": false,
+						"description": "Page size",
+						"schema": {
+							"type": "integer",
+							"default": 100
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeezerApiListEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/NoDeezer"
+					}
+				}
+			}
+		},
+		"/api/v1/search/suggest": {
+			"get": {
+				"tags": [
+					"Search"
+				],
+				"operationId": "searchSuggest",
+				"summary": "Autocomplete suggestions (normalized)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"parameters": [
+					{
+						"name": "term",
+						"in": "query",
+						"required": true,
+						"description": "Search query",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"description": "Per-bucket limit (clamped 1–10)",
+						"schema": {
+							"type": "integer",
+							"default": 5,
+							"minimum": 1,
+							"maximum": 10
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SuggestionsEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"503": {
+						"$ref": "#/components/responses/NoDeezer"
+					}
+				}
+			}
+		},
+		"/api/v1/library/tracks": {
+			"get": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "listSavedTracks",
+				"summary": "Liked tracks (most recent first)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"description": "Page size (0 / invalid → 100)",
+						"schema": {
+							"type": "integer",
+							"default": 100,
+							"minimum": 1,
+							"maximum": 500
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"description": "Offset",
+						"schema": {
+							"type": "integer",
+							"default": 0,
+							"minimum": 0
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SavedTrackListEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "saveTrack",
+				"summary": "Like a track (upsert)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/TrackMetaInput"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SavedTrackEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"INVALID_BODY"
+				]
+			}
+		},
+		"/api/v1/library/tracks/{trackId}": {
+			"parameters": [
+				{
+					"name": "trackId",
+					"in": "path",
+					"required": true,
+					"description": "Deezer track id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "isTrackSaved",
+				"summary": "Is this track liked?",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SavedFlagEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "unsaveTrack",
+				"summary": "Unlike a track (idempotent)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UnsavedEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/library/albums": {
+			"get": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "listSavedAlbums",
+				"summary": "Saved albums",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AlbumListEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "saveAlbum",
+				"summary": "Save an album with its tracklist (upsert, re-syncs tracks)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SaveAlbumInput"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SavedAlbumEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"INVALID_BODY"
+				]
+			}
+		},
+		"/api/v1/library/albums/{albumId}": {
+			"parameters": [
+				{
+					"name": "albumId",
+					"in": "path",
+					"required": true,
+					"description": "Internal Album.id (cuid), NOT the Deezer album id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "getSavedAlbum",
+				"summary": "Saved album with tracklist",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AlbumWithTracksEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "unsaveAlbum",
+				"summary": "Remove a saved album",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UnsavedEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/library/artists": {
+			"get": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "listFollowedArtists",
+				"summary": "Followed artists",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FollowedArtistListEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "followArtist",
+				"summary": "Follow an artist (upsert)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/FollowArtistInput"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FollowedArtistEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"INVALID_BODY"
+				]
+			}
+		},
+		"/api/v1/library/artists/{deezerArtistId}": {
+			"parameters": [
+				{
+					"name": "deezerArtistId",
+					"in": "path",
+					"required": true,
+					"description": "Deezer artist id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"delete": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "unfollowArtist",
+				"summary": "Unfollow an artist (idempotent)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UnfollowedEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/library/status": {
+			"post": {
+				"tags": [
+					"Library"
+				],
+				"operationId": "getLibraryStatus",
+				"summary": "Batch: which of these tracks/albums are saved?",
+				"description": "Non-array `trackIds` / `albumIds` are silently treated as `[]`.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/LibraryStatusInput"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/LibraryStatusEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/playlists": {
+			"get": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "listPlaylists",
+				"summary": "User playlists (most recently updated first)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "trackId",
+						"in": "query",
+						"required": false,
+						"description": "If set, each playlist gets `containsTrack`",
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PlaylistSummaryListEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "createPlaylist",
+				"summary": "Create a playlist",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreatePlaylistInput"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PlaylistEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_TITLE"
+				]
+			}
+		},
+		"/api/v1/playlists/{id}": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"description": "Playlist id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "getPlaylist",
+				"summary": "Playlist with tracks (ordered by position)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PlaylistWithTracksEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "updatePlaylist",
+				"summary": "Rename / edit description",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdatePlaylistInput"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PlaylistEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"delete": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "deletePlaylist",
+				"summary": "Delete a playlist",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeletedEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/playlists/{id}/tracks": {
+			"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"description": "Playlist id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"post": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "addPlaylistTracks",
+				"summary": "Append track(s) (duplicates skipped)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"tracks": {
+										"type": "array",
+										"items": {
+											"$ref": "#/components/schemas/PlaylistTrackInput"
+										},
+										"minItems": 1
+									}
+								},
+								"required": [
+									"tracks"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AddedEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_TRACKS",
+					"NOT_FOUND"
+				]
+			},
+			"patch": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "reorderPlaylistTracks",
+				"summary": "Reorder tracks",
+				"description": "`trackIds` must contain exactly the playlist's current trackIds in the new order.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"trackIds": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"required": [
+									"trackIds"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ReorderedEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_TRACK_IDS",
+					"REORDER_LENGTH_MISMATCH",
+					"REORDER_DUPLICATE_TRACK",
+					"REORDER_UNKNOWN_TRACK"
+				]
+			},
+			"delete": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "removePlaylistTracks",
+				"summary": "Remove track(s)",
+				"description": "⚠ DELETE with a JSON body. Make sure your HTTP client sends it (Dio does with `data:`).",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"trackIds": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"minItems": 1
+									}
+								},
+								"required": [
+									"trackIds"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RemovedEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_TRACK_IDS",
+					"NOT_FOUND"
+				]
+			}
+		},
+		"/api/v1/playlists/import/spotify": {
+			"post": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "importSpotifyPlaylist",
+				"summary": "Import a Spotify playlist (matched to Deezer, max 500 tracks)",
+				"description": "Synchronous; can take tens of seconds on large playlists — use a long client timeout.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"url": {
+										"type": "string",
+										"description": "Spotify playlist URL, URI or id",
+										"example": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+									}
+								},
+								"required": [
+									"url"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SpotifyImportEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticatedOrDeezerLoginFailed"
+					},
+					"403": {
+						"$ref": "#/components/responses/NoDeezerArl"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/RateLimited"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"502": {
+						"$ref": "#/components/responses/UpstreamError"
+					},
+					"503": {
+						"$ref": "#/components/responses/ServiceUnavailable"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_URL",
+					"INVALID_URL",
+					"EMPTY_PLAYLIST",
+					"SPOTIFY_NOT_CONFIGURED",
+					"SPOTIFY_NOT_FOUND",
+					"SPOTIFY_FORBIDDEN",
+					"SPOTIFY_RATE_LIMITED",
+					"SPOTIFY_ERROR",
+					"NO_DEEZER_ARL",
+					"DEEZER_LOGIN_FAILED"
+				]
+			}
+		},
+		"/api/v1/preferences": {
+			"get": {
+				"tags": [
+					"Settings"
+				],
+				"operationId": "getPreferences",
+				"summary": "UI preferences",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserPreferencesEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"patch": {
+				"tags": [
+					"Settings"
+				],
+				"operationId": "updatePreferences",
+				"summary": "Merge UI preferences (unknown keys → 400)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UserPreferences"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserPreferencesEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"INVALID_KEY"
+				]
+			}
+		},
+		"/api/v1/settings": {
+			"get": {
+				"tags": [
+					"Settings"
+				],
+				"operationId": "getSettings",
+				"summary": "Engine settings (per-user overrides merged over global)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SettingsBundleEnvelope"
+								}
+							}
+						}
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"Settings"
+				],
+				"operationId": "saveSettings",
+				"summary": "Save engine settings",
+				"description": "`settings` is stored per-user (replaces the previous object) when authenticated. `spotifySettings` is global.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"settings": {
+										"$ref": "#/components/schemas/Settings"
+									},
+									"spotifySettings": {
+										"type": "object",
+										"additionalProperties": true,
+										"description": "Spotify plugin settings"
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SettingsBundleEnvelope"
+								}
+							}
+						}
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/settings/quality": {
+			"get": {
+				"tags": [
+					"Settings"
+				],
+				"operationId": "getStreamingQuality",
+				"summary": "Server-wide streaming quality (maxBitrate)",
+				"description": "The one `maxBitrate` every stream uses (1 = MP3 128, 3 = MP3 320, 9 = FLAC). Per-user `settings.maxBitrate` is not used for streaming.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					},
+					{}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StreamingQualityEnvelope"
+								}
+							}
+						}
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"Settings"
+				],
+				"operationId": "setStreamingQuality",
+				"summary": "Change the server-wide streaming quality",
+				"description": "Applies to every listener. Tracks already cached keep the bitrate they were stored in.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"maxBitrate": {
+										"type": "integer",
+										"enum": [
+											1,
+											3,
+											9
+										]
+									}
+								},
+								"required": [
+									"maxBitrate"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StreamingQualityEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"INVALID_BITRATE",
+					"INVALID_BODY"
+				]
+			}
+		},
+		"/api/v1/recent-plays": {
+			"get": {
+				"tags": [
+					"Recent plays"
+				],
+				"operationId": "listRecentPlays",
+				"summary": "Listening history (most recent first, cap 100)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"description": "Page size (0 / invalid → 50)",
+						"schema": {
+							"type": "integer",
+							"default": 50,
+							"minimum": 1,
+							"maximum": 100
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RecentPlayListEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"Recent plays"
+				],
+				"operationId": "logRecentPlay",
+				"summary": "Log a play — call after 30 s of continuous playback",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RecentPlayInput"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/LoggedEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"INVALID_BODY"
+				]
+			}
+		},
+		"/api/v1/recent-plays/{trackId}/skip": {
+			"parameters": [
+				{
+					"name": "trackId",
+					"in": "path",
+					"required": true,
+					"description": "Deezer track id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"post": {
+				"tags": [
+					"Recent plays"
+				],
+				"operationId": "reportSkip",
+				"summary": "Report a skip before 30 s (lets the server free the cached file)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SkipEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/lyrics/{trackId}": {
+			"parameters": [
+				{
+					"name": "trackId",
+					"in": "path",
+					"required": true,
+					"description": "Deezer track id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"tags": [
+					"Lyrics"
+				],
+				"operationId": "getLyrics",
+				"summary": "Lyrics (LRCLIB first, Deezer fallback)",
+				"description": "Pass title/artist when the track is not in the library nor recent plays. No lyrics → 200 with `source: null`.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "title",
+						"in": "query",
+						"required": false,
+						"description": "Track title",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "artist",
+						"in": "query",
+						"required": false,
+						"description": "Artist name",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "album",
+						"in": "query",
+						"required": false,
+						"description": "Album title",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "duration",
+						"in": "query",
+						"required": false,
+						"description": "Duration in seconds (improves matching)",
+						"schema": {
+							"type": "integer"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/LyricsEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_METADATA"
+				]
+			}
+		},
+		"/api/v1/shares": {
+			"get": {
+				"tags": [
+					"Shares"
+				],
+				"operationId": "listShares",
+				"summary": "My share links",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SharedTrackListEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"Shares"
+				],
+				"operationId": "createShare",
+				"summary": "Create (or reuse) a public share link for a track",
+				"description": "Returns 200 with the existing share if one already exists for this track, 201 otherwise. Public page: `https://wavelet.titosy.dev/share/t/{shareId}`.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateShareInput"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Existing share reused",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SharedTrackEnvelope"
+								}
+							}
+						}
+					},
+					"201": {
+						"description": "Share created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SharedTrackEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_TRACK_ID"
+				]
+			}
+		},
+		"/api/v1/shares/{shareId}": {
+			"parameters": [
+				{
+					"name": "shareId",
+					"in": "path",
+					"required": true,
+					"description": "Public share id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"tags": [
+					"Shares"
+				],
+				"operationId": "getShare",
+				"summary": "Public share metadata (no auth)",
+				"security": [],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublicShareEnvelope"
+								}
+							}
+						}
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"410": {
+						"$ref": "#/components/responses/Gone"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"NOT_FOUND",
+					"EXPIRED"
+				]
+			},
+			"delete": {
+				"tags": [
+					"Shares"
+				],
+				"operationId": "deleteShare",
+				"summary": "Revoke a share link (owner only)",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeletedEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/shares/{shareId}/stream": {
+			"parameters": [
+				{
+					"name": "shareId",
+					"in": "path",
+					"required": true,
+					"description": "Public share id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"tags": [
+					"Shares",
+					"Streaming"
+				],
+				"operationId": "streamShare",
+				"summary": "Public audio stream of a shared track (no auth)",
+				"description": "Range supported when served from cache (206); live fallback has `Accept-Ranges: none`. Each call increments the play counter.",
+				"security": [],
+				"parameters": [
+					{
+						"name": "Range",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"example": "bytes=0-"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Full audio body",
+						"content": {
+							"audio/mpeg": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							},
+							"audio/flac": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							}
+						}
+					},
+					"206": {
+						"description": "Partial content (cached file)",
+						"content": {
+							"audio/mpeg": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							},
+							"audio/flac": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							}
+						}
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"410": {
+						"$ref": "#/components/responses/Gone"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"NOT_FOUND",
+					"EXPIRED",
+					"SHARE_OWNER_OFFLINE",
+					"STORAGE_UNAVAILABLE"
+				]
+			}
+		},
+		"/api/v1/stream-url/{trackId}": {
+			"parameters": [
+				{
+					"name": "trackId",
+					"in": "path",
+					"required": true,
+					"description": "Deezer track id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"tags": [
+					"Streaming"
+				],
+				"operationId": "getStreamUrl",
+				"summary": "Step 1 — presigned direct URL if the track is cached",
+				"description": "Recommended playback flow:\n1. `GET /stream-url/{id}` → if `url` is set, play it directly (CDN, Range-capable, ~15 min validity).\n2. Otherwise play `GET /stream-progressive/{id}` (live from Deezer, persisted to Blob in the background).\n`/stream/{id}` is the same-origin proxy for cached files.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StreamUrlEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/stream/{trackId}": {
+			"parameters": [
+				{
+					"name": "trackId",
+					"in": "path",
+					"required": true,
+					"description": "Deezer track id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"tags": [
+					"Streaming"
+				],
+				"operationId": "streamCached",
+				"summary": "Stream a cached track (Range supported)",
+				"description": "Cache miss / storage down → 302 to `/api/v1/stream-progressive/{trackId}`. The audio player must follow redirects and keep sending the session cookie.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "Range",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"example": "bytes=0-"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Full audio body",
+						"content": {
+							"audio/mpeg": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							},
+							"audio/flac": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							}
+						},
+						"headers": {
+							"Accept-Ranges": {
+								"schema": {
+									"type": "string",
+									"enum": [
+										"bytes"
+									]
+								}
+							}
+						}
+					},
+					"206": {
+						"description": "Partial content",
+						"content": {
+							"audio/mpeg": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							},
+							"audio/flac": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							}
+						},
+						"headers": {
+							"Content-Range": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"302": {
+						"description": "Not cached → redirect to /stream-progressive",
+						"headers": {
+							"Location": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		},
+		"/api/v1/stream-progressive/{trackId}": {
+			"parameters": [
+				{
+					"name": "trackId",
+					"in": "path",
+					"required": true,
+					"description": "Deezer track id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"tags": [
+					"Streaming"
+				],
+				"operationId": "streamProgressive",
+				"summary": "Live stream from Deezer (decrypted on the fly, persisted in background)",
+				"description": "No Range support (`Accept-Ranges: none`) — seeking beyond the buffer requires restarting the stream. Already cached → 302 to `/api/v1/stream/{trackId}`.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "preview",
+						"in": "query",
+						"required": false,
+						"description": "Prefetch mode: no persistence, no download lock",
+						"schema": {
+							"type": "string",
+							"enum": [
+								"1"
+							]
+						}
+					},
+					{
+						"name": "head",
+						"in": "query",
+						"required": false,
+						"description": "With preview=1: cap response at ~64 KB",
+						"schema": {
+							"type": "string",
+							"enum": [
+								"1"
+							]
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Audio body (chunked or with Content-Length)",
+						"content": {
+							"audio/mpeg": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							},
+							"audio/flac": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							}
+						}
+					},
+					"302": {
+						"description": "Already cached → redirect to /stream",
+						"headers": {
+							"Location": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticatedOrDeezerLoginFailed"
+					},
+					"403": {
+						"$ref": "#/components/responses/NoDeezerArl"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"NO_DEEZER_ARL",
+					"DEEZER_LOGIN_FAILED",
+					"APP_NOT_INITIALIZED",
+					"STORAGE_UNAVAILABLE"
+				]
+			}
+		},
+		"/api/v1/stream-warm/{trackId}": {
+			"parameters": [
+				{
+					"name": "trackId",
+					"in": "path",
+					"required": true,
+					"description": "Deezer track id",
+					"schema": {
+						"type": "string"
+					}
+				}
+			],
+			"get": {
+				"tags": [
+					"Streaming"
+				],
+				"operationId": "warmStream",
+				"summary": "Prefetch Deezer metadata so the next play starts faster",
+				"description": "Fire-and-forget, always 204 on success. Call when a track is about to be played (e.g. next in queue).",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Accepted (no body)"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticatedOrDeezerLoginFailed"
+					},
+					"403": {
+						"$ref": "#/components/responses/NoDeezerArl"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				}
+			}
+		}
+	},
+	"components": {
+		"securitySchemes": {
+			"bearerAuth": {
+				"type": "http",
+				"scheme": "bearer",
+				"description": "Session token from the `set-auth-token` header returned by `/api/auth/sign-in/social`."
+			},
+			"sessionCookie": {
+				"type": "apiKey",
+				"in": "cookie",
+				"name": "__Secure-better-auth.session_token",
+				"description": "better-auth session cookie (`better-auth.session_token` on http://localhost)."
+			}
+		},
+		"responses": {
+			"BadRequest": {
+				"description": "Invalid input",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"NotAuthenticated": {
+				"description": "`NOT_AUTHENTICATED` — no / expired session cookie",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"NotAuthenticatedOrDeezerLoginFailed": {
+				"description": "`NOT_AUTHENTICATED`, `DEEZER_LOGIN_FAILED` or `LOGIN_FAILED`",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"NoDeezerArl": {
+				"description": "`NO_DEEZER_ARL` — user has no Deezer account connected (send them to login-arl)",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"Forbidden": {
+				"description": "Forbidden",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"NotFound": {
+				"description": "`NOT_FOUND`",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"Gone": {
+				"description": "`EXPIRED` or `SHARE_OWNER_OFFLINE`",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"RateLimited": {
+				"description": "Upstream rate limit",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"UpstreamError": {
+				"description": "Upstream (Spotify) error",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"ServiceUnavailable": {
+				"description": "Service not configured",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"NoDeezer": {
+				"description": "`NO_DEEZER` — no user nor service Deezer session available",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"InternalError": {
+				"description": "`INTERNAL_ERROR`, `AUTH_ERROR`, `DEEZER_ERROR` or `APP_NOT_INITIALIZED`",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			}
+		},
+		"schemas": {
+			"ErrorResponse": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							false
+						]
+					},
+					"error": {
+						"type": "object",
+						"properties": {
+							"code": {
+								"type": "string",
+								"description": "Machine-readable error code (see `x-error-codes`).",
+								"example": "NOT_AUTHENTICATED"
+							},
+							"message": {
+								"type": "string",
+								"example": "Please sign in to continue."
+							}
+						},
+						"required": [
+							"code",
+							"message"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"error"
+				]
+			},
+			"AuthUser": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"email": {
+						"type": "string",
+						"format": "email"
+					},
+					"image": {
+						"type": "string",
+						"nullable": true,
+						"format": "uri"
+					}
+				},
+				"required": [
+					"id",
+					"name",
+					"email"
+				]
+			},
+			"DeezerUser": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"oneOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "string"
+							}
+						],
+						"description": "Deezer USER_ID"
+					},
+					"name": {
+						"type": "string"
+					},
+					"picture": {
+						"type": "string",
+						"description": "Deezer picture hash (build URL via e-cdns-images.dzcdn.net/images/user/{hash}/...)"
+					},
+					"license_token": {
+						"type": "string"
+					},
+					"can_stream_hq": {
+						"type": "boolean"
+					},
+					"can_stream_lossless": {
+						"type": "boolean"
+					},
+					"country": {
+						"type": "string"
+					},
+					"language": {
+						"type": "string"
+					},
+					"loved_tracks": {
+						"oneOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "string"
+							}
+						],
+						"description": "Loved-tracks playlist id (may be absent)"
+					}
+				},
+				"description": "Deezer may send extra keys; they are ignored."
+			},
+			"DeezerLoginResult": {
+				"type": "object",
+				"properties": {
+					"user": {
+						"$ref": "#/components/schemas/DeezerUser"
+					},
+					"childs": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/DeezerUser"
+						},
+						"description": "Family / child accounts"
+					},
+					"currentChild": {
+						"type": "integer",
+						"description": "Index of the selected account in `childs`"
+					},
+					"hasMultipleAccounts": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"user",
+					"childs",
+					"currentChild",
+					"hasMultipleAccounts"
+				]
+			},
+			"ChangeAccountResult": {
+				"type": "object",
+				"properties": {
+					"user": {
+						"$ref": "#/components/schemas/DeezerUser"
+					},
+					"selectedAccount": {
+						"type": "integer"
+					},
+					"childs": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/DeezerUser"
+						}
+					}
+				},
+				"required": [
+					"user",
+					"selectedAccount",
+					"childs"
+				]
+			},
+			"Settings": {
+				"type": "object",
+				"additionalProperties": true,
+				"description": "Wavelet engine settings (bitrate, path templates, tagging, …). Key example: `maxBitrate` (1 = MP3 128, 3 = MP3 320, 9 = FLAC). Shape mirrors `src/lib/wavelet/types/Settings.ts`."
+			},
+			"SettingsBundle": {
+				"type": "object",
+				"properties": {
+					"settings": {
+						"$ref": "#/components/schemas/Settings"
+					},
+					"defaultSettings": {
+						"$ref": "#/components/schemas/Settings"
+					},
+					"spotifySettings": {
+						"type": "object",
+						"additionalProperties": true,
+						"description": "Spotify plugin settings (may be absent).",
+						"nullable": true
+					}
+				},
+				"required": [
+					"settings",
+					"defaultSettings"
+				]
+			},
+			"ConnectStatus": {
+				"type": "object",
+				"properties": {
+					"authenticated": {
+						"type": "boolean",
+						"description": "A better-auth session is present"
+					},
+					"user": {
+						"type": "object",
+						"allOf": [
+							{
+								"$ref": "#/components/schemas/AuthUser"
+							}
+						],
+						"nullable": true
+					},
+					"deezerLoggedIn": {
+						"type": "boolean"
+					},
+					"deezerUser": {
+						"type": "object",
+						"allOf": [
+							{
+								"$ref": "#/components/schemas/DeezerUser"
+							}
+						],
+						"nullable": true
+					},
+					"deezerAvailable": {
+						"type": "string",
+						"enum": [
+							"yes",
+							"no",
+							"no-network"
+						]
+					},
+					"settings": {
+						"type": "object",
+						"additionalProperties": true,
+						"description": "Same shape as SettingsBundle, or `{}` if the app is not initialized."
+					}
+				},
+				"required": [
+					"authenticated",
+					"user",
+					"deezerLoggedIn",
+					"deezerUser",
+					"deezerAvailable",
+					"settings"
+				]
+			},
+			"MessageResult": {
+				"type": "object",
+				"properties": {
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"message"
+				]
+			},
+			"DeezerPage": {
+				"type": "object",
+				"additionalProperties": true,
+				"description": "Raw Deezer GW page payload (`gw.get_page`). Contains `sections[]` with `items[]`."
+			},
+			"DeezerApiList": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"additionalProperties": true,
+							"description": "Deezer public API object (track / album / artist / playlist)"
+						}
+					},
+					"total": {
+						"type": "integer"
+					},
+					"next": {
+						"type": "string",
+						"format": "uri"
+					},
+					"prev": {
+						"type": "string",
+						"format": "uri"
+					}
+				},
+				"description": "Paginated Deezer public API list (api.deezer.com)."
+			},
+			"DeezerTracklist": {
+				"type": "object",
+				"additionalProperties": true,
+				"description": "Raw Deezer GW payload. `type=album` → album page + `tracks[]`; `type=playlist` → playlist page + `tracks[]`; `type=artist` → artist page + `topTracks[]` + `discography`. GW objects use uppercase keys (SNG_ID, ALB_ID, ART_ID, …)."
+			},
+			"DeezerSearchMain": {
+				"type": "object",
+				"additionalProperties": true,
+				"description": "Merged GW search payload with `TRACK`, `ALBUM`, `ARTIST`, `PLAYLIST`, `TOP_RESULT`, `ORDER`, … Each bucket is `{ data: [], count }`. Items are GW objects (uppercase keys) possibly mixed with public-API objects (lowercase keys) appended for extra coverage."
+			},
+			"SuggestTrack": {
+				"type": "object",
+				"properties": {
+					"source": {
+						"type": "string",
+						"enum": [
+							"deezer"
+						]
+					},
+					"sourceId": {
+						"type": "string"
+					},
+					"deezerTrackId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artists": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"artistId": {
+						"type": "string",
+						"nullable": true
+					},
+					"album": {
+						"type": "string"
+					},
+					"albumId": {
+						"type": "string",
+						"nullable": true
+					},
+					"durationMs": {
+						"type": "integer"
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true,
+						"format": "uri"
+					}
+				},
+				"required": [
+					"source",
+					"sourceId",
+					"deezerTrackId",
+					"title",
+					"artists",
+					"artistId",
+					"album",
+					"albumId",
+					"durationMs",
+					"coverUrl"
+				]
+			},
+			"SuggestAlbum": {
+				"type": "object",
+				"properties": {
+					"source": {
+						"type": "string",
+						"enum": [
+							"deezer"
+						]
+					},
+					"sourceId": {
+						"type": "string"
+					},
+					"deezerAlbumId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artists": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true,
+						"format": "uri"
+					}
+				},
+				"required": [
+					"source",
+					"sourceId",
+					"deezerAlbumId",
+					"title",
+					"artists",
+					"coverUrl"
+				]
+			},
+			"SuggestArtist": {
+				"type": "object",
+				"properties": {
+					"source": {
+						"type": "string",
+						"enum": [
+							"deezer"
+						]
+					},
+					"sourceId": {
+						"type": "string"
+					},
+					"deezerArtistId": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"imageUrl": {
+						"type": "string",
+						"nullable": true,
+						"format": "uri"
+					}
+				},
+				"required": [
+					"source",
+					"sourceId",
+					"deezerArtistId",
+					"name",
+					"imageUrl"
+				]
+			},
+			"Suggestions": {
+				"type": "object",
+				"properties": {
+					"tracks": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/SuggestTrack"
+						}
+					},
+					"albums": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/SuggestAlbum"
+						}
+					},
+					"artists": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/SuggestArtist"
+						}
+					},
+					"source": {
+						"type": "string",
+						"enum": [
+							"deezer"
+						]
+					}
+				},
+				"required": [
+					"tracks",
+					"albums",
+					"artists",
+					"source"
+				]
+			},
+			"TrackMetaInput": {
+				"type": "object",
+				"properties": {
+					"trackId": {
+						"type": "string",
+						"description": "Deezer track id",
+						"example": "3135556"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"album": {
+						"type": "string",
+						"nullable": true
+					},
+					"albumId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Deezer album id"
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true,
+						"format": "uri"
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true,
+						"description": "Seconds"
+					}
+				},
+				"required": [
+					"trackId",
+					"title",
+					"artist"
+				]
+			},
+			"SavedTrack": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"userId": {
+						"type": "string"
+					},
+					"trackId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"album": {
+						"type": "string",
+						"nullable": true
+					},
+					"albumId": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true
+					},
+					"savedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"userId",
+					"trackId",
+					"title",
+					"artist",
+					"album",
+					"albumId",
+					"coverUrl",
+					"duration",
+					"savedAt"
+				]
+			},
+			"AlbumTrackInput": {
+				"type": "object",
+				"properties": {
+					"trackId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true,
+						"description": "Seconds"
+					},
+					"trackNumber": {
+						"type": "integer",
+						"nullable": true
+					}
+				},
+				"required": [
+					"trackId"
+				]
+			},
+			"SaveAlbumInput": {
+				"type": "object",
+				"properties": {
+					"deezerAlbumId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true,
+						"format": "uri"
+					},
+					"tracks": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/AlbumTrackInput"
+						}
+					}
+				},
+				"required": [
+					"deezerAlbumId",
+					"title",
+					"artist",
+					"tracks"
+				]
+			},
+			"Album": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"description": "Internal id (cuid) — use this for /library/albums/{albumId}"
+					},
+					"userId": {
+						"type": "string"
+					},
+					"deezerAlbumId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"trackCount": {
+						"type": "integer"
+					},
+					"savedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"userId",
+					"deezerAlbumId",
+					"title",
+					"artist",
+					"coverUrl",
+					"trackCount",
+					"savedAt"
+				]
+			},
+			"AlbumTrack": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"albumId": {
+						"type": "string"
+					},
+					"trackId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true
+					},
+					"trackNumber": {
+						"type": "integer",
+						"nullable": true
+					}
+				},
+				"required": [
+					"id",
+					"albumId",
+					"trackId",
+					"title",
+					"artist",
+					"coverUrl",
+					"duration",
+					"trackNumber"
+				]
+			},
+			"AlbumWithTracks": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/Album"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"tracks": {
+								"type": "array",
+								"items": {
+									"$ref": "#/components/schemas/AlbumTrack"
+								}
+							}
+						},
+						"required": [
+							"tracks"
+						]
+					}
+				]
+			},
+			"FollowArtistInput": {
+				"type": "object",
+				"properties": {
+					"deezerArtistId": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"pictureUrl": {
+						"type": "string",
+						"nullable": true,
+						"format": "uri"
+					}
+				},
+				"required": [
+					"deezerArtistId",
+					"name"
+				]
+			},
+			"FollowedArtist": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"userId": {
+						"type": "string"
+					},
+					"deezerArtistId": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"pictureUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"followedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"userId",
+					"deezerArtistId",
+					"name",
+					"pictureUrl",
+					"followedAt"
+				]
+			},
+			"LibraryStatusInput": {
+				"type": "object",
+				"properties": {
+					"trackIds": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Deezer track ids to check"
+					},
+					"albumIds": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Deezer album ids to check"
+					}
+				}
+			},
+			"LibraryStatus": {
+				"type": "object",
+				"properties": {
+					"tracks": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Subset of trackIds that are saved"
+					},
+					"albums": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Subset of albumIds that are saved"
+					}
+				},
+				"required": [
+					"tracks",
+					"albums"
+				]
+			},
+			"Playlist": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"userId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"isPublic": {
+						"type": "boolean"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"userId",
+					"title",
+					"description",
+					"coverUrl",
+					"isPublic",
+					"createdAt",
+					"updatedAt"
+				]
+			},
+			"PlaylistSummary": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/Playlist"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"_count": {
+								"type": "object",
+								"properties": {
+									"tracks": {
+										"type": "integer"
+									}
+								},
+								"required": [
+									"tracks"
+								]
+							},
+							"covers": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "Cover URLs of the first 4 tracks"
+							},
+							"containsTrack": {
+								"type": "boolean",
+								"description": "Only present when `?trackId=` is passed"
+							}
+						},
+						"required": [
+							"_count",
+							"covers"
+						]
+					}
+				]
+			},
+			"PlaylistTrack": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"playlistId": {
+						"type": "string"
+					},
+					"trackId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"album": {
+						"type": "string",
+						"nullable": true
+					},
+					"albumId": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true
+					},
+					"position": {
+						"type": "integer"
+					},
+					"addedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"playlistId",
+					"trackId",
+					"title",
+					"artist",
+					"album",
+					"albumId",
+					"coverUrl",
+					"duration",
+					"position",
+					"addedAt"
+				]
+			},
+			"PlaylistWithTracks": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/Playlist"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"tracks": {
+								"type": "array",
+								"items": {
+									"$ref": "#/components/schemas/PlaylistTrack"
+								}
+							}
+						},
+						"required": [
+							"tracks"
+						]
+					}
+				]
+			},
+			"CreatePlaylistInput": {
+				"type": "object",
+				"properties": {
+					"title": {
+						"type": "string",
+						"minLength": 1
+					},
+					"description": {
+						"type": "string",
+						"nullable": true
+					}
+				},
+				"required": [
+					"title"
+				]
+			},
+			"UpdatePlaylistInput": {
+				"type": "object",
+				"properties": {
+					"title": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string",
+						"nullable": true
+					}
+				}
+			},
+			"PlaylistTrackInput": {
+				"type": "object",
+				"properties": {
+					"trackId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"album": {
+						"type": "string",
+						"nullable": true
+					},
+					"albumId": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true
+					}
+				},
+				"required": [
+					"trackId"
+				]
+			},
+			"SpotifyImportReport": {
+				"type": "object",
+				"properties": {
+					"totalSpotify": {
+						"type": "integer"
+					},
+					"processed": {
+						"type": "integer"
+					},
+					"matched": {
+						"type": "integer"
+					},
+					"notFound": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"spotifyId": {
+									"type": "string"
+								},
+								"title": {
+									"type": "string"
+								},
+								"artist": {
+									"type": "string"
+								},
+								"album": {
+									"type": "string"
+								},
+								"reason": {
+									"type": "string"
+								}
+							},
+							"required": [
+								"spotifyId",
+								"title",
+								"artist",
+								"album",
+								"reason"
+							]
+						}
+					},
+					"truncated": {
+						"type": "boolean",
+						"description": "true when the playlist had more than 500 tracks"
+					}
+				},
+				"required": [
+					"totalSpotify",
+					"processed",
+					"matched",
+					"notFound",
+					"truncated"
+				]
+			},
+			"SpotifyImportResult": {
+				"type": "object",
+				"properties": {
+					"playlist": {
+						"type": "object",
+						"allOf": [
+							{
+								"$ref": "#/components/schemas/Playlist"
+							}
+						],
+						"nullable": true,
+						"description": "null when no track matched"
+					},
+					"report": {
+						"$ref": "#/components/schemas/SpotifyImportReport"
+					}
+				},
+				"required": [
+					"playlist",
+					"report"
+				]
+			},
+			"UserPreferences": {
+				"type": "object",
+				"properties": {
+					"playlistSortOrder": {
+						"type": "string",
+						"enum": [
+							"asc",
+							"desc"
+						]
+					},
+					"albumSortOrder": {
+						"type": "string",
+						"enum": [
+							"asc",
+							"desc"
+						]
+					},
+					"preCacheSaved": {
+						"type": "boolean",
+						"description": "Warm the Blob cache when saving a track/album"
+					}
+				},
+				"additionalProperties": false
+			},
+			"RecentPlay": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"userId": {
+						"type": "string"
+					},
+					"trackId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"album": {
+						"type": "string",
+						"nullable": true
+					},
+					"albumId": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true
+					},
+					"playedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"userId",
+					"trackId",
+					"title",
+					"artist",
+					"album",
+					"albumId",
+					"coverUrl",
+					"duration",
+					"playedAt"
+				]
+			},
+			"RecentPlayInput": {
+				"type": "object",
+				"properties": {
+					"trackId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string",
+						"default": ""
+					},
+					"artist": {
+						"type": "string",
+						"default": ""
+					},
+					"album": {
+						"type": "string",
+						"nullable": true
+					},
+					"albumId": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true
+					}
+				},
+				"required": [
+					"trackId"
+				]
+			},
+			"SkipResult": {
+				"type": "object",
+				"properties": {
+					"kept": {
+						"type": "boolean"
+					},
+					"reason": {
+						"type": "string",
+						"enum": [
+							"already_played",
+							"anchored"
+						]
+					},
+					"evicted": {
+						"type": "boolean"
+					}
+				},
+				"description": "Either `{ kept: true, reason }` or `{ evicted: true }`."
+			},
+			"Lyrics": {
+				"type": "object",
+				"properties": {
+					"source": {
+						"type": "string",
+						"enum": [
+							"lrclib",
+							"deezer"
+						],
+						"nullable": true
+					},
+					"syncedLyrics": {
+						"type": "string",
+						"nullable": true,
+						"description": "LRC format (`[mm:ss.xx]line` per line)"
+					},
+					"plainLyrics": {
+						"type": "string",
+						"nullable": true
+					},
+					"instrumental": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"source",
+					"syncedLyrics",
+					"plainLyrics",
+					"instrumental"
+				]
+			},
+			"CreateShareInput": {
+				"type": "object",
+				"properties": {
+					"trackId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"album": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true
+					},
+					"expiresIn": {
+						"type": "number",
+						"description": "Hours until expiry. Omit for a permanent link."
+					}
+				},
+				"required": [
+					"trackId"
+				]
+			},
+			"SharedTrack": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"shareId": {
+						"type": "string",
+						"description": "Public id used in /share/t/{shareId}"
+					},
+					"trackId": {
+						"type": "string"
+					},
+					"userId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"album": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true
+					},
+					"storedTrackId": {
+						"type": "string",
+						"nullable": true
+					},
+					"expiresAt": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"plays": {
+						"type": "integer"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"shareId",
+					"trackId",
+					"userId",
+					"title",
+					"artist",
+					"album",
+					"coverUrl",
+					"duration",
+					"storedTrackId",
+					"expiresAt",
+					"plays",
+					"createdAt"
+				]
+			},
+			"PublicShare": {
+				"type": "object",
+				"properties": {
+					"shareId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"album": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true
+					},
+					"plays": {
+						"type": "integer"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"expiresAt": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"user": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string"
+							},
+							"image": {
+								"type": "string",
+								"nullable": true
+							}
+						},
+						"required": [
+							"name",
+							"image"
+						]
+					}
+				},
+				"required": [
+					"shareId",
+					"title",
+					"artist",
+					"album",
+					"coverUrl",
+					"duration",
+					"plays",
+					"createdAt",
+					"expiresAt",
+					"user"
+				]
+			},
+			"StreamUrl": {
+				"type": "object",
+				"properties": {
+					"url": {
+						"type": "string",
+						"nullable": true,
+						"format": "uri",
+						"description": "Presigned Vercel Blob URL, valid ~15 min. null → use /stream-progressive."
+					},
+					"contentType": {
+						"type": "string",
+						"example": "audio/mpeg"
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"not_cached",
+							"unsupported_storage",
+							"file_missing",
+							"presigned_disabled"
+						],
+						"description": "Present only when `url` is null"
+					}
+				},
+				"required": [
+					"url"
+				]
+			},
+			"SocialSignInInput": {
+				"type": "object",
+				"properties": {
+					"provider": {
+						"type": "string",
+						"enum": [
+							"google"
+						]
+					},
+					"callbackURL": {
+						"type": "string",
+						"description": "Where to land after the OAuth redirect flow (web flow only)"
+					},
+					"disableRedirect": {
+						"type": "boolean"
+					},
+					"idToken": {
+						"type": "object",
+						"properties": {
+							"token": {
+								"type": "string",
+								"description": "Google ID token from the native Google Sign-In SDK"
+							},
+							"accessToken": {
+								"type": "string"
+							},
+							"nonce": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"token"
+						],
+						"description": "Native mobile flow: no browser redirect, session cookie set directly on the response."
+					}
+				},
+				"required": [
+					"provider"
+				]
+			},
+			"SocialSignInResult": {
+				"type": "object",
+				"properties": {
+					"redirect": {
+						"type": "boolean"
+					},
+					"url": {
+						"type": "string",
+						"format": "uri",
+						"description": "Google consent URL (redirect flow)"
+					},
+					"token": {
+						"type": "string",
+						"description": "Session token (idToken flow)"
+					},
+					"user": {
+						"$ref": "#/components/schemas/BetterAuthUser"
+					}
+				},
+				"description": "better-auth may send extra keys; they are ignored."
+			},
+			"BetterAuthUser": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"email": {
+						"type": "string",
+						"format": "email"
+					},
+					"emailVerified": {
+						"type": "boolean"
+					},
+					"image": {
+						"type": "string",
+						"nullable": true
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"name",
+					"email"
+				]
+			},
+			"BetterAuthSession": {
+				"type": "object",
+				"properties": {
+					"session": {
+						"type": "object",
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"userId": {
+								"type": "string"
+							},
+							"token": {
+								"type": "string"
+							},
+							"expiresAt": {
+								"type": "string",
+								"format": "date-time"
+							},
+							"createdAt": {
+								"type": "string",
+								"format": "date-time"
+							},
+							"updatedAt": {
+								"type": "string",
+								"format": "date-time"
+							},
+							"ipAddress": {
+								"type": "string",
+								"nullable": true
+							},
+							"userAgent": {
+								"type": "string",
+								"nullable": true
+							}
+						},
+						"required": [
+							"id",
+							"userId",
+							"token",
+							"expiresAt"
+						]
+					},
+					"user": {
+						"$ref": "#/components/schemas/BetterAuthUser"
+					}
+				},
+				"required": [
+					"session",
+					"user"
+				]
+			},
+			"ConnectStatusEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/ConnectStatus"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"DeezerLoginEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/DeezerLoginResult"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"ChangeAccountEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/ChangeAccountResult"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"MessageEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/MessageResult"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"DeezerPageEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/DeezerPage"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"DeezerApiListEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/DeezerApiList"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"DeezerTracklistEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/DeezerTracklist"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"DeezerSearchMainEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/DeezerSearchMain"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SuggestionsEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/Suggestions"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SavedTrackListEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"items": {
+								"type": "array",
+								"items": {
+									"$ref": "#/components/schemas/SavedTrack"
+								}
+							}
+						},
+						"required": [
+							"items"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SavedTrackEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"saved": {
+								"$ref": "#/components/schemas/SavedTrack"
+							}
+						},
+						"required": [
+							"saved"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SavedFlagEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"saved": {
+								"type": "boolean"
+							}
+						},
+						"required": [
+							"saved"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"UnsavedEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"unsaved": {
+								"type": "boolean",
+								"enum": [
+									true
+								]
+							}
+						},
+						"required": [
+							"unsaved"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"AlbumListEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"items": {
+								"type": "array",
+								"items": {
+									"$ref": "#/components/schemas/Album"
+								}
+							}
+						},
+						"required": [
+							"items"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SavedAlbumEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"saved": {
+								"$ref": "#/components/schemas/Album"
+							}
+						},
+						"required": [
+							"saved"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"AlbumWithTracksEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/AlbumWithTracks"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"FollowedArtistListEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"items": {
+								"type": "array",
+								"items": {
+									"$ref": "#/components/schemas/FollowedArtist"
+								}
+							}
+						},
+						"required": [
+							"items"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"FollowedArtistEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"followed": {
+								"$ref": "#/components/schemas/FollowedArtist"
+							}
+						},
+						"required": [
+							"followed"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"UnfollowedEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"unfollowed": {
+								"type": "boolean",
+								"enum": [
+									true
+								]
+							}
+						},
+						"required": [
+							"unfollowed"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"LibraryStatusEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/LibraryStatus"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"PlaylistSummaryListEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/PlaylistSummary"
+						}
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"PlaylistEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/Playlist"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"PlaylistWithTracksEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/PlaylistWithTracks"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"DeletedEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"deleted": {
+								"type": "boolean",
+								"enum": [
+									true
+								]
+							}
+						},
+						"required": [
+							"deleted"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"AddedEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"added": {
+								"type": "integer"
+							}
+						},
+						"required": [
+							"added"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"ReorderedEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"reordered": {
+								"type": "integer"
+							}
+						},
+						"required": [
+							"reordered"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"RemovedEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"removed": {
+								"type": "integer"
+							}
+						},
+						"required": [
+							"removed"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SpotifyImportEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/SpotifyImportResult"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"UserPreferencesEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/UserPreferences"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SettingsBundleEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/SettingsBundle"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"StreamingQualityEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"maxBitrate": {
+								"type": "integer",
+								"enum": [
+									1,
+									3,
+									9
+								]
+							}
+						},
+						"required": [
+							"maxBitrate"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"RecentPlayListEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"items": {
+								"type": "array",
+								"items": {
+									"$ref": "#/components/schemas/RecentPlay"
+								}
+							}
+						},
+						"required": [
+							"items"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"LoggedEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"logged": {
+								"type": "boolean",
+								"enum": [
+									true
+								]
+							}
+						},
+						"required": [
+							"logged"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SkipEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/SkipResult"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"LyricsEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/Lyrics"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SharedTrackListEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/SharedTrack"
+						}
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SharedTrackEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/SharedTrack"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"PublicShareEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/PublicShare"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"StreamUrlEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/StreamUrl"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			}
+		}
+	}
+}

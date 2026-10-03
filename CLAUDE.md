@@ -14,6 +14,14 @@ This project uses Next.js 16 which has breaking changes from earlier versions. *
 - **Storage**: private Vercel Blob store — writes via `BlobStorageProvider` (`src/lib/wavelet/storage/`), reads/presigned URLs via `src/lib/blob-stream.ts`. `/tmp` is the only writable path.
 - **Auth**: better-auth (`src/lib/auth.ts`, `src/lib/auth-client.ts`)
 
+## Design language — Geist minimal + the mobile app's expressive layer
+
+The base stays Vercel / Geist: monochrome surfaces, hairline borders, the sticky glass header with its nav, Geist semibold with tight tracking, one blue accent (`--highlight`) for focus and now-playing. On top of it sit the "stunning" moments of the Flutter client (`~/dev/wavelet`): when you build or touch UI, add them rather than replacing the base.
+
+- **Expressive layer** (`src/components/expressive`, reuse first): `HeroBanner` (aurora + drifting `ArtworkWall`, white copy, `HeroTitle` with the sky → indigo → pink `.brand-text` line), `CoverTheme` (re-themes a subtree's accents from artwork via `.cover-theme`; maths in `lib/cover-palette.ts`), `CollectionScaffold` (album / playlist / artist hero), `ArtCarousel` / `CardCarousel`, `BigPlayButton` (glowing), `QuickTile`, `FilterPills`, `SlidingSegments`, `SectionTitle`, `Medallion` (empty states), motion tokens (`DUR`, `EASE`, `entrance(i)`, `swap`).
+- **Tokens** (`src/app/globals.css`): the shadcn tokens are the Geist palette; the extra roles (`surface-{low,container,high,highest}`, `primary-container`, `tertiary-container`, `.bg-tonal-gradient`) are neutral greys and faint brand tints that `.cover-theme` swaps for artwork colours. `.type-display` / `.type-eyebrow` for hero titles and eyebrows. Don't name custom utilities `text-*` — `cn()` (tailwind-merge) drops them.
+- Heroes bleed to the viewport edges with `mx-[calc(50%-50vw)] px-[calc(50vw-50%)]` (`html` has `overflow-x: clip`); sticky sub-bars sit at `top-[var(--header-h)]` (the whole header, nav row included on phones).
+
 ## Project Map
 
 ```
@@ -27,7 +35,8 @@ src/
 │   └── share/t/[shareId]/   # Public share player + OG image
 ├── components/
 │   ├── audio/               # Player (floating pill, bottom-center), MiniPlayer (preview pill), FullscreenPlayer, SeekBar
-│   ├── layout/              # AppHeader (nav + ⌘K trigger), EntityHero
+│   ├── layout/              # AppHeader (glass top bar: nav + ⌘K trigger)
+│   ├── expressive/          # Design kit mirroring the Flutter app (heroes, pills, carousels, CoverTheme, CollectionScaffold)
 │   ├── command/             # CommandPalette — ⌘K search + downloads (single entry point)
 │   ├── cards/               # MediaCard grid cards (hover play / download)
 │   ├── motion/              # Motion-driven SVG primitives (PlayPauseIcon, ProgressRing, …)
@@ -64,6 +73,8 @@ npm run studio       # Prisma Studio
 npm test             # Vitest one-shot
 npm run test:watch   # Vitest watch mode
 npm run test:coverage # Coverage with thresholds (gate used by CI)
+npm run openapi      # Regenerate openapi.json (scripts/generate-openapi.mjs) — update it when a v1 route changes
+npm run openapi:dart # Regenerate the Dart client in clients/dart (Docker + Dart SDK)
 ```
 
 ## Testing & Regression Prevention
@@ -96,6 +107,8 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Stream failure diagnosis | `src/lib/stream-failure.ts` (used by `AudioEngine.tsx` give-up path) | `stream-failure.test.ts` |
 | Logo / icons | `src/lib/logo.ts` (shared by `LogoMark`, OG image, `scripts/generate-icons.ts`) | `logo.test.ts` |
 | Blob storage | `src/lib/blob-stream.ts`, `src/lib/wavelet/storage/{blob,BlobStorageProvider}.ts` | `blob-stream.test.ts`, `blob.test.ts`, `BlobStorageProvider.test.ts` |
+| Cover palette (CoverTheme seed) | `src/lib/cover-palette.ts` | `cover-palette.test.ts` |
+| Home discover parsing | `src/lib/discover.ts` (used by `hooks/useDiscover.ts`) | `discover.test.ts` |
 | Bearer auth (native clients) | `src/lib/auth.ts` (better-auth `bearer()` plugin) | `auth.test.ts` |
 
 ### Fix-bug-once strategy (read this before fixing anything)

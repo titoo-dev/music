@@ -3,29 +3,32 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
 /**
- * Minimal Sonner Toaster — hairline border, soft float shadow, sits just
- * above the floating player pill.
+ * Toasts as M3 snackbars: inverse surface (onSurface fill, surface ink),
+ * rounded-2xl, bold action in the inverse-primary (primaryContainer) tone.
+ * Sits just above the floating player pill.
  */
 export function Toaster(props: ToasterProps) {
 	return (
 		<Sonner
 			position="bottom-center"
 			offset={{ bottom: "calc(var(--player-h) + var(--player-offset) + 12px)" }}
+			mobileOffset={{ bottom: "calc(var(--player-h) + var(--player-offset) + 10px)" }}
 			gap={8}
 			toastOptions={{
 				classNames: {
 					toast:
-						"!bg-popover !text-popover-foreground !border !border-border !shadow-float !rounded-xl font-sans",
-					title: "!font-medium !text-[13px] !tracking-tight",
-					description: "!text-xs !text-muted-foreground",
+						"!bg-foreground !text-background !border-0 !rounded-2xl !shadow-[0_12px_32px_-8px_rgb(0_0_0/0.45)] !px-4 !py-3.5 !gap-3 font-sans",
+					title: "!font-semibold !text-sm !tracking-[-0.005em]",
+					description: "!text-[13px] !text-background/70",
+					icon: "!text-[color:var(--m3-primary-container)]",
 					actionButton:
-						"!bg-primary !text-primary-foreground !rounded-md !text-xs !font-medium !px-2.5 !py-1 !h-7",
+						"!bg-transparent !text-[color:var(--m3-primary-container)] !rounded-full !text-sm !font-bold !px-3 !h-9 hover:!bg-background/10",
 					cancelButton:
-						"!bg-transparent !text-muted-foreground hover:!bg-accent hover:!text-foreground !rounded-md !text-xs !font-medium !px-2.5 !py-1 !h-7",
+						"!bg-transparent !text-background/70 hover:!bg-background/10 hover:!text-background !rounded-full !text-sm !font-semibold !px-3 !h-9",
 					closeButton:
-						"!bg-popover !text-muted-foreground hover:!text-foreground !border !border-border !rounded-full",
-					error: "[&_[data-icon]]:!text-destructive",
-					success: "[&_[data-icon]]:!text-success",
+						"!bg-foreground !text-background/70 hover:!text-background !border-0 !rounded-full",
+					error: "[&_[data-icon]]:!text-[#ffb4ab] dark:[&_[data-icon]]:!text-[#ba1a1a]",
+					success: "[&_[data-icon]]:!text-[color:var(--m3-primary-container)]",
 				},
 			}}
 			{...props}

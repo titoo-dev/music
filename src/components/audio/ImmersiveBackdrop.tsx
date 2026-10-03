@@ -51,7 +51,9 @@ export function ImmersiveBackdrop({ cover, level }: { cover: string | null | und
 			</AnimatePresence>
 
 			{/* Legibility veil — lighter at the top so the colour reads, denser under the controls. */}
-			<div className="absolute inset-0 bg-gradient-to-b from-background/20 via-background/45 to-background/85" />
+			<div className="absolute inset-0 bg-[linear-gradient(to_bottom,color-mix(in_srgb,var(--background)_35%,transparent)_0%,color-mix(in_srgb,var(--background)_60%,transparent)_50%,color-mix(in_srgb,var(--background)_92%,transparent)_95%)]" />
+			{/* A wash of the cover-themed primary so the page reads in the artwork's colour. */}
+			<div className="absolute inset-0 bg-[radial-gradient(90%_60%_at_50%_10%,color-mix(in_oklch,var(--primary)_18%,transparent),transparent_70%)]" />
 			<div className="absolute inset-0 [background:radial-gradient(120%_80%_at_50%_0%,transparent_40%,var(--background)_100%)] opacity-60" />
 
 			{/* Film grain */}

@@ -58,6 +58,8 @@ export default defineConfig({
 				"src/lib/wavelet/storage/blob.ts",
 				"src/lib/wavelet/storage/BlobStorageProvider.ts",
 				"src/lib/auth.ts",
+				"src/lib/cover-palette.ts",
+				"src/lib/discover.ts",
 			],
 			exclude: [
 				"**/*.test.{ts,tsx}",

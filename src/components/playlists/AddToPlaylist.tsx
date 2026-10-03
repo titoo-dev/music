@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
 	DropdownMenu,
 	DropdownMenuTrigger,
@@ -12,16 +11,11 @@ import {
 	DropdownMenuGroup,
 	DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-	DialogFooter,
-} from "@/components/ui/dialog";
-import { ListPlus, Plus } from "lucide-react";
+import { ListMusic, ListPlus, Plus } from "lucide-react";
 import { DrawCheck, Spinner } from "@/components/motion/icons";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { PlaylistEditDialog } from "./PlaylistDialogs";
+import { plural } from "./format";
 
 export interface TrackInfo {
 	trackId: string;
@@ -49,8 +43,6 @@ export function AddToPlaylist({
 	const [loading, setLoading] = useState(false);
 	const [addedTo, setAddedTo] = useState<Set<string>>(new Set());
 	const [dialogOpen, setDialogOpen] = useState(false);
-	const [newName, setNewName] = useState("");
-	const [submitting, setSubmitting] = useState(false);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
 	const fetchPlaylists = useCallback(async () => {
@@ -95,29 +87,18 @@ export function AddToPlaylist({
 		}
 	};
 
-	const handleCreate = async () => {
-		const name = newName.trim();
-		if (!name) return;
-		setSubmitting(true);
-		try {
-			const res = await fetch("/api/v1/playlists", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				credentials: "include",
-				body: JSON.stringify({ title: name }),
-			});
-			const json = await res.json();
-			if (json.success) {
-				const newPlaylist = json.data as Playlist;
-				setPlaylists((prev) => [newPlaylist, ...prev]);
-				await handleAdd(newPlaylist.id);
-				setNewName("");
-				setDialogOpen(false);
-			}
-		} catch {
-			// ignore
-		}
-		setSubmitting(false);
+	const handleCreate = async ({ title, description }: { title: string; description: string | null }) => {
+		const res = await fetch("/api/v1/playlists", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			credentials: "include",
+			body: JSON.stringify({ title, description }),
+		});
+		const json = await res.json();
+		if (!json.success) throw new Error(json.error?.message || "Couldn't create the playlist");
+		const newPlaylist = json.data as Playlist;
+		setPlaylists((prev) => [newPlaylist, ...prev]);
+		await handleAdd(newPlaylist.id);
 	};
 
 	return (
@@ -135,9 +116,9 @@ export function AddToPlaylist({
 				>
 					<ListPlus className="size-3.5" />
 				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-56">
+				<DropdownMenuContent align="end" side="bottom" sideOffset={6} className="w-64 rounded-2xl p-1.5">
 					<DropdownMenuGroup>
-						<DropdownMenuLabel>Add to playlist</DropdownMenuLabel>
+						<DropdownMenuLabel className="type-eyebrow px-2.5 pb-1.5 pt-2 text-primary">Add to playlist</DropdownMenuLabel>
 					</DropdownMenuGroup>
 					<DropdownMenuSeparator />
 					{loading ? (
@@ -145,17 +126,23 @@ export function AddToPlaylist({
 							<Spinner className="text-muted-foreground" />
 						</div>
 					) : playlists.length === 0 ? (
-						<div className="px-2 py-3 text-xs text-muted-foreground text-center">
-							No playlists yet
-						</div>
+						<div className="px-2 py-4 text-center text-xs text-muted-foreground">No playlists yet</div>
 					) : (
 						playlists.map((p) => (
 							<DropdownMenuItem
 								key={p.id}
-								className="flex items-center justify-between gap-2"
+								className="flex items-center justify-between gap-2 rounded-xl py-2"
 								onClick={() => !addedTo.has(p.id) && handleAdd(p.id)}
 							>
-								<span className="truncate">{p.title}</span>
+								<span className="flex min-w-0 items-center gap-2.5">
+									<span className="bg-tonal-gradient flex size-8 shrink-0 items-center justify-center rounded-lg text-on-primary-container">
+										<ListMusic className="size-4" />
+									</span>
+									<span className="min-w-0">
+										<span className="block truncate font-medium">{p.title}</span>
+										{p._count && <span className="block text-xs text-muted-foreground">{plural(p._count.tracks, "track")}</span>}
+									</span>
+								</span>
 								{addedTo.has(p.id) && (
 									<DrawCheck className="size-4 text-success shrink-0" />
 								)}
@@ -163,52 +150,16 @@ export function AddToPlaylist({
 						))
 					)}
 					<DropdownMenuSeparator />
-					<DropdownMenuItem
-						className="gap-2 text-muted-foreground"
-						onClick={() => setDialogOpen(true)}
-					>
-						<Plus className="size-3.5" />
+					<DropdownMenuItem className="gap-2.5 rounded-xl py-2 font-semibold text-primary" onClick={() => setDialogOpen(true)}>
+						<span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+							<Plus className="size-4" />
+						</span>
 						New playlist
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
 
-			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>New playlist</DialogTitle>
-					</DialogHeader>
-					<form
-						onSubmit={(e) => {
-							e.preventDefault();
-							handleCreate();
-						}}
-					>
-						<Input
-							autoFocus
-							placeholder="Playlist name"
-							value={newName}
-							onChange={(e) => setNewName(e.target.value)}
-						/>
-						<DialogFooter className="mt-4">
-							<Button
-								type="button"
-								variant="outline"
-								onClick={() => {
-									setDialogOpen(false);
-									setNewName("");
-								}}
-							>
-								Cancel
-							</Button>
-							<Button type="submit" disabled={!newName.trim() || submitting}>
-								{submitting && <Spinner size={14} />}
-								Create & add
-							</Button>
-						</DialogFooter>
-					</form>
-				</DialogContent>
-			</Dialog>
+			<PlaylistEditDialog open={dialogOpen} onOpenChange={setDialogOpen} mode="create" submitLabel="Create & add" onSubmit={handleCreate} />
 		</>
 	);
 }

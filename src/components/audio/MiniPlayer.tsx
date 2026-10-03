@@ -8,12 +8,14 @@ import { usePreviewStore } from "@/stores/usePreviewStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useTrackActionStore } from "@/stores/useTrackActionStore";
 import { CoverImage } from "@/components/ui/cover-image";
-import { PlayPauseIcon, ProgressRing } from "@/components/motion/icons";
+import { Equalizer, PlayPauseIcon, ProgressRing } from "@/components/motion/icons";
+import { CoverTheme, EASE, SPRING } from "@/components/expressive";
 import { cn } from "@/lib/utils";
 
 /**
  * 30-second preview pill. Floats bottom-center like the main player; when the
- * main player is visible it stacks just above it.
+ * main player is visible it stacks just above it. Same tonal, cover-themed
+ * language as the player card, in a compact stadium.
  */
 export function MiniPlayer() {
 	const { currentTrack, isPlaying, isBuffering, toggle, stop, volume, setVolume } = usePreviewStore();
@@ -28,6 +30,7 @@ export function MiniPlayer() {
 				id: String(currentTrack.id),
 				title: currentTrack.title,
 				artist: currentTrack.artist,
+				artistId: currentTrack.artistId ?? null,
 				cover: currentTrack.cover,
 				previewUrl: currentTrack.previewUrl,
 			});
@@ -48,58 +51,88 @@ export function MiniPlayer() {
 					role="region"
 					aria-label="Preview player"
 					className={cn(
-						"glass fixed inset-x-0 z-[46] mx-auto flex w-fit max-w-[calc(100%-24px)] items-center gap-3 rounded-full border border-border py-1.5 pl-1.5 pr-2 shadow-float",
-						playerVisible
-							? "bottom-[calc(var(--player-offset)+var(--player-h)+10px)]"
-							: "bottom-[var(--player-offset)]"
+						"fixed left-[var(--rail-w)] right-0 z-[46] mx-auto w-fit max-w-[calc(100%-var(--rail-w)-24px)]",
+						playerVisible ? "bottom-[calc(var(--player-offset)+var(--player-h)+10px)]" : "bottom-[var(--player-offset)]"
 					)}
 				>
-					<CoverImage src={currentTrack.cover} className="size-9 rounded-full" />
-
-					<div className="min-w-0 max-w-[160px]" onContextMenu={handleContextMenu}>
-						<p className="truncate text-[13px] font-medium leading-tight">{currentTrack.title}</p>
-						<p className="truncate text-[11px] leading-tight text-muted-foreground">
-							<span className="mr-1 rounded-sm bg-muted px-1 py-px text-[10px] text-muted-foreground">Preview</span>
-							{currentTrack.artistId ? (
-								<Link href={`/artist?id=${currentTrack.artistId}`} className="hover:text-foreground hover:underline">
-									{currentTrack.artist}
-								</Link>
-							) : (
-								currentTrack.artist
+					<CoverTheme src={currentTrack.cover}>
+						<div
+							className={cn(
+								"flex items-center gap-3 rounded-full py-1.5 pl-1.5 pr-2 text-on-primary-container ring-1 ring-inset ring-on-primary-container/8 transition-shadow duration-500",
+								"bg-[linear-gradient(135deg,var(--m3-primary-container),color-mix(in_oklch,var(--m3-primary-container)_30%,var(--m3-tertiary-container)))]",
+								isPlaying
+									? "shadow-[0_10px_24px_-4px_color-mix(in_oklch,var(--m3-primary)_40%,transparent)]"
+									: "shadow-[0_6px_14px_-4px_color-mix(in_oklch,var(--m3-primary)_22%,transparent)]"
 							)}
-						</p>
-					</div>
+						>
+							<motion.span
+								initial={false}
+								animate={{ scale: isPlaying ? 1 : 0.9, rotate: isPlaying ? 0 : -4 }}
+								transition={{ type: "spring", stiffness: 400, damping: 17 }}
+								className="shrink-0"
+							>
+								<CoverImage src={currentTrack.cover} className="size-10 rounded-full shadow-[0_3px_10px_-2px_rgb(0_0_0/0.35)]" />
+							</motion.span>
 
-					<input
-						type="range"
-						min={0}
-						max={100}
-						value={volume}
-						aria-label="Preview volume"
-						onChange={(e) => setVolume(parseInt(e.target.value))}
-						className="hidden h-1 w-16 cursor-pointer accent-foreground sm:block"
-					/>
+							<div className="min-w-0 max-w-[180px]" onContextMenu={handleContextMenu}>
+								<p className="truncate text-[13px] font-semibold leading-tight tracking-[-0.01em]">{currentTrack.title}</p>
+								<p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] leading-tight text-on-primary-container/75">
+									<span className="inline-flex h-4 shrink-0 items-center gap-1 rounded-full bg-primary px-1.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-primary-foreground">
+										{isPlaying && <Equalizer playing className="h-2" />}
+										Preview
+									</span>
+									{currentTrack.artistId ? (
+										<Link href={`/artist?id=${currentTrack.artistId}`} className="truncate hover:text-on-primary-container hover:underline">
+											{currentTrack.artist}
+										</Link>
+									) : (
+										<span className="truncate">{currentTrack.artist}</span>
+									)}
+								</p>
+							</div>
 
-					<button
-						type="button"
-						aria-label={isPlaying ? "Pause preview" : "Play preview"}
-						className="relative flex size-9 items-center justify-center rounded-full bg-foreground text-background"
-						onClick={() => toggle(currentTrack)}
-					>
-						{isBuffering && (
-							<ProgressRing indeterminate size={36} stroke={2} className="absolute inset-0 text-highlight" trackClassName="text-transparent" />
-						)}
-						<PlayPauseIcon playing={isPlaying} className="size-4" />
-					</button>
+							{/* Volume */}
+							<div className="relative hidden h-1.5 w-16 shrink-0 rounded-full bg-on-primary-container/15 sm:block">
+								<div className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${volume}%` }} />
+								<input
+									type="range"
+									min={0}
+									max={100}
+									value={volume}
+									aria-label="Preview volume"
+									onChange={(e) => setVolume(parseInt(e.target.value))}
+									className="absolute -inset-y-2 inset-x-0 h-5 w-full cursor-pointer opacity-0"
+								/>
+							</div>
 
-					<button
-						type="button"
-						aria-label="Close preview"
-						onClick={stop}
-						className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
-					>
-						<X className="size-4" />
-					</button>
+							<span className="relative inline-flex size-10 shrink-0 items-center justify-center">
+								<motion.button
+									type="button"
+									aria-label={isPlaying ? "Pause preview" : "Play preview"}
+									initial={false}
+									animate={{ borderRadius: isPlaying ? 18 : 11 }}
+									whileTap={{ scale: 0.88 }}
+									transition={{ borderRadius: { duration: 0.3, ease: EASE.emphasized }, scale: SPRING.press }}
+									className="flex size-9 items-center justify-center bg-primary text-primary-foreground outline-none transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring/50"
+									onClick={() => toggle(currentTrack)}
+								>
+									<PlayPauseIcon playing={isPlaying} className="size-4" />
+								</motion.button>
+								{isBuffering && (
+									<ProgressRing indeterminate size={40} stroke={2} className="pointer-events-none absolute inset-0 text-primary" trackClassName="text-transparent" />
+								)}
+							</span>
+
+							<button
+								type="button"
+								aria-label="Close preview"
+								onClick={stop}
+								className="flex size-8 shrink-0 items-center justify-center rounded-full text-on-primary-container/70 transition-colors hover:bg-on-primary-container/10 hover:text-on-primary-container active:scale-90"
+							>
+								<X className="size-4" />
+							</button>
+						</div>
+					</CoverTheme>
 				</motion.div>
 			)}
 		</AnimatePresence>

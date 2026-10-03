@@ -27,9 +27,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 			<div className="relative min-h-dvh bg-background">
 				<AppHeader />
 
-				<main className="mx-auto w-full min-w-0 max-w-6xl px-4 pt-6 pb-app-chrome sm:px-6 sm:pt-8">
-					{children}
-				</main>
+				<main className="mx-auto w-full min-w-0 max-w-6xl px-4 pt-6 pb-app-chrome sm:px-6 sm:pt-8 lg:px-8">{children}</main>
 
 				{/* ─── Search + downloads ─── */}
 				<CommandPalette />

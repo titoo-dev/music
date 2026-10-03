@@ -1,260 +1,234 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
-import Link from "next/link";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { fetchData } from "@/utils/api";
-import { Button } from "@/components/ui/button";
-import { EntityHero, HeroPlayButton } from "@/components/layout/EntityHero";
-import { Shuffle } from "lucide-react";
-import { EmptyState, HeartGlyph, Spinner } from "@/components/motion/icons";
+import { AnimatePresence, motion } from "motion/react";
+import { toast } from "sonner";
+import { CalendarDays, Clock3, Copyright, Disc3, Music2, Tag } from "lucide-react";
+import { HeartGlyph, Spinner } from "@/components/motion/icons";
 import { useSavedAlbums } from "@/hooks/useLibrary";
-import { TrackRow, trackFromDeezerRaw } from "@/components/tracks/TrackRow";
-import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
+import { TrackRow, trackFromDeezerRaw, type TrackRowTrack } from "@/components/tracks/TrackRow";
+import { MediaCard } from "@/components/cards/MediaCard";
+import { useTracklist } from "@/components/collection/useTracklist";
+import { AlbumDetailSkeleton } from "@/components/skeletons";
+import { AddTracksToPlaylist, DownloadCollectionButton, useCollectionPlayback } from "@/components/collection/CollectionActions";
+import { CardCarousel, CollectionScaffold, Medallion, SPRING, SavedBadge, SectionTitle, TonalIconButton, swap } from "@/components/expressive";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { albumRows, formatReleaseDate, formatTotal, parseAlbumPage, plural, type AlbumPageData } from "@/lib/collection-page";
 
-function getCoverUrl(picture: string, size = 500) {
-	if (!picture) return "/placeholder.jpg";
-	if (picture.startsWith("http")) return picture;
-	return `https://e-cdns-images.dzcdn.net/images/cover/${picture}/${size}x${size}-000000-80-0-0.jpg`;
-}
+/** Rows rise in as they scroll into view (Flutter `ScrollReveal`, lighter for lists). */
+const rowReveal = {
+	initial: { opacity: 0.2, y: 12 },
+	whileInView: { opacity: 1, y: 0 },
+	viewport: { once: true, margin: "0px 0px -24px 0px" },
+	transition: { duration: 0.36, ease: [0.05, 0.7, 0.1, 1] },
+} as const;
 
-function AlbumSaveButton({
-	saved,
-	saving,
-	onClick,
-}: {
-	saved: boolean;
-	saving: boolean;
-	onClick: () => void;
-}) {
+function AlbumContent() {
+	const id = useSearchParams().get("id");
+	const { page, status } = useTracklist("album", id, parseAlbumPage);
+
 	return (
-		<Button
-			onClick={onClick}
-			disabled={saving}
-			variant="outline"
-			size="icon-touch"
-			className="rounded-full"
-			aria-label={saved ? "Remove from library" : "Save album"}
-			aria-pressed={saved}
-		>
-			{saving ? <Spinner /> : <HeartGlyph filled={saved} />}
-		</Button>
+		<AnimatePresence mode="wait" initial={false}>
+			<motion.div key={status === "ready" ? `album-${page?.id}` : status} variants={swap} initial="initial" animate="animate" exit="exit">
+				{status === "loading" ? (
+					<AlbumDetailSkeleton />
+				) : status === "ready" && page ? (
+					<AlbumView page={page} />
+				) : (
+					<Medallion icon={Disc3} title="Album not found" message="The album you're looking for doesn't exist or is unavailable." className="mt-10" />
+				)}
+			</motion.div>
+		</AnimatePresence>
 	);
 }
 
-function AlbumContent() {
-	const searchParams = useSearchParams();
-	const id = searchParams.get("id");
-	const [album, setAlbum] = useState<any>(null);
-	const [tracks, setTracks] = useState<any[]>([]);
-	const [loading, setLoading] = useState(true);
+/** Tonal heart that pops when the album is saved. */
+function SaveAlbumButton({ saved, saving, onClick }: { saved: boolean; saving: boolean; onClick: () => void }) {
+	return (
+		<TonalIconButton label={saved ? "Remove from library" : "Save album"} active={saved} onClick={onClick} disabled={saving}>
+			<AnimatePresence mode="popLayout" initial={false}>
+				<motion.span
+					key={saving ? "busy" : String(saved)}
+					initial={{ scale: 0.3, opacity: 0 }}
+					animate={{ scale: 1, opacity: 1 }}
+					exit={{ scale: 0.3, opacity: 0 }}
+					transition={SPRING.pop}
+					className="flex"
+				>
+					{saving ? <Spinner /> : <HeartGlyph filled={saved} />}
+				</motion.span>
+			</AnimatePresence>
+		</TonalIconButton>
+	);
+}
+
+function AlbumView({ page }: { page: AlbumPageData }) {
+	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const [saving, setSaving] = useState(false);
+	const moreIds = useMemo(() => [page.id, ...page.moreByArtist.map((a) => a.id)], [page]);
+	const { isSaved, save, unsave } = useSavedAlbums(moreIds);
+	const saved = isSaved(page.id);
 
-	const { isSaved, save, unsave } = useSavedAlbums(id ? [id] : []);
-	const albumSaved = id ? isSaved(id) : false;
-	const playerPlay = usePlayerStore((s) => s.play);
-	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+	const tracks = useMemo<TrackRowTrack[]>(() => page.tracks.map((t) => trackFromDeezerRaw(t)), [page]);
+	const rows = useMemo(() => albumRows(page.discs), [page]);
+	const { play, shuffle, trackIds } = useCollectionPlayback(tracks);
 
-	useEffect(() => {
-		if (!id) return;
-		async function loadAlbum() {
-			try {
-				const data = await fetchData("content/tracklist", { id, type: "album" });
-				const albumData = data?.DATA || data;
-				const trackList = data?.tracks || data?.SONGS?.data || [];
-				setAlbum(albumData);
-				setTracks(trackList);
-			} catch {
-				// ignore
-			}
-			setLoading(false);
-		}
-		loadAlbum();
-	}, [id]);
-
-	const handleToggleSave = async () => {
-		if (!id || !album) return;
+	const toggleSave = async () => {
 		setSaving(true);
 		try {
-			if (albumSaved) {
-				// We need the internal Album.id to unsave; fetch the saved albums
+			if (saved) {
+				// Unsaving needs the library's own Album.id.
 				const res = await fetch("/api/v1/library/albums", { credentials: "include" });
 				const json = await res.json();
-				const items = (json?.data?.items as any[]) || [];
-				const match = items.find((a) => String(a.deezerAlbumId) === String(id));
-				if (match) {
-					await unsave(String(match.id), String(id));
-				}
+				const items = (json?.data?.items as { id: string; deezerAlbumId: string }[]) || [];
+				const match = items.find((a) => String(a.deezerAlbumId) === page.id);
+				if (match) await unsave(String(match.id), page.id);
+				toast("Removed from your library");
 			} else {
-				const albumTitle = album.ALB_TITLE || album.title || "";
-				const artistName = album.ART_NAME || album.artist?.name || "";
-				const albumCover = album.cover_xl || album.cover_big || getCoverUrl(album.ALB_PICTURE, 500);
 				await save({
-					deezerAlbumId: String(id),
-					title: albumTitle,
-					artist: artistName,
-					coverUrl: albumCover,
-					tracks: tracks.map((t: any, idx: number) => ({
-						trackId: String(t.SNG_ID || t.id),
-						title: t.SNG_TITLE || t.title || "",
-						artist: t.ART_NAME || t.artist?.name || "",
-						coverUrl:
-							t.album?.cover_small ||
-							(t.ALB_PICTURE
-								? `https://e-cdns-images.dzcdn.net/images/cover/${t.ALB_PICTURE}/56x56-000000-80-0-0.jpg`
-								: null),
-						duration: t.DURATION ? Number(t.DURATION) : t.duration ?? null,
-						trackNumber: Number(t.TRACK_NUMBER || t.track_position || idx + 1),
+					deezerAlbumId: page.id,
+					title: page.title,
+					artist: page.artist ?? "",
+					coverUrl: page.cover,
+					tracks: tracks.map((t, i) => ({
+						trackId: t.trackId,
+						title: t.title,
+						artist: t.artist,
+						coverUrl: t.cover,
+						duration: t.duration ?? null,
+						trackNumber: Number((page.tracks[i] as { TRACK_NUMBER?: string })?.TRACK_NUMBER) || i + 1,
 					})),
 				});
+				toast.success("Saved to your library");
 			}
 		} catch (e) {
 			console.error("[album save] failed:", e);
+			toast.error("Couldn't update your library");
 		}
 		setSaving(false);
 	};
 
-	if (loading)
-		return (
-			<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
-				<Spinner size={20} />
-			</div>
-		);
-	if (!album)
-		return (
-			<EmptyState
-				className="mt-8"
-				title="Album not found"
-				description="The album you're looking for doesn't exist or is unavailable."
-			/>
-		);
-
-	// Handle both GW format (ALB_PICTURE, ALB_TITLE) and standard API format (cover_xl, title)
-	const title = album.ALB_TITLE || album.title || "";
-	const artistName = album.ART_NAME || album.artist?.name || "";
-	const artistId = album.ART_ID || album.artist?.id;
-	const cover = album.cover_xl || album.cover_big || getCoverUrl(album.ALB_PICTURE, 500);
-	const nbTracks = album.NUMBER_TRACK || album.nb_tracks;
-	const releaseDate = album.PHYSICAL_RELEASE_DATE || album.DIGITAL_RELEASE_DATE || album.release_date;
-	const releaseYear = releaseDate ? String(releaseDate).slice(0, 4) : null;
-	const recordType = album.TYPE === "0" ? "Single" : album.TYPE === "1" ? "Album" : album.TYPE === "2" ? "Compilation" : album.record_type || "Album";
-
-	const playableTracks: PlayerTrack[] = tracks.map((t: any) => {
-		const n = trackFromDeezerRaw(t);
-		return {
-			trackId: n.trackId,
-			title: n.title,
-			artist: n.artist,
-			artistId: n.artistId ?? null,
-			cover: n.cover,
-			duration: n.duration ?? null,
-		};
-	});
-
-	const handlePlayAll = () => {
-		if (playableTracks.length === 0) return;
-		playerPlay(playableTracks[0], playableTracks);
-	};
-
-	const handleShuffleAll = () => {
-		if (playableTracks.length === 0) return;
-		// Toggle on then start — usePlayerStore handles the queue order.
-		const wasShuffled = usePlayerStore.getState().shuffle;
-		if (!wasShuffled) toggleShuffle();
-		playerPlay(playableTracks[0], playableTracks);
-	};
+	const stats = [
+		{ icon: Music2, label: plural(tracks.length, "track") },
+		...(page.duration ? [{ icon: Clock3, label: formatTotal(page.duration) }] : []),
+		...(page.discCount > 1 ? [{ icon: Disc3, label: plural(page.discCount, "disc") }] : []),
+	];
 
 	return (
-		<div className="space-y-10">
-			<EntityHero
-				eyebrow={`${recordType}${releaseYear ? ` · ${releaseYear}` : ""}`}
-				title={title}
-				subtitle={
-					artistId ? (
-						<Link href={`/artist?id=${artistId}`} className="font-medium text-foreground hover:underline underline-offset-4">
-							{artistName}
-						</Link>
+		<CollectionScaffold
+			title={page.title}
+			cover={page.cover}
+			eyebrow={[page.recordType, page.year].filter(Boolean).join(" · ")}
+			subtitle={page.artist ? { label: page.artist, href: page.artistId ? `/artist?id=${page.artistId}` : undefined, image: page.artistPicture } : null}
+			stats={stats}
+			trackIds={trackIds}
+			onPlay={play}
+			onShuffle={shuffle}
+			playLabel="Play album"
+			actions={
+				<>
+					{isAuthenticated && <SaveAlbumButton saved={saved} saving={saving} onClick={toggleSave} />}
+					<AddTracksToPlaylist tracks={tracks} />
+					<DownloadCollectionButton tracks={tracks} group={`Album · ${page.title}`} label="Download album" />
+				</>
+			}
+		>
+			<div className="mt-6 grid items-start gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+				<section aria-label="Tracklist" className="min-w-0">
+					{tracks.length === 0 ? (
+						<Medallion icon={Disc3} title="No tracks" message="The tracklist for this album is unavailable." />
 					) : (
-						<span className="font-medium text-foreground">{artistName}</span>
-					)
-				}
-				meta={nbTracks ? `${nbTracks} tracks${releaseDate ? ` · ${releaseDate}` : ""}` : releaseDate}
-				coverSrc={cover}
-				coverAlt={title}
-				primaryAction={
-					<HeroPlayButton
-						onPlay={handlePlayAll}
-						trackIds={playableTracks.map((t) => t.trackId)}
-						disabled={playableTracks.length === 0}
-						label="Play album"
-					/>
-				}
-				secondaryActions={
-					<>
-						<Button
-							onClick={handleShuffleAll}
-							disabled={playableTracks.length === 0}
-							variant="outline"
-							size="icon-touch"
-							className="rounded-full"
-							aria-label="Shuffle album"
-						>
-							<Shuffle className="size-4" aria-hidden />
-						</Button>
-						<AlbumSaveButton
-							saved={albumSaved}
-							saving={saving}
-							onClick={handleToggleSave}
-						/>
-					</>
-				}
-			/>
+						<div className="-mx-2 space-y-0.5">
+							{rows.map((row) =>
+								row.kind === "disc" ? (
+									<DiscHeader key={`disc-${row.disc}`} disc={row.disc} first={row === rows[0]} />
+								) : (
+									<motion.div key={`${tracks[row.index].trackId}-${row.index}`} {...rowReveal}>
+										<TrackRow
+											track={tracks[row.index]}
+											trackNumber={Number((page.tracks[row.index] as { TRACK_NUMBER?: string })?.TRACK_NUMBER) || row.index + 1}
+											queue={tracks}
+											showCover={false}
+											subtitle={tracks[row.index].artist}
+										/>
+									</motion.div>
+								)
+							)}
+						</div>
+					)}
+				</section>
+				<Credits page={page} />
+			</div>
 
-			{/* Tracklist */}
-			<section>
-				<div className="mb-3 flex items-baseline gap-2">
-					<h2 className="text-sm font-medium m-0">Tracklist</h2>
-					<span className="text-xs text-muted-foreground tabular-nums">{tracks.length}</span>
-				</div>
-				{tracks.length === 0 ? (
-					<EmptyState
-						title="No tracks"
-						description="The tracklist for this album is unavailable."
+			{page.moreByArtist.length > 0 && (
+				<section>
+					<SectionTitle
+						eyebrow="Discography"
+						title={page.artist ? `More by ${page.artist}` : "More albums"}
+						actionLabel="Artist"
+						href={page.artistId ? `/artist?id=${page.artistId}` : undefined}
 					/>
-				) : (
-				<div className="divide-y divide-border border-y border-border">
-					{(() => {
-						const normalizedTracks = tracks.map((t: any) => trackFromDeezerRaw(t));
-						return tracks.map((track: any, idx: number) => {
-							const normalized = normalizedTracks[idx];
-							const trackNum = track.TRACK_NUMBER || track.track_position || idx + 1;
-							const trackId = normalized.trackId;
-							return (
-								<TrackRow
-									key={trackId || idx}
-									track={normalized}
-									trackNumber={Number(trackNum)}
-									queue={normalizedTracks}
-								/>
-							);
-						});
-					})()}
-				</div>
-				)}
-			</section>
-		</div>
+					<CardCarousel>
+						{page.moreByArtist.slice(0, 12).map((a, i) => (
+							<MediaCard
+								key={a.id}
+								index={i}
+								href={`/album?id=${a.id}`}
+								title={a.title}
+								subtitle={[a.year, a.recordType].filter(Boolean).join(" · ") || undefined}
+								cover={a.cover}
+								collection={{ type: "album", id: a.id }}
+								badge={isSaved(a.id) ? <SavedBadge /> : undefined}
+							/>
+						))}
+					</CardCarousel>
+				</section>
+			)}
+		</CollectionScaffold>
+	);
+}
+
+/** "Disc N" tertiary pill with a rule running out to the edge. */
+function DiscHeader({ disc, first }: { disc: number; first: boolean }) {
+	return (
+		<motion.div {...rowReveal} className={first ? "flex items-center gap-3 px-2 pb-2" : "flex items-center gap-3 px-2 pb-2 pt-6"}>
+			<span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-tertiary-container pl-2 pr-3 text-sm font-semibold text-on-tertiary-container">
+				<Disc3 className="size-4" />
+				Disc {disc}
+			</span>
+			<span className="h-px flex-1 bg-outline-variant" />
+		</motion.div>
+	);
+}
+
+/** Release date and label / copyright on a tonal card. */
+function Credits({ page }: { page: AlbumPageData }) {
+	const lines = [
+		...(page.releaseDate ? [{ icon: CalendarDays, text: `Released ${formatReleaseDate(page.releaseDate)}` }] : []),
+		...(page.copyright ? [{ icon: Copyright, text: page.copyright }] : []),
+		...(page.label && !page.copyright ? [{ icon: Tag, text: `℗ ${page.label}` }] : []),
+		...(page.label && page.copyright && !page.copyright.includes(page.label) ? [{ icon: Tag, text: page.label }] : []),
+	];
+	if (!lines.length) return null;
+	return (
+		<motion.aside {...rowReveal} aria-label="Credits" className="rounded-[20px] bg-surface-low p-5 lg:sticky lg:top-[calc(var(--header-h)+80px)]">
+			<p className="type-eyebrow mb-3 text-primary">Credits</p>
+			<ul className="space-y-3">
+				{lines.map(({ icon: Icon, text }) => (
+					<li key={text} className="flex items-start gap-3 text-sm leading-snug text-muted-foreground">
+						<Icon className="mt-px size-[18px] shrink-0 text-primary" />
+						<span className="min-w-0 break-words">{text}</span>
+					</li>
+				))}
+			</ul>
+		</motion.aside>
 	);
 }
 
 export default function AlbumPage() {
 	return (
-		<Suspense
-			fallback={
-				<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
-					<Spinner size={20} />
-				</div>
-			}
-		>
+		<Suspense fallback={<AlbumDetailSkeleton />}>
 			<AlbumContent />
 		</Suspense>
 	);

@@ -49,7 +49,9 @@ function arrangeProgressive() {
 	const persisted = Promise.resolve();
 	serverStateMock.getOrLoginUserDz.mockResolvedValue({ loggedIn: true });
 	serverStateMock.getWaveletApp.mockResolvedValue({
-		settings: { maxBitrate: 3 },
+		settings: { maxBitrate: 1 },
+		// The config store now holds High: the share must follow it, not the cold-start value.
+		freshSettings: vi.fn(async () => ({ maxBitrate: 3 })),
 		storageProvider: {},
 	});
 	startProgressiveStreamMock.mockResolvedValue({
@@ -113,6 +115,16 @@ describe("GET /api/v1/shares/[shareId]/stream", () => {
 			where: { id: "s1" },
 			data: { storedTrackId: null },
 		});
+	});
+
+	it("re-streams at the server quality saved since this instance started (was: kept the cold-start maxBitrate)", async () => {
+		prismaMock.sharedTrack.findUnique.mockResolvedValue(share(null));
+		arrangeProgressive();
+
+		await GET(makeNextRequest(), makeParams({ shareId: "abc" }));
+		expect(startProgressiveStreamMock).toHaveBeenCalledWith(
+			expect.objectContaining({ bitrate: 3, settings: expect.objectContaining({ maxBitrate: 3 }) })
+		);
 	});
 
 	it("hands the progressive persist promise to after() (was: fire-and-forget)", async () => {

@@ -2,18 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Reorder, useDragControls } from "motion/react";
-import { useAuthStore } from "@/stores/useAuthStore";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowDownUp, Shuffle, GripVertical } from "lucide-react";
 import Link from "next/link";
+import { AnimatePresence, motion, Reorder, useDragControls } from "motion/react";
+import { toast } from "sonner";
+import { ArrowLeft, Clock3, GripVertical, History, ListPlus, MoreHorizontal, Music, Pencil, Search, Trash2, ArrowDownUp } from "lucide-react";
+import { useAuthStore } from "@/stores/useAuthStore";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
-import { EntityHero, HeroPlayButton } from "@/components/layout/EntityHero";
-import { EmptyState, Spinner } from "@/components/motion/icons";
+import { CollectionScaffold, Medallion, SlidingSegments, TonalIconButton, swap } from "@/components/expressive";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { usePrefetch } from "@/hooks/usePrefetch";
+import { DeletePlaylistDialog, PlaylistEditDialog, tonalButton } from "@/components/playlists/PlaylistDialogs";
+import { PlaylistDetailSkeleton } from "@/components/playlists/PlaylistTiles";
+import { formatRelative, formatTotal, plural, uniqueCovers } from "@/components/playlists/format";
 
 interface PlaylistTrack {
 	id: string;
@@ -21,6 +24,7 @@ interface PlaylistTrack {
 	title: string;
 	artist: string;
 	album: string | null;
+	albumId?: string | null;
 	coverUrl: string | null;
 	duration: number | null;
 	position: number;
@@ -30,18 +34,24 @@ interface PlaylistDetail {
 	id: string;
 	title: string;
 	description: string | null;
+	updatedAt?: string;
 	tracks: PlaylistTrack[];
 }
+
+type SortOrder = "asc" | "desc";
 
 export default function PlaylistDetailPage() {
 	const params = useParams();
 	const router = useRouter();
-	const [playlist, setPlaylist] = useState<PlaylistDetail | null>(null);
-	const [loading, setLoading] = useState(true);
+	// undefined = loading, null = not found.
+	const [playlist, setPlaylist] = useState<PlaylistDetail | null | undefined>(undefined);
+	const [editing, setEditing] = useState(false);
+	const [deleting, setDeleting] = useState(false);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const authLoading = useAuthStore((s) => s.isLoading);
 	const { prefs, updatePrefs } = useUserPreferences();
-	const sortOrder = prefs.playlistSortOrder ?? "asc";
-	const setSortOrder = (order: "asc" | "desc") => updatePrefs({ playlistSortOrder: order });
+	const sortOrder: SortOrder = prefs.playlistSortOrder ?? "asc";
+	const setSortOrder = (order: SortOrder) => updatePrefs({ playlistSortOrder: order });
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
 	const stopPlayer = usePlayerStore((s) => s.stop);
 	const playerPlay = usePlayerStore((s) => s.play);
@@ -52,22 +62,18 @@ export default function PlaylistDetailPage() {
 	usePrefetch(allTrackIds);
 
 	useEffect(() => {
-		if (!isAuthenticated || !params.id) {
-			setLoading(false);
-			return;
-		}
-		async function load() {
-			try {
-				const res = await fetch(`/api/v1/playlists/${params.id}`);
-				const json = await res.json();
-				if (json.success) setPlaylist(json.data);
-			} catch {
-				// ignore
-			}
-			setLoading(false);
-		}
-		load();
+		if (!isAuthenticated || !params.id) return;
+		let live = true;
+		fetch(`/api/v1/playlists/${params.id}`)
+			.then((res) => res.json())
+			.then((json) => live && setPlaylist(json.success ? json.data : null))
+			.catch(() => live && setPlaylist(null));
+		return () => {
+			live = false;
+		};
 	}, [params.id, isAuthenticated]);
+
+	const loading = authLoading || (isAuthenticated && playlist === undefined);
 
 	// Preload first tracks so playback starts instantly
 	useEffect(() => {
@@ -79,6 +85,8 @@ export default function PlaylistDetailPage() {
 
 	const handleRemoveTrack = async (trackId: string) => {
 		if (!playlist) return;
+		const removed = playlist.tracks.find((t) => t.trackId === trackId);
+		const before = [...playlist.tracks].sort((a, b) => a.position - b.position).map((t) => t.trackId);
 		// Stop player if it's playing the track being removed
 		if (currentPlayerTrack?.trackId === trackId) {
 			stopPlayer();
@@ -89,13 +97,40 @@ export default function PlaylistDetailPage() {
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ trackIds: [trackId] }),
 			});
-			setPlaylist((prev) =>
-				prev
-					? { ...prev, tracks: prev.tracks.filter((t) => t.trackId !== trackId) }
-					: null
-			);
+			setPlaylist((prev) => (prev ? { ...prev, tracks: prev.tracks.filter((t) => t.trackId !== trackId) } : prev));
+			if (removed) {
+				toast(`Removed “${removed.title}”`, {
+					action: { label: "Undo", onClick: () => void restoreTrack(playlist.id, removed, before) },
+				});
+			}
 		} catch {
 			// ignore
+		}
+	};
+
+	/** Undo a removal: re-add the track, then put the old order back. */
+	const restoreTrack = async (playlistId: string, track: PlaylistTrack, order: string[]) => {
+		try {
+			await fetch(`/api/v1/playlists/${playlistId}/tracks`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					tracks: [{ trackId: track.trackId, title: track.title, artist: track.artist, album: track.album, albumId: track.albumId ?? null, coverUrl: track.coverUrl, duration: track.duration }],
+				}),
+			});
+			await fetch(`/api/v1/playlists/${playlistId}/tracks`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ trackIds: order }),
+			});
+			setPlaylist((prev) => {
+				if (!prev || prev.tracks.some((t) => t.trackId === track.trackId)) return prev;
+				const byId = new Map([...prev.tracks, track].map((t) => [t.trackId, t]));
+				const tracks = order.map((id) => byId.get(id)).filter((t): t is PlaylistTrack => !!t).map((t, position) => ({ ...t, position }));
+				return { ...prev, tracks };
+			});
+		} catch {
+			toast.error("Couldn't restore the track");
 		}
 	};
 
@@ -104,74 +139,92 @@ export default function PlaylistDetailPage() {
 	// debounced so we don't spam the endpoint mid-drag.
 	const reorderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const playlistIdRef = useRef<string | null>(null);
-	playlistIdRef.current = playlist?.id ?? null;
+	useEffect(() => {
+		playlistIdRef.current = playlist?.id ?? null;
+	}, [playlist?.id]);
 
-	useEffect(() => () => {
-		if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
-	}, []);
-
-	const handleReorder = useCallback(
-		(newOrderIds: string[]) => {
-			// Optimistic local update — also rewrites .position so re-renders
-			// in any sort order stay consistent until the API confirms.
-			setPlaylist((prev) => {
-				if (!prev) return prev;
-				const byId = new Map(prev.tracks.map((t) => [t.trackId, t]));
-				const next = newOrderIds
-					.map((trackId, position) => {
-						const t = byId.get(trackId);
-						return t ? { ...t, position } : null;
-					})
-					.filter((t): t is PlaylistTrack => t !== null);
-				return { ...prev, tracks: next };
-			});
-
-			// Debounce the API call until the drag settles (~250ms idle).
+	useEffect(
+		() => () => {
 			if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
-			reorderTimerRef.current = setTimeout(() => {
-				const pid = playlistIdRef.current;
-				if (!pid) return;
-				void fetch(`/api/v1/playlists/${pid}/tracks`, {
-					method: "PATCH",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ trackIds: newOrderIds }),
-				}).catch(() => {
-					// Persist failed — leave the optimistic state in place. A future
-					// fetch on mount will re-sync from the server.
-				});
-			}, 250);
 		},
 		[]
 	);
 
-	if (loading) {
-		return (
-			<div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">
-				<Spinner size={20} />
-			</div>
-		);
-	}
+	const handleReorder = useCallback((newOrderIds: string[]) => {
+		// Optimistic local update — also rewrites .position so re-renders
+		// in any sort order stay consistent until the API confirms.
+		setPlaylist((prev) => {
+			if (!prev) return prev;
+			const byId = new Map(prev.tracks.map((t) => [t.trackId, t]));
+			const next = newOrderIds
+				.map((trackId, position) => {
+					const t = byId.get(trackId);
+					return t ? { ...t, position } : null;
+				})
+				.filter((t): t is PlaylistTrack => t !== null);
+			return { ...prev, tracks: next };
+		});
 
-	const sortedTracks = playlist
-		? [...playlist.tracks].sort((a, b) =>
-				sortOrder === "asc" ? a.position - b.position : b.position - a.position
-			)
-		: [];
+		// Debounce the API call until the drag settles (~250ms idle).
+		if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
+		reorderTimerRef.current = setTimeout(() => {
+			const pid = playlistIdRef.current;
+			if (!pid) return;
+			void fetch(`/api/v1/playlists/${pid}/tracks`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ trackIds: newOrderIds }),
+			}).catch(() => {
+				// Persist failed — leave the optimistic state in place. A future
+				// fetch on mount will re-sync from the server.
+			});
+		}, 250);
+	}, []);
+
+	const saveDetails = async ({ title, description }: { title: string; description: string | null }) => {
+		if (!playlist) return;
+		const res = await fetch(`/api/v1/playlists/${playlist.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ title, description }),
+		});
+		const json = await res.json().catch(() => null);
+		if (!res.ok || !json?.success) throw new Error(json?.error?.message || "Couldn't save the playlist");
+		setPlaylist((prev) => (prev ? { ...prev, title, description, updatedAt: json.data?.updatedAt ?? new Date().toISOString() } : prev));
+	};
+
+	const deletePlaylist = async () => {
+		if (!playlist) return;
+		if (currentPlayerTrack && playlist.tracks.some((t) => t.trackId === currentPlayerTrack.trackId)) stopPlayer();
+		const res = await fetch(`/api/v1/playlists/${playlist.id}`, { method: "DELETE" });
+		if (!res.ok) {
+			toast.error("Couldn't delete the playlist");
+			return;
+		}
+		toast(`Deleted “${playlist.title}”`);
+		router.push("/my-playlists");
+	};
+
+	if (loading) return <PlaylistDetailSkeleton />;
 
 	if (!playlist) {
 		return (
-			<EmptyState
-				className="mt-8"
+			<Medallion
+				className="pt-[10vh]"
+				icon={ListPlus}
 				title="Playlist not found"
-				description="It may have been deleted, or you don't have access to it."
+				message="It may have been deleted, or you don't have access to it."
 				action={
-					<Link href="/my-playlists">
-						<Button variant="outline">Back to playlists</Button>
+					<Link href="/my-playlists" className={tonalButton}>
+						<ArrowLeft />
+						Back to playlists
 					</Link>
 				}
 			/>
 		);
 	}
+
+	const sortedTracks = [...playlist.tracks].sort((a, b) => (sortOrder === "asc" ? a.position - b.position : b.position - a.position));
 
 	const playablePlaylistTracks: PlayerTrack[] = sortedTracks.map((t) => ({
 		trackId: t.trackId,
@@ -199,6 +252,7 @@ export default function PlaylistDetailPage() {
 		title: track.title,
 		artist: track.artist,
 		album: track.album,
+		albumId: track.albumId ?? null,
 		cover: track.coverUrl,
 		duration: track.duration,
 		bitrateLabel: null,
@@ -208,97 +262,121 @@ export default function PlaylistDetailPage() {
 	// position order (i.e. ascending). In "newest first" mode, dragging would
 	// invert positions on save — disable until the user flips back to "asc".
 	const reorderEnabled = sortOrder === "asc" && sortedTracks.length > 1;
+	const allCovers = uniqueCovers([[...playlist.tracks].sort((a, b) => a.position - b.position).map((t) => t.coverUrl)], 40);
+	const seconds = playlist.tracks.reduce((s, t) => s + (t.duration ?? 0), 0);
+	const updated = formatRelative(playlist.updatedAt);
 
 	return (
-		<div className="space-y-10">
-			<div className="space-y-2">
-				<Button
-					variant="ghost"
-					size="sm"
-					className="-ml-2 min-h-11 md:min-h-8"
-					aria-label="Back"
-					onClick={() => router.back()}
-				>
-					<ArrowLeft aria-hidden />
-					Back
-				</Button>
-				<EntityHero
-					eyebrow="Playlist"
-					title={playlist.title}
-					subtitle={
-						playlist.description ? (
-							<span>{playlist.description}</span>
-						) : undefined
-					}
-					meta={`${playlist.tracks.length} track${playlist.tracks.length !== 1 ? "s" : ""}`}
-					coverSrc={playlist.tracks.find((t) => t.coverUrl)?.coverUrl ?? null}
-					coverAlt={playlist.title}
-					primaryAction={
-						playlist.tracks.length > 0 ? (
-							<HeroPlayButton
-								onPlay={handlePlayAll}
-								trackIds={playablePlaylistTracks.map((t) => t.trackId)}
-								label="Play playlist"
+		<>
+			<CollectionScaffold
+				title={playlist.title}
+				covers={allCovers.slice(0, 4)}
+				backdropCovers={allCovers}
+				eyebrow="Playlist"
+				stats={[
+					{ icon: Music, label: plural(playlist.tracks.length, "track") },
+					...(seconds > 0 ? [{ icon: Clock3, label: formatTotal(seconds) }] : []),
+					...(updated ? [{ icon: History, label: `Updated ${updated === "Just now" ? "just now" : updated}` }] : []),
+				]}
+				description={playlist.description || undefined}
+				trackIds={playablePlaylistTracks.map((t) => t.trackId)}
+				onPlay={handlePlayAll}
+				onShuffle={handleShuffleAll}
+				playLabel="Play playlist"
+				actions={
+					<>
+						<TonalIconButton label="Edit details" onClick={() => setEditing(true)}>
+							<Pencil />
+						</TonalIconButton>
+						<DropdownMenu>
+							<DropdownMenuTrigger
+								aria-label="More options"
+								title="More options"
+								className="flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground outline-none transition-[background-color,transform] hover:bg-secondary/75 focus-visible:ring-4 focus-visible:ring-ring/40 active:scale-90"
+							>
+								<MoreHorizontal className="size-5" />
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="start" className="w-52 rounded-2xl p-1.5">
+								<DropdownMenuItem className="gap-2.5 rounded-xl py-2" onClick={() => setEditing(true)}>
+									<Pencil className="size-4" />
+									Edit details
+								</DropdownMenuItem>
+								<DropdownMenuSeparator />
+								<DropdownMenuItem variant="destructive" className="gap-2.5 rounded-xl py-2" onClick={() => setDeleting(true)}>
+									<Trash2 className="size-4" />
+									Delete playlist
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					</>
+				}
+			>
+				<AnimatePresence mode="wait" initial={false}>
+					{playlist.tracks.length === 0 ? (
+						<motion.div key="empty" variants={swap} initial="initial" animate="animate" exit="exit">
+							<Medallion
+								icon={ListPlus}
+								title="This playlist is empty"
+								message="Add tracks from any track menu with “Add to playlist”."
+								action={
+									<Link href="/search" className={tonalButton}>
+										<Search />
+										Find tracks
+									</Link>
+								}
 							/>
-						) : undefined
-					}
-					secondaryActions={
-						playlist.tracks.length > 0 ? (
-							<>
-								<Button
-									onClick={handleShuffleAll}
-									variant="outline"
-									size="icon-touch"
-									className="rounded-full"
-									aria-label="Shuffle playlist"
-								>
-									<Shuffle className="size-4" aria-hidden />
-								</Button>
-								{playlist.tracks.length > 1 && (
-									<Button
-										variant="outline"
-										size="sm"
-										className="rounded-full min-h-11 md:min-h-9 px-3.5"
-										onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-										aria-label="Toggle sort order"
+						</motion.div>
+					) : (
+						<motion.div key="list" variants={swap} initial="initial" animate="animate" exit="exit" className="mt-4">
+							<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+								<AnimatePresence mode="wait" initial={false}>
+									<motion.p
+										key={String(reorderEnabled)}
+										initial={{ opacity: 0, y: 6 }}
+										animate={{ opacity: 1, y: 0 }}
+										exit={{ opacity: 0, y: -6 }}
+										transition={{ duration: 0.2 }}
+										className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"
 									>
-										<ArrowDownUp aria-hidden />
-										{sortOrder === "asc" ? "Oldest" : "Newest"}
-									</Button>
+										{reorderEnabled ? <GripVertical className="size-4 shrink-0 text-primary" /> : <ArrowDownUp className="size-4 shrink-0 text-primary" />}
+										{reorderEnabled ? "Drag the handle to reorder" : sortedTracks.length > 1 ? "Switch to Oldest to reorder" : "Add more tracks to reorder"}
+									</motion.p>
+								</AnimatePresence>
+								{sortedTracks.length > 1 && (
+									<SlidingSegments<SortOrder>
+										id="playlist-sort"
+										size="sm"
+										className="w-[200px]"
+										value={sortOrder}
+										onChange={setSortOrder}
+										items={[
+											{ value: "asc", label: "Oldest" },
+											{ value: "desc", label: "Newest" },
+										]}
+									/>
 								)}
-							</>
-						) : undefined
-					}
-				/>
-			</div>
+							</div>
+							<Reorder.Group as="div" axis="y" values={sortedTracks.map((t) => t.trackId)} onReorder={handleReorder} className="-mx-2 space-y-0.5">
+								{sortedTracks.map((track, idx) => (
+									<DraggableRow
+										key={track.id}
+										trackId={track.trackId}
+										idx={idx}
+										normalized={normalized[idx]}
+										queue={normalized}
+										onDelete={() => handleRemoveTrack(track.trackId)}
+										canDrag={reorderEnabled}
+									/>
+								))}
+							</Reorder.Group>
+						</motion.div>
+					)}
+				</AnimatePresence>
+			</CollectionScaffold>
 
-			{playlist.tracks.length === 0 ? (
-				<EmptyState
-					title="This playlist is empty"
-					description="Add tracks from search results or album pages."
-				/>
-			) : (
-				<Reorder.Group
-					as="div"
-					axis="y"
-					values={sortedTracks.map((t) => t.trackId)}
-					onReorder={handleReorder}
-					className="border-y border-border"
-				>
-					{sortedTracks.map((track, idx) => (
-						<DraggableRow
-							key={track.id}
-							trackId={track.trackId}
-							idx={idx}
-							normalized={normalized[idx]}
-							queue={normalized}
-							onDelete={() => handleRemoveTrack(track.trackId)}
-							canDrag={reorderEnabled}
-						/>
-					))}
-				</Reorder.Group>
-			)}
-		</div>
+			<PlaylistEditDialog open={editing} onOpenChange={setEditing} mode="edit" initial={{ title: playlist.title, description: playlist.description }} onSubmit={saveDetails} />
+			<DeletePlaylistDialog open={deleting} onOpenChange={setDeleting} title={playlist.title} trackCount={playlist.tracks.length} onConfirm={deletePlaylist} />
+		</>
 	);
 }
 
@@ -329,30 +407,33 @@ function DraggableRow({
 			value={trackId}
 			dragListener={false}
 			dragControls={dragControls}
-			className="relative flex items-stretch border-b border-border last:border-b-0 bg-background data-[dragging=true]:z-10 data-[dragging=true]:rounded-lg data-[dragging=true]:shadow-float"
+			exit={{ opacity: 0, x: -24, transition: { duration: 0.2 } }}
+			whileDrag={{ scale: 1.02 }}
+			className="relative flex items-stretch rounded-2xl bg-background data-[dragging=true]:z-10 data-[dragging=true]:bg-surface-high data-[dragging=true]:shadow-float"
 		>
-			{canDrag && (
-				<button
-					type="button"
-					aria-label={`Drag to reorder track ${idx + 1}`}
-					onPointerDown={(e) => {
-						e.preventDefault();
-						dragControls.start(e);
-					}}
-					className="shrink-0 flex items-center justify-center w-10 md:w-8 cursor-grab active:cursor-grabbing touch-none text-muted-foreground [@media(hover:hover)]:hover:text-foreground"
-				>
-					<GripVertical className="size-4" aria-hidden />
-				</button>
-			)}
-			<div className="flex-1 min-w-0">
-				<TrackRow
-					track={normalized}
-					trackNumber={idx + 1}
-					showBitrate={false}
-					showDuration
-					onDelete={onDelete}
-					queue={queue}
-				/>
+			<AnimatePresence initial={false}>
+				{canDrag && (
+					<motion.button
+						type="button"
+						aria-label={`Drag to reorder track ${idx + 1}`}
+						initial={{ width: 0, opacity: 0 }}
+						animate={{ width: "auto", opacity: 1 }}
+						exit={{ width: 0, opacity: 0 }}
+						transition={{ duration: 0.25, ease: [0.2, 0, 0, 1] }}
+						onPointerDown={(e) => {
+							e.preventDefault();
+							dragControls.start(e);
+						}}
+						className="flex shrink-0 cursor-grab touch-none items-center justify-center overflow-hidden text-muted-foreground active:cursor-grabbing [@media(hover:hover)]:hover:text-primary"
+					>
+						<span className="flex w-9 justify-center md:w-8">
+							<GripVertical className="size-4" aria-hidden />
+						</span>
+					</motion.button>
+				)}
+			</AnimatePresence>
+			<div className="min-w-0 flex-1">
+				<TrackRow track={normalized} trackNumber={idx + 1} showBitrate={false} showDuration onDelete={onDelete} queue={queue} />
 			</div>
 		</Reorder.Item>
 	);

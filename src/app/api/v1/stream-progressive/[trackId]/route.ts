@@ -76,7 +76,7 @@ export async function GET(
 		}
 
 		// Not cached — open a progressive stream
-		const settings = app.settings;
+		const settings = await app.freshSettings();
 		const preferredBitrate = settings.maxBitrate;
 
 		// Dedup lock: only used for real (persisting) plays. Preview streams

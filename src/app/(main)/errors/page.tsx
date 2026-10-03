@@ -1,82 +1,98 @@
 "use client";
 
-import { motion } from "motion/react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
+import { CircleCheck, Disc3, ListX, Search, Trash2, TriangleAlert } from "lucide-react";
 import { useErrorStore } from "@/stores/useErrorStore";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/motion/icons";
+import { cn } from "@/lib/utils";
+import { GlassIconBadge, GlassPill, HeroBanner, HeroEyebrow, HeroTitle, Medallion, entrance, heroGlassButton, swap } from "@/components/expressive";
+import { SettingsSection, StatusPill } from "../settings/_components/SettingsTiles";
 
 export default function ErrorsPage() {
 	const { errors, downloadInfo, clearErrors } = useErrorStore();
+	const n = errors.length;
 
 	return (
-		<motion.div
-			initial={{ opacity: 0, y: 8 }}
-			animate={{ opacity: 1, y: 0 }}
-			transition={{ duration: 0.3, ease: "easeOut" }}
-			className="max-w-3xl mx-auto pt-2"
-		>
-			{/* Page header */}
-			<div className="mb-8 flex items-end gap-5 justify-between flex-wrap">
-				<div className="min-w-0 flex-1">
-					<h1 className="text-2xl sm:text-3xl font-semibold tracking-tight m-0">Errors</h1>
-					<p className="mt-1 text-sm text-muted-foreground tabular-nums">
-						{errors.length === 0
-							? "Nothing failed. All clean."
-							: `${errors.length} failed download${errors.length !== 1 ? "s" : ""} on record`}
-					</p>
-				</div>
-				{errors.length > 0 && (
-					<Button variant="destructive" size="sm" onClick={clearErrors} className="min-h-11 sm:min-h-8">
-						Clear all
-					</Button>
-				)}
-			</div>
-
-			{/* Source download */}
-			{downloadInfo && (
-				<div className="mb-6 rounded-xl border border-border bg-card p-4">
-					<p className="text-xs text-muted-foreground mb-1">Source</p>
-					<p className="text-sm font-medium text-foreground truncate">{downloadInfo.title}</p>
-					<p className="text-sm text-muted-foreground mt-0.5 tabular-nums">
-						{downloadInfo.artist} · {downloadInfo.size} tracks
-					</p>
-				</div>
-			)}
-
-			{/* List */}
-			{errors.length === 0 ? (
-				<EmptyState title="No errors" description="All downloads completed cleanly." />
-			) : (
-				<div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
-					{errors.map((error, idx) => (
-						<div
-							key={idx}
-							className="grid grid-cols-[28px_1fr_auto] gap-3 items-start px-4 py-3 hover:bg-accent/40 transition-colors"
-						>
-							<span className="text-xs font-mono tabular-nums text-muted-foreground mt-0.5">
-								{String(idx + 1).padStart(2, "0")}
-							</span>
-							<div className="min-w-0">
-								<p className="text-sm font-medium text-foreground leading-snug">
-									{error.message}
-								</p>
-								{error.data && (
-									<p className="text-xs text-muted-foreground mt-1 truncate">
-										{error.data.artist} · {error.data.title} · <span className="font-mono">ID {error.data.id}</span>
-									</p>
-								)}
-							</div>
-							{error.errid ? (
-								<span className="rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 font-mono text-[11px] text-destructive shrink-0">
-									{error.errid}
-								</span>
-							) : (
-								<span className="text-xs text-muted-foreground shrink-0 mt-0.5">—</span>
+		<div className="mx-auto max-w-4xl pb-6 pt-2">
+			<motion.div {...entrance(0)}>
+				<HeroBanner contentClassName="p-6 sm:p-8 lg:p-10">
+					<div className="flex items-start justify-between gap-4">
+						<GlassIconBadge icon={n ? TriangleAlert : CircleCheck} size={52} />
+						<AnimatePresence>
+							{n > 0 && (
+								<motion.button key="clear" type="button" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} whileTap={{ scale: 0.95 }} onClick={clearErrors} className={heroGlassButton}>
+									<Trash2 />
+									Clear all
+								</motion.button>
 							)}
+						</AnimatePresence>
+					</div>
+					<HeroEyebrow className="mt-6">Downloads</HeroEyebrow>
+					<HeroTitle first="Errors" second={n ? `${n} failed.` : "All clean."} className="mt-2" />
+					<p className="mt-3 max-w-md text-base text-white/80">{n ? "Tracks that couldn’t be fetched in your last download. The reason is on each row." : "Nothing failed. Every download completed cleanly."}</p>
+					<div className="mt-5 flex flex-wrap gap-2">
+						<GlassPill icon={ListX} value={n} label={n === 1 ? "failed track" : "failed tracks"} />
+						{downloadInfo && <GlassPill icon={Disc3} value={downloadInfo.size} label="in source" />}
+					</div>
+				</HeroBanner>
+			</motion.div>
+
+			{downloadInfo && (
+				<SettingsSection title="Source" index={1}>
+					<div className="flex items-center gap-4 px-4 py-3.5">
+						<span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
+							<Disc3 className="size-[22px]" />
+						</span>
+						<div className="min-w-0 flex-1">
+							<p className="truncate text-base font-semibold text-foreground">{downloadInfo.title}</p>
+							<p className="truncate text-sm tabular-nums text-muted-foreground">
+								{downloadInfo.artist} · {downloadInfo.size} tracks
+							</p>
 						</div>
-					))}
-				</div>
+					</div>
+				</SettingsSection>
 			)}
-		</motion.div>
+
+			<AnimatePresence mode="wait" initial={false}>
+				{n === 0 ? (
+					<motion.div key="empty" variants={swap} initial="initial" animate="animate" exit="exit">
+						<Medallion
+							icon={CircleCheck}
+							title="No errors"
+							message="All downloads completed cleanly."
+							action={
+								<Link href="/search" className="inline-flex h-11 items-center gap-2 rounded-full bg-secondary px-5 text-sm font-semibold text-secondary-foreground no-underline transition-transform active:scale-95">
+									<Search className="size-[18px]" />
+									Find music
+								</Link>
+							}
+						/>
+					</motion.div>
+				) : (
+					<motion.div key="list" variants={swap} initial="initial" animate="animate" exit="exit">
+						<SettingsSection title={`Failed · ${n}`} index={2}>
+							{errors.map((error, idx) => (
+								<motion.div
+									key={idx}
+									{...entrance(idx, 8)}
+									className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-start gap-4 px-4 py-3.5 transition-colors hover:bg-surface-high"
+								>
+									<span className="flex size-10 items-center justify-center rounded-xl bg-destructive/15 font-mono text-sm font-semibold tabular-nums text-destructive">{String(idx + 1).padStart(2, "0")}</span>
+									<div className="min-w-0 pt-0.5">
+										<p className="text-base font-semibold leading-snug text-foreground">{error.message}</p>
+										{error.data && (
+											<p className="mt-0.5 truncate text-sm text-muted-foreground">
+												{error.data.artist} · {error.data.title} · <span className="font-mono text-xs">ID {error.data.id}</span>
+											</p>
+										)}
+									</div>
+									<span className={cn("pt-2", !error.errid && "text-xs text-muted-foreground")}>{error.errid ? <StatusPill label={error.errid} tone="error" className="font-mono" /> : "—"}</span>
+								</motion.div>
+							))}
+						</SettingsSection>
+					</motion.div>
+				)}
+			</AnimatePresence>
+		</div>
 	);
 }

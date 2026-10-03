@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "eslint",
     "icons": "tsx scripts/generate-icons.ts",
+    "openapi": "node scripts/generate-openapi.mjs",
+    "openapi:dart": "node scripts/generate-dart-client.mjs",
     "studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

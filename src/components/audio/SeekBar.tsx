@@ -66,7 +66,7 @@ export function SeekBar({ currentTime, duration, buffered, loading = false, onSe
 	return (
 		<div className={cn("flex w-full items-center gap-2.5", className)}>
 			{showTimes && (
-				<span className="w-9 shrink-0 text-right font-mono text-[10.5px] tabular-nums text-muted-foreground" data-testid="seek-elapsed">
+				<span className={cn("w-9 shrink-0 text-right text-[11px] font-semibold tabular-nums text-muted-foreground transition-colors", drag !== null && "font-semibold text-primary")} data-testid="seek-elapsed">
 					{formatTime(labelTime)}
 				</span>
 			)}
@@ -110,24 +110,24 @@ export function SeekBar({ currentTime, duration, buffered, loading = false, onSe
 				{/* Track */}
 				<div
 					ref={trackRef}
-					className="relative h-1 w-full overflow-hidden rounded-full bg-foreground/12 transition-[height] duration-150 ease-out group-hover/seek:h-1.5 group-data-[active]/seek:h-1.5"
+					className="relative h-1 w-full overflow-hidden rounded-full bg-primary/15 transition-[height] duration-150 ease-out group-hover/seek:h-1.5 group-data-[active]/seek:h-1.5"
 				>
 					<div
-						className="absolute inset-y-0 left-0 rounded-full bg-foreground/15 transition-[width] duration-300"
+						className="absolute inset-y-0 left-0 rounded-full bg-primary/20 transition-[width] duration-300"
 						style={{ width: `${bufPct * 100}%` }}
 						data-testid="seek-buffered"
 					/>
 					{hover !== null && drag === null && hover > pct && (
 						<div
-							className="absolute inset-y-0 left-0 rounded-full bg-foreground/20"
+							className="absolute inset-y-0 left-0 rounded-full bg-primary/30"
 							style={{ width: `${hover * 100}%` }}
 							data-testid="seek-hover"
 						/>
 					)}
 					<div
 						className={cn(
-							"absolute inset-y-0 left-0 rounded-full bg-foreground transition-colors group-hover/seek:bg-highlight group-data-[active]/seek:bg-highlight",
-							drag === null && "transition-[width,background-color] duration-200 ease-linear",
+							"absolute inset-y-0 left-0 rounded-full bg-primary",
+							drag === null && "transition-[width] duration-200 ease-linear",
 							loading && "opacity-50"
 						)}
 						style={{ width: `${shown * 100}%` }}
@@ -138,7 +138,7 @@ export function SeekBar({ currentTime, duration, buffered, loading = false, onSe
 							<motion.div
 								key="sheen"
 								data-testid="seek-loading"
-								className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-foreground/45 to-transparent"
+								className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-primary/60 to-transparent"
 								initial={{ left: "-35%", opacity: 0 }}
 								animate={{ left: ["-35%", "100%"], opacity: 1 }}
 								exit={{ opacity: 0 }}
@@ -153,7 +153,7 @@ export function SeekBar({ currentTime, duration, buffered, loading = false, onSe
 					<span
 						aria-hidden
 						className={cn(
-							"pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground shadow-[0_1px_4px_rgb(0_0_0/0.3)] ring-2 ring-background transition-[scale,opacity] duration-150",
+							"pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow-[0_2px_8px_color-mix(in_oklch,var(--primary)_55%,transparent)] transition-[scale,opacity] duration-150",
 							active ? "scale-100 opacity-100" : "scale-50 opacity-0 group-focus-visible/seek:scale-100 group-focus-visible/seek:opacity-100"
 						)}
 						style={{ left: `${shown * 100}%` }}
@@ -169,7 +169,7 @@ export function SeekBar({ currentTime, duration, buffered, loading = false, onSe
 							animate={{ opacity: 1, y: 0, scale: 1 }}
 							exit={{ opacity: 0, y: 4, scale: 0.95 }}
 							transition={{ duration: 0.12 }}
-							className="pointer-events-none absolute bottom-full z-10 mb-2 -translate-x-1/2 rounded-md bg-foreground px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums text-background shadow-float"
+							className="pointer-events-none absolute bottom-full z-10 mb-2 -translate-x-1/2 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary-foreground shadow-float"
 							style={{ left: `${(drag ?? hover ?? 0) * 100}%` }}
 							data-testid="seek-bubble"
 						>
@@ -180,7 +180,7 @@ export function SeekBar({ currentTime, duration, buffered, loading = false, onSe
 			</div>
 
 			{showTimes && (
-				<span className="w-9 shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground" data-testid="seek-total">
+				<span className="w-9 shrink-0 text-[11px] font-semibold tabular-nums text-muted-foreground" data-testid="seek-total">
 					{formatTime(duration)}
 				</span>
 			)}

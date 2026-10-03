@@ -82,4 +82,34 @@ describe("Player", () => {
 		const slider = screen.getByLabelText("Volume");
 		expect(slider).toHaveAttribute("type", "range");
 	});
+
+	it("rides a wavy progress line along the phone card instead of the flat bar", () => {
+		usePlayerStore.setState({ currentTime: 60 });
+		renderPlayer();
+		const sliders = screen.getAllByRole("slider", { name: "Seek" });
+		expect(sliders[1]).toHaveAttribute("data-testid", "wave-seek");
+		fireEvent.keyDown(sliders[1], { key: "ArrowRight" });
+		expect(usePlayerStore.getState()._seekTo).toBe(65);
+	});
+
+	it("shows the heart only when signed in", () => {
+		const { unmount } = renderPlayer();
+		expect(screen.getByRole("button", { name: "Save to library" })).toBeInTheDocument();
+		unmount();
+		useAuthStore.setState({ isAuthenticated: false });
+		renderPlayer();
+		expect(screen.queryByRole("button", { name: "Save to library" })).toBeNull();
+	});
+
+	it("rings the play button while the stream buffers", () => {
+		usePlayerStore.setState({ isPlaying: true, isBuffering: true });
+		renderPlayer();
+		expect(screen.getByTestId("player-buffering")).toBeInTheDocument();
+	});
+
+	it("opens Now Playing from the track title", async () => {
+		renderPlayer();
+		await userEvent.click(screen.getByText("Pluto Projector"));
+		expect(usePlayerStore.getState().fullscreenOpen).toBe(true);
+	});
 });

@@ -39,6 +39,9 @@ export class WaveletApp {
 	 *  completes. Prevents concurrent progressive downloads of the same track. */
 	private _downloadLocks: Map<string, Promise<void>> = new Map();
 
+	/** When `settings` was last read from the config store (see freshSettings). */
+	private _settingsLoadedAt = 0;
+
 	constructor(listener: Listener, configStore: ConfigStore) {
 		this.listener = listener;
 		this.settings = {} as Settings;
@@ -50,10 +53,24 @@ export class WaveletApp {
 		await ensureImports();
 		if (loadSettings) {
 			this.settings = await loadSettings(this.configStore);
+			this._settingsLoadedAt = Date.now();
 		}
 		if (createStorageProvider) {
 			this.storageProvider = createStorageProvider();
 		}
+	}
+
+	/**
+	 * Settings no older than `maxAgeMs`. Each Vercel instance keeps its own
+	 * WaveletApp, so a change saved on one instance (e.g. the server-wide
+	 * streaming quality) only reaches the others by re-reading the config store.
+	 */
+	async freshSettings(maxAgeMs = 30_000): Promise<Settings> {
+		if (loadSettings && Date.now() - this._settingsLoadedAt > maxAgeMs) {
+			this.settings = await loadSettings(this.configStore);
+			this._settingsLoadedAt = Date.now();
+		}
+		return this.settings;
 	}
 
 	async isDeezerAvailable(): Promise<"yes" | "no" | "no-network"> {
@@ -91,6 +108,7 @@ export class WaveletApp {
 			await saveSettingsFn(newSettings, this.configStore);
 		}
 		this.settings = newSettings;
+		this._settingsLoadedAt = Date.now();
 		if (createStorageProvider) {
 			this.storageProvider = createStorageProvider();
 		}

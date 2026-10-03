@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { HardDrive, Trash2 } from "lucide-react";
 import { getCacheStats, clearCache, setCacheLimit, getCacheLimit } from "@/lib/audio-cache";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trash2, HardDrive } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/motion/icons";
+import { DUR, EASE, SlidingSegments } from "@/components/expressive";
 
 function formatBytes(bytes: number): string {
 	if (bytes === 0) return "0 B";
@@ -21,14 +22,33 @@ const CACHE_LIMITS = [
 	{ label: "2 GB", bytes: 2 * 1024 * 1024 * 1024 },
 ];
 
-export function AudioCacheManager() {
+/** Saved limit from localStorage (applied to the cache), else the current one. */
+function restoreLimit(): number {
+	try {
+		const saved = typeof window === "undefined" ? null : localStorage.getItem("wavelet-cache-limit");
+		const bytes = saved ? parseInt(saved, 10) : NaN;
+		if (!isNaN(bytes) && bytes > 0) {
+			setCacheLimit(bytes);
+			return bytes;
+		}
+	} catch {}
+	return getCacheLimit();
+}
+
+/**
+ * Local audio cache as an M3 settings tile: usage meter, size limit segments
+ * and a tonal "Clear". Renders as a single tile root so it slots straight
+ * into a settings section.
+ */
+export function AudioCacheManager({ className }: { className?: string }) {
 	const [stats, setStats] = useState<{
 		trackCount: number;
 		totalBytes: number;
 		maxBytes: number;
 	} | null>(null);
 	const [clearing, setClearing] = useState(false);
-	const [currentLimit, setCurrentLimit] = useState(getCacheLimit());
+	// Restores the saved limit on first render (client-only tile).
+	const [currentLimit, setCurrentLimit] = useState(restoreLimit);
 
 	const refreshStats = useCallback(async () => {
 		const s = await getCacheStats();
@@ -36,8 +56,14 @@ export function AudioCacheManager() {
 	}, []);
 
 	useEffect(() => {
-		refreshStats();
-	}, [refreshStats]);
+		let live = true;
+		getCacheStats().then((s) => {
+			if (live) setStats({ trackCount: s.trackCount, totalBytes: s.totalBytes, maxBytes: s.maxBytes });
+		});
+		return () => {
+			live = false;
+		};
+	}, []);
 
 	const handleClear = async () => {
 		setClearing(true);
@@ -55,94 +81,74 @@ export function AudioCacheManager() {
 		} catch {}
 	};
 
-	// Restore limit from localStorage on mount
-	useEffect(() => {
-		try {
-			const saved = localStorage.getItem("wavelet-cache-limit");
-			if (saved) {
-				const bytes = parseInt(saved, 10);
-				if (!isNaN(bytes) && bytes > 0) {
-					setCacheLimit(bytes);
-					setCurrentLimit(bytes);
-				}
-			}
-		} catch {}
-	}, []);
-
 	const usagePercent = stats ? Math.min(100, (stats.totalBytes / currentLimit) * 100) : 0;
+	const summary = stats
+		? `${formatBytes(stats.totalBytes)} of ${formatBytes(currentLimit)} · ${stats.trackCount} track${stats.trackCount !== 1 ? "s" : ""}`
+		: "Calculating…";
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="flex items-center gap-2">
-					<HardDrive className="size-4 text-muted-foreground" />
-					Audio Cache
-				</CardTitle>
-			</CardHeader>
-			<CardContent className="space-y-4">
-				{!stats ? (
-					<div className="flex justify-center py-4">
-						<Spinner className="text-muted-foreground" />
-					</div>
-				) : (
-					<>
-						{/* Usage bar */}
-						<div className="space-y-2">
-							<div className="flex justify-between text-xs text-muted-foreground">
-								<span>{stats.trackCount} track{stats.trackCount !== 1 ? "s" : ""} cached</span>
-								<span className="font-mono tabular-nums">{formatBytes(stats.totalBytes)} / {formatBytes(currentLimit)}</span>
-							</div>
-							<div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-								<div
-									className="h-full rounded-full bg-foreground transition-all duration-500 ease-out"
-									style={{ width: `${usagePercent}%` }}
-								/>
-							</div>
-						</div>
-
-						{/* Cache limit selector */}
-						<div className="space-y-1.5">
-							<p className="text-xs font-medium text-muted-foreground">
-								Max cache size
-							</p>
-							<div className="flex gap-1.5 flex-wrap">
-								{CACHE_LIMITS.map((opt) => (
-									<Button
-										key={opt.bytes}
-										variant={currentLimit === opt.bytes ? "default" : "outline"}
-										size="sm"
-										className="font-mono text-xs tabular-nums"
-										onClick={() => handleLimitChange(opt.bytes)}
-									>
-										{opt.label}
-									</Button>
-								))}
-							</div>
-						</div>
-
-						{/* Clear button */}
-						<Button
-							variant="outline"
-							size="sm"
-							className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/40"
-							onClick={handleClear}
-							disabled={clearing || stats.trackCount === 0}
+		<div className={cn("px-4 pb-4 pt-3.5", className)}>
+			<div className="flex items-center gap-4">
+				<span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary-container text-on-secondary-container">
+					<HardDrive className="size-[22px]" />
+				</span>
+				<div className="min-w-0 flex-1">
+					<p className="text-base font-semibold leading-snug text-foreground">Audio cache</p>
+					<AnimatePresence mode="popLayout" initial={false}>
+						<motion.p
+							key={summary}
+							initial={{ opacity: 0, y: 4 }}
+							animate={{ opacity: 1, y: 0 }}
+							exit={{ opacity: 0, y: -4 }}
+							transition={{ duration: DUR.short }}
+							className="mt-0.5 truncate text-sm tabular-nums leading-snug text-muted-foreground"
 						>
-							{clearing ? (
-								<Spinner size={14} />
-							) : (
-								<Trash2 className="size-3.5" />
-							)}
-							Clear audio cache
-						</Button>
+							{summary}
+						</motion.p>
+					</AnimatePresence>
+				</div>
+				<motion.button
+					type="button"
+					whileTap={{ scale: 0.94 }}
+					onClick={handleClear}
+					disabled={!stats || clearing || stats.trackCount === 0}
+					className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-secondary px-4 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-destructive/15 hover:text-destructive disabled:pointer-events-none disabled:opacity-50"
+				>
+					{clearing ? <Spinner size={14} /> : <Trash2 className="size-4" />}
+					Clear
+				</motion.button>
+			</div>
 
-						<p className="text-xs text-muted-foreground">
-							Cached tracks play instantly without network requests.
-							Tracks are automatically cached as you listen and when you browse playlists.
-						</p>
-					</>
-				)}
-			</CardContent>
-		</Card>
+			{/* Usage meter */}
+			<div
+				role="progressbar"
+				aria-label="Audio cache usage"
+				aria-valuemin={0}
+				aria-valuemax={100}
+				aria-valuenow={Math.round(usagePercent)}
+				className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-surface-highest"
+			>
+				<motion.div
+					className="h-full rounded-full bg-primary"
+					initial={false}
+					animate={{ width: `${Math.max(usagePercent, stats && stats.totalBytes > 0 ? 1.5 : 0)}%` }}
+					transition={{ duration: DUR.long, ease: EASE.emphasized }}
+				/>
+			</div>
+
+			{/* Cache limit */}
+			<p className="type-eyebrow mb-2 mt-5 text-muted-foreground">Max cache size</p>
+			<SlidingSegments
+				id="cache-limit"
+				size="sm"
+				value={String(currentLimit)}
+				onChange={(v) => handleLimitChange(Number(v))}
+				items={CACHE_LIMITS.map((o) => ({ value: String(o.bytes), label: o.label }))}
+			/>
+
+			<p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+				Cached tracks play instantly without network requests. Tracks are cached as you listen and when you browse playlists.
+			</p>
+		</div>
 	);
 }

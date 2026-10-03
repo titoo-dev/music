@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence, Reorder, useDragControls } from "motion/react";
-import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/ui/cover-image";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
-import { GripVertical, X, Trash2 } from "lucide-react";
-import { EmptyState } from "@/components/motion/icons";
+import { GripVertical, ListMusic, Shuffle, X, Trash2 } from "lucide-react";
+import { Equalizer } from "@/components/motion/icons";
+import { CountPill, CoverTheme, Medallion, entrance } from "@/components/expressive";
 import { PlaybackIndicator } from "./PlaybackIndicator";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+/** Floating panel shell shared by the queue and the lyrics (rounded 28, surfaceContainer). */
+export const floatingPanel =
+	"fixed z-[60] flex flex-col overflow-hidden rounded-[28px] bg-surface-container text-foreground shadow-popover inset-x-2 top-[calc(env(safe-area-inset-top,0px)+8px)] md:inset-x-auto md:right-4 md:top-[calc(var(--header-h)+12px)] md:bottom-[calc(var(--player-h)+var(--player-offset)+12px)] md:w-[380px]";
 
 export function QueuePanel() {
 	const open = usePlayerStore((s) => s.queuePanelOpen);
@@ -24,6 +28,8 @@ export function QueuePanel() {
 	const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
 	const clearQueue = usePlayerStore((s) => s.clearQueue);
 	const currentTrack = usePlayerStore((s) => s.currentTrack);
+	// Over Now Playing there's no docked player to clear on phones.
+	const overFullscreen = usePlayerStore((s) => s.fullscreenOpen);
 
 	const [isDesktop, setIsDesktop] = useState(() =>
 		typeof window !== "undefined" &&
@@ -83,12 +89,7 @@ export function QueuePanel() {
 	};
 
 	const totalCount = queue.length;
-	const subtitle =
-		totalCount === 0
-			? ""
-			: totalCount === 1
-				? "1 track"
-				: `${totalCount} tracks`;
+	const subtitle = totalCount === 0 ? "" : totalCount === 1 ? "1 track" : `${totalCount} tracks`;
 
 	return (
 		<AnimatePresence>
@@ -108,9 +109,10 @@ export function QueuePanel() {
 					onDragEnd={handleDragEnd}
 					role="region"
 					aria-label="Queue"
-					className="fixed z-[60] flex flex-col overflow-hidden rounded-2xl border border-border bg-popover/95 glass text-popover-foreground shadow-popover
-						inset-x-2 top-[calc(env(safe-area-inset-top,0px)+8px)] bottom-[calc(var(--player-h)+var(--player-offset)+8px)]
-						md:inset-x-auto md:right-4 md:top-[calc(var(--header-h)+12px)] md:bottom-[calc(var(--player-h)+var(--player-offset)+12px)] md:w-[360px] md:rounded-xl"
+					className={cn(
+						floatingPanel,
+						overFullscreen ? "bottom-[calc(env(safe-area-inset-bottom,0px)+8px)]" : "bottom-[calc(var(--player-h)+var(--player-offset)+8px)]"
+					)}
 				>
 					{/* Drag handle (mobile only) — scoped drag surface, also signals "swipeable" */}
 					{!isDesktop && (
@@ -118,20 +120,33 @@ export function QueuePanel() {
 							onPointerDown={(e) => dragControls.start(e)}
 							role="button"
 							aria-label="Drag down to close queue"
-							className="flex shrink-0 items-center justify-center pt-2.5 pb-1.5 cursor-grab active:cursor-grabbing touch-none"
+							className="flex shrink-0 cursor-grab touch-none items-center justify-center pb-1 pt-2.5 active:cursor-grabbing"
 						>
-							<div className="h-1 w-10 rounded-full bg-foreground/20" />
+							<div className="h-1 w-9 rounded-full bg-foreground/20" />
 						</div>
 					)}
 
 					{/* Header */}
-					<div className="flex items-center gap-2 border-b border-border px-4 py-3">
-						<div className="flex-1 min-w-0">
-							<p className="text-sm font-semibold tracking-tight">Queue</p>
-							<p className="mt-0.5 truncate text-xs text-muted-foreground">
-								{subtitle}
-								{shuffle && " · Shuffled"}
-							</p>
+					<div className="flex items-center gap-2 px-5 pb-3 pt-3 md:pt-5">
+						<div className="min-w-0 flex-1">
+							<h2 className="text-2xl font-semibold leading-tight tracking-[-0.02em]">Queue</h2>
+							<div className="mt-1 flex items-center gap-2">
+								<span className="truncate text-sm text-muted-foreground tabular-nums">{subtitle}</span>
+								<AnimatePresence>
+									{shuffle && (
+										<motion.span
+											initial={{ opacity: 0, scale: 0.6 }}
+											animate={{ opacity: 1, scale: 1 }}
+											exit={{ opacity: 0, scale: 0.6 }}
+											transition={{ type: "spring", stiffness: 520, damping: 18 }}
+											className="inline-flex h-6 items-center gap-1 rounded-full bg-primary-container px-2.5 text-[11px] font-semibold text-on-primary-container"
+										>
+											<Shuffle className="size-3" strokeWidth={2.5} />
+											Shuffled
+										</motion.span>
+									)}
+								</AnimatePresence>
+							</div>
 						</div>
 						{queue.length > 1 && (
 							<button
@@ -139,67 +154,49 @@ export function QueuePanel() {
 								onClick={() => {
 									const removed = queue.length - 1;
 									clearQueue();
-									toast.success(
-										`Cleared ${removed} ${removed === 1 ? "track" : "tracks"} from queue`,
-										{ duration: 3000 }
-									);
+									toast.success(`Cleared ${removed} ${removed === 1 ? "track" : "tracks"} from queue`, { duration: 3000 });
 								}}
-								className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
+								className="inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 active:scale-95 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
 								aria-label="Clear queue"
 							>
-								<Trash2 className="h-3.5 w-3.5" />
+								<Trash2 className="size-4" />
 								Clear
 							</button>
 						)}
-						<Button
-							variant="ghost"
-							size="icon-touch"
+						<button
+							type="button"
 							onClick={() => setOpen(false)}
 							aria-label="Close queue"
-							className="-mr-1.5 rounded-full"
+							className="-mr-1.5 inline-flex size-10 items-center justify-center rounded-full bg-surface-high text-foreground transition-colors hover:bg-surface-highest active:scale-90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
 						>
-							<X className="h-4 w-4" />
-						</Button>
+							<X className="size-[18px]" />
+						</button>
 					</div>
 
 					{/* Body */}
-					<ScrollArea className="flex-1 min-h-0">
-						<div className="px-2 py-3 space-y-5">
-							{current && (
-								<section>
-									<SectionLabel>Now Playing</SectionLabel>
-									<QueueRow
-										track={current}
-										active
-										isPlaying={isPlaying}
-									/>
-								</section>
-							)}
+					<ScrollArea className="min-h-0 flex-1">
+						<div className="space-y-6 px-3 pb-4 pt-1">
+							{current && <NowCard track={current} isPlaying={isPlaying} />}
 
 							{upNext.length > 0 && (
 								<section>
-									<SectionLabel>
-										Up Next
-										{shuffle && (
-											<span className="ml-1 font-normal text-muted-foreground/70">
-												· playback in shuffled order
-											</span>
-										)}
-									</SectionLabel>
+									<SectionLabel count={upNext.length}>Up next</SectionLabel>
 									<Reorder.Group
 										axis="y"
 										values={upNext.map((t) => t.trackId)}
 										onReorder={handleReorder}
-										className="flex flex-col gap-0.5"
+										className="flex flex-col gap-1"
 									>
 										{upNext.map((track, i) => (
 											<Reorder.Item
 												key={track.trackId}
 												value={track.trackId}
-												className="cursor-grab active:cursor-grabbing"
+												className="cursor-grab rounded-2xl active:cursor-grabbing"
+												whileDrag={{ scale: 1.02, boxShadow: "0 12px 28px -8px rgb(0 0 0 / 0.35)" }}
 											>
 												<QueueRow
 													track={track}
+													index={i}
 													onJump={() => jumpToIndex(queueIndex + 1 + i)}
 													onRemove={() => removeFromQueue(queueIndex + 1 + i)}
 													showHandle
@@ -212,86 +209,87 @@ export function QueuePanel() {
 
 							{played.length > 0 && (
 								<section>
-									<SectionLabel>
-										Played
-									</SectionLabel>
-									<div className="flex flex-col gap-0.5">
+									<SectionLabel count={played.length}>History</SectionLabel>
+									<div className="flex flex-col gap-1 opacity-55 transition-opacity hover:opacity-80">
 										{played.map((track, i) => (
-											<QueueRow
-												key={`played-${i}-${track.trackId}`}
-												track={track}
-												onJump={() => jumpToIndex(i)}
-												muted
-											/>
+											<QueueRow key={`played-${i}-${track.trackId}`} track={track} index={i} onJump={() => jumpToIndex(i)} />
 										))}
 									</div>
 								</section>
 							)}
 
 							{queue.length <= 1 && (
-								<EmptyState
-									title="Nothing up next"
-									description="Add tracks to fill your queue."
-									className="mx-2 border-none py-10"
-								/>
+								<Medallion icon={ListMusic} title="Nothing up next" message="Add tracks to fill your queue." className="py-8" />
 							)}
 						</div>
 					</ScrollArea>
 
-					{/* Footer — mirrors LyricsPanel */}
-					<div className="flex items-center justify-between border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
-						<span className="tabular-nums">
-							{upNext.length} up next · {played.length} played
-						</span>
-						<span className="text-muted-foreground/70">Drag to reorder</span>
-					</div>
+					{/* Footer */}
+					{upNext.length > 1 && (
+						<div className="flex items-center justify-center gap-1.5 px-4 pb-3 pt-1 text-xs text-muted-foreground">
+							<GripVertical className="size-3.5" />
+							Drag to reorder
+						</div>
+					)}
 				</motion.aside>
 			)}
 		</AnimatePresence>
 	);
 }
 
-function SectionLabel({
-	children,
-	className,
-}: {
-	children: React.ReactNode;
-	className?: string;
-}) {
+/** "UP NEXT" / "HISTORY": primary eyebrow + count pill. */
+function SectionLabel({ children, count }: { children: React.ReactNode; count: number }) {
 	return (
-		<h3
-			className={cn(
-				"mb-1.5 px-2 text-xs font-medium text-muted-foreground",
-				className
-			)}
-		>
-			{children}
+		<h3 className="mb-2 flex items-center gap-2 px-2">
+			<span className="type-eyebrow text-primary">{children}</span>
+			<CountPill value={count} />
 		</h3>
+	);
+}
+
+/** The cover-themed "now playing" card (radius 24, tonal gradient, 64px art). */
+function NowCard({ track, isPlaying }: { track: PlayerTrack; isPlaying: boolean }) {
+	return (
+		<CoverTheme src={track.cover}>
+			<motion.div
+				layout
+				className="flex items-center gap-3.5 rounded-[24px] bg-[linear-gradient(135deg,var(--m3-primary-container),var(--m3-tertiary-container))] p-3 text-on-primary-container shadow-[0_8px_22px_-8px_color-mix(in_oklch,var(--m3-primary)_45%,transparent)]"
+			>
+				<div className="relative shrink-0">
+					<CoverImage src={track.cover} className="size-16 rounded-2xl shadow-[0_4px_12px_-2px_rgb(0_0_0/0.3)]" />
+				</div>
+				<div className="min-w-0 flex-1">
+					<p className="type-eyebrow flex items-center gap-1.5 text-primary">
+						{isPlaying && <Equalizer playing className="h-2.5" />}
+						Now playing
+					</p>
+					<AnimatePresence mode="popLayout" initial={false}>
+						<motion.div key={track.trackId} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+							<p className="mt-1 truncate text-base font-semibold leading-tight tracking-[-0.01em]">{track.title}</p>
+							<p className="mt-0.5 truncate text-sm text-on-primary-container/75">{track.artist}</p>
+						</motion.div>
+					</AnimatePresence>
+				</div>
+			</motion.div>
+		</CoverTheme>
 	);
 }
 
 interface QueueRowProps {
 	track: PlayerTrack;
+	index: number;
 	active?: boolean;
 	isPlaying?: boolean;
-	muted?: boolean;
 	showHandle?: boolean;
 	onJump?: () => void;
 	onRemove?: () => void;
 }
 
-function QueueRow({
-	track,
-	active,
-	isPlaying,
-	muted,
-	showHandle,
-	onJump,
-	onRemove,
-}: QueueRowProps) {
+function QueueRow({ track, index, active, isPlaying, showHandle, onJump, onRemove }: QueueRowProps) {
 	const interactive = !!onJump;
 	return (
-		<div
+		<motion.div
+			{...entrance(index, 8)}
 			role={interactive ? "button" : undefined}
 			tabIndex={interactive ? 0 : undefined}
 			onClick={interactive ? onJump : undefined}
@@ -306,61 +304,43 @@ function QueueRow({
 					: undefined
 			}
 			className={cn(
-				"group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors select-none",
-				active ? "bg-accent" : "hover:bg-accent/60",
-				muted && "opacity-60",
+				"group flex select-none items-center gap-3 rounded-2xl px-2 py-1.5 transition-colors",
+				active ? "bg-secondary" : "hover:bg-surface-high",
 				interactive && "cursor-pointer focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
 			)}
 		>
-			{showHandle && (
-				<div
-					className="-mx-1 text-muted-foreground/30 transition-colors group-hover:text-muted-foreground touch-none shrink-0"
-					aria-hidden
-				>
-					<GripVertical className="h-4 w-4" />
-				</div>
-			)}
-
 			<div className="relative shrink-0">
-				<CoverImage
-					src={track.cover}
-					className="h-10 w-10 rounded-md"
-				/>
+				<CoverImage src={track.cover} className="size-12 rounded-xl" />
 				{active && (
-					<div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/45 text-white">
+					<div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 text-white">
 						<PlaybackIndicator paused={!isPlaying} />
 					</div>
 				)}
 			</div>
 
 			<div className="min-w-0 flex-1">
-				<p
-					className={cn(
-						"truncate text-sm font-medium leading-tight",
-						active && "text-foreground"
-					)}
-				>
-					{track.title}
-				</p>
-				<p className="truncate text-xs text-muted-foreground leading-tight mt-0.5">
-					{track.artist}
-				</p>
+				<p className={cn("truncate text-[15px] font-semibold leading-tight", active && "font-semibold text-primary")}>{track.title}</p>
+				<p className="mt-0.5 truncate text-[13px] leading-tight text-muted-foreground">{track.artist}</p>
 			</div>
 
 			{onRemove && (
-				<Button
-					variant="ghost"
-					size="icon"
+				<button
+					type="button"
 					aria-label={`Remove ${track.title} from queue`}
-					className="h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:bg-destructive/10 hover:text-destructive shrink-0"
+					className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-[opacity,background-color,color] hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100 max-md:opacity-100"
 					onClick={(e) => {
 						e.stopPropagation();
 						onRemove();
 					}}
 				>
-					<X className="h-3.5 w-3.5" />
-				</Button>
+					<X className="size-4" />
+				</button>
 			)}
-		</div>
+			{showHandle && (
+				<span aria-hidden className="shrink-0 touch-none text-muted-foreground/40 transition-colors group-hover:text-muted-foreground">
+					<GripVertical className="size-4" />
+				</span>
+			)}
+		</motion.div>
 	);
 }

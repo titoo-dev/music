@@ -2,18 +2,39 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { motion, LayoutGroup, AnimatePresence } from "motion/react";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
-import { ArrowRight, Music, Shuffle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowDownAZ, Clock3, Disc3, Heart, ListMusic, LogIn, Search, Shuffle, User, ChevronDown, Library } from "lucide-react";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
-import { MediaCard, CardGrid, SectionHeader } from "@/components/cards/MediaCard";
-import { DownloadGlyph, EmptyState, LogoMark, PlayPauseIcon, SlideSwap, WaveLine } from "@/components/motion/icons";
+import { MediaCard, CardGrid } from "@/components/cards/MediaCard";
+import { DownloadGlyph, Equalizer, LogoMark, PlayPauseIcon } from "@/components/motion/icons";
 import { useCommandStore } from "@/stores/useCommandStore";
-import { ModKey } from "@/components/command/CommandPalette";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { useDownloadStore } from "@/stores/useDownloadStore";
+import { useDiscover } from "@/hooks/useDiscover";
 import { cn } from "@/lib/utils";
+import { sizedCover } from "@/lib/cover-palette";
+import {
+	ArtCarousel,
+	Art,
+	CardCarousel,
+	FilterPills,
+	GlassPill,
+	HeroBanner,
+	HeroEyebrow,
+	HeroTitle,
+	LikedArt,
+	Medallion,
+	QuickTile,
+	SectionTitle,
+	heroGlassButton,
+	heroPrimaryButton,
+	paletteNow,
+	swap,
+	entrance,
+} from "@/components/expressive";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export interface UserPlaylist {
 	id: string;
@@ -96,122 +117,267 @@ function toPlayer(t: TrackRowTrack): PlayerTrack {
 	return { trackId: t.trackId, title: t.title, artist: t.artist, artistId: t.artistId ?? null, cover: t.cover, duration: t.duration ?? null };
 }
 
-function Segmented<T extends string>({
-	id,
-	value,
-	onChange,
-	options,
-}: {
-	id: string;
-	value: T;
-	onChange: (v: T) => void;
-	options: { value: T; label: string; count?: number }[];
-}) {
-	return (
-		<LayoutGroup id={id}>
-			<div role="tablist" className="scrollbar-hide inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-border bg-muted/50 p-0.5">
-				{options.map((o) => (
-					<button
-						key={o.value}
-						role="tab"
-						type="button"
-						aria-selected={value === o.value}
-						onClick={() => onChange(o.value)}
-						className={cn(
-							"relative flex h-7 shrink-0 items-center gap-1.5 rounded-md px-3 text-[13px] transition-colors",
-							value === o.value ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-						)}
-					>
-						{value === o.value && (
-							<motion.span
-								layoutId={`${id}-pill`}
-								className="absolute inset-0 rounded-md bg-background shadow-sm ring-1 ring-border"
-								transition={{ type: "spring", stiffness: 500, damping: 38 }}
-							/>
-						)}
-						<span className="relative">{o.label}</span>
-						{o.count !== undefined && <span className="relative font-mono text-[11px] tabular-nums text-muted-foreground">{o.count}</span>}
-					</button>
-				))}
-			</div>
-		</LayoutGroup>
-	);
-}
-
-function TrackList({ tracks, emptyTitle }: { tracks: TrackRowTrack[]; emptyTitle: string }) {
+function TrackList({ tracks }: { tracks: TrackRowTrack[] }) {
 	const [limit, setLimit] = useState(PAGE);
-	if (tracks.length === 0) return <EmptyState title={emptyTitle} description="Save tracks with the heart icon and they'll show up here." />;
 	const shown = tracks.slice(0, limit);
 	return (
 		<div>
-			<div className="-mx-2 space-y-px">
+			<div className="-mx-2 space-y-0.5">
 				{shown.map((t, i) => (
 					<TrackRow key={`${t.trackId}-${i}`} track={t} trackNumber={i + 1} showBitrate={false} queue={tracks} />
 				))}
 			</div>
 			{tracks.length > limit && (
-				<div className="mt-4 flex justify-center">
-					<Button variant="outline" size="sm" onClick={() => setLimit((l) => l + PAGE)}>
+				<div className="mt-5 flex justify-center">
+					<motion.button
+						type="button"
+						whileTap={{ scale: 0.95 }}
+						onClick={() => setLimit((l) => l + PAGE)}
+						className="inline-flex h-11 items-center gap-2 rounded-full bg-secondary px-5 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-secondary/80"
+					>
+						<ChevronDown className="size-[18px]" />
 						Show {Math.min(PAGE, tracks.length - limit)} more
-					</Button>
+					</motion.button>
 				</div>
 			)}
 		</div>
 	);
 }
 
-function GuestHero() {
-	const open = useCommandStore((s) => s.open);
+const SORTS: { value: Sort; label: string; short: string; icon: typeof Clock3 }[] = [
+	{ value: "added", label: "Recently added", short: "Recent", icon: Clock3 },
+	{ value: "title", label: "Title A–Z", short: "A–Z", icon: ArrowDownAZ },
+	{ value: "artist", label: "Artist", short: "Artist", icon: User },
+];
+
+function SortPill({ sort, onChange }: { sort: Sort; onChange: (s: Sort) => void }) {
+	const current = SORTS.find((s) => s.value === sort)!;
+	const Icon = current.icon;
 	return (
-		<section className="relative -mx-4 -mt-6 overflow-hidden px-4 pb-16 pt-16 sm:-mx-6 sm:-mt-8 sm:px-6 sm:pt-24">
-			<div className="bg-grid pointer-events-none absolute inset-0" />
-			<div className="relative mx-auto flex max-w-2xl flex-col items-center text-center">
-				<motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 260, damping: 20 }}>
-					<LogoMark animated className="size-14" />
-				</motion.div>
-				<motion.h1
-					initial={{ opacity: 0, y: 12 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ delay: 0.1, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-					className="text-balance mt-8 text-4xl font-semibold tracking-tighter sm:text-6xl"
-				>
-					Every track,
-					<br />
-					<span className="bg-gradient-to-b from-foreground to-muted-foreground bg-clip-text text-transparent">one keystroke away.</span>
-				</motion.h1>
-				<motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }} className="mt-5 max-w-md text-balance text-muted-foreground">
-					Search Deezer, stream in lossless and download anything — all from a single command bar.
-				</motion.p>
-				<motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-8 flex flex-wrap justify-center gap-3">
-					<Button size="lg" render={<Link href="/login" />} nativeButton={false}>
-						Sign in
-						<ArrowRight />
-					</Button>
-					<Button size="lg" variant="outline" onClick={() => open()}>
-						Search
-						<span className="ml-1 flex gap-0.5">
-							<ModKey />
-							<kbd className="kbd">K</kbd>
-						</span>
-					</Button>
-				</motion.div>
-				<div className="mt-14 w-full max-w-lg text-muted-foreground/50">
-					<WaveLine className="h-10" amplitude={12} />
-				</div>
-			</div>
-		</section>
+		<DropdownMenu>
+			<DropdownMenuTrigger
+				aria-label="Sort tracks"
+				className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-surface-high pl-2.5 pr-3.5 text-sm font-medium outline-none transition-colors hover:bg-surface-highest focus-visible:ring-2 focus-visible:ring-ring"
+			>
+				<AnimatePresence mode="popLayout" initial={false}>
+					<motion.span key={sort} initial={{ rotate: -90, scale: 0.6, opacity: 0 }} animate={{ rotate: 0, scale: 1, opacity: 1 }} exit={{ rotate: 90, scale: 0.6, opacity: 0 }} className="flex">
+						<Icon className="size-[18px]" />
+					</motion.span>
+				</AnimatePresence>
+				{current.short}
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="end" className="w-48 rounded-2xl p-1.5">
+				<DropdownMenuRadioGroup value={sort} onValueChange={(v) => onChange(v as Sort)}>
+					{SORTS.map((s) => (
+						<DropdownMenuRadioItem key={s.value} value={s.value} className="rounded-xl">
+							{s.label}
+						</DropdownMenuRadioItem>
+					))}
+				</DropdownMenuRadioGroup>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }
+
+// ─── Guest ──────────────────────────────────────────────────────────────────
+
+function GuestHero({ covers }: { covers: string[] }) {
+	return (
+		<HeroBanner palette={paletteNow()} covers={covers} radius={32} minCovers={8} contentClassName="flex min-h-[340px] flex-col justify-end p-6 sm:min-h-[420px] sm:p-10">
+			<motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 260, damping: 18 }}>
+				<LogoMark animated className="size-14" />
+			</motion.div>
+			<motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.5, ease: [0.05, 0.7, 0.1, 1] }}>
+				<HeroTitle first="Every track," second="one tap away." className="mt-6 text-[2.5rem] sm:text-6xl lg:text-7xl" />
+			</motion.div>
+			<motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }} className="mt-3 max-w-md text-base text-white/80 sm:text-lg">
+				Search Deezer, stream in lossless and build your library.
+			</motion.p>
+			<motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-6 flex flex-wrap gap-2">
+				<Link href="/login" className={cn(heroPrimaryButton, "no-underline")}>
+					<LogIn />
+					Sign in
+				</Link>
+				<Link href="/search" className={cn(heroGlassButton, "no-underline")}>
+					<Search />
+					Search
+				</Link>
+			</motion.div>
+		</HeroBanner>
+	);
+}
+
+// ─── Signed in ──────────────────────────────────────────────────────────────
+
+function GreetingHero({
+	firstName,
+	covers,
+	stats,
+	playAll,
+	onPlayAll,
+	onShuffle,
+	onDownloadAll,
+}: {
+	firstName: string;
+	covers: string[];
+	stats: { icon: typeof Heart; value: number; label: string }[];
+	playAll: TrackRowTrack[];
+	onPlayAll: () => void;
+	onShuffle: () => void;
+	onDownloadAll?: () => void;
+}) {
+	const current = usePlayerStore((s) => s.currentTrack);
+	const isPlaying = usePlayerStore((s) => s.isPlaying);
+	const toggle = usePlayerStore((s) => s.toggle);
+	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
+	const isThis = !!current && playAll.some((t) => t.trackId === current.trackId);
+	const weekday = new Date().toLocaleDateString("en", { weekday: "long" });
+
+	return (
+		<HeroBanner palette={paletteNow()} covers={covers} radius={32} minCovers={8} contentClassName="p-6 sm:p-8 lg:p-10">
+			<div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+				<div className="min-w-0">
+					<HeroEyebrow className="tracking-[0.2em]">{weekday}</HeroEyebrow>
+					<motion.h1
+						initial={{ opacity: 0, y: 12 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.5, ease: [0.05, 0.7, 0.1, 1] }}
+						className="type-display mt-2 text-[2.25rem] text-white sm:text-5xl lg:text-6xl"
+					>
+						{greeting()}
+						{firstName && (
+							<>
+								,<br />
+								<span className="brand-text">{firstName}</span>
+							</>
+						)}
+					</motion.h1>
+					<div className="mt-5 flex flex-wrap gap-2">
+						{stats.map((s, i) => (
+							<motion.span key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.06 }}>
+								<GlassPill icon={s.icon} value={s.value} label={s.label} />
+							</motion.span>
+						))}
+					</div>
+					<div className="mt-6 flex flex-wrap gap-2">
+						<button type="button" disabled={!playAll.length} onClick={isThis ? toggle : onPlayAll} className={heroPrimaryButton}>
+							<PlayPauseIcon playing={isThis && isPlaying} className="size-5" />
+							<AnimatePresence mode="popLayout" initial={false}>
+								<motion.span key={String(isThis && isPlaying)} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
+									{isThis && isPlaying ? "Pause" : "Play all"}
+								</motion.span>
+							</AnimatePresence>
+						</button>
+						<button type="button" disabled={!playAll.length} onClick={onShuffle} className={heroGlassButton}>
+							<Shuffle />
+							Shuffle
+						</button>
+						{onDownloadAll && (
+							<button type="button" onClick={onDownloadAll} aria-label="Download all" title="Download all" className={cn(heroGlassButton, "w-11 px-0")}>
+								<DownloadGlyph />
+							</button>
+						)}
+					</div>
+				</div>
+
+				{/* What's playing, inside the hero; opens the player. */}
+				<AnimatePresence>
+					{current && (
+						<motion.button
+							type="button"
+							initial={{ opacity: 0, height: 0 }}
+							animate={{ opacity: 1, height: "auto" }}
+							exit={{ opacity: 0, height: 0 }}
+							whileTap={{ scale: 0.97 }}
+							onClick={() => setFullscreenOpen(true)}
+							className="flex w-full items-center gap-3 overflow-hidden rounded-[20px] bg-white/[0.14] p-2 text-left backdrop-blur-md transition-colors hover:bg-white/20 lg:w-[340px]"
+						>
+							{/* eslint-disable-next-line @next/next/no-img-element */}
+							<img src={current.cover ? sizedCover(current.cover, 120) : undefined} alt="" className="size-11 shrink-0 rounded-xl bg-white/10 object-cover" />
+							<span className="min-w-0 flex-1">
+								<span className="type-eyebrow block text-[10px] text-white/70">{isPlaying ? "Now playing" : "Paused"}</span>
+								<AnimatePresence mode="popLayout" initial={false}>
+									<motion.span key={current.trackId} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="block truncate text-sm font-semibold text-white">
+										{current.title} · {current.artist}
+									</motion.span>
+								</AnimatePresence>
+							</span>
+							<Equalizer playing={isPlaying} className="mr-2 h-4 text-white" />
+						</motion.button>
+					)}
+				</AnimatePresence>
+			</div>
+		</HeroBanner>
+	);
+}
+
+// ─── Discover (everyone) ────────────────────────────────────────────────────
+
+function Discover({ savedAlbumIds }: { savedAlbumIds: Set<string> }) {
+	// Rendered only once there is content: a skeleton here would flash and then
+	// vanish whenever Deezer has nothing to show (e.g. no editorial releases).
+	const { releases, sections } = useDiscover();
+	const router = useRouter();
+	return (
+		<>
+			{releases.length > 0 && (
+				<motion.section {...entrance()}>
+					<SectionTitle eyebrow="Fresh on Deezer" title="New releases" />
+					<ArtCarousel
+						label="New releases"
+						height={280}
+						lead={1.9}
+						items={releases.slice(0, 30).map((a) => ({ key: a.id, title: a.title, subtitle: a.artist, image: a.cover }))}
+						onSelect={(i) => router.push(`/album?id=${releases[i].id}`)}
+					/>
+				</motion.section>
+			)}
+			{sections.slice(0, 6).map((s) => (
+				<section key={s.title}>
+					<SectionTitle title={s.title} />
+					<CardCarousel>
+						{s.albums.slice(0, 20).map((a, i) => (
+							<MediaCard
+								key={a.id}
+								index={i}
+								href={`/album?id=${a.id}`}
+								title={a.title}
+								subtitle={a.artist ?? undefined}
+								cover={a.cover}
+								collection={{ type: "album", id: a.id }}
+								badge={savedAlbumIds.has(a.id) ? <SavedDot /> : undefined}
+							/>
+						))}
+					</CardCarousel>
+				</section>
+			))}
+		</>
+	);
+}
+
+function SavedDot() {
+	return (
+		<span className="flex size-6 items-center justify-center rounded-full bg-primary-container text-on-primary-container shadow-sm">
+			<Heart className="size-3.5 fill-current" />
+		</span>
+	);
+}
+
+// ─── Page ───────────────────────────────────────────────────────────────────
 
 export function HomeContent({ playlists, albums, recentPlays, tracks, user }: HomeContentProps) {
 	const [filter, setFilter] = useState<Filter>("all");
 	const [sort, setSort] = useState<Sort>("added");
 	const openPalette = useCommandStore((s) => s.open);
 	const playQueue = usePlayerStore((s) => s.playQueue);
+	const play = usePlayerStore((s) => s.play);
+	const toggle = usePlayerStore((s) => s.toggle);
+	const current = usePlayerStore((s) => s.currentTrack);
+	const isPlaying = usePlayerStore((s) => s.isPlaying);
 	const shuffleOn = usePlayerStore((s) => s.shuffle);
 	const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
-	const isPlaying = usePlayerStore((s) => s.isPlaying);
 	const enqueue = useDownloadStore((s) => s.enqueue);
+	const { showcase } = useDiscover();
 
 	const trackRows = useMemo(() => {
 		const rows = tracks.map(toRow);
@@ -224,22 +390,32 @@ export function HomeContent({ playlists, albums, recentPlays, tracks, user }: Ho
 		const seen = new Set<string>();
 		return recentPlays.filter((r) => (seen.has(r.trackId) ? false : (seen.add(r.trackId), true))).map(toRow);
 	}, [recentPlays]);
-	const sortedAlbums = useMemo(
-		() => [...albums].sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()),
-		[albums]
-	);
+	const sortedAlbums = useMemo(() => [...albums].sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()), [albums]);
+	const savedAlbumIds = useMemo(() => new Set(albums.map((a) => a.deezerAlbumId)), [albums]);
+	const heroCovers = useMemo(() => {
+		const own = [...recentPlays.map((r) => r.coverUrl), ...tracks.map((t) => t.coverUrl), ...albums.map((a) => a.coverUrl)].filter((c): c is string => !!c);
+		return [...new Set([...own, ...showcase])].slice(0, 40);
+	}, [recentPlays, tracks, albums, showcase]);
 
-	if (!user) return <GuestHero />;
+	if (!user) {
+		return (
+			<div className="pt-2">
+				<GuestHero covers={showcase} />
+				<Discover savedAlbumIds={savedAlbumIds} />
+			</div>
+		);
+	}
 
-	const totalTracks = tracks.length;
 	const isEmpty = tracks.length === 0 && albums.length === 0 && playlists.length === 0 && recentPlays.length === 0;
+	const all = filter === "all";
+	const firstName = user.name?.split(" ")[0] || "";
+	const source = trackRows.length ? trackRows : recentRows;
 
 	const playAll = (shuffle: boolean) => {
-		const src = trackRows.length ? trackRows : recentRows;
-		if (!src.length) return;
+		if (!source.length) return;
 		if (shuffle !== shuffleOn) toggleShuffle();
-		const start = shuffle ? Math.floor(Math.random() * src.length) : 0;
-		playQueue(src.map(toPlayer), start);
+		const start = shuffle ? Math.floor(Math.random() * source.length) : 0;
+		playQueue(source.map(toPlayer), start);
 	};
 
 	const downloadAll = () => {
@@ -250,257 +426,193 @@ export function HomeContent({ playlists, albums, recentPlays, tracks, user }: Ho
 		});
 	};
 
+	const playRecent = (i: number) => {
+		const t = recentRows[i];
+		if (current?.trackId === t.trackId) return toggle();
+		play(toPlayer(t), recentRows.map(toPlayer));
+	};
+
+	// Quick picks: liked songs, two playlists, two albums, then recent tracks.
+	const shortcuts = [
+		...(tracks.length ? [{ key: "liked", title: "Liked songs", subtitle: `${tracks.length} ${tracks.length === 1 ? "track" : "tracks"}`, art: <LikedArt className="size-full" />, onClick: () => setFilter("tracks") }] : []),
+		...playlists.slice(0, 2).map((p) => ({ key: `p${p.id}`, title: p.title, subtitle: `Playlist · ${p._count.tracks} tracks`, art: <Art covers={p.covers} className="size-full" size={120} />, href: `/my-playlists/${p.id}` })),
+		...sortedAlbums.slice(0, 2).map((a) => ({ key: `a${a.id}`, title: a.title, subtitle: a.artist, art: <Art src={a.coverUrl} className="size-full" size={120} />, href: `/album?id=${a.deezerAlbumId}` })),
+		...recentRows.map((t, i) => ({ key: `r${t.trackId}`, title: t.title, subtitle: t.artist, art: <Art src={t.cover} className="size-full" size={120} />, onClick: () => playRecent(i), trackId: t.trackId })),
+	].slice(0, 6);
+
 	return (
-		<div>
-			{/* Header */}
-			<div className="relative -mx-4 -mt-6 mb-8 overflow-hidden px-4 pb-2 pt-6 sm:-mx-6 sm:-mt-8 sm:px-6 sm:pt-10">
-				<div className="bg-grid pointer-events-none absolute inset-0 opacity-70" />
-				<div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-					<div>
-						<motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-muted-foreground">
-							{greeting()}, {user.name?.split(" ")[0] || "there"}
-						</motion.p>
-						<motion.h1
-							initial={{ opacity: 0, y: 8 }}
-							animate={{ opacity: 1, y: 0 }}
-							transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-							className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl"
-						>
-							All music
-						</motion.h1>
-						<p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-							<span>
-								<SlideSwap id={totalTracks} className="font-mono tabular-nums text-foreground">
-									{totalTracks}
-								</SlideSwap>{" "}
-								tracks
-							</span>
-							<span className="size-1 rounded-full bg-border" />
-							<span>
-								<span className="font-mono tabular-nums text-foreground">{albums.length}</span> albums
-							</span>
-							<span className="size-1 rounded-full bg-border" />
-							<span>
-								<span className="font-mono tabular-nums text-foreground">{playlists.length}</span> playlists
-							</span>
-						</p>
-					</div>
-					{!isEmpty && (
-						<div className="flex items-center gap-2">
-							<motion.button
-								type="button"
-								whileTap={{ scale: 0.94 }}
-								onClick={() => playAll(false)}
-								className="flex h-10 items-center gap-2 rounded-full bg-foreground pl-3 pr-4 text-sm font-medium text-background transition-colors hover:bg-foreground/85"
-							>
-								<PlayPauseIcon playing={false} className="size-4" />
-								Play all
-							</motion.button>
-							<Button variant="outline" size="icon-lg" className="rounded-full" aria-label="Shuffle all" onClick={() => playAll(true)}>
-								<Shuffle />
-							</Button>
-							<Button variant="outline" size="icon-lg" className="rounded-full" aria-label="Download all" title="Download all" onClick={downloadAll}>
-								<DownloadGlyph />
-							</Button>
-						</div>
-					)}
-				</div>
+		// More air between sections than the default rhythm (see SectionTitle).
+		<div className="pb-6 [--section-gap:3.5rem] [--section-title-gap:1rem]">
+			{/* Filter pills: scroll away with the page (the glass header is the only pinned bar). */}
+			<div className="mb-6 py-2">
+				<FilterPills<Filter>
+					value={filter}
+					onChange={(f) => {
+						setFilter(f);
+						window.scrollTo({ top: 0, behavior: "smooth" });
+					}}
+					items={[
+						{ value: "all", label: "All" },
+						{ value: "tracks", label: "Tracks", count: tracks.length },
+						{ value: "albums", label: "Albums", count: albums.length },
+						{ value: "playlists", label: "Playlists", count: playlists.length },
+						{ value: "recent", label: "Recent" },
+					]}
+				/>
 			</div>
 
-			{isEmpty ? (
-				<EmptyState
-					title="Your library is empty"
-					description={
+			<AnimatePresence mode="wait" initial={false}>
+				<motion.div key={filter} variants={swap} initial="initial" animate="animate" exit="exit">
+					{all && (
 						<>
-							Press <ModKey /> <kbd className="kbd">K</kbd> to search Deezer, or paste an album link to download it.
-						</>
-					}
-					action={
-						<Button onClick={() => openPalette()}>
-							Open search
-						</Button>
-					}
-				/>
-			) : (
-				<>
-					<div className="sticky top-[calc(var(--header-h)+8px)] z-20 -mx-1 mb-6 flex flex-wrap items-center justify-between gap-3 px-1 max-md:top-[calc(var(--header-h)+44px)]">
-						<Segmented<Filter>
-							id="home-filter"
-							value={filter}
-							onChange={setFilter}
-							options={[
-								{ value: "all", label: "All" },
-								{ value: "tracks", label: "Tracks", count: tracks.length },
-								{ value: "albums", label: "Albums", count: albums.length },
-								{ value: "playlists", label: "Playlists", count: playlists.length },
-								{ value: "recent", label: "Recent" },
-							]}
-						/>
-						{(filter === "tracks" || filter === "all") && trackRows.length > 1 && (
-							<Segmented<Sort>
-								id="home-sort"
-								value={sort}
-								onChange={setSort}
-								options={[
-									{ value: "added", label: "Recent" },
-									{ value: "title", label: "A–Z" },
-									{ value: "artist", label: "Artist" },
+							<GreetingHero
+								firstName={firstName}
+								covers={heroCovers}
+								playAll={source}
+								onPlayAll={() => playAll(false)}
+								onShuffle={() => playAll(true)}
+								onDownloadAll={trackRows.length ? downloadAll : undefined}
+								stats={[
+									{ icon: Heart, value: tracks.length, label: "liked" },
+									{ icon: Disc3, value: albums.length, label: "albums" },
+									{ icon: ListMusic, value: playlists.length, label: "playlists" },
 								]}
 							/>
-						)}
-					</div>
+							{shortcuts.length > 0 && (
+								<div className="mt-6 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3">
+									{shortcuts.map((s, i) => (
+										<QuickTile
+											key={s.key}
+											index={i + 2}
+											title={s.title}
+											subtitle={s.subtitle}
+											art={s.art}
+											href={"href" in s ? s.href : undefined}
+											onClick={"onClick" in s ? s.onClick : undefined}
+											current={"trackId" in s && current?.trackId === s.trackId}
+											playing={isPlaying}
+										/>
+									))}
+								</div>
+							)}
+						</>
+					)}
 
-					<AnimatePresence mode="wait" initial={false}>
-						<motion.div
-							key={filter}
-							initial={{ opacity: 0, y: 6 }}
-							animate={{ opacity: 1, y: 0 }}
-							exit={{ opacity: 0, y: -6 }}
-							transition={{ duration: 0.18 }}
-							className="space-y-12"
-						>
-							{(filter === "all" || filter === "recent") && recentRows.length > 0 && (
+					{isEmpty ? (
+						<Medallion
+							icon={Library}
+							title="Your library is empty"
+							message="Like tracks, save albums and create playlists — they’ll show up here."
+							action={
+								<Link href="/search" className="inline-flex h-11 items-center gap-2 rounded-full bg-secondary px-5 text-sm font-semibold text-secondary-foreground no-underline">
+									<Search className="size-[18px]" />
+									Open search
+								</Link>
+							}
+						/>
+					) : (
+						<>
+							{all && recentRows.length > 0 && (
 								<section>
-									<SectionHeader
+									<SectionTitle
+										eyebrow="Pick up where you left off"
 										title="Recently played"
-										count={recentRows.length}
-										action={
-											filter === "all" ? (
-												<button type="button" onClick={() => setFilter("recent")} className="text-sm text-muted-foreground hover:text-foreground">
-													View all
-												</button>
-											) : undefined
-										}
+										onAction={recentRows.length > 12 ? () => setFilter("recent") : undefined}
 									/>
-									{filter === "all" ? (
-										<div className="scrollbar-hide -mx-4 flex snap-x scroll-px-4 gap-4 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:scroll-px-6 sm:px-6">
-											{recentRows.slice(0, 12).map((t, i) => (
-												<RecentCard key={t.trackId} track={t} queue={recentRows} index={i} />
-											))}
-										</div>
+									<ArtCarousel
+										label="Recently played"
+										height={200}
+										lead={1.6}
+										items={recentRows.slice(0, 12).map((t) => ({
+											key: t.trackId,
+											title: t.title,
+											subtitle: t.artist,
+											image: t.cover,
+											current: current?.trackId === t.trackId,
+											playing: isPlaying,
+										}))}
+										onSelect={playRecent}
+									/>
+								</section>
+							)}
+
+							{filter === "recent" && (
+								<section>
+									<SectionTitle title="Recently played" count={recentRows.length} className="mt-2" />
+									{recentRows.length ? (
+										<TrackList tracks={recentRows} />
 									) : (
-										<TrackList tracks={recentRows} emptyTitle="Nothing played yet" />
+										<Medallion icon={Clock3} title="Nothing yet" message="Play a track for at least 30 seconds and it’ll show up here." />
 									)}
 								</section>
 							)}
 
-							{(filter === "all" || filter === "albums") && sortedAlbums.length > 0 && (
+							{(all || filter === "albums") && sortedAlbums.length > 0 && (
 								<section>
-									<SectionHeader
+									<SectionTitle
 										title="Albums"
-										count={albums.length}
-										action={
-											filter === "all" && albums.length > 10 ? (
-												<button type="button" onClick={() => setFilter("albums")} className="text-sm text-muted-foreground hover:text-foreground">
-													View all
-												</button>
-											) : undefined
-										}
+										count={all ? null : albums.length}
+										className={cn(!all && "mt-2")}
+										onAction={all && albums.length > 10 ? () => setFilter("albums") : undefined}
 									/>
-									<CardGrid>
-										{(filter === "all" ? sortedAlbums.slice(0, 10) : sortedAlbums).map((a, i) => (
-											<MediaCard
-												key={a.id}
-												index={i}
-												href={`/album?id=${a.deezerAlbumId}`}
-												title={a.title}
-												subtitle={`${a.artist} · ${a.trackCount} tracks`}
-												cover={a.coverUrl}
-												collection={{ type: "album", id: a.deezerAlbumId }}
-											/>
-										))}
-									</CardGrid>
+									{all ? (
+										<CardCarousel>
+											{sortedAlbums.slice(0, 10).map((a, i) => (
+												<MediaCard key={a.id} index={i} href={`/album?id=${a.deezerAlbumId}`} title={a.title} subtitle={a.artist} cover={a.coverUrl} collection={{ type: "album", id: a.deezerAlbumId }} />
+											))}
+										</CardCarousel>
+									) : (
+										<CardGrid>
+											{sortedAlbums.map((a, i) => (
+												<MediaCard key={a.id} index={i} href={`/album?id=${a.deezerAlbumId}`} title={a.title} subtitle={`${a.artist} · ${a.trackCount} tracks`} cover={a.coverUrl} collection={{ type: "album", id: a.deezerAlbumId }} />
+											))}
+										</CardGrid>
+									)}
 								</section>
 							)}
+							{filter === "albums" && sortedAlbums.length === 0 && <Medallion icon={Disc3} title="No saved albums" message="Save albums with the heart on their page." />}
 
-							{(filter === "all" || filter === "playlists") && playlists.length > 0 && (
+							{(all || filter === "playlists") && playlists.length > 0 && (
 								<section>
-									<SectionHeader
-										title="Playlists"
-										count={playlists.length}
-										action={
-											<Link href="/my-playlists" className="text-sm text-muted-foreground no-underline hover:text-foreground">
-												Manage
-											</Link>
-										}
-									/>
-									<CardGrid>
-										{(filter === "all" ? playlists.slice(0, 10) : playlists).map((p, i) => (
-											<MediaCard
-												key={p.id}
-												index={i}
-												href={`/my-playlists/${p.id}`}
-												title={p.title}
-												subtitle={`${p._count.tracks} tracks`}
-												covers={p.covers}
-											/>
-										))}
-									</CardGrid>
+									<SectionTitle title="Playlists" count={all ? null : playlists.length} className={cn(!all && "mt-2")} actionLabel="Manage" href="/my-playlists" />
+									{all ? (
+										<CardCarousel>
+											{playlists.map((p, i) => (
+												<MediaCard key={p.id} index={i} href={`/my-playlists/${p.id}`} title={p.title} subtitle={`${p._count.tracks} tracks`} covers={p.covers} />
+											))}
+										</CardCarousel>
+									) : (
+										<CardGrid>
+											{playlists.map((p, i) => (
+												<MediaCard key={p.id} index={i} href={`/my-playlists/${p.id}`} title={p.title} subtitle={`${p._count.tracks} tracks`} covers={p.covers} />
+											))}
+										</CardGrid>
+									)}
 								</section>
 							)}
+							{filter === "playlists" && playlists.length === 0 && <Medallion icon={ListMusic} title="No playlists" message="Collect tracks into your own mixes." />}
 
-							{(filter === "all" || filter === "tracks") && (
+							{(all || filter === "tracks") && (
 								<section>
-									<SectionHeader
-										title="Tracks"
+									<SectionTitle
+										title="Liked tracks"
 										count={tracks.length}
-										action={
-											isPlaying ? undefined : (
-												<button type="button" onClick={() => playAll(false)} className="text-sm text-muted-foreground hover:text-foreground">
-													Play
-												</button>
-											)
-										}
+										className={cn(!all && "mt-2")}
+										trailing={trackRows.length > 1 ? <SortPill sort={sort} onChange={setSort} /> : undefined}
 									/>
-									<TrackList tracks={trackRows} emptyTitle="No saved tracks yet" />
+									{trackRows.length ? (
+										<TrackList tracks={trackRows} />
+									) : (
+										<Medallion icon={Heart} title="No liked tracks" message="Tap the heart on any track to save it here." className="py-8" />
+									)}
 								</section>
 							)}
-
-							{filter === "recent" && recentRows.length === 0 && <EmptyState title="Nothing played yet" />}
-						</motion.div>
-					</AnimatePresence>
-				</>
-			)}
-		</div>
-	);
-}
-
-function RecentCard({ track, queue, index }: { track: TrackRowTrack; queue: TrackRowTrack[]; index: number }) {
-	const play = usePlayerStore((s) => s.play);
-	const toggle = usePlayerStore((s) => s.toggle);
-	const current = usePlayerStore((s) => s.currentTrack);
-	const isPlaying = usePlayerStore((s) => s.isPlaying);
-	const loaded = current?.trackId === track.trackId;
-
-	return (
-		<motion.button
-			type="button"
-			initial={{ opacity: 0, x: 12 }}
-			animate={{ opacity: 1, x: 0 }}
-			transition={{ delay: index * 0.03, duration: 0.3 }}
-			onClick={() => (loaded ? toggle() : play(toPlayer(track), queue.map(toPlayer)))}
-			className="group w-32 shrink-0 snap-start text-left sm:w-36"
-		>
-			<div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
-				{track.cover ? (
-					// eslint-disable-next-line @next/next/no-img-element
-					<img src={track.cover.replace(/\/\d+x\d+-/, "/500x500-")} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
-				) : (
-					<span className="flex h-full w-full items-center justify-center text-muted-foreground/40">
-						<Music className="size-8" />
-					</span>
-				)}
-				<span
-					className={cn(
-						"absolute bottom-2 right-2 flex size-9 items-center justify-center rounded-full bg-foreground text-background shadow transition-all duration-200",
-						loaded ? "opacity-100" : "translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
+						</>
 					)}
-				>
-					<PlayPauseIcon playing={loaded && isPlaying} className="size-4" />
-				</span>
-			</div>
-			<p className={cn("mt-2 truncate text-sm font-medium", loaded ? "text-highlight" : "text-foreground")}>{track.title}</p>
-			<p className="truncate text-xs text-muted-foreground">{track.artist}</p>
-		</motion.button>
+
+					{all && <Discover savedAlbumIds={savedAlbumIds} />}
+				</motion.div>
+			</AnimatePresence>
+		</div>
 	);
 }

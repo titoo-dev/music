@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { CoverImage } from "@/components/ui/cover-image";
-import { motion } from "motion/react";
-import { Download, Share2, ExternalLink, ArrowRight } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowRight, Clock3, Download, ExternalLink, Globe, Headphones, Link2, Music } from "lucide-react";
 import { DrawCheck, Equalizer, LogoMark, PlayPauseIcon, SlideSwap, Spinner } from "@/components/motion/icons";
+import { WaveSeek } from "@/components/audio/WaveSeek";
+import { CoverTheme, DUR, EASE, EyebrowPill, StatBadge, entrance } from "@/components/expressive";
+import { sizedCover } from "@/lib/cover-palette";
+import { cn } from "@/lib/utils";
 
 function formatTime(seconds: number) {
 	if (!seconds || !isFinite(seconds)) return "0:00";
@@ -24,18 +27,32 @@ interface SharePlayerProps {
 	sharedBy: string;
 }
 
-export function SharePlayer({
-	shareId,
-	title,
-	artist,
-	album,
-	coverUrl,
-	duration: initialDuration,
-	sharedBy,
-}: SharePlayerProps) {
+/** Cover-themed backdrop: the artwork blurred into the page, with accent glows. */
+function Backdrop({ coverUrl }: { coverUrl: string | null }) {
+	return (
+		<div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+			{coverUrl && (
+				<motion.img
+					src={sizedCover(coverUrl, 250)}
+					alt=""
+					initial={{ opacity: 0 }}
+					animate={{ opacity: 0.6 }}
+					transition={{ duration: 1.2 }}
+					className="absolute left-1/2 top-[-10%] h-[80vh] w-[140vw] max-w-none -translate-x-1/2 scale-110 object-cover blur-[80px] saturate-150"
+				/>
+			)}
+			<div className="motion-drift absolute -left-[20%] -top-[30%] aspect-square w-[80%] rounded-full opacity-50 blur-3xl" style={{ animation: "aurora-a 19s ease-in-out infinite", background: "radial-gradient(closest-side, var(--primary), transparent)" }} />
+			<div className="motion-drift absolute -right-[25%] top-[5%] aspect-square w-[70%] rounded-full opacity-40 blur-3xl" style={{ animation: "aurora-b 23s ease-in-out infinite", background: "radial-gradient(closest-side, var(--m3-tertiary), transparent)" }} />
+			<div className="absolute inset-0 bg-[linear-gradient(to_bottom,color-mix(in_srgb,var(--background)_35%,transparent),color-mix(in_srgb,var(--background)_80%,transparent)_45%,var(--background)_85%)]" />
+		</div>
+	);
+}
+
+export function SharePlayer({ shareId, title, artist, album, coverUrl, duration: initialDuration, sharedBy }: SharePlayerProps) {
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [currentTime, setCurrentTime] = useState(0);
+	const [buffered, setBuffered] = useState(0);
 	const [duration, setDuration] = useState(initialDuration ?? 0);
 	const [loaded, setLoaded] = useState(false);
 	const [linkCopied, setLinkCopied] = useState(false);
@@ -54,6 +71,10 @@ export function SharePlayer({
 			setLoaded(true);
 		};
 		audio.ontimeupdate = () => setCurrentTime(audio.currentTime);
+		audio.onprogress = () => {
+			const b = audio.buffered;
+			if (b.length) setBuffered(b.end(b.length - 1));
+		};
 		audio.onended = () => {
 			setIsPlaying(false);
 			setCurrentTime(0);
@@ -102,10 +123,9 @@ export function SharePlayer({
 		}
 	}, [isPlaying]);
 
-	const handleSeekTo = (pct: number) => {
+	const handleSeek = (time: number) => {
 		const audio = audioRef.current;
 		if (!audio || !duration) return;
-		const time = pct * duration;
 		audio.currentTime = time;
 		setCurrentTime(time);
 	};
@@ -150,196 +170,161 @@ export function SharePlayer({
 		};
 	}, [handleToggle]);
 
-	// Stable pseudo-random waveform (deterministic based on shareId)
-	const waveformBars = useMemo(() => {
-		const seed = shareId.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-		return Array.from({ length: 80 }, (_, i) => {
-			const v = Math.abs(Math.sin((i + seed) * 0.5) * Math.cos((i + seed) * 0.2));
-			return 18 + v * 78;
-		});
-	}, [shareId]);
-
-	const progressPct = duration > 0 ? currentTime / duration : 0;
-
 	const sharedByLabel = `@${sharedBy.toLowerCase().replace(/\s+/g, "")}`;
+	const longTitle = title.length > 22;
 
 	return (
-		<div className="relative min-h-dvh overflow-hidden bg-background">
-			<div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-grid" />
+		<CoverTheme src={coverUrl} className="relative isolate min-h-dvh overflow-x-hidden bg-background">
+			<Backdrop coverUrl={coverUrl} />
 
-			{/* Header */}
-			<header className="glass sticky top-0 z-10 border-b border-border">
-				<div className="max-w-5xl mx-auto h-14 px-4 sm:px-6 flex items-center justify-between gap-4">
-					<Link href="/" className="flex items-center gap-2 no-underline text-foreground">
-						<LogoMark className="size-6 shrink-0" />
-						<span className="text-sm font-semibold tracking-tight">wavelet</span>
+			{/* Top bar */}
+			<header className="relative z-10">
+				<div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+					<Link href="/" className="flex items-center gap-2 text-foreground no-underline">
+						<LogoMark animated={isPlaying} className="size-8" />
+						<span className="text-xl font-semibold tracking-tight">wavelet</span>
 					</Link>
-					<Link
-						href="/"
-						className="inline-flex items-center gap-1.5 h-9 md:h-8 px-3 rounded-md border border-border bg-background text-sm font-medium text-foreground transition-colors no-underline [@media(hover:hover)]:hover:bg-accent"
-					>
-						Open in app <ExternalLink className="size-3.5" aria-hidden />
+					<Link href="/" className="inline-flex h-10 items-center gap-1.5 rounded-full bg-secondary px-4 text-sm font-semibold text-secondary-foreground no-underline transition-[transform,background-color] hover:bg-secondary/80 active:scale-95">
+						Open wavelet <ExternalLink className="size-4" aria-hidden />
 					</Link>
 				</div>
 			</header>
 
-			<main className="relative max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
-				{/* Hero */}
-				<motion.div
-					initial={{ opacity: 0, y: 12 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-					className="grid grid-cols-1 md:grid-cols-[minmax(0,360px)_1fr] gap-8 md:gap-12 items-center mb-10"
-				>
-					<div className="relative w-full max-w-[360px] mx-auto md:mx-0">
-						<CoverImage
-							src={coverUrl}
-							alt={album ? `${album} cover` : `${title} cover`}
-							className="w-full aspect-square rounded-xl ring-1 ring-border shadow-[0_24px_60px_-20px_rgb(0_0_0/0.35)]"
-						/>
-					</div>
-
-					<div className="min-w-0 text-center md:text-left">
-						<span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-0.5 text-xs text-muted-foreground">
-							<Equalizer playing={isPlaying} bars={3} className="h-3" />
-							Shared with you
-						</span>
-						<h1 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-balance break-words m-0">
-							{title}
-						</h1>
-						<p className="mt-2 text-lg text-muted-foreground">
-							<span className="font-medium text-foreground">{artist}</span>
-							{album && (
-								<>
-									{" · "}
-									<span>{album}</span>
-								</>
+			<main className="relative mx-auto max-w-6xl px-4 pb-10 pt-4 sm:px-6 sm:pt-10">
+				<div className="grid grid-cols-1 items-center gap-8 md:grid-cols-[minmax(0,400px)_1fr] md:gap-12 lg:grid-cols-[minmax(0,460px)_1fr] lg:gap-16">
+					{/* Glowing cover */}
+					<motion.div
+						initial={{ opacity: 0, scale: 0.9, y: 16 }}
+						animate={{ opacity: 1, scale: isPlaying ? 1 : 0.97, y: 0 }}
+						transition={{ duration: DUR.long, ease: EASE.emphasized }}
+						className="mx-auto w-[min(78vw,340px)] md:w-full"
+					>
+						<div
+							className={cn(
+								"relative aspect-square overflow-hidden rounded-[28px] bg-surface-high transition-shadow duration-700",
+								isPlaying
+									? "shadow-[0_24px_64px_-8px_color-mix(in_srgb,var(--primary)_55%,transparent)]"
+									: "shadow-[0_18px_48px_-12px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
 							)}
-						</p>
-
-						{/* Actions */}
-						<div className="mt-7 flex flex-wrap items-center justify-center md:justify-start gap-2">
-							<button
-								onClick={handleToggle}
-								disabled={!loaded}
-								className="inline-flex items-center gap-2 h-11 pl-4 pr-5 rounded-full bg-primary text-primary-foreground text-sm font-medium outline-none transition-[background-color,transform] duration-150 [@media(hover:hover)]:hover:bg-primary/85 focus-visible:ring-[3px] focus-visible:ring-ring/40 active:scale-[0.98] disabled:opacity-50"
-							>
-								<PlayPauseIcon playing={isPlaying} className="size-4" />
-								{isPlaying ? "Pause" : "Play"}
-							</button>
-							<Link
-								href="/"
-								className="inline-flex items-center gap-2 h-11 px-4 rounded-full border border-border bg-background text-sm font-medium text-foreground transition-colors no-underline [@media(hover:hover)]:hover:bg-accent"
-							>
-								<Download className="size-4" aria-hidden />
-								Get it
-							</Link>
-							<button
-								onClick={handleCopyLink}
-								className="inline-flex items-center gap-2 h-11 px-4 rounded-full text-sm font-medium text-muted-foreground transition-colors [@media(hover:hover)]:hover:bg-accent [@media(hover:hover)]:hover:text-foreground"
-							>
-								{linkCopied ? <DrawCheck className="size-4 text-success" /> : <Share2 className="size-4" aria-hidden />}
-								<SlideSwap id={linkCopied ? "copied" : "copy"}>
-									{linkCopied ? "Copied" : "Copy link"}
-								</SlideSwap>
-							</button>
-						</div>
-
-						<p className="mt-6 text-sm text-muted-foreground">
-							Shared by <span className="font-medium text-foreground">{sharedByLabel}</span>
-						</p>
-					</div>
-				</motion.div>
-
-				{/* Waveform card */}
-				<motion.div
-					initial={{ opacity: 0, y: 8 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
-					className="rounded-xl border border-border bg-card p-4 sm:p-5 mb-10"
-				>
-					<div className="flex items-center gap-4">
-						<button
-							onClick={handleToggle}
-							disabled={!loaded}
-							aria-label={isPlaying ? "Pause" : "Play"}
-							className="shrink-0 inline-flex items-center justify-center size-12 rounded-full bg-primary text-primary-foreground outline-none transition-[background-color,transform] duration-150 [@media(hover:hover)]:hover:bg-primary/85 focus-visible:ring-[3px] focus-visible:ring-ring/40 active:scale-95 disabled:opacity-50"
 						>
-							{loaded ? <PlayPauseIcon playing={isPlaying} className="size-5" /> : <Spinner size={18} />}
-						</button>
-						<div className="flex-1 min-w-0">
-							{/* Bars */}
-							<div
-								className="h-12 flex items-center gap-[2px] cursor-pointer"
-								onClick={(e) => {
-									const rect = e.currentTarget.getBoundingClientRect();
-									const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-									handleSeekTo(pct);
-								}}
-							>
-								{waveformBars.map((h, i) => {
-									const filledThreshold = progressPct * waveformBars.length;
-									const filled = i < filledThreshold;
-									return (
-										<div
-											key={i}
-											className={`flex-1 rounded-full transition-colors ${filled ? "bg-highlight" : "bg-muted-foreground/25"}`}
-											style={{ height: `${h}%` }}
-										/>
-									);
-								})}
-							</div>
-							{/* Time line */}
-							<div className="flex justify-between gap-3 mt-2 text-xs text-muted-foreground">
-								<span className="font-mono tabular-nums">
-									{formatTime(currentTime)} / {formatTime(duration)}
+							{coverUrl ? (
+								// eslint-disable-next-line @next/next/no-img-element
+								<img src={sizedCover(coverUrl, 1000)} alt={album ? `${album} cover` : `${title} cover`} className="size-full object-cover" />
+							) : (
+								<span className="flex size-full items-center justify-center text-muted-foreground">
+									<Music className="size-1/3" />
 								</span>
-								<span className="truncate">Full track · get the app to download</span>
-							</div>
+							)}
 						</div>
-					</div>
-				</motion.div>
+					</motion.div>
 
-				{/* Stats strip */}
-				<dl className="grid grid-cols-3 rounded-xl border border-border bg-card divide-x divide-border mb-10 overflow-hidden">
-					{[
-						{ k: "Format", v: "FLAC" },
-						{ k: "Duration", v: duration > 0 ? formatTime(duration) : "—" },
-						{ k: "Access", v: "Public" },
-					].map((s) => (
-						<div key={s.k} className="px-4 py-4 sm:px-5">
-							<dt className="text-xs text-muted-foreground">{s.k}</dt>
-							<dd className="m-0 mt-1 text-lg sm:text-xl font-semibold tracking-tight tabular-nums">{s.v}</dd>
-						</div>
-					))}
-				</dl>
+					{/* Heading + player */}
+					<div className="min-w-0 text-center md:text-left">
+						<motion.div {...entrance(1, 10)}>
+							<EyebrowPill className="gap-1.5">
+								<Equalizer playing={isPlaying} bars={3} className="h-3" />
+								Shared with you
+							</EyebrowPill>
+						</motion.div>
+						<motion.h1 {...entrance(2, 12)} className={cn("type-display mt-4 break-words text-balance text-foreground", longTitle ? "text-3xl sm:text-4xl lg:text-5xl" : "text-4xl sm:text-5xl lg:text-6xl")}>
+							{title}
+						</motion.h1>
+						<motion.p {...entrance(3, 8)} className="mt-2 text-lg text-muted-foreground">
+							<span className="font-semibold text-foreground">{artist}</span>
+							{album && <> · {album}</>}
+						</motion.p>
+						<motion.div {...entrance(4, 8)} className="mt-4 flex justify-center md:justify-start">
+							<span className="inline-flex items-center gap-2 rounded-full bg-secondary-container py-1 pl-1 pr-3.5 text-sm text-on-secondary-container">
+								<span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{sharedBy.charAt(0).toUpperCase() || "?"}</span>
+								Shared by <span className="font-semibold">{sharedByLabel}</span>
+							</span>
+						</motion.div>
+
+						{/* Player card */}
+						<motion.div {...entrance(5, 16)} className="mt-8 rounded-[28px] bg-surface-container/75 p-4 text-left shadow-[0_12px_32px_-12px_rgb(0_0_0/0.25)] backdrop-blur-xl sm:p-6">
+							<div className="flex items-center gap-4 sm:gap-5">
+								<motion.button
+									type="button"
+									onClick={handleToggle}
+									disabled={!loaded}
+									aria-label={isPlaying ? "Pause" : "Play"}
+									whileTap={{ scale: 0.9 }}
+									animate={{ scale: isPlaying ? 1.06 : 1, borderRadius: isPlaying ? 999 : 26 }}
+									transition={{ duration: DUR.medium, ease: EASE.emphasized }}
+									className={cn(
+										"flex size-[72px] shrink-0 items-center justify-center bg-primary text-primary-foreground outline-none transition-[box-shadow,opacity] duration-500 focus-visible:ring-4 focus-visible:ring-ring/40 disabled:opacity-60",
+										isPlaying ? "shadow-[0_8px_30px_2px_color-mix(in_srgb,var(--primary)_55%,transparent)]" : "shadow-[0_6px_16px_-2px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
+									)}
+								>
+									<AnimatePresence mode="popLayout" initial={false}>
+										<motion.span key={loaded ? "ready" : "wait"} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }} className="flex">
+											{loaded ? <PlayPauseIcon playing={isPlaying} className="size-8" /> : <Spinner size={24} />}
+										</motion.span>
+									</AnimatePresence>
+								</motion.button>
+								<div className="min-w-0 flex-1">
+									<WaveSeek currentTime={currentTime} duration={duration} buffered={buffered} playing={isPlaying} onSeek={handleSeek} />
+								</div>
+							</div>
+
+							<div className="mt-5 flex flex-wrap items-center gap-2">
+								<motion.button
+									type="button"
+									whileTap={{ scale: 0.95 }}
+									onClick={handleCopyLink}
+									className="inline-flex h-10 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-secondary/80"
+								>
+									{linkCopied ? <DrawCheck className="size-4" /> : <Link2 className="size-4" aria-hidden />}
+									<SlideSwap id={linkCopied ? "copied" : "copy"}>{linkCopied ? "Copied" : "Copy link"}</SlideSwap>
+								</motion.button>
+								<Link href="/" className="inline-flex h-10 items-center gap-2 rounded-full bg-primary-container px-4 text-sm font-semibold text-on-primary-container no-underline transition-[transform,opacity] hover:opacity-90 active:scale-95">
+									<Download className="size-4" aria-hidden />
+									Get it
+								</Link>
+								<span className="ml-auto hidden text-xs text-muted-foreground sm:inline">Full track · get the app to download</span>
+							</div>
+						</motion.div>
+
+						<motion.div {...entrance(6, 8)} className="mt-4 flex flex-wrap justify-center gap-2 md:justify-start">
+							<StatBadge icon={Clock3}>{duration > 0 ? formatTime(duration) : "—"}</StatBadge>
+							<StatBadge icon={Headphones}>Full track</StatBadge>
+							<StatBadge icon={Globe}>Public</StatBadge>
+						</motion.div>
+					</div>
+				</div>
 
 				{/* CTA */}
-				<div className="rounded-xl border border-border bg-card p-6 sm:p-8 mb-12">
-					<div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-center">
+				<motion.section
+					initial={{ opacity: 0, y: 24 }}
+					whileInView={{ opacity: 1, y: 0 }}
+					viewport={{ once: true }}
+					transition={{ duration: 0.5, ease: EASE.decelerate }}
+					className="bg-tonal-gradient relative mt-14 overflow-hidden rounded-[28px] p-6 text-on-primary-container sm:p-10"
+				>
+					<LogoMark className="pointer-events-none absolute -bottom-10 -right-6 size-48 rotate-[-12deg] opacity-15" />
+					<div className="relative grid grid-cols-1 items-center gap-6 md:grid-cols-[1fr_auto]">
 						<div>
-							<h2 className="text-xl sm:text-2xl font-semibold tracking-tight m-0">
-								Download your library
-							</h2>
-							<p className="mt-2 text-sm text-muted-foreground max-w-[52ch]">
-								wavelet is a self-hosted, open-source web app for downloading high-quality music from Deezer. No ads — your files, your disk.
-							</p>
+							<p className="type-eyebrow opacity-80">wavelet</p>
+							<h2 className="type-display mt-2 text-3xl sm:text-4xl">Download your library</h2>
+							<p className="mt-2 max-w-[52ch] text-sm opacity-80 sm:text-base">wavelet is a self-hosted, open-source web app for downloading high-quality music from Deezer. No ads — your files, your disk.</p>
 						</div>
-						<Link
-							href="/"
-							className="inline-flex items-center justify-center gap-2 h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-medium transition-colors no-underline whitespace-nowrap [@media(hover:hover)]:hover:bg-primary/85"
-						>
+						<Link href="/" className="inline-flex h-12 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground no-underline shadow-[0_6px_18px_-4px_color-mix(in_srgb,var(--primary)_45%,transparent)] transition-[transform,background-color] hover:bg-primary/90 active:scale-95">
 							Get wavelet
 							<ArrowRight className="size-4" aria-hidden />
 						</Link>
 					</div>
-				</div>
+				</motion.section>
 
 				{/* Footer */}
-				<p className="text-center text-xs text-muted-foreground py-6">
-					<span className="font-mono">{shareId.slice(0, 8)}</span> · Not affiliated with Deezer
-				</p>
+				<footer className="mt-10 flex flex-col items-center gap-2 py-4 text-center text-xs text-muted-foreground">
+					<span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+						<LogoMark className="size-5" /> wavelet
+					</span>
+					<span>
+						Not affiliated with Deezer · <span className="font-mono">{shareId.slice(0, 8)}</span>
+					</span>
+				</footer>
 			</main>
-		</div>
+		</CoverTheme>
 	);
 }

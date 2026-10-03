@@ -32,6 +32,11 @@ import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DrawCheck, HeartGlyph, PlayPauseIcon, Spinner } from "@/components/motion/icons";
+import { CoverImage } from "@/components/ui/cover-image";
+import { cn } from "@/lib/utils";
+
+/** Menu item shape: rounded-xl rows with a little more air (M3 menus). */
+const item = "gap-2.5 rounded-xl px-2.5 py-2 [&_svg:not([class*='text-'])]:text-muted-foreground";
 
 export interface TrackActionTrack {
 	id: string;
@@ -174,11 +179,11 @@ function AddToPlaylistSubmenu({
 								key={p.id}
 								closeOnClick={false}
 								onClick={() => handleAdd(p.id)}
-								className="flex items-center justify-between gap-3"
+								className="flex items-center justify-between gap-3 rounded-xl px-2.5 py-2"
 							>
 								<span className="truncate">{p.title}</span>
 								{inPlaylist ? (
-									<DrawCheck className="size-4 text-success shrink-0" />
+									<DrawCheck className="size-4 shrink-0 text-primary" />
 								) : (
 									<span className="font-mono text-xs tabular-nums text-muted-foreground shrink-0">
 										{p._count?.tracks ?? 0}
@@ -231,9 +236,11 @@ function AddToPlaylistSubmenu({
 					<DropdownMenuItem
 						closeOnClick={false}
 						onClick={() => setCreating(true)}
-						className="gap-2 text-muted-foreground"
+						className="gap-2.5 rounded-xl px-2.5 py-2 font-semibold text-primary focus:text-primary"
 					>
-						<Plus className="size-4" />
+						<span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+							<Plus className="size-3.5" />
+						</span>
 						<span>New playlist</span>
 					</DropdownMenuItem>
 				</>
@@ -278,11 +285,12 @@ export function TrackActionMenu({
 	const currentPlayerTrack = usePlayerStore((s) => s.currentTrack);
 	const hasPlayerQueue = usePlayerStore((s) => s.queue.length > 0);
 
-	useEffect(() => {
-		if (!open) setView("main");
-	}, [open]);
-
-	const close = () => setOpen(false);
+	// Back to the main view whenever the menu closes.
+	const changeOpen = (next: boolean) => {
+		setOpen(next);
+		if (!next) setView("main");
+	};
+	const close = () => changeOpen(false);
 
 	const toPlayerTrack = useCallback(
 		() => ({
@@ -352,7 +360,7 @@ export function TrackActionMenu({
 
 	return (
 		<>
-			<DropdownMenu open={open} onOpenChange={setOpen}>
+			<DropdownMenu open={open} onOpenChange={changeOpen}>
 				<DropdownMenuTrigger
 					render={
 						<button
@@ -360,7 +368,7 @@ export function TrackActionMenu({
 							onMouseDown={(e) => e.stopPropagation()}
 							onPointerDown={(e) => e.stopPropagation()}
 							aria-label="Track actions"
-							className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent data-popup-open:bg-accent data-popup-open:text-foreground transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 ${className}`}
+							className={cn("inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-[color,background-color,scale] hover:bg-surface-highest hover:text-foreground active:scale-90 focus-visible:ring-[3px] focus-visible:ring-ring/30 data-popup-open:bg-secondary data-popup-open:text-secondary-foreground", className)}
 						/>
 					}
 				>
@@ -369,23 +377,22 @@ export function TrackActionMenu({
 				<DropdownMenuContent
 					side={side}
 					align={align}
-					className="w-64"
+					className="w-72 rounded-2xl p-1.5"
 					onClick={(e) => e.stopPropagation()}
 				>
 					{view === "main" ? (
 						<div>
 							{/* Track header */}
-							<div className="-mx-1 -mt-1 mb-1 border-b border-border px-3 py-2.5">
-								<p className="truncate text-sm font-medium leading-tight tracking-tight">
-									{track.title}
-								</p>
-								<p className="mt-0.5 truncate text-xs text-muted-foreground">
-									{track.artist}
-								</p>
+							<div className="mb-1 flex items-center gap-3 rounded-xl bg-[linear-gradient(135deg,var(--m3-primary-container),var(--m3-surface-container-high))] p-2">
+								<CoverImage src={track.cover ?? null} className="size-11 shrink-0 rounded-[10px]" />
+								<div className="min-w-0">
+									<p className="truncate text-sm font-semibold leading-tight tracking-[-0.01em]">{track.title}</p>
+									<p className="mt-0.5 truncate text-xs text-muted-foreground">{track.artist}</p>
+								</div>
 							</div>
 
 							{track.previewUrl && (
-								<DropdownMenuItem onClick={handlePreview} className="gap-2.5">
+								<DropdownMenuItem onClick={handlePreview} className={item}>
 									<PlayPauseIcon playing={isPreviewActive} />
 									{isPreviewActive ? "Pause preview" : "Play preview"}
 								</DropdownMenuItem>
@@ -393,11 +400,11 @@ export function TrackActionMenu({
 
 							{hasPlayerQueue && currentPlayerTrack?.trackId !== track.id && (
 								<>
-									<DropdownMenuItem onClick={handlePlayNext} className="gap-2.5">
+									<DropdownMenuItem onClick={handlePlayNext} className={item}>
 										<ListStart className="size-4" />
 										Play next
 									</DropdownMenuItem>
-									<DropdownMenuItem onClick={handleAddToQueue} className="gap-2.5">
+									<DropdownMenuItem onClick={handleAddToQueue} className={item}>
 										<ListEnd className="size-4" />
 										Add to queue
 									</DropdownMenuItem>
@@ -405,15 +412,15 @@ export function TrackActionMenu({
 							)}
 
 							{isAuthenticated && (
-								<DropdownMenuItem onClick={handleSave} className="gap-2.5">
-									<HeartGlyph filled={saved} className={saved ? "!text-foreground" : ""} />
+								<DropdownMenuItem onClick={handleSave} className={item}>
+									<HeartGlyph filled={saved} className={saved ? "!text-primary" : ""} />
 									{saved ? "Remove from library" : "Save to library"}
 								</DropdownMenuItem>
 							)}
 
 							{isAuthenticated && (
 								<DropdownMenuItem
-									className="gap-2.5"
+									className={item}
 									closeOnClick={false}
 									onClick={() => setView("playlists")}
 								>
@@ -424,8 +431,8 @@ export function TrackActionMenu({
 							)}
 
 							{isAuthenticated && (
-								<DropdownMenuItem onClick={handleShare} className="gap-2.5">
-									{isShared ? <LinkIcon className="size-4 !text-highlight" /> : <Share2 className="size-4" />}
+								<DropdownMenuItem onClick={handleShare} className={item}>
+									{isShared ? <LinkIcon className="size-4 !text-primary" /> : <Share2 className="size-4" />}
 									{isShared ? "Manage share" : "Share track"}
 								</DropdownMenuItem>
 							)}
@@ -438,7 +445,7 @@ export function TrackActionMenu({
 									onClick={close}
 									className="no-underline"
 								>
-									<DropdownMenuItem className="gap-2.5">
+									<DropdownMenuItem className={item}>
 										<Disc3 className="size-4" />
 										<span className="truncate">{track.albumTitle || "Go to album"}</span>
 									</DropdownMenuItem>
@@ -451,7 +458,7 @@ export function TrackActionMenu({
 									onClick={close}
 									className="no-underline"
 								>
-									<DropdownMenuItem className="gap-2.5">
+									<DropdownMenuItem className={item}>
 										<User className="size-4" />
 										<span className="truncate">{track.artist}</span>
 									</DropdownMenuItem>
@@ -463,7 +470,7 @@ export function TrackActionMenu({
 									<DropdownMenuSeparator />
 									<DropdownMenuItem
 										onClick={handleDelete}
-										className="gap-2.5 text-destructive focus:text-destructive focus:bg-destructive/10"
+										className="gap-2.5 rounded-xl px-2.5 py-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
 									>
 										<Trash2 className="size-4" />
 										Remove
@@ -473,20 +480,18 @@ export function TrackActionMenu({
 						</div>
 					) : (
 						<div>
-							<div className="-mx-1 -mt-1 mb-1 flex items-center justify-between border-b border-border">
+							<div className="mb-1 flex items-center gap-2 px-1 py-1">
 								<button
 									onClick={(e) => {
 										e.preventDefault();
 										setView("main");
 									}}
-									className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors outline-none focus-visible:text-foreground"
+									aria-label="Back"
+									className="inline-flex size-8 items-center justify-center rounded-full bg-surface-high text-foreground outline-none transition-colors hover:bg-surface-highest focus-visible:ring-[3px] focus-visible:ring-ring/30"
 								>
-									<ArrowLeft className="size-3.5" />
-									Back
+									<ArrowLeft className="size-4" />
 								</button>
-								<span className="px-3 text-xs font-medium text-foreground">
-									Add to playlist
-								</span>
+								<span className="text-sm font-semibold tracking-tight">Add to playlist</span>
 							</div>
 							<AddToPlaylistSubmenu track={track} onClose={close} />
 						</div>
@@ -499,6 +504,9 @@ export function TrackActionMenu({
 				onOpenChange={setShareDialogOpen}
 				trackId={track.id}
 				duration={track.duration}
+				title={track.title}
+				artist={track.artist}
+				cover={track.cover ?? null}
 			/>
 		</>
 	);

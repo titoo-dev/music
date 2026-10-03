@@ -107,9 +107,48 @@ describe("FullscreenPlayer", () => {
 		expect(screen.getByRole("button", { name: "Unmute" })).toBeInTheDocument();
 	});
 
+	it("centres the Now playing eyebrow between equal-width side slots (was: pushed left by the two right-hand buttons)", () => {
+		render(<FullscreenPlayer />);
+		const bar = screen.getByTestId("np-topbar");
+		// jsdom has no layout: lock in the symmetric 1fr | auto | 1fr track instead of measuring.
+		expect(bar.className).toContain("grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]");
+		const [left, middle, right] = Array.from(bar.children);
+		expect(left).toContainElement(screen.getByRole("button", { name: "Close fullscreen player" }));
+		expect(middle).toHaveTextContent("Now playing");
+		expect(right).toContainElement(screen.getByRole("button", { name: "Audio settings" }));
+		expect(right).toContainElement(screen.getByRole("button", { name: "Track actions" }));
+	});
+
 	it("closes from the chevron", async () => {
 		render(<FullscreenPlayer />);
 		await userEvent.click(screen.getByRole("button", { name: "Close fullscreen player" }));
 		expect(usePlayerStore.getState().fullscreenOpen).toBe(false);
+	});
+
+	it("opens the queue on top of Now Playing from the action pill (was: closed the player first)", async () => {
+		usePlayerStore.setState({ queue: [a, b] });
+		render(<FullscreenPlayer />);
+		await userEvent.click(screen.getByRole("button", { name: /1 up next/ }));
+		expect(usePlayerStore.getState().queuePanelOpen).toBe(true);
+		expect(usePlayerStore.getState().fullscreenOpen).toBe(true);
+	});
+
+	it("labels the queue pill \"Queue\" when nothing is up next", () => {
+		render(<FullscreenPlayer />);
+		expect(screen.getByRole("button", { name: /^Queue$/ })).toBeInTheDocument();
+	});
+
+	it("rings the play button while buffering", () => {
+		usePlayerStore.setState({ isPlaying: true, isBuffering: true });
+		render(<FullscreenPlayer />);
+		expect(screen.getByTestId("play-buffering")).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+	});
+
+	it("shows the queue position under the eyebrow", () => {
+		usePlayerStore.setState({ queue: [a, b] });
+		render(<FullscreenPlayer />);
+		expect(screen.getByText("Now playing")).toBeInTheDocument();
+		expect(screen.getByText("1 of 2 in queue")).toBeInTheDocument();
 	});
 });

@@ -8,6 +8,7 @@ import { Info, ListMusic, LogOut, Monitor, Moon, Search, Settings, Sun } from "l
 import { useAuthStore } from "@/stores/useAuthStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useCommandStore } from "@/stores/useCommandStore";
+import { useScrolled } from "@/hooks/useScrolled";
 import { authClient } from "@/lib/auth-client";
 import { applyThemePreference, readThemePreference, type ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -81,6 +82,7 @@ export function AppHeader() {
 	const logout = useAuthStore((s) => s.logout);
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
 	const openPalette = useCommandStore((s) => s.open);
+	const scrolled = useScrolled();
 
 	const handleLogout = async () => {
 		await authClient.signOut();
@@ -99,8 +101,15 @@ export function AppHeader() {
 	const nav = NAV.filter((n) => !n.auth || isAuthenticated);
 
 	return (
-		<header className="app-titlebar glass sticky top-0 z-40 border-b border-border">
-			<div className="mx-auto flex h-[var(--header-h)] w-full max-w-6xl items-center gap-4 px-4 sm:px-6">
+		// Clear at the top of the page; the frosted glass and hairline only come in once content slides under it.
+		<header
+			data-scrolled={scrolled || undefined}
+			className={cn(
+				"app-titlebar sticky top-0 z-40 border-b transition-[background-color,border-color,backdrop-filter] duration-300 ease-out",
+				scrolled ? "glass border-border" : "border-transparent bg-transparent"
+			)}
+		>
+			<div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-4 px-4 sm:px-6 lg:px-8">
 				<Link href="/" className="flex shrink-0 items-center gap-2 no-underline" aria-label="wavelet home">
 					<LogoMark animated={isPlaying} className="size-6" />
 					<span className="hidden text-[15px] font-semibold tracking-tight text-foreground sm:inline">wavelet</span>
@@ -148,7 +157,7 @@ export function AppHeader() {
 								aria-label="Account"
 								className="flex size-8 shrink-0 items-center justify-center rounded-full outline-none ring-offset-2 ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
 							>
-								<Avatar className="size-8 border border-border">
+								<Avatar className="size-8 border-2 border-background ring-2 ring-transparent [background:linear-gradient(var(--background),var(--background))_padding-box,linear-gradient(135deg,var(--brand-sky),var(--brand-indigo),var(--brand-pink))_border-box]">
 									{avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
 									<AvatarFallback className="bg-gradient-to-br from-muted to-accent text-xs font-medium text-foreground">
 										{displayName.charAt(0).toUpperCase()}
@@ -194,7 +203,7 @@ export function AppHeader() {
 
 			{/* Mobile nav — horizontal segmented row */}
 			<LayoutGroup id="mobile-nav">
-				<nav aria-label="Primary mobile" className="scrollbar-hide flex gap-1 overflow-x-auto px-3 pb-2 md:hidden">
+				<nav aria-label="Primary mobile" className="scrollbar-hide flex h-11 items-center gap-1 overflow-x-auto px-3 md:hidden">
 					{nav.map((item) => {
 						const active = isActive(pathname, item.href);
 						return (
