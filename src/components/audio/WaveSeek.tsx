@@ -83,8 +83,10 @@ export function WaveSeek({
 	const mid = height / 2;
 	const primary = tone === "primary";
 
-	const pct = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
-	const bufPct = duration > 0 ? Math.min(1, Math.max(0, buffered / duration)) : 0;
+	// A media element that isn't ready reports NaN, which Math.min/max pass through.
+	const ratio = (t: number) => (duration > 0 && Number.isFinite(t) ? Math.min(1, Math.max(0, t / duration)) : 0);
+	const pct = ratio(currentTime);
+	const bufPct = ratio(buffered);
 	const shown = drag ?? pct;
 	const x = shown * w;
 	const active = drag !== null || hover;

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence, type Transition } from "motion/react";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { cn } from "@/lib/utils";
 import { LOGO_BG, LOGO_GRADIENT, LOGO_VIEWBOX, waveletPath } from "@/lib/logo";
 
@@ -12,13 +12,16 @@ import { LOGO_BG, LOGO_GRADIENT, LOGO_VIEWBOX, waveletPath } from "@/lib/logo";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SPRING: Transition = { type: "spring", stiffness: 420, damping: 32 };
+// Critically damped: a spring that overshoots a path morph pushes the
+// vertices past their target and the glyph visibly wobbles.
+const MORPH: Transition = { type: "spring", stiffness: 520, damping: 46 };
 
 // Both states share the same point count so `d` interpolates cleanly:
 // the play triangle is split in two quads that fold into the pause bars.
-const PLAY_LEFT = "M7 4.5 L12.5 7.8 L12.5 16.2 L7 19.5 Z";
-const PLAY_RIGHT = "M12.5 7.8 L19 12 L19 12 L12.5 16.2 Z";
-const PAUSE_LEFT = "M6.5 4.5 L10.5 4.5 L10.5 19.5 L6.5 19.5 Z";
-const PAUSE_RIGHT = "M13.5 4.5 L17.5 4.5 L17.5 19.5 L13.5 19.5 Z";
+// They live in ONE path: two sibling paths sharing an edge leave an
+// anti-aliased hairline down the middle of the triangle.
+const PLAY = "M7 4.5 L12.5 7.8 L12.5 16.2 L7 19.5 Z M12.5 7.8 L19 12 L19 12 L12.5 16.2 Z";
+const PAUSE = "M6.5 4.5 L10.5 4.5 L10.5 19.5 L6.5 19.5 Z M13.5 4.5 L17.5 4.5 L17.5 19.5 L13.5 19.5 Z";
 
 export function PlayPauseIcon({
 	playing,
@@ -29,18 +32,7 @@ export function PlayPauseIcon({
 }) {
 	return (
 		<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={cn("size-4", className)}>
-			<motion.path
-				initial={false}
-				animate={{ d: playing ? PAUSE_LEFT : PLAY_LEFT }}
-				transition={SPRING}
-				strokeLinejoin="round"
-			/>
-			<motion.path
-				initial={false}
-				animate={{ d: playing ? PAUSE_RIGHT : PLAY_RIGHT }}
-				transition={SPRING}
-				strokeLinejoin="round"
-			/>
+			<motion.path initial={false} animate={{ d: playing ? PAUSE : PLAY }} transition={MORPH} />
 		</svg>
 	);
 }
@@ -93,8 +85,9 @@ export function ProgressRing({
 						strokeWidth={stroke}
 						strokeLinecap="round"
 						initial={false}
-						animate={{ pathLength: clamped }}
-						transition={{ type: "spring", stiffness: 120, damping: 24 }}
+						// A round cap draws a dot even at pathLength 0 — hide the arc there.
+						animate={{ pathLength: clamped, opacity: clamped > 0 ? 1 : 0 }}
+						transition={{ pathLength: { type: "spring", stiffness: 120, damping: 24 }, opacity: { duration: 0.15 } }}
 					/>
 				)}
 			</svg>
@@ -169,7 +162,7 @@ export function Equalizer({
 }
 
 /** One carrier cycle of the travelling wavelet, sampled for the `d` keyframes. */
-const LOGO_FRAMES = Array.from({ length: 9 }, (_, i) => waveletPath({ phase: (i / 8) * 2 * Math.PI }));
+const LOGO_FRAMES = Array.from({ length: 17 }, (_, i) => waveletPath({ phase: (i / 16) * 2 * Math.PI }));
 
 /**
  * The wavelet mark: a gradient wavelet stroke on a dark squircle. It draws
@@ -233,40 +226,47 @@ export function SearchGlyph({ busy = false, className }: { busy?: boolean; class
 export function HeartGlyph({ filled, className }: { filled: boolean; className?: string }) {
 	return (
 		<svg viewBox="0 0 24 24" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden className={cn("size-4", className)}>
+			{/* currentColor can't be interpolated — keep it as the fill and fade its opacity. */}
 			<motion.path
 				d="M12 20s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 10c0 5.65-7 10-7 10z"
 				stroke="currentColor"
+				fill="currentColor"
 				initial={false}
-				animate={{ fill: filled ? "currentColor" : "rgba(0,0,0,0)", scale: filled ? [1, 1.25, 1] : 1 }}
-				transition={{ duration: 0.35 }}
-				style={{ originX: "50%", originY: "50%" }}
+				animate={{ fillOpacity: filled ? 1 : 0, scale: filled ? [1, 1.25, 1] : 1 }}
+				transition={{ fillOpacity: { duration: 0.2 }, scale: { duration: 0.35, ease: [0.2, 0, 0, 1] } }}
 			/>
 		</svg>
 	);
 }
 
-/** A soft looping waveform line — used for empty states and the hero. */
-export function WaveLine({ className, amplitude = 8, playing = true }: { className?: string; amplitude?: number; playing?: boolean }) {
-	const make = (phase: number) => {
+/**
+ * Keyframes of the travelling wave: one carrier cycle in 16 steps. Linear
+ * `d` interpolation between two phases far apart (0 → π) cancels the wave
+ * out mid-way, so the steps stay small and the first equals the last.
+ */
+export function waveLineFrames(amplitude: number, steps = 16): string[] {
+	return Array.from({ length: steps + 1 }, (_, i) => {
+		const phase = (i / steps) * Math.PI * 2;
 		const pts: string[] = [];
 		for (let x = 0; x <= 200; x += 10) {
-			const y = 20 + Math.sin((x / 200) * Math.PI * 4 + phase) * amplitude * Math.sin((x / 200) * Math.PI);
+			const y = 20 + Math.sin((x / 200) * Math.PI * 4 - phase) * amplitude * Math.sin((x / 200) * Math.PI);
 			pts.push(`${x === 0 ? "M" : "L"}${x} ${y.toFixed(2)}`);
 		}
 		return pts.join(" ");
-	};
+	});
+}
+
+/** A soft looping waveform line — used for empty states and the hero. */
+export function WaveLine({ className, amplitude = 8, playing = true }: { className?: string; amplitude?: number; playing?: boolean }) {
+	const frames = waveLineFrames(amplitude);
 	return (
 		<svg viewBox="0 0 200 40" fill="none" stroke="currentColor" strokeWidth={1.25} strokeLinecap="round" aria-hidden className={cn("w-full", className)}>
 			<motion.path
-				initial={{ pathLength: 0, d: make(0) }}
-				animate={
-					playing
-						? { pathLength: 1, d: [make(0), make(Math.PI), make(Math.PI * 2)] }
-						: { pathLength: 1, d: make(0) }
-				}
+				initial={{ pathLength: 0, d: frames[0] }}
+				animate={playing ? { pathLength: 1, d: frames } : { pathLength: 1, d: frames[0] }}
 				transition={{
 					pathLength: { duration: 1.2, ease: "easeOut" },
-					d: { repeat: Infinity, duration: 4, ease: "linear" },
+					d: playing ? { repeat: Infinity, duration: 4, ease: "linear" } : { duration: 0.6, ease: "easeOut" },
 				}}
 			/>
 		</svg>
@@ -342,20 +342,33 @@ export function SlideSwap({ id, children, className }: { id: string | number; ch
 
 /** Shuffle arrows — the crossing strands redraw themselves when toggled. */
 export function ShuffleGlyph({ active, className }: { active: boolean; className?: string }) {
+	// Redraw only when switched on — not on mount, not when switched off.
+	const [prev, setPrev] = useState(active);
+	const [draws, setDraws] = useState(0);
+	if (active !== prev) {
+		setPrev(active);
+		if (active) setDraws((n) => n + 1);
+	}
+	const from = draws === 0 ? false : { pathLength: 0 };
 	return (
 		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden className={cn("size-5", className)}>
-			<g key={String(active)}>
-				<motion.path d="M3 7h3.5c2.4 0 3.9 1.3 5.1 3.3l.8 1.4c1.2 2 2.7 3.3 5.1 3.3H21" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.45, ease: "easeOut" }} />
-				<motion.path d="M3 17h3.5c1.6 0 2.8-.6 3.8-1.6M13.7 8.6c1-1 2.2-1.6 3.8-1.6H21" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }} />
+			<g key={draws}>
+				<motion.path d="M3 7h3.5c2.4 0 3.9 1.3 5.1 3.3l.8 1.4c1.2 2 2.7 3.3 5.1 3.3H21" initial={from} animate={{ pathLength: 1 }} transition={{ duration: 0.45, ease: "easeOut" }} />
+				<motion.path d="M3 17h3.5c1.6 0 2.8-.6 3.8-1.6M13.7 8.6c1-1 2.2-1.6 3.8-1.6H21" initial={from} animate={{ pathLength: 1 }} transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }} />
 			</g>
 			<path d="M18 4l3 3-3 3M18 14l3 3-3 3" />
 		</svg>
 	);
 }
 
-/** Repeat loop — spins half a turn on every mode change; "1" pops in for repeat-one. */
+/** Repeat loop — spins half a turn forward on every mode change; "1" pops in for repeat-one. */
 export function RepeatGlyph({ mode, className }: { mode: "off" | "all" | "one"; className?: string }) {
-	const turns = { off: 0, all: 180, one: 360 }[mode];
+	const [prev, setPrev] = useState(mode);
+	const [turns, setTurns] = useState(0);
+	if (mode !== prev) {
+		setPrev(mode);
+		setTurns((t) => t + 180);
+	}
 	return (
 		<span className={cn("relative inline-flex size-5", className)}>
 			<motion.svg

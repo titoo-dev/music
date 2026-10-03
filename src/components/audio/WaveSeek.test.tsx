@@ -148,3 +148,14 @@ describe("WaveSeek", () => {
 		fireEvent.pointerUp(slider, { clientX: 225, pointerId: 1 });
 	});
 });
+
+describe("WaveSeek with a media element that isn't ready", () => {
+	it("keeps the playhead at 0 when currentTime is NaN (was: 'Received NaN for the x1 attribute')", () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		setup({ currentTime: Number.NaN, buffered: Number.NaN });
+		expect(screen.getByTestId("wave-played").getAttribute("d")).not.toMatch(/NaN/);
+		expect(document.querySelector("svg")?.outerHTML).not.toMatch(/NaN/);
+		expect(error).not.toHaveBeenCalledWith(expect.stringMatching(/NaN/), expect.anything(), expect.anything());
+		error.mockRestore();
+	});
+});
