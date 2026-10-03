@@ -21,4 +21,8 @@ export interface SpotifyPlaylistMeta {
 	coverUrl: string | null;
 	totalTracks: number;
 	tracks: SpotifyTrackMeta[];
+	// "api": Web API (full list, ISRCs). "embed": public embed page (see embed.ts).
+	source: "api" | "embed";
+	// True when the source capped the list (embed: first 100 tracks only).
+	limited: boolean;
 }

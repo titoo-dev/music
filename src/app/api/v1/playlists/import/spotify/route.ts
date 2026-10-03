@@ -5,7 +5,6 @@ import {
 	parsePlaylistInput,
 	fetchPlaylist,
 	matchTracks,
-	SpotifyConfigError,
 	SpotifyAPIError,
 } from "@/lib/spotify";
 import { ok, fail, handleError, requireDeezer } from "../../../_lib/helpers";
@@ -42,9 +41,6 @@ export async function POST(request: NextRequest) {
 		try {
 			spotify = await fetchPlaylist(playlistId);
 		} catch (e) {
-			if (e instanceof SpotifyConfigError) {
-				return fail("SPOTIFY_NOT_CONFIGURED", e.message, 503);
-			}
 			if (e instanceof SpotifyAPIError) {
 				if (e.status === 404) {
 					return fail(
@@ -54,14 +50,7 @@ export async function POST(request: NextRequest) {
 					);
 				}
 				if (e.status === 403) {
-					// Spotify uses 403 for both "owner of the dev app needs Premium"
-					// and rate-limit-style restrictions. Surface a hint either way —
-					// the underlying message often explains it.
-					return fail(
-						"SPOTIFY_FORBIDDEN",
-						`Spotify denied the request: ${e.message}. The developer account that owns the Spotify app must have an active Premium subscription.`,
-						403
-					);
+					return fail("SPOTIFY_FORBIDDEN", `Spotify denied the request: ${e.message}.`, 403);
 				}
 				if (e.status === 429) {
 					return fail(
@@ -138,6 +127,7 @@ export async function POST(request: NextRequest) {
 					matched: 0,
 					notFound,
 					truncated,
+					limited: spotify.limited,
 				},
 			});
 		}
@@ -161,6 +151,7 @@ export async function POST(request: NextRequest) {
 				matched: matchedRows.length,
 				notFound,
 				truncated,
+				limited: spotify.limited,
 			},
 		});
 	} catch (e) {
