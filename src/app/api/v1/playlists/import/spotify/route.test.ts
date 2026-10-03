@@ -152,13 +152,22 @@ describe("POST /api/v1/playlists/import/spotify", () => {
 			expect(dz.api.getTrackByISRC).not.toHaveBeenCalled();
 		});
 
-		it("flags a paste above 500 links as truncated", async () => {
-			const many = Array.from({ length: 501 }, (_, i) => track(String(i).padStart(22, "x"), "Patient Zero", ["Taylor Swift"], 225_868));
+		it("imports up to 1000 links (was: capped at 500)", async () => {
+			const many = Array.from({ length: 1000 }, (_, i) => track(String(i).padStart(22, "x"), "Patient Zero", ["Taylor Swift"], 225_868));
 
-			const res = await POST(makeNextRequest({ method: "POST", body: { tracks: many, total: 600 } }));
+			const res = await POST(makeNextRequest({ method: "POST", body: { tracks: many, total: 1000 } }));
 			const body = await readJson<Body & { data: { report: { truncated: boolean; totalSpotify: number } } }>(res);
 
-			expect(body?.data.report).toMatchObject({ truncated: true, totalSpotify: 600, processed: 500 });
+			expect(body?.data.report).toMatchObject({ truncated: false, totalSpotify: 1000, processed: 1000 });
+		});
+
+		it("flags a paste above 1000 links as truncated", async () => {
+			const many = Array.from({ length: 1001 }, (_, i) => track(String(i).padStart(22, "x"), "Patient Zero", ["Taylor Swift"], 225_868));
+
+			const res = await POST(makeNextRequest({ method: "POST", body: { tracks: many, total: 1200 } }));
+			const body = await readJson<Body & { data: { report: { truncated: boolean; totalSpotify: number } } }>(res);
+
+			expect(body?.data.report).toMatchObject({ truncated: true, totalSpotify: 1200, processed: 1000 });
 		});
 	});
 });

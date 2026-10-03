@@ -22,6 +22,25 @@ export const SPRING = {
 	pop: { type: "spring", stiffness: 520, damping: 14 } satisfies Transition,
 };
 
+/** A Material 3 motion-physics spring: stiffness + damping ratio (1 = no bounce). */
+export function m3Spring(stiffness: number, dampingRatio: number) {
+	return { type: "spring", stiffness, damping: dampingRatio * 2 * Math.sqrt(stiffness), mass: 1 } satisfies Transition;
+}
+
+/**
+ * Material 3 Expressive motion schemes. Spatial springs move things (position,
+ * size, rotation, shape) and may overshoot; effects springs fade and recolour
+ * and never do.
+ */
+export const M3_SPRING = {
+	fastSpatial: m3Spring(800, 0.6),
+	defaultSpatial: m3Spring(380, 0.8),
+	slowSpatial: m3Spring(200, 0.8),
+	fastEffects: m3Spring(3800, 1),
+	defaultEffects: m3Spring(1600, 1),
+	slowEffects: m3Spring(800, 1),
+};
+
 /** `EntranceFade`: fade + rise, staggered by index (60ms steps, capped). */
 export function entrance(index = 0, offset = 16) {
 	return {

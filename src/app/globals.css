@@ -234,6 +234,15 @@ html.dark {
 	--color-brand-night: var(--brand-night);
 	--shadow-glow: var(--shadow-glow);
 	--radius-hero: 28px;
+	/* Material 3 Expressive shape scale (rounded-m3-*). */
+	--radius-m3-xs: 4px;
+	--radius-m3-sm: 8px;
+	--radius-m3-md: 12px;
+	--radius-m3-lg: 16px;
+	--radius-m3-lg-plus: 20px;
+	--radius-m3-xl: 28px;
+	--radius-m3-xl-plus: 32px;
+	--radius-m3-xxl: 48px;
 	--ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
 	--ease-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
 	--ease-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
@@ -400,9 +409,12 @@ html.dark {
 	}
 }
 
+/* <Equalizer> bars. CSS, not Motion: an ancestor AnimatePresence initial={false} froze them. */
 @keyframes playback-eq {
-	0%, 100% { height: 3px; }
-	50% { height: 12px; }
+	0%, 100% { height: 30%; }
+	25% { height: 100%; }
+	50% { height: 45%; }
+	75% { height: 85%; }
 }
 
 /* ─── COVER THEME ───

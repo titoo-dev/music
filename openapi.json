@@ -1869,8 +1869,8 @@
 					"Playlists"
 				],
 				"operationId": "importSpotifyPlaylist",
-				"summary": "Import a Spotify playlist (matched to Deezer, max 500 tracks)",
-				"description": "Synchronous; can take tens of seconds on large playlists — use a long client timeout.",
+				"summary": "Import a Spotify playlist (matched to Deezer, max 1000 tracks)",
+				"description": "Synchronous; can take a couple of minutes on large playlists — use a long client timeout, or the chunked flow: POST /playlists/import/spotify/playlist (or …/tracks), then …/match in batches of 50, then …/save.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -2044,6 +2044,234 @@
 				"x-error-codes": [
 					"INVALID_IDS",
 					"TOO_MANY_IDS"
+				]
+			}
+		},
+		"/api/v1/playlists/import/spotify/playlist": {
+			"post": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "readSpotifyPlaylist",
+				"summary": "Read a public Spotify playlist (no matching)",
+				"description": "Step 1 of the chunked import from a playlist link. `tracks` is capped at 1000; `totalTracks` keeps the real count.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"url": {
+										"type": "string",
+										"description": "Spotify playlist URL, URI or id"
+									}
+								},
+								"required": [
+									"url"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SpotifyPlaylistEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
+					"429": {
+						"$ref": "#/components/responses/RateLimited"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					},
+					"502": {
+						"$ref": "#/components/responses/UpstreamError"
+					}
+				},
+				"x-error-codes": [
+					"MISSING_URL",
+					"INVALID_URL",
+					"EMPTY_PLAYLIST",
+					"SPOTIFY_NOT_FOUND",
+					"SPOTIFY_FORBIDDEN",
+					"SPOTIFY_RATE_LIMITED",
+					"SPOTIFY_ERROR"
+				]
+			}
+		},
+		"/api/v1/playlists/import/spotify/match": {
+			"post": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "matchSpotifyTracks",
+				"summary": "Match up to 50 Spotify tracks on Deezer",
+				"description": "Step 2 of the chunked import. `results` is in the order of `tracks`; send the matched ones to POST /playlists/import/spotify/save.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"tracks": {
+										"type": "array",
+										"items": {
+											"$ref": "#/components/schemas/SpotifyTrack"
+										},
+										"minItems": 1,
+										"maxItems": 50
+									}
+								},
+								"required": [
+									"tracks"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SpotifyMatchEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticatedOrDeezerLoginFailed"
+					},
+					"403": {
+						"$ref": "#/components/responses/NoDeezerArl"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"INVALID_TRACKS",
+					"TOO_MANY_TRACKS",
+					"NO_DEEZER_ARL",
+					"DEEZER_LOGIN_FAILED"
+				]
+			}
+		},
+		"/api/v1/playlists/import/spotify/save": {
+			"post": {
+				"tags": [
+					"Playlists"
+				],
+				"operationId": "saveSpotifyImport",
+				"summary": "Create the imported playlist from matched tracks",
+				"description": "Step 3 of the chunked import. Duplicate track ids are dropped.",
+				"security": [
+					{
+						"bearerAuth": []
+					},
+					{
+						"sessionCookie": []
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"title": {
+										"type": "string",
+										"description": "default \"Spotify import\""
+									},
+									"description": {
+										"type": "string"
+									},
+									"coverUrl": {
+										"type": "string",
+										"nullable": true,
+										"description": "https only; else the first track's cover"
+									},
+									"tracks": {
+										"type": "array",
+										"items": {
+											"$ref": "#/components/schemas/ImportedTrack"
+										},
+										"minItems": 1,
+										"maxItems": 1000
+									}
+								},
+								"required": [
+									"tracks"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SpotifySaveEnvelope"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
+					"500": {
+						"$ref": "#/components/responses/InternalError"
+					}
+				},
+				"x-error-codes": [
+					"INVALID_TRACKS",
+					"TOO_MANY_TRACKS"
 				]
 			}
 		},
@@ -4327,7 +4555,7 @@
 					},
 					"truncated": {
 						"type": "boolean",
-						"description": "true when the playlist had more than 500 tracks"
+						"description": "true when the playlist had more than 1000 tracks"
 					},
 					"limited": {
 						"type": "boolean",
@@ -4434,6 +4662,150 @@
 				"required": [
 					"playlist",
 					"report"
+				]
+			},
+			"SpotifyPlaylist": {
+				"type": "object",
+				"properties": {
+					"spotifyId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"ownerName": {
+						"type": "string"
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"totalTracks": {
+						"type": "integer",
+						"description": "real size of the playlist (tracks is capped at 1000)"
+					},
+					"tracks": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/SpotifyTrack"
+						}
+					},
+					"source": {
+						"type": "string",
+						"enum": [
+							"api",
+							"embed"
+						]
+					},
+					"limited": {
+						"type": "boolean",
+						"description": "true when Spotify only exposed the first 100 tracks"
+					}
+				},
+				"required": [
+					"spotifyId",
+					"title",
+					"totalTracks",
+					"tracks",
+					"source",
+					"limited"
+				]
+			},
+			"SpotifyMatchResult": {
+				"type": "object",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": [
+							"matched",
+							"not_found"
+						]
+					},
+					"strategy": {
+						"type": "string",
+						"enum": [
+							"isrc",
+							"advanced",
+							"advanced-clean",
+							"fuzzy"
+						]
+					},
+					"confidence": {
+						"type": "number",
+						"description": "0…1"
+					},
+					"deezerTrackId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"album": {
+						"type": "string"
+					},
+					"albumId": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true
+					},
+					"duration": {
+						"type": "integer",
+						"description": "seconds"
+					},
+					"reason": {
+						"type": "string",
+						"description": "why nothing matched (not_found only)"
+					}
+				},
+				"required": [
+					"status"
+				]
+			},
+			"ImportedTrack": {
+				"type": "object",
+				"properties": {
+					"trackId": {
+						"type": "string",
+						"description": "Deezer track id"
+					},
+					"title": {
+						"type": "string"
+					},
+					"artist": {
+						"type": "string"
+					},
+					"album": {
+						"type": "string",
+						"nullable": true
+					},
+					"albumId": {
+						"type": "string",
+						"nullable": true
+					},
+					"coverUrl": {
+						"type": "string",
+						"nullable": true,
+						"description": "https only"
+					},
+					"duration": {
+						"type": "integer",
+						"nullable": true,
+						"description": "seconds"
+					}
+				},
+				"required": [
+					"trackId",
+					"title",
+					"artist"
 				]
 			},
 			"UserPreferences": {
@@ -5579,6 +5951,79 @@
 					},
 					"data": {
 						"$ref": "#/components/schemas/SpotifyTrackBatch"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SpotifyPlaylistEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/SpotifyPlaylist"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SpotifyMatchEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"results": {
+								"type": "array",
+								"items": {
+									"$ref": "#/components/schemas/SpotifyMatchResult"
+								}
+							}
+						},
+						"required": [
+							"results"
+						]
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"SpotifySaveEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"type": "object",
+						"properties": {
+							"playlist": {
+								"$ref": "#/components/schemas/Playlist"
+							}
+						},
+						"required": [
+							"playlist"
+						]
 					}
 				},
 				"required": [

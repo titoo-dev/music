@@ -20,12 +20,13 @@ export async function fetchData(endpoint: string, params: Record<string, string>
 	return unwrap(res);
 }
 
-export async function postToServer(endpoint: string, data: Record<string, any> = {}) {
+export async function postToServer(endpoint: string, data: object = {}, { signal }: { signal?: AbortSignal } = {}) {
 	const res = await fetch(`${API_BASE}/${endpoint}`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		credentials: "include",
 		body: JSON.stringify(data),
+		signal,
 	});
 	return unwrap(res);
 }

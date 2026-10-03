@@ -17,6 +17,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { LyricsPanel } from "@/components/audio/LyricsPanel";
 import { LyricsImmersive } from "@/components/audio/LyricsImmersive";
 import { TrackActionSheet } from "@/components/tracks/TrackActionSheet";
+import { ImportSpotifyDialog } from "@/components/playlists/ImportSpotifyDialog";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
 	useInitApp();
@@ -45,6 +46,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 				<QueuePanel />
 				<TrackAnnouncer />
 				<TrackActionSheet />
+
+				{/* ─── Spotify import (keeps running when closed) ─── */}
+				<ImportSpotifyDialog />
 				<Toaster />
 			</div>
 		</MotionConfig>

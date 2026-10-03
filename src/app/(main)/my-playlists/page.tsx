@@ -11,7 +11,7 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
 import { cn } from "@/lib/utils";
 import { CardGrid, MediaCard } from "@/components/cards/MediaCard";
 import { ArtworkWall, Count, Medallion, entrance, swap } from "@/components/expressive";
-import { ImportSpotifyDialog } from "@/components/playlists/ImportSpotifyDialog";
+import { useSpotifyImportStore } from "@/stores/useSpotifyImportStore";
 import { DeletePlaylistDialog, PlaylistEditDialog, filledButton, tonalButton } from "@/components/playlists/PlaylistDialogs";
 import { CardGridSkeleton, NewPlaylistTile } from "@/components/playlists/PlaylistTiles";
 import { plural, uniqueCovers } from "@/components/playlists/format";
@@ -152,7 +152,6 @@ export default function MyPlaylistsPage() {
 	const router = useRouter();
 	const [list, setList] = useState<PlaylistItem[] | null>(null);
 	const [creating, setCreating] = useState(false);
-	const [importing, setImporting] = useState(false);
 	const [deleteTarget, setDeleteTarget] = useState<PlaylistItem | null>(null);
 	const [deleteOpen, setDeleteOpen] = useState(false);
 	const [fab, setFab] = useState(false);
@@ -170,9 +169,13 @@ export default function MyPlaylistsPage() {
 		[]
 	);
 
+	const openImport = useSpotifyImportStore((s) => s.openDialog);
+	// Imports can finish in the background (the dialog lives in the layout).
+	const lastImportedId = useSpotifyImportStore((s) => s.lastImportedId);
+
 	useEffect(() => {
 		if (isAuthenticated) void loadPlaylists();
-	}, [isAuthenticated, loadPlaylists]);
+	}, [isAuthenticated, loadPlaylists, lastImportedId]);
 
 	const loading = isAuthenticated && list === null;
 	const playlists = useMemo(() => list ?? [], [list]);
@@ -241,7 +244,7 @@ export default function MyPlaylistsPage() {
 				playlists={loading ? null : playlists.length}
 				tracks={loading ? null : totalTracks}
 				onCreate={() => setCreating(true)}
-				onImport={() => setImporting(true)}
+				onImport={openImport}
 				createRef={createRef}
 			/>
 
@@ -260,7 +263,7 @@ export default function MyPlaylistsPage() {
 										<Plus />
 										New playlist
 									</button>
-									<button type="button" className={tonalButton} onClick={() => setImporting(true)}>
+									<button type="button" className={tonalButton} onClick={openImport}>
 										<Download />
 										Import from Spotify
 									</button>
@@ -297,7 +300,6 @@ export default function MyPlaylistsPage() {
 			<NewPlaylistFab visible={fab && !loading && playlists.length > 0} onClick={() => setCreating(true)} />
 
 			<PlaylistEditDialog open={creating} onOpenChange={setCreating} mode="create" onSubmit={handleCreate} />
-			<ImportSpotifyDialog open={importing} onOpenChange={setImporting} onImported={loadPlaylists} />
 			<DeletePlaylistDialog
 				open={deleteOpen}
 				onOpenChange={setDeleteOpen}

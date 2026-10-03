@@ -67,6 +67,11 @@ export default defineConfig({
 				"src/lib/entity-links.ts",
 				"src/components/links/EntityLink.tsx",
 				"src/components/audio/leave-player.ts",
+				"src/lib/spotify/import.ts",
+				"src/lib/spotify/import-run.ts",
+				"src/stores/useSpotifyImportStore.ts",
+				"src/app/api/v1/playlists/import/spotify/{playlist,match,save}/route.ts",
+				"src/components/motion/WavyProgress.tsx",
 			],
 			exclude: [
 				"**/*.test.{ts,tsx}",

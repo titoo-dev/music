@@ -394,7 +394,7 @@ const schemas = {
 					["spotifyId", "title", "artist", "album", "reason"]
 				)
 			),
-			truncated: bool({ description: "true when the playlist had more than 500 tracks" }),
+			truncated: bool({ description: "true when the playlist had more than 1000 tracks" }),
 			limited: bool({ description: "true when Spotify only exposed the first 100 tracks of a playlist link (paste track links for the full list)" }),
 		},
 		["totalSpotify", "processed", "matched", "notFound", "truncated"]
@@ -426,6 +426,48 @@ const schemas = {
 			report: ref("SpotifyImportReport"),
 		},
 		["playlist", "report"]
+	),
+	SpotifyPlaylist: obj(
+		{
+			spotifyId: str(),
+			title: str(),
+			description: str(),
+			ownerName: str(),
+			coverUrl: nstr(),
+			totalTracks: int({ description: "real size of the playlist (tracks is capped at 1000)" }),
+			tracks: arr(ref("SpotifyTrack")),
+			source: str({ enum: ["api", "embed"] }),
+			limited: bool({ description: "true when Spotify only exposed the first 100 tracks" }),
+		},
+		["spotifyId", "title", "totalTracks", "tracks", "source", "limited"]
+	),
+	SpotifyMatchResult: obj(
+		{
+			status: str({ enum: ["matched", "not_found"] }),
+			strategy: str({ enum: ["isrc", "advanced", "advanced-clean", "fuzzy"] }),
+			confidence: { type: "number", description: "0…1" },
+			deezerTrackId: str(),
+			title: str(),
+			artist: str(),
+			album: str(),
+			albumId: nstr(),
+			coverUrl: nstr(),
+			duration: int({ description: "seconds" }),
+			reason: str({ description: "why nothing matched (not_found only)" }),
+		},
+		["status"]
+	),
+	ImportedTrack: obj(
+		{
+			trackId: str({ description: "Deezer track id" }),
+			title: str(),
+			artist: str(),
+			album: nstr(),
+			albumId: nstr(),
+			coverUrl: nstr({ description: "https only" }),
+			duration: nint({ description: "seconds" }),
+		},
+		["trackId", "title", "artist"]
 	),
 
 	// Preferences
@@ -1019,8 +1061,8 @@ const paths = {
 		post: {
 			tags: ["Playlists"],
 			operationId: "importSpotifyPlaylist",
-			summary: "Import a Spotify playlist (matched to Deezer, max 500 tracks)",
-			description: "Synchronous; can take tens of seconds on large playlists — use a long client timeout.",
+			summary: "Import a Spotify playlist (matched to Deezer, max 1000 tracks)",
+			description: "Synchronous; can take a couple of minutes on large playlists — use a long client timeout, or the chunked flow: POST /playlists/import/spotify/playlist (or …/tracks), then …/match in batches of 50, then …/save.",
 			security: userAuth,
 			requestBody: body({
 				oneOf: [
@@ -1062,6 +1104,60 @@ const paths = {
 			requestBody: body(obj({ ids: arr(str(), { minItems: 1, maxItems: 50 }) }, ["ids"])),
 			responses: { ...okRes("SpotifyTrackBatchEnvelope", ref("SpotifyTrackBatch")), ...E_400, ...E_USER },
 			"x-error-codes": ["INVALID_IDS", "TOO_MANY_IDS"],
+		},
+	},
+	"/api/v1/playlists/import/spotify/playlist": {
+		post: {
+			tags: ["Playlists"],
+			operationId: "readSpotifyPlaylist",
+			summary: "Read a public Spotify playlist (no matching)",
+			description: "Step 1 of the chunked import from a playlist link. `tracks` is capped at 1000; `totalTracks` keeps the real count.",
+			security: userAuth,
+			requestBody: body(obj({ url: str({ description: "Spotify playlist URL, URI or id" }) }, ["url"])),
+			responses: {
+				...okRes("SpotifyPlaylistEnvelope", ref("SpotifyPlaylist")),
+				400: err("BadRequest"),
+				403: err("Forbidden"),
+				404: err("NotFound"),
+				429: err("RateLimited"),
+				502: err("UpstreamError"),
+				...E_USER,
+			},
+			"x-error-codes": ["MISSING_URL", "INVALID_URL", "EMPTY_PLAYLIST", "SPOTIFY_NOT_FOUND", "SPOTIFY_FORBIDDEN", "SPOTIFY_RATE_LIMITED", "SPOTIFY_ERROR"],
+		},
+	},
+	"/api/v1/playlists/import/spotify/match": {
+		post: {
+			tags: ["Playlists"],
+			operationId: "matchSpotifyTracks",
+			summary: "Match up to 50 Spotify tracks on Deezer",
+			description: "Step 2 of the chunked import. `results` is in the order of `tracks`; send the matched ones to POST /playlists/import/spotify/save.",
+			security: userAuth,
+			requestBody: body(obj({ tracks: arr(ref("SpotifyTrack"), { minItems: 1, maxItems: 50 }) }, ["tracks"])),
+			responses: { ...okRes("SpotifyMatchEnvelope", obj({ results: arr(ref("SpotifyMatchResult")) }, ["results"])), ...E_400, ...E_DEEZER },
+			"x-error-codes": ["INVALID_TRACKS", "TOO_MANY_TRACKS", "NO_DEEZER_ARL", "DEEZER_LOGIN_FAILED"],
+		},
+	},
+	"/api/v1/playlists/import/spotify/save": {
+		post: {
+			tags: ["Playlists"],
+			operationId: "saveSpotifyImport",
+			summary: "Create the imported playlist from matched tracks",
+			description: "Step 3 of the chunked import. Duplicate track ids are dropped.",
+			security: userAuth,
+			requestBody: body(
+				obj(
+					{
+						title: str({ description: "default \"Spotify import\"" }),
+						description: str(),
+						coverUrl: nstr({ description: "https only; else the first track's cover" }),
+						tracks: arr(ref("ImportedTrack"), { minItems: 1, maxItems: 1000 }),
+					},
+					["tracks"]
+				)
+			),
+			responses: { ...okRes("SpotifySaveEnvelope", obj({ playlist: ref("Playlist") }, ["playlist"])), ...E_400, ...E_USER },
+			"x-error-codes": ["INVALID_TRACKS", "TOO_MANY_TRACKS"],
 		},
 	},
 
