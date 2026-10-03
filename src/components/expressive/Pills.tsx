@@ -150,6 +150,43 @@ export function CountPill({ value, className }: { value: number; className?: str
 	);
 }
 
+/**
+ * Tonal stat pill (primaryContainer / tertiaryContainer) for page heroes. A
+ * dash stands in while [value] is loading; with [onClick] it becomes a button.
+ */
+export function TonalPill({
+	icon: Icon,
+	value,
+	label,
+	tone = "primary",
+	onClick,
+	className,
+}: {
+	icon: LucideIcon;
+	value: number | null;
+	label: string;
+	tone?: "primary" | "tertiary";
+	onClick?: () => void;
+	className?: string;
+}) {
+	const Tag = onClick ? motion.button : motion.span;
+	return (
+		<Tag
+			{...(onClick ? { type: "button" as const, onClick, whileTap: { scale: 0.94 }, transition: SPRING.press } : {})}
+			className={cn(
+				"inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full pl-2.5 pr-3.5 text-sm font-semibold",
+				tone === "primary" ? "bg-primary-container text-on-primary-container" : "bg-tertiary-container text-on-tertiary-container",
+				onClick && "outline-none transition-[filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-ring dark:hover:brightness-125",
+				className
+			)}
+		>
+			<Icon className="size-4" strokeWidth={2.25} />
+			{value == null ? "–" : <Count value={value} className="font-semibold" />}
+			<span className="opacity-85">{label}</span>
+		</Tag>
+	);
+}
+
 /** Uppercase eyebrow pill (primaryContainer) — collection headings. */
 export function EyebrowPill({ children, className }: { children: ReactNode; className?: string }) {
 	return <span className={cn("type-eyebrow inline-flex items-center rounded-full bg-primary-container px-2.5 py-1 text-on-primary-container", className)}>{children}</span>;

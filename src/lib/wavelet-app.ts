@@ -28,6 +28,19 @@ async function ensureImports() {
 	}
 }
 
+/**
+ * How long a download lock may be held. Holders release in a `finally`, but
+ * an invocation killed at maxDuration (300s on stream-progressive) never
+ * gets there — without a TTL its lock would block that track on this
+ * instance for good.
+ */
+export const DOWNLOAD_LOCK_TTL_MS = 330_000;
+
+interface DownloadLock {
+	done: Promise<void>;
+	acquiredAt: number;
+}
+
 export class WaveletApp {
 	deezerAvailable?: "yes" | "no" | "no-network";
 	settings: Settings;
@@ -37,7 +50,7 @@ export class WaveletApp {
 
 	/** Lock map: "trackId_bitrate" → Promise that resolves when a fetch
 	 *  completes. Prevents concurrent progressive downloads of the same track. */
-	private _downloadLocks: Map<string, Promise<void>> = new Map();
+	private _downloadLocks: Map<string, DownloadLock> = new Map();
 
 	/** When `settings` was last read from the config store (see freshSettings). */
 	private _settingsLoadedAt = 0;
@@ -125,24 +138,40 @@ export class WaveletApp {
 		release: () => void;
 	} {
 		const lockKey = `${trackId}_${bitrate}`;
+		const now = Date.now();
 		const existing = this._downloadLocks.get(lockKey);
-		if (existing) {
+		if (existing && now - existing.acquiredAt < DOWNLOAD_LOCK_TTL_MS) {
+			const remaining = DOWNLOAD_LOCK_TTL_MS - (now - existing.acquiredAt);
 			return {
 				alreadyInProgress: true,
-				waitForExisting: () => existing,
+				// Never outlive the holder's TTL, even if it never releases.
+				waitForExisting: () =>
+					new Promise<void>((resolve) => {
+						const timer = setTimeout(resolve, remaining);
+						void existing.done.then(() => {
+							clearTimeout(timer);
+							resolve();
+						});
+					}),
 				release: () => {},
 			};
 		}
 		let releaseFn: () => void;
-		const lockPromise = new Promise<void>((resolve) => {
-			releaseFn = resolve;
-		});
-		this._downloadLocks.set(lockKey, lockPromise);
+		const lock: DownloadLock = {
+			done: new Promise<void>((resolve) => {
+				releaseFn = resolve;
+			}),
+			acquiredAt: now,
+		};
+		this._downloadLocks.set(lockKey, lock);
 		return {
 			alreadyInProgress: false,
 			waitForExisting: () => Promise.resolve(),
 			release: () => {
-				this._downloadLocks.delete(lockKey);
+				// A stale holder may release after its lock was taken over.
+				if (this._downloadLocks.get(lockKey) === lock) {
+					this._downloadLocks.delete(lockKey);
+				}
 				releaseFn();
 			},
 		};

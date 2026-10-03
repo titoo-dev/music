@@ -10,7 +10,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { cn } from "@/lib/utils";
 import { CardGrid, MediaCard } from "@/components/cards/MediaCard";
-import { ArtworkWall, Count, Medallion, entrance, swap } from "@/components/expressive";
+import { Medallion, PageHero, TonalPill, entrance, swap } from "@/components/expressive";
 import { useSpotifyImportStore } from "@/stores/useSpotifyImportStore";
 import { DeletePlaylistDialog, PlaylistEditDialog, filledButton, tonalButton } from "@/components/playlists/PlaylistDialogs";
 import { CardGridSkeleton, NewPlaylistTile } from "@/components/playlists/PlaylistTiles";
@@ -24,22 +24,6 @@ interface PlaylistItem {
 	updatedAt: string;
 	_count: { tracks: number };
 	covers?: string[];
-}
-
-/** Tonal stat pill (primaryContainer / tertiaryContainer). */
-function StatusPill({ icon: Icon, value, label, tone }: { icon: typeof Music; value: number | null; label: string; tone: "primary" | "tertiary" }) {
-	return (
-		<span
-			className={cn(
-				"inline-flex h-8 items-center gap-1.5 rounded-full pl-2.5 pr-3.5 text-sm font-semibold",
-				tone === "primary" ? "bg-primary-container text-on-primary-container" : "bg-tertiary-container text-on-tertiary-container"
-			)}
-		>
-			<Icon className="size-4" strokeWidth={2.25} />
-			{value == null ? "–" : <Count value={value} className="font-semibold" />}
-			<span className="opacity-85">{label}</span>
-		</span>
-	);
 }
 
 /** Artwork wall veiled by the surface, eyebrow, display title, pills, actions. */
@@ -59,46 +43,30 @@ function PlaylistsHero({
 	createRef: React.Ref<HTMLButtonElement>;
 }) {
 	return (
-		<div className="relative mx-[calc(50%-50vw)] -mt-[calc(var(--header-h)+24px)] sm:-mt-[calc(var(--header-h)+32px)] px-[calc(50vw-50%)] pt-[calc(var(--header-h)+24px)] sm:pt-[calc(var(--header-h)+32px)]">
-			<div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-				<AnimatePresence>
-					{covers.length > 0 && (
-						<motion.div key="wall" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.9 }} className="absolute inset-0">
-							<ArtworkWall urls={covers} columns={7} tilt={-14} period={90} />
-							{/* A surface veil, not an opacity layer: the wall keeps compositing cheaply. */}
-							<div className="absolute inset-0 bg-background/[0.62] dark:bg-background/50" />
-						</motion.div>
-					)}
-				</AnimatePresence>
-				<div className="absolute inset-x-0 top-0 h-[70%] bg-[radial-gradient(60%_80%_at_0%_0%,color-mix(in_srgb,var(--brand-indigo)_22%,transparent),transparent_70%)]" />
-				<div className="absolute inset-0 bg-[linear-gradient(to_bottom,color-mix(in_srgb,var(--background)_10%,transparent),color-mix(in_srgb,var(--background)_65%,transparent)_55%,var(--background)_92%)]" />
-			</div>
-
-			<div className="relative flex min-h-[220px] flex-col gap-5 pb-6 pt-10 sm:min-h-[280px] md:flex-row md:items-end md:justify-between">
-				<div className="min-w-0">
-					<motion.p {...entrance(0, 10)} className="type-eyebrow tracking-[0.2em] text-primary">
-						Your mixes
-					</motion.p>
-					<motion.h1 {...entrance(1)} className="type-display mt-2 text-[2.75rem] tracking-[-0.045em] sm:text-6xl lg:text-7xl">
-						Playlists
-					</motion.h1>
-					<motion.div {...entrance(2, 8)} className="mt-4 flex flex-wrap gap-2">
-						<StatusPill icon={ListMusic} value={playlists} label={playlists === 1 ? "playlist" : "playlists"} tone="primary" />
-						<StatusPill icon={Music} value={tracks} label={tracks === 1 ? "track" : "tracks"} tone="tertiary" />
-					</motion.div>
-				</div>
-				<motion.div {...entrance(3, 8)} className={cn("flex flex-wrap gap-2", playlists === 0 && "hidden")}>
-					<button type="button" onClick={onImport} className={cn(tonalButton, "h-11")}>
-						<Download />
-						Import from Spotify
-					</button>
-					<button ref={createRef} type="button" onClick={onCreate} className={cn(filledButton, "h-11")}>
-						<Plus />
-						New playlist
-					</button>
+		<PageHero covers={covers} className="md:flex-row md:items-end md:justify-between">
+			<div className="min-w-0">
+				<motion.p {...entrance(0, 10)} className="type-eyebrow tracking-[0.2em] text-primary">
+					Your mixes
+				</motion.p>
+				<motion.h1 {...entrance(1)} className="type-display mt-2 text-[2.75rem] tracking-[-0.045em] sm:text-6xl lg:text-7xl">
+					Playlists
+				</motion.h1>
+				<motion.div {...entrance(2, 8)} className="mt-4 flex flex-wrap gap-2">
+					<TonalPill icon={ListMusic} value={playlists} label={playlists === 1 ? "playlist" : "playlists"} tone="primary" />
+					<TonalPill icon={Music} value={tracks} label={tracks === 1 ? "track" : "tracks"} tone="tertiary" />
 				</motion.div>
 			</div>
-		</div>
+			<motion.div {...entrance(3, 8)} className={cn("flex flex-wrap gap-2", playlists === 0 && "hidden")}>
+				<button type="button" onClick={onImport} className={cn(tonalButton, "h-11")}>
+					<Download />
+					Import from Spotify
+				</button>
+				<button ref={createRef} type="button" onClick={onCreate} className={cn(filledButton, "h-11")}>
+					<Plus />
+					New playlist
+				</button>
+			</motion.div>
+		</PageHero>
 	);
 }
 

@@ -25,6 +25,7 @@ import {
 	createPrefetchBudget,
 } from "@/lib/prefetch-budget";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-failure";
 import { canSeekInPlace, isPreviewSource, waitForSeekableUrl } from "@/lib/seek";
@@ -493,6 +494,7 @@ export function AudioEngine() {
 	const setDuration = usePlayerStore((s) => s.setDuration);
 	const next = usePlayerStore((s) => s.next);
 	const prev = usePlayerStore((s) => s.prev);
+	const router = useRouter();
 	const pause = usePlayerStore((s) => s.pause);
 	const resume = usePlayerStore((s) => s.resume);
 
@@ -1423,7 +1425,8 @@ export function AudioEngine() {
 				duration: 10000,
 				action: {
 					label: signIn ? "Sign in" : "Settings",
-					onClick: () => window.location.assign(signIn ? "/login" : "/settings"),
+					// Client-side navigation: a full load would stop playback and reset the app.
+					onClick: () => router.push(signIn ? "/login" : "/settings"),
 				},
 			});
 			return;

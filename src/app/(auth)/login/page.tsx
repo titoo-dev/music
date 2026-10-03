@@ -78,6 +78,8 @@ export default function LoginPage() {
 			}
 			const url = data?.url || data?.data?.url;
 			if (url) {
+				// OAuth leaves the app for the provider: a full navigation is the point.
+				// eslint-disable-next-line no-restricted-syntax
 				window.location.href = url;
 			} else {
 				setError("No redirect URL received. Check your Google OAuth configuration.");

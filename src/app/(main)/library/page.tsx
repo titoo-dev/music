@@ -1,9 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { ChevronRight, Disc3, Heart, History, Library, ListMusic, LogIn, Plus, Search, Shuffle, User as UserIcon, UserPlus, type LucideIcon } from "lucide-react";
 import { fetchData, postToServer } from "@/utils/api";
@@ -16,7 +16,7 @@ import { useDownloadStore } from "@/stores/useDownloadStore";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
 import { CardGrid, MediaCard, useCollectionActions } from "@/components/cards/MediaCard";
 import { DownloadGlyph, PlayPauseIcon, Spinner } from "@/components/motion/icons";
-import { Count, CountPill, Medallion, SPRING, SectionTitle, swap, entrance } from "@/components/expressive";
+import { CountPill, FilterPills, Medallion, PageHero, SectionTitle, TonalPill, swap, entrance } from "@/components/expressive";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlaylistEditDialog, filledButton, tonalButton } from "@/components/playlists/PlaylistDialogs";
 import { CardGridSkeleton, NewPlaylistTile, TrackRowsSkeleton } from "@/components/playlists/PlaylistTiles";
@@ -82,12 +82,12 @@ const EMPTY: LibraryData = { playlists: [], albums: [], tracks: [], recentPlays:
 
 type Tab = "recent" | "tracks" | "albums" | "playlists" | "following";
 
-const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
-	{ key: "recent", label: "Recent", icon: History },
-	{ key: "tracks", label: "Liked", icon: Heart },
-	{ key: "albums", label: "Albums", icon: Disc3 },
-	{ key: "playlists", label: "Playlists", icon: ListMusic },
-	{ key: "following", label: "Following", icon: UserIcon },
+const TABS: { key: Tab; label: string }[] = [
+	{ key: "recent", label: "Recent" },
+	{ key: "tracks", label: "Liked" },
+	{ key: "albums", label: "Albums" },
+	{ key: "playlists", label: "Playlists" },
+	{ key: "following", label: "Following" },
 ];
 
 /** `?tab=` → tab (accepts the mobile names too). */
@@ -107,48 +107,6 @@ function toPlayer(t: TrackRowTrack): PlayerTrack {
 
 // ─── Hero ───────────────────────────────────────────────────────────────────
 
-/** Brick-laid, tilted wall of the user's artwork (rows offset by half a tile). */
-function CoverWall({ covers }: { covers: string[] }) {
-	const rows = 8;
-	const cols = 16;
-	let k = 0;
-	return (
-		<div
-			className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 rotate-[-12.6deg] flex-col gap-2.5 [--tile:92px] sm:[--tile:116px] lg:[--tile:132px]"
-			style={{ width: "calc(var(--tile) * 16 + 150px)" } as CSSProperties}
-		>
-			{Array.from({ length: rows }, (_, r) => (
-				<div key={r} className="flex gap-2.5" style={{ transform: `translateX(${r % 2 ? "calc(var(--tile) / -2)" : "0px"})` }}>
-					{Array.from({ length: cols }, () => {
-						const src = covers[k++ % covers.length];
-						return (
-							// eslint-disable-next-line @next/next/no-img-element
-							<img key={k} src={sizedCover(src, 250)} alt="" loading="lazy" decoding="async" className="size-[var(--tile)] shrink-0 rounded-2xl bg-surface-high object-cover" />
-						);
-					})}
-				</div>
-			))}
-		</div>
-	);
-}
-
-/** Soft sky / indigo / pink light leaks from the logo palette. */
-function BrandGlow({ className }: { className?: string }) {
-	return (
-		<div
-			aria-hidden
-			className={cn("pointer-events-none absolute inset-0 [--glow:28%] dark:[--glow:40%]", className)}
-			style={{
-				background: [
-					"radial-gradient(70% 95% at 0% 0%, color-mix(in srgb, var(--brand-indigo) var(--glow), transparent), transparent 72%)",
-					"radial-gradient(55% 85% at 105% 35%, color-mix(in srgb, var(--brand-pink) var(--glow), transparent), transparent 70%)",
-					"radial-gradient(45% 70% at 55% -15%, color-mix(in srgb, var(--brand-sky) var(--glow), transparent), transparent 70%)",
-				].join(","),
-			}}
-		/>
-	);
-}
-
 interface Stat {
 	icon: LucideIcon;
 	count: number | null;
@@ -156,111 +114,23 @@ interface Stat {
 	tab: Tab;
 }
 
-function LibraryHero({ covers, stats, tab, onStat }: { covers: string[]; stats: Stat[]; tab: Tab; onStat: (t: Tab) => void }) {
-	const reduce = useReducedMotion();
-	const { scrollY } = useScroll();
-	// The wall lags, turns and zooms as the page scrolls away (parallax).
-	const y = useTransform(scrollY, [0, 400], [0, reduce ? 0 : 110]);
-	const rotate = useTransform(scrollY, [0, 400], [0, reduce ? 0 : 6]);
-	const scale = useTransform(scrollY, [0, 400], [1, reduce ? 1 : 1.18]);
-	const fade = useTransform(scrollY, [0, 320], [1, 0.25]);
-
+function LibraryHero({ covers, stats, onStat }: { covers: string[]; stats: Stat[]; onStat: (t: Tab) => void }) {
 	return (
-		<div className="relative mx-[calc(50%-50vw)] -mt-[calc(var(--header-h)+24px)] sm:-mt-[calc(var(--header-h)+32px)] px-[calc(50vw-50%)] pt-[calc(var(--header-h)+24px)] sm:pt-[calc(var(--header-h)+32px)]">
-			<div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-				<AnimatePresence>
-					{covers.length > 0 && (
-						<motion.div key="wall" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.9 }} className="absolute inset-0 opacity-40 dark:opacity-55">
-							<motion.div style={{ y, rotate, scale, opacity: fade }} className="absolute inset-0">
-								<CoverWall covers={covers} />
-							</motion.div>
-						</motion.div>
-					)}
-				</AnimatePresence>
-				<BrandGlow />
-				{/* Fades into the page. */}
-				<div className="absolute inset-0 bg-[linear-gradient(to_bottom,color-mix(in_srgb,var(--background)_22%,transparent),color-mix(in_srgb,var(--background)_74%,transparent)_52%,var(--background)_90%)]" />
-			</div>
-
-			<div className="relative flex min-h-[236px] flex-col justify-end pb-4 pt-10 sm:min-h-[300px] sm:pb-5">
-				<motion.p {...entrance(0, 10)} className="type-eyebrow text-primary tracking-[0.2em]">
+		<PageHero covers={covers}>
+			<div className="mt-auto min-w-0">
+				<motion.p {...entrance(0, 10)} className="type-eyebrow tracking-[0.2em] text-primary">
 					Your collection
 				</motion.p>
-				<motion.h1
-					{...entrance(1)}
-					className="type-display mt-2 cursor-default text-[2.75rem] sm:text-6xl lg:text-7xl"
-					onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-				>
+				<motion.h1 {...entrance(1)} className="type-display mt-2 text-[2.75rem] tracking-[-0.045em] sm:text-6xl lg:text-7xl">
 					Library
 				</motion.h1>
-				<div className="scrollbar-hide -mx-4 mt-5 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
-					{stats.map((s, i) => {
-						const active = s.tab === tab;
-						return (
-							<motion.button
-								key={s.label}
-								type="button"
-								{...entrance(i + 2, 8)}
-								whileTap={{ scale: 0.94 }}
-								aria-pressed={active}
-								onClick={() => onStat(s.tab)}
-								className={cn(
-									"inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border pl-2.5 pr-3.5 text-sm backdrop-blur-md transition-colors duration-300",
-									active
-										? "border-transparent bg-primary-container text-on-primary-container"
-										: "border-outline-variant/50 bg-surface-highest/70 hover:bg-surface-highest"
-								)}
-							>
-								<s.icon className={cn("size-4", active ? (s.tab === "tracks" && "fill-current") : "text-primary")} strokeWidth={2.25} />
-								{s.count == null ? <span className="font-semibold">–</span> : <Count value={s.count} className="font-semibold" />}
-								<span className={active ? "opacity-80" : "text-muted-foreground"}>{s.label}</span>
-							</motion.button>
-						);
-					})}
-				</div>
+				<motion.div {...entrance(2, 8)} className="scrollbar-hide -mx-4 mt-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+					{stats.map((s) => (
+						<TonalPill key={s.label} icon={s.icon} value={s.count} label={s.label} tone={s.tab === "tracks" ? "tertiary" : "primary"} onClick={() => onStat(s.tab)} />
+					))}
+				</motion.div>
 			</div>
-		</div>
-	);
-}
-
-/** Scrollable tabs with a sliding primary stadium indicator. */
-function PillTabBar({ tab, counts, onChange }: { tab: Tab; counts: Record<Tab, number | null>; onChange: (t: Tab) => void }) {
-	return (
-		<LayoutGroup id="library-tabs">
-			<div role="tablist" aria-label="Library sections" className="scrollbar-hide flex gap-1 overflow-x-auto">
-				{TABS.map(({ key, label, icon: Icon }) => {
-					const selected = key === tab;
-					const count = key === "recent" ? null : counts[key];
-					return (
-						<motion.button
-							key={key}
-							type="button"
-							role="tab"
-							aria-selected={selected}
-							onClick={() => onChange(key)}
-							whileTap={{ scale: 0.94 }}
-							className={cn(
-								"relative flex h-10 shrink-0 items-center rounded-full px-4 text-sm outline-none transition-colors duration-300 focus-visible:ring-2 focus-visible:ring-ring",
-								selected ? "font-semibold text-primary-foreground" : "font-medium text-muted-foreground hover:bg-surface-high hover:text-foreground"
-							)}
-						>
-							{selected && (
-								<motion.span
-									layoutId="library-tab-indicator"
-									className="absolute inset-0 rounded-full bg-primary shadow-[0_3px_10px_-2px_color-mix(in_srgb,var(--primary)_45%,transparent)]"
-									transition={SPRING.indicator}
-								/>
-							)}
-							<span className="relative flex items-center gap-1.5">
-								<Icon className="hidden size-[18px] sm:block" strokeWidth={selected ? 2.4 : 2} />
-								{label}
-								{count != null && count > 0 && <Count value={count} className="text-xs opacity-70" />}
-							</span>
-						</motion.button>
-					);
-				})}
-			</div>
-		</LayoutGroup>
+		</PageHero>
 	);
 }
 
@@ -368,7 +238,7 @@ function LikedBanner({ rows }: { rows: TrackRowTrack[] }) {
 	return (
 		<motion.section
 			{...entrance(0)}
-			className="bg-liked-gradient relative isolate mb-4 mt-2 overflow-hidden rounded-[28px] text-white shadow-[0_12px_28px_-4px_rgb(79_70_229/0.35)]"
+			className="bg-liked-gradient relative isolate mb-4 mt-2 overflow-hidden rounded-m3-xl text-white shadow-[0_12px_28px_-4px_rgb(79_70_229/0.35)]"
 		>
 			<Heart aria-hidden className="absolute -bottom-12 -right-7 -z-10 size-[180px] fill-white/[0.12] text-transparent sm:size-[240px]" />
 			<button type="button" onClick={download} aria-label="Download liked songs" title="Download all" className="absolute right-3 top-3 flex size-11 items-center justify-center rounded-full text-white/90 transition-[background-color,transform] hover:bg-white/15 active:scale-90 sm:right-5 sm:top-5">
@@ -427,7 +297,7 @@ function FeaturedAlbum({ album }: { album: UserAlbum }) {
 	const href = `/album?id=${album.deezerAlbumId}`;
 	const meta = [album.trackCount > 0 ? plural(album.trackCount, "track") : null, album.savedAt ? `Saved ${relativePhrase(album.savedAt)}` : null].filter(Boolean).join(" · ");
 	return (
-		<motion.div {...entrance(0)} whileTap={{ scale: 0.985 }} className="group relative isolate mt-2 overflow-hidden rounded-[28px] bg-surface-highest text-white">
+		<motion.div {...entrance(0)} whileTap={{ scale: 0.985 }} className="group relative isolate mt-2 overflow-hidden rounded-m3-xl bg-surface-highest text-white">
 			{album.coverUrl && (
 				<div aria-hidden className="absolute inset-[-30%] -z-10 bg-cover bg-center blur-[48px] saturate-150 transition-transform duration-700 group-hover:scale-110" style={{ backgroundImage: `url("${sizedCover(album.coverUrl, 120)}")` }} />
 			)}
@@ -438,7 +308,7 @@ function FeaturedAlbum({ album }: { album: UserAlbum }) {
 				<img
 					src={album.coverUrl ? sizedCover(album.coverUrl, 500) : undefined}
 					alt=""
-					className="size-28 shrink-0 rounded-2xl bg-white/10 object-cover shadow-[0_8px_20px_rgb(0_0_0/0.38)] transition-transform duration-500 ease-[cubic-bezier(0.2,0,0,1)] group-hover:-rotate-2 group-hover:scale-[1.03] sm:size-40 lg:size-44"
+					className="size-28 shrink-0 rounded-m3-lg bg-white/10 object-cover shadow-[0_8px_20px_rgb(0_0_0/0.38)] transition-transform duration-500 ease-[cubic-bezier(0.2,0,0,1)] group-hover:-rotate-2 group-hover:scale-[1.03] sm:size-40 lg:size-44"
 				/>
 				<div className="min-w-0 flex-1">
 					<p className="type-eyebrow text-white/75">Latest addition</p>
@@ -544,7 +414,7 @@ function ArtistBubble({ artist, index }: { artist: FollowedArtistItem; index: nu
 			whileTap={{ scale: 0.95 }}
 			transition={{ duration: 0.45, delay: Math.min(index, 12) * 0.04, ease: [0.05, 0.7, 0.1, 1] }}
 		>
-			<Link href={`/artist?id=${artist.deezerArtistId}`} className="group block rounded-2xl p-1.5 text-center no-underline transition-colors duration-300 hover:bg-surface-high/70">
+			<Link href={`/artist?id=${artist.deezerArtistId}`} className="group block rounded-m3-lg p-1.5 text-center no-underline transition-colors duration-300 hover:bg-surface-high/70">
 				<span className="bg-brand-gradient block aspect-square rounded-full p-[2.5px] transition-transform duration-500 ease-[cubic-bezier(0.2,0,0,1)] group-hover:rotate-[8deg]">
 					<span className="block size-full rounded-full bg-background p-[3px]">
 						{artist.pictureUrl ? (
@@ -590,14 +460,14 @@ function TabSkeleton({ tab }: { tab: Tab }) {
 	if (tab === "tracks")
 		return (
 			<div>
-				<Skeleton className="mb-4 mt-2 h-[172px] rounded-[28px] sm:h-[180px]" />
+				<Skeleton className="mb-4 mt-2 h-[172px] rounded-m3-xl sm:h-[180px]" />
 				<TrackRowsSkeleton count={7} numbered />
 			</div>
 		);
 	if (tab === "albums")
 		return (
 			<div>
-				<Skeleton className="mt-2 h-[144px] rounded-[28px] sm:h-[208px] lg:h-[224px]" />
+				<Skeleton className="mt-2 h-[144px] rounded-m3-xl sm:h-[208px] lg:h-[224px]" />
 				<Skeleton className="mb-3 mt-8 h-5 w-32 rounded-full" />
 				<CardGridSkeleton count={5} />
 			</div>
@@ -610,23 +480,18 @@ function TabSkeleton({ tab }: { tab: Tab }) {
 
 function GuestLibrary() {
 	return (
-		<div className="relative mx-[calc(50%-50vw)] -mt-[calc(var(--header-h)+24px)] sm:-mt-[calc(var(--header-h)+32px)] min-h-[70vh] px-[calc(50vw-50%)] pt-[calc(var(--header-h)+24px)] sm:pt-[calc(var(--header-h)+32px)]">
-			<BrandGlow className="h-[460px]" />
-			<div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[460px] bg-[linear-gradient(to_bottom,transparent_40%,var(--background))]" />
-			<div className="relative pt-[8vh]">
-				<Medallion
-					icon={Library}
-					title="Your library"
-					message="Sign in to keep liked tracks, saved albums and the artists you follow."
-					action={
-						<Link href="/login" className={filledButton}>
-							<LogIn />
-							Sign in
-						</Link>
-					}
-				/>
-			</div>
-		</div>
+		<Medallion
+			className="pt-[12vh]"
+			icon={Library}
+			title="Your library"
+			message="Sign in to keep liked tracks, saved albums and the artists you follow."
+			action={
+				<Link href="/login" className={filledButton}>
+					<LogIn />
+					Sign in
+				</Link>
+			}
+		/>
 	);
 }
 
@@ -708,7 +573,6 @@ function LibraryContent() {
 		<div>
 			<LibraryHero
 				covers={covers}
-				tab={tab}
 				onStat={setTab}
 				stats={[
 					{ icon: Heart, count: counts.tracks, label: "liked", tab: "tracks" },
@@ -718,9 +582,14 @@ function LibraryContent() {
 				]}
 			/>
 
-			{/* Pill tabs, pinned under the top bar. */}
+			{/* Section pills, pinned under the top bar. */}
 			<div ref={tabsRef} className="sticky top-[var(--header-h)] z-20 mb-3 mx-[calc(50%-50vw)] glass border-b border-border px-[calc(50vw-50%)] py-2">
-				<PillTabBar tab={tab} counts={counts} onChange={setTab} />
+				<FilterPills<Tab>
+					ariaLabel="Library sections"
+					value={tab}
+					onChange={setTab}
+					items={TABS.map(({ key, label }) => ({ value: key, label, count: key === "recent" ? null : counts[key] }))}
+				/>
 			</div>
 
 			<AnimatePresence mode="wait" initial={false}>

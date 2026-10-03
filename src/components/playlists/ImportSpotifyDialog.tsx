@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, Check, ChevronDown, ClipboardPaste, Download, Info, Link2, ListMusic, Music, Pencil, RotateCcw, Search, Square, X, type LucideIcon } from "lucide-react";
+import { AlertCircle, Check, ChevronDown, ClipboardPaste, Download, Info, ListMusic, Music, Pencil, RotateCcw, Search, Square, X, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AlbumLink, ArtistLink } from "@/components/links/EntityLink";
@@ -12,11 +12,13 @@ import { M3_SPRING, swap } from "@/components/expressive";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { sizedCover } from "@/lib/cover-palette";
 import { MAX_IMPORT_TRACKS, type ImportResult } from "@/lib/spotify/import";
+import { commitLinks } from "@/lib/spotify/link-input";
 import type { ResolvedTrack } from "@/lib/spotify/import-run";
 import type { ReadProgress } from "@/lib/spotify/read-links";
 import { detectInput, isRunning, useSpotifyImportStore, type ImportPhase } from "@/stores/useSpotifyImportStore";
 import { FilledField, filledButton, textButton, tonalButton } from "./PlaylistDialogs";
 import { ImportStage } from "./ImportStage";
+import { SpotifyLinksField } from "./SpotifyLinksField";
 
 const fmt = (n: number) => n.toLocaleString("en");
 const TOAST_ID = "spotify-import";
@@ -106,7 +108,7 @@ function FormPane() {
 	const paste = async () => {
 		try {
 			const text = (await navigator.clipboard.readText()).trim();
-			if (text) setInput(text);
+			if (text) setInput(commitLinks(input, text) ?? text);
 		} catch {
 			// Clipboard access denied — the user can still paste by hand.
 		}
@@ -128,21 +130,13 @@ function FormPane() {
 				</>
 			}
 		>
-			<FilledField
+			<SpotifyLinksField
 				autoFocus
-				multiline
 				label="Playlist or track links"
-				placeholder="https://open.spotify.com/playlist/…"
-				icon={Link2}
 				value={input}
 				onValueChange={setInput}
+				onSubmit={() => void start()}
 				error={error}
-				onKeyDown={(e) => {
-					if (e.key === "Enter" && !e.shiftKey) {
-						e.preventDefault();
-						void start();
-					}
-				}}
 				suffix={
 					<button
 						type="button"

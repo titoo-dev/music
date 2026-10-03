@@ -4,6 +4,7 @@ export * from "./motion";
 export * from "./Aurora";
 export * from "./ArtworkWall";
 export * from "./HeroBanner";
+export * from "./PageHero";
 export * from "./Pills";
 export * from "./Section";
 export * from "./Tiles";

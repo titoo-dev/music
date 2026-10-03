@@ -20,6 +20,7 @@ import type { Settings } from "./types/Settings";
 import type { StorageProvider } from "./storage/StorageProvider";
 import { gwTrackCache } from "./cache/deezer-track-cache";
 import { STORAGE_TYPE } from "./storage/objects";
+import { pumpTee } from "./tee-pump";
 import { mkdirSync } from "fs";
 import { tmpdir } from "os";
 
@@ -200,80 +201,7 @@ export async function startProgressiveStream(
 	// and nothing pollutes storage.
 	const responseBranch = new PassThrough();
 	const persistBranch = persist ? new PassThrough() : null;
-	let responseClosed = false;
-
-	const markResponseClosed = () => {
-		responseClosed = true;
-	};
-	responseBranch.on("close", markResponseClosed);
-	responseBranch.on("error", markResponseClosed);
-
-	(async () => {
-		let bytesWritten = 0;
-		try {
-			for await (const chunk of readable) {
-				const buf = chunk as Buffer;
-
-				if (persistBranch && !persistBranch.destroyed) {
-					persistBranch.write(buf);
-				}
-
-				// Preview mode: bail out early when client disconnects, since
-				// no other consumer wants the bytes.
-				if (responseClosed && !persistBranch) break;
-
-				// Feed response only if still open; respect backpressure.
-				// Trim the chunk if we'd overshoot maxBytes — this keeps the
-				// emitted byte count exact so the audio element knows the
-				// duration of the head segment.
-				if (!responseClosed && !responseBranch.destroyed) {
-					let toWrite: Buffer = buf;
-					let shouldClose = false;
-					if (maxBytes && bytesWritten + buf.length >= maxBytes) {
-						toWrite = buf.subarray(0, maxBytes - bytesWritten);
-						shouldClose = true;
-					}
-					try {
-						if (!responseBranch.write(toWrite)) {
-							await new Promise<void>((resolve) => {
-								const done = () => {
-									responseBranch.off("drain", done);
-									responseBranch.off("close", done);
-									resolve();
-								};
-								responseBranch.once("drain", done);
-								responseBranch.once("close", done);
-							});
-						}
-						bytesWritten += toWrite.length;
-					} catch {
-						responseClosed = true;
-					}
-					if (shouldClose) {
-						// Reached the head cap — close the response cleanly. If
-						// nothing else is consuming bytes (preview + maxBytes),
-						// abort upstream so we don't keep pulling from Deezer.
-						if (!responseBranch.destroyed) responseBranch.end();
-						responseClosed = true;
-						if (!persistBranch) {
-							abort();
-							break;
-						}
-					}
-				}
-			}
-			if (persistBranch && !persistBranch.destroyed) persistBranch.end();
-			if (!responseClosed && !responseBranch.destroyed) responseBranch.end();
-		} catch (e) {
-			abort();
-			if (persistBranch && !persistBranch.destroyed) {
-				persistBranch.destroy(e as Error);
-			}
-			if (!responseClosed && !responseBranch.destroyed) {
-				responseBranch.destroy(e as Error);
-			}
-		}
-	})();
+	void pumpTee({ source: readable, responseBranch, persistBranch, maxBytes, abort });
 
 	// Step 8 — Persistence pipeline (runs to completion even if the client
 	// disconnects, as long as the caller keeps `persisted` alive via after()). Waits for persistSetupPromise to know writepath,
@@ -353,7 +281,8 @@ export async function startProgressiveStream(
 	// already closed" surfaces as an uncaughtException in dev mode. Wrapping
 	// every controller call in try/catch makes the late-write a no-op, and
 	// pause/resume on the Node side propagates consumer backpressure upstream
-	// so the server doesn't outpace a slow audio element.
+	// so a preview stream doesn't outpace a slow audio element (persisting
+	// streams ignore it — see pumpTee).
 	const body = new ReadableStream<Uint8Array>({
 		start(controller) {
 			let closed = false;
