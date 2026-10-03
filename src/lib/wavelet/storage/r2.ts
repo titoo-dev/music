@@ -39,10 +39,6 @@ function client() {
 				secretAccessKey: config.secretAccessKey,
 				service: "s3",
 				region: "auto",
-				// aws4fetch retries 429/5xx itself; its default (10 retries,
-				// doubling from 50 ms) can stall a play for ~50 s before the
-				// live fallback kicks in.
-				retries: 2,
 			}),
 			base: `https://${config.accountId}.r2.cloudflarestorage.com/${config.bucket}`,
 			bucket: config.bucket,
@@ -64,11 +60,34 @@ export function copySource(key: string): string {
 	return `/${client().bucket}/${encodeKey(key)}`;
 }
 
-/** Signed request; network failures become StorageUnavailableError. */
+// A couple of quick retries on 429 / 5xx — enough for a blip, short enough
+// that a real outage reaches the live fallback in well under a second.
+const RETRY_DELAYS_MS = [50, 150];
+
+/**
+ * Signed request; network failures become StorageUnavailableError.
+ *
+ * Signs with aws4fetch but sends with a plain `fetch(url, init)` carrying the
+ * original bytes: handing fetch the signed `Request` makes Next's patched
+ * fetch re-stream its body chunked, and R2 rejects a PUT without
+ * Content-Length (411 MissingContentLength).
+ */
 export async function r2Fetch(url: string, init: RequestInit = {}): Promise<Response> {
 	const { aws } = client();
 	try {
-		return await aws.fetch(url, init);
+		const signed = await aws.sign(url, init);
+		for (let attempt = 0; ; attempt++) {
+			const res = await fetch(signed.url, {
+				method: signed.method,
+				headers: signed.headers,
+				body: init.body,
+				signal: init.signal,
+			});
+			const retryable = res.status === 429 || res.status >= 500;
+			if (!retryable || attempt >= RETRY_DELAYS_MS.length) return res;
+			await res.body?.cancel();
+			await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+		}
 	} catch (e) {
 		throw new StorageUnavailableError(e);
 	}

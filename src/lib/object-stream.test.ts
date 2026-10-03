@@ -11,8 +11,8 @@ const ENV = {
 };
 const BASE = "https://acct.r2.cloudflarestorage.com/bucket";
 
-const fetchMock = vi.fn<(req: Request) => Promise<Response>>();
-const lastRequest = () => fetchMock.mock.calls.at(-1)![0];
+const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
+const lastRequest = () => new Request(...(fetchMock.mock.calls.at(-1) as [RequestInfo, RequestInit?]));
 
 describe("object-stream (R2)", () => {
 	beforeEach(() => {
@@ -53,6 +53,21 @@ describe("object-stream (R2)", () => {
 			fetchMock.mockResolvedValue(new Response("nope", { status }));
 			const e = await headObject("music/x.mp3").catch((err) => err);
 			expect(isStorageUnavailable(e)).toBe(true);
+		});
+
+		it("retries a one-off 503 before answering", async () => {
+			fetchMock
+				.mockResolvedValueOnce(new Response("", { status: 503 }))
+				.mockResolvedValueOnce(new Response(null, { status: 200, headers: { "content-length": "5" } }));
+			expect((await headObject("music/a.mp3")).contentLength).toBe(5);
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+		});
+
+		it("gives up after two retries", async () => {
+			fetchMock.mockResolvedValue(new Response("", { status: 503 }));
+			const e = await headObject("music/a.mp3").catch((err) => err);
+			expect(isStorageUnavailable(e)).toBe(true);
+			expect(fetchMock).toHaveBeenCalledTimes(3);
 		});
 
 		it("maps network failures to StorageUnavailableError", async () => {

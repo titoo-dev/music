@@ -5,8 +5,10 @@ import { StorageNotFoundError, StorageUnavailableError } from "./objects";
 import { _resetR2Client } from "./r2";
 
 const BASE = "https://acct.r2.cloudflarestorage.com/bucket";
-const fetchMock = vi.fn<(req: Request) => Promise<Response>>();
-const calls = () => fetchMock.mock.calls.map(([r]) => `${r.method} ${decodeURIComponent(r.url.replace(BASE, ""))}`);
+const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
+const reqAt = (i: number) => new Request(...(fetchMock.mock.calls[i] as [RequestInfo, RequestInit?]));
+const calls = () =>
+	fetchMock.mock.calls.map((_, i) => reqAt(i)).map((r) => `${r.method} ${decodeURIComponent(r.url.replace(BASE, ""))}`);
 
 describe("R2StorageProvider", () => {
 	let provider: R2StorageProvider;
@@ -65,10 +67,20 @@ describe("R2StorageProvider", () => {
 	it("writeFile PUTs to a deterministic key with the inferred content type", async () => {
 		await provider.writeFile("/music/A/cover.jpg", Buffer.from("img"));
 
-		const req = fetchMock.mock.calls[0][0];
+		const req = reqAt(0);
 		expect(calls()).toEqual(["PUT /music/A/cover.jpg"]);
 		expect(req.headers.get("content-type")).toBe("image/jpeg");
 		expect(await req.text()).toBe("img");
+	});
+
+	it("hands fetch the raw bytes so the upload carries a Content-Length (was: R2 411 MissingContentLength — Next's fetch streamed the signed Request's body chunked)", async () => {
+		await provider.writeFile("music/a.mp3", Buffer.from("abc"));
+
+		const [input, init] = fetchMock.mock.calls[0];
+		expect(input).not.toBeInstanceOf(Request);
+		expect(init?.body).toBeInstanceOf(Uint8Array);
+		expect((init?.body as Uint8Array).byteLength).toBe(3);
+		expect(new Headers(init?.headers).get("authorization")).toMatch(/^AWS4-HMAC-SHA256 /);
 	});
 
 	describe("stream → tag → finalize pipeline", () => {
@@ -79,7 +91,7 @@ describe("R2StorageProvider", () => {
 
 			await provider.finalizeStream("music/A/T.flac");
 
-			const req = fetchMock.mock.calls[0][0];
+			const req = reqAt(0);
 			expect(calls()).toEqual(["PUT /music/A/T.flac"]);
 			expect(req.headers.get("content-type")).toBe("audio/flac");
 			expect(await req.text()).toBe("audio-bytes");
@@ -121,8 +133,8 @@ describe("R2StorageProvider", () => {
 	});
 
 	it("deleteDirectory pages through the prefix and deletes every object", async () => {
-		fetchMock.mockImplementation(async (req) => {
-			const url = new URL(req.url);
+		fetchMock.mockImplementation(async (input, init) => {
+			const url = new URL(new Request(input, init).url);
 			if (url.searchParams.get("list-type") !== "2") return new Response(null, { status: 204 });
 			return url.searchParams.get("continuation-token")
 				? new Response("<ListBucketResult><Key>music/A/2.mp3</Key><IsTruncated>false</IsTruncated></ListBucketResult>")
@@ -133,7 +145,7 @@ describe("R2StorageProvider", () => {
 
 		await provider.deleteDirectory("/music/A");
 
-		const lists = fetchMock.mock.calls.map(([r]) => new URL(r.url)).filter((u) => u.searchParams.get("list-type") === "2");
+		const lists = fetchMock.mock.calls.map((_, i) => new URL(reqAt(i).url)).filter((u) => u.searchParams.get("list-type") === "2");
 		expect(lists.map((u) => [u.searchParams.get("prefix"), u.searchParams.get("continuation-token")])).toEqual([
 			["music/A/", null],
 			["music/A/", "t&2"],
@@ -158,7 +170,7 @@ describe("R2StorageProvider", () => {
 			await provider.rename("music/old name.mp3", "music/new.mp3");
 
 			expect(calls()).toEqual(["PUT /music/new.mp3", "DELETE /music/old name.mp3"]);
-			expect(fetchMock.mock.calls[0][0].headers.get("x-amz-copy-source")).toBe("/bucket/music/old%20name.mp3");
+			expect(reqAt(0).headers.get("x-amz-copy-source")).toBe("/bucket/music/old%20name.mp3");
 		});
 	});
 });
