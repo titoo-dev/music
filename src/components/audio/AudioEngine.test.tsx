@@ -367,3 +367,84 @@ describe("AudioEngine — stop", () => {
 		expect(FakeAudio.all.filter((a) => /r2\.example/.test(a.src))).toEqual([]);
 	});
 });
+
+describe("AudioEngine — source recovery", () => {
+	it("a presigned URL failing while still valid falls back to the proxy for that track, at the same position", async () => {
+		stored["1"] = "https://r2.example/tracks/1/1.mp3?sig=1";
+		render(<AudioEngine />);
+		act(() => usePlayerStore.getState().play(track("1")));
+		const el = await waitFor(() => elementWithSrc(/r2\.example\/tracks\/1\//));
+		act(() => el.ready(200));
+		act(() => el.tick(50));
+		act(() => el.fail(2));
+		await waitFor(() => expect(el.src).toMatch(/\/api\/v1\/stream\/1$/));
+		act(() => el.ready(200));
+		expect(el.currentTime).toBe(50);
+		expect(presignedUrls.isDenied("1")).toBe(true);
+	});
+
+	it("a corrupt IndexedDB copy is evicted and the track reloads from the network", async () => {
+		const { removeCached } = await import("@/lib/audio-cache");
+		vi.mocked(getCachedBlobUrl).mockImplementation(async (id) => (id === "3" ? "blob:http://localhost/3" : null));
+		stored["3"] = "https://r2.example/tracks/3/1.mp3?sig=1";
+		render(<AudioEngine />);
+		act(() => usePlayerStore.getState().play(track("3")));
+		const el = await waitFor(() => elementWithSrc(/^blob:/));
+		act(() => el.fail(4));
+		expect(removeCached).toHaveBeenCalledWith("3");
+		await waitFor(() => expect(el.src).toMatch(/r2\.example\/tracks\/3\//));
+	});
+});
+
+describe("AudioEngine — play count", () => {
+	const recentPlays = () => fetchMock.mock.calls.filter(([u]) => String(u) === "/api/v1/recent-plays");
+
+	it("logs a play after 30 s really listened to, once", async () => {
+		render(<AudioEngine />);
+		act(() => usePlayerStore.getState().play(track("1")));
+		const el = await waitFor(() => elementWithSrc(/stream-progressive\/1$/));
+		act(() => el.ready(200));
+		act(() => {
+			for (let t = 0; t <= 31; t += 0.25) el.tick(t);
+		});
+		expect(recentPlays()).toHaveLength(1);
+		act(() => el.tick(31.25));
+		expect(recentPlays()).toHaveLength(1);
+	});
+
+	it("doesn't count a seek past 0:30 as a play", async () => {
+		stored["1"] = "https://r2.example/tracks/1/1.mp3?sig=1";
+		render(<AudioEngine />);
+		act(() => usePlayerStore.getState().play(track("1")));
+		const el = await waitFor(() => elementWithSrc(/r2\.example\/tracks\/1\//));
+		act(() => el.ready(200));
+		act(() => {
+			el.tick(0);
+			el.tick(0.25);
+			el.tick(120);
+			el.tick(120.25);
+		});
+		expect(recentPlays()).toHaveLength(0);
+	});
+});
+
+describe("AudioEngine — long pause on a presigned URL", () => {
+	it("resuming after the URL expired signs it again and resumes at the same position", async () => {
+		stored["1"] = "https://r2.example/tracks/1/1.mp3?sig=1";
+		render(<AudioEngine />);
+		act(() => usePlayerStore.getState().play(track("1")));
+		const el = await waitFor(() => elementWithSrc(/sig=1$/));
+		act(() => el.ready(200));
+		act(() => el.tick(42));
+		act(() => usePlayerStore.getState().pause());
+		await waitFor(() => expect(el.paused).toBe(true));
+		const later = Date.now() + 2 * 3_600_000;
+		vi.spyOn(Date, "now").mockReturnValue(later);
+		stored["1"] = "https://r2.example/tracks/1/1.mp3?sig=2";
+		act(() => usePlayerStore.getState().resume());
+		await waitFor(() => expect(el.src).toMatch(/sig=2$/));
+		act(() => el.ready(200));
+		expect(el.currentTime).toBe(42);
+		expect(el.paused).toBe(false);
+	});
+});
