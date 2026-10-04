@@ -79,6 +79,20 @@ describe("POST /api/v1/auth/change-account", () => {
 		});
 	});
 
+	it("still answers the completed switch when saving the choice fails (was: the session switched but the client got a 500)", async () => {
+		setSessionUser("u1");
+		const dz = sessionDz();
+		prismaMock.deezerCredential.updateMany.mockRejectedValue(new Error("db down"));
+		const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const res = await post({ child: 1 });
+		expect(res.status).toBe(200);
+		const body = await readJson<{ data: { selectedAccount: number } }>(res);
+		expect(body?.data.selectedAccount).toBe(1);
+		expect(dz.selectedAccount).toBe(1);
+		expect(String(warned.mock.calls[0])).toContain("db down");
+		warned.mockRestore();
+	});
+
 	it("never returns the license token (was: user / childs carried license_token)", async () => {
 		setSessionUser("u1");
 		sessionDz();

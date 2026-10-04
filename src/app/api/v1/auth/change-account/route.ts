@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { ok, fail, handleError, requireDeezer } from "../../_lib/helpers";
 import { saveSelectedAccount } from "@/lib/deezer-session";
 import { toPublicDeezerUser } from "@/lib/deezer/public-user";
+import { errorSummary } from "@/lib/log-safe";
 
 export async function POST(request: NextRequest) {
 	try {
@@ -20,7 +21,12 @@ export async function POST(request: NextRequest) {
 
 		const [user, selectedAccount] = dz.changeAccount(index);
 		// Persist the choice: a cold restore (other instance, after TTL) logs into the same child.
-		await saveSelectedAccount(userId, dz);
+		// Best effort: the switch itself is done, so a failed save must not turn it into a 500.
+		try {
+			await saveSelectedAccount(userId, dz);
+		} catch (e) {
+			console.warn("[change-account] could not save the selected account:", errorSummary(e));
+		}
 
 		// Never hand the license token to the client (it requests media as this account)
 		return ok({
