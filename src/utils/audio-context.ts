@@ -38,6 +38,9 @@ let _analyser: AnalyserNode | null = null;
 let _routes = new WeakMap<HTMLAudioElement, Route>();
 let _failed = new WeakSet<HTMLAudioElement>(); // CORS or duplicate-source failures
 let _volumes = new WeakMap<HTMLAudioElement, number>();
+// element.volume as read back right after our last write to an unrouted
+// element (1 on iOS, where it is read-only): tells a write made elsewhere.
+let _written = new WeakMap<HTMLAudioElement, number>();
 
 function defaultFactory(): AudioContext | null {
 	if (typeof window === "undefined") return null;
@@ -56,6 +59,7 @@ export function __setAudioContextFactory(factory?: () => AudioContext | null) {
 	_routes = new WeakMap();
 	_failed = new WeakSet();
 	_volumes = new WeakMap();
+	_written = new WeakMap();
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -154,9 +158,17 @@ export function releaseElement(audio: HTMLAudioElement): void {
 	_routes.delete(audio);
 }
 
-/** The volume the player set on this element (0..1), routed or not. */
+/**
+ * The volume the player set on this element (0..1), routed or not. An
+ * unrouted element whose element.volume was changed by other code since
+ * (AudioPreview mutes its element directly) reports that real volume (was:
+ * the stale remembered one, so the next fade-in started at full volume).
+ */
 export function getElementVolume(audio: HTMLAudioElement): number {
-	return _volumes.get(audio) ?? audio.volume;
+	const remembered = _volumes.get(audio);
+	if (remembered === undefined) return audio.volume;
+	if (!_routes.has(audio) && _written.has(audio) && audio.volume !== _written.get(audio)) return audio.volume;
+	return remembered;
 }
 
 /**
@@ -174,6 +186,7 @@ export function setElementVolume(audio: HTMLAudioElement, value: number): void {
 	try {
 		audio.volume = v;
 	} catch {}
+	_written.set(audio, audio.volume);
 }
 
 /** Returns the shared AnalyserNode (null if not yet initialised). Used by AudioVisualizer. */

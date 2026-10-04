@@ -156,6 +156,25 @@ describe("routing and volume", () => {
 		expect(audio.volume).toBeCloseTo(0.4);
 	});
 
+	it("fades from the element's real volume when something else set element.volume (was: a preview started after a stop skipped its fade-in)", async () => {
+		const audio = new Audio();
+		setElementVolume(audio, 0.8);
+		audio.volume = 0; // AudioPreview mutes its element this way before play()
+		expect(getElementVolume(audio)).toBe(0);
+		vi.useFakeTimers();
+		try {
+			const done = adjustVolume(audio, 0.8, { duration: 130 });
+			vi.advanceTimersByTime(65);
+			expect(audio.volume).toBeGreaterThan(0);
+			expect(audio.volume).toBeLessThan(0.8);
+			vi.advanceTimersByTime(100);
+			await done;
+			expect(audio.volume).toBeCloseTo(0.8);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("drives a routed element's volume through its own GainNode, element.volume stays 1 (was: read-only on iOS)", async () => {
 		await running();
 		const audio = new Audio();
