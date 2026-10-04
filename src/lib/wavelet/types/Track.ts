@@ -24,6 +24,7 @@ import { Lyrics } from "./Lyrics";
 import { Picture } from "./Picture";
 import { Playlist } from "./Playlist";
 import type { Settings } from "./Settings";
+import { cachedMetadata } from "../cache/metadata-cache";
 
 const { mapGwTrackToDeezer: map_track, map_album } = utils;
 
@@ -193,10 +194,12 @@ class Track {
 				existingTrack.album.md5_origin || ""
 			);
 
-			// Get album Data
+			// Get album Data (cached per album id for a few minutes: tracks of
+			// one album are usually played back to back)
+			const albumId = this.album.id;
 			if (!albumAPI) {
 				try {
-					albumAPI = await dz.api.get_album(this.album.id);
+					albumAPI = await cachedMetadata(`api.album:${albumId}`, () => dz.api.get_album(albumId));
 				} catch {
 					albumAPI = null;
 				}
@@ -207,7 +210,7 @@ class Track {
 			if (!albumAPI || (albumAPI && !albumAPI.nb_disk)) {
 				let albumAPI_gw;
 				try {
-					albumAPI_gw = await dz.gw.get_album(this.album.id);
+					albumAPI_gw = await cachedMetadata(`gw.album:${albumId}`, () => dz.gw.get_album(albumId));
 					albumAPI_gw = map_album(albumAPI_gw);
 				} catch {
 					albumAPI_gw = {};
@@ -222,14 +225,21 @@ class Track {
 			// albumAPI_gw doesn't contain the artist cover
 			// Getting artist image ID
 			// ex: https://e-cdns-images.dzcdn.net/images/artist/f2bc007e9133c946ac3c3907ddc5d2ea/56x56-000000-80-0-0.jpg
+			// The artist picture only feeds tags: a failed lookup must not fail
+			// the whole enrichment (a progressive persist then never cached).
 			if (!this.album.mainArtist.pic.md5) {
-				const artistAPI: any = await dz.api.get_artist(
-					this.album.mainArtist.id
-				);
-				this.album.mainArtist.pic.md5 = artistAPI.picture_small.slice(
-					artistAPI.picture_small.search("artist/") + 7,
-					-24
-				);
+				const artistId = this.album.mainArtist.id;
+				try {
+					const artistAPI: any = await cachedMetadata(`api.artist:${artistId}`, () =>
+						dz.api.get_artist(artistId)
+					);
+					this.album.mainArtist.pic.md5 = artistAPI.picture_small.slice(
+						artistAPI.picture_small.search("artist/") + 7,
+						-24
+					);
+				} catch {
+					// No artist picture.
+				}
 			}
 
 			// Fill missing data

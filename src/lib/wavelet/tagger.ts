@@ -1,13 +1,33 @@
 import { ID3Writer } from "browser-id3-writer";
 import Metaflac from "metaflac-js2";
 import fs from "fs/promises";
-import fsSync from "fs";
 import Track from "./types/Track";
 import type { Tags } from "./types/Settings";
 
+/** The bytes of `buf` as an ArrayBuffer of exactly that size (no copy when it already is one). */
+function exactArrayBuffer(buf: Uint8Array): ArrayBuffer {
+	if (buf.byteOffset === 0 && buf.byteLength === buf.buffer.byteLength) return buf.buffer as ArrayBuffer;
+	return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+}
+
+/**
+ * The cover to embed: the caller's bytes when given (progressive persists
+ * fetch it into memory), else the legacy /tmp file at album.embeddedCoverPath.
+ */
+async function coverBytes(track: Track, cover?: Buffer | null): Promise<Buffer | null> {
+	if (cover) return cover.length ? cover : null;
+	if (!track.album?.embeddedCoverPath) return null;
+	const file = await fs.readFile(track.album.embeddedCoverPath);
+	return file.length ? file : null;
+}
+
 async function tagID3(path: string, track: Track, save: Tags) {
-	const songBuffer = await fs.readFile(path);
-	const writer = new ID3Writer(songBuffer.buffer);
+	await fs.writeFile(path, await tagID3Buffer(await fs.readFile(path), track, save));
+}
+
+/** ID3-tags an MP3 held in memory; returns the tagged bytes (the input is not modified). */
+async function tagID3Buffer(songBuffer: Buffer, track: Track, save: Tags, cover?: Buffer | null): Promise<Buffer> {
+	const writer = new ID3Writer(exactArrayBuffer(songBuffer));
 
 	if (save.title) writer.setFrame("TIT2", track.title);
 
@@ -143,16 +163,14 @@ async function tagID3(path: string, track: Track, save: Tags) {
 	// 	});
 	// }
 
-	if (save.cover && track.album.embeddedCoverPath) {
-		const coverArrayBuffer = await fs.readFile(track.album.embeddedCoverPath);
-		if (coverArrayBuffer.length !== 0) {
-			writer.setFrame("APIC", {
-				type: 3,
-				data: coverArrayBuffer.buffer,
-				description: "cover",
-				useUnicodeEncoding: save.coverDescriptionUTF8,
-			});
-		}
+	const coverArrayBuffer = save.cover ? await coverBytes(track, cover) : null;
+	if (coverArrayBuffer) {
+		writer.setFrame("APIC", {
+			type: 3,
+			data: exactArrayBuffer(coverArrayBuffer),
+			description: "cover",
+			useUnicodeEncoding: save.coverDescriptionUTF8,
+		});
 	}
 
 	let taggedSongBuffer = Buffer.from(writer.addTag());
@@ -162,12 +180,20 @@ async function tagID3(path: string, track: Track, save: Tags) {
 	if (save.saveID3v1) {
 		taggedSongBuffer = tagID3v1(taggedSongBuffer, track, save);
 	}
-
-	await fs.writeFile(path, taggedSongBuffer);
+	return taggedSongBuffer;
 }
 
-async function tagFLAC(path, track, save) {
-	const flac = new Metaflac(path);
+async function tagFLAC(path: string, track: Track, save: Tags) {
+	await fs.writeFile(path, await tagFLACBuffer(await fs.readFile(path), track, save));
+}
+
+/**
+ * Vorbis-comment-tags a FLAC held in memory; returns the tagged bytes.
+ * metaflac-js2 is synchronous over the whole buffer: callers run it off the
+ * response path (progressive persists tag after the response bytes are on disk).
+ */
+async function tagFLACBuffer(songBuffer: Buffer, track: Track, save: Tags, cover?: Buffer | null): Promise<Buffer> {
+	const flac = new Metaflac(songBuffer);
 	flac.removeAllTags();
 
 	if (save.title) flac.setTag(`TITLE=${track.title}`);
@@ -221,7 +247,7 @@ async function tagFLAC(path, track, save) {
 	if (save.date) flac.setTag(`DATE=${track.dateString}`);
 	else if (save.year) flac.setTag(`DATE=${track.date.year}`);
 
-	if (save.length) flac.setTag(`LENGTH=${parseInt(track.duration) * 1000}`);
+	if (save.length) flac.setTag(`LENGTH=${parseInt(String(track.duration)) * 1000}`);
 	if (save.bpm && track.bpm) flac.setTag(`BPM=${track.bpm}`);
 	if (save.label) flac.setTag(`PUBLISHER=${track.album.label}`);
 	if (save.isrc) flac.setTag(`ISRC=${track.ISRC}`);
@@ -277,12 +303,10 @@ async function tagFLAC(path, track, save) {
 		flac.setTag(`RATING=${rank}`);
 	}
 
-	if (save.cover && track.album.embeddedCoverPath) {
-		const picture = await fs.readFile(track.album.embeddedCoverPath);
-		if (picture.length !== 0) flac.importPicture(picture);
-	}
+	const picture = save.cover ? await coverBytes(track, cover) : null;
+	if (picture) flac.importPicture(picture);
 
-	flac.save();
+	return flac.save() as Buffer;
 }
 
 const id3v1Genres = [
@@ -544,4 +568,4 @@ function tagID3v1(taggedSongBuffer, track, save) {
 	return Buffer.from(buffer);
 }
 
-export { tagID3, tagFLAC, tagID3v1 };
+export { tagID3, tagFLAC, tagID3v1, tagID3Buffer, tagFLACBuffer };

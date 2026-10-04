@@ -3,7 +3,7 @@ import type Track from "../types/Track";
 import type { StorageProvider } from "../storage/StorageProvider";
 import { OverwriteOption } from "../settings";
 import { TrackFormats } from "@/lib/deezer";
-import { tagFLAC, tagID3 } from "../tagger";
+import { tagFLAC, tagFLACBuffer, tagID3, tagID3Buffer } from "../tagger";
 
 // Numeric quality rank for bitrate comparison (higher = better)
 const BITRATE_RANK: Record<number, number> = {
@@ -98,4 +98,17 @@ export const tagTrack = async (
 	} else if (extension === ".flac") {
 		await tagFLAC(writepath, track, tags);
 	}
+};
+
+/** In-memory variant: returns the tagged bytes (other formats come back untouched). */
+export const tagTrackBuffer = async (
+	extension: string,
+	data: Buffer,
+	track: Track,
+	tags: Tags,
+	cover?: Buffer | null
+): Promise<Buffer> => {
+	if (extension === ".mp3") return tagID3Buffer(data, track, tags, cover);
+	if (extension === ".flac") return tagFLACBuffer(data, track, tags, cover);
+	return data;
 };
