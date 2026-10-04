@@ -3,6 +3,8 @@
 // activation path (load, preload hit, crossfade, handoff, retry) can't
 // forget to reset one of them: starting a track = replacing the session.
 
+import { isPreviewSource } from "@/lib/seek";
+
 /** Spotify rule: a play counts once this much of the track was listened to. */
 export const PLAY_THRESHOLD_SECONDS = 30;
 
@@ -16,6 +18,8 @@ export interface TrackSession {
 	retryCount: number;
 	/** A fresh presigned URL was already tried after an error. */
 	resigned: boolean;
+	/** persistInBackground() was already opened for this play. */
+	persistRequested: boolean;
 }
 
 export function createTrackSession(trackId: string, opts: { autoAdvance?: boolean } = {}): TrackSession {
@@ -25,7 +29,19 @@ export function createTrackSession(trackId: string, opts: { autoAdvance?: boolea
 		logged: false,
 		retryCount: 0,
 		resigned: false,
+		persistRequested: false,
 	};
+}
+
+/**
+ * A track playing from a preview stream (hover / queue preload) isn't being
+ * stored by the server. Persisting it is only worth it for the track that is
+ * actually playing — once per play, however many seeks or thresholds ask.
+ */
+export function claimBackgroundPersist(session: TrackSession | null, src: string): boolean {
+	if (!session || session.persistRequested || !isPreviewSource(src)) return false;
+	session.persistRequested = true;
+	return true;
 }
 
 /**

@@ -256,31 +256,88 @@ export function getCacheLimit(): number {
 
 // --- Prefetch API ---
 
+/**
+ * Where a copy of a track that the server already holds can be fetched from:
+ * a presigned R2 URL (direct, CORS) or the same-origin proxy
+ * /api/v1/stream/{id}. Never /stream-progressive — that one persists.
+ */
+export interface CachedSource {
+  url: string;
+  kind: "presigned" | "proxy";
+}
+
+export type ResolveCachedSource = (
+  trackId: string,
+  signal?: AbortSignal
+) => Promise<CachedSource | null>;
+
+export interface PrefetchOptions {
+  signal?: AbortSignal;
+  /**
+   * Required: says where the server's cached copy lives, or null when the
+   * track isn't cached server-side. Without it nothing is fetched — a
+   * background prefetch must never make the server download, decrypt, tag
+   * and upload a track nobody is listening to.
+   */
+  resolveSource?: ResolveCachedSource;
+  fetchImpl?: typeof fetch;
+}
+
+const NOT_AUDIO = /json|html|xml/i;
+
+/**
+ * Download a cached copy for the IndexedDB cache. Returns null — and caches
+ * nothing — unless the response is a complete 200 audio body: the proxy is
+ * asked with ?prefetch=1 and redirect:"manual" so a "not cached" answer
+ * (404 NOT_CACHED, or the legacy 302 to the persisting stream) is never
+ * followed, and a body shorter than its Content-Length is dropped.
+ */
+export async function fetchCachedCopy(
+  source: CachedSource,
+  opts: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {}
+): Promise<{ blob: Blob; contentType: string } | null> {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const proxy = source.kind === "proxy";
+  const url = proxy ? `${source.url}${source.url.includes("?") ? "&" : "?"}prefetch=1` : source.url;
+  const res = await doFetch(
+    url,
+    proxy
+      ? { credentials: "include", redirect: "manual", signal: opts.signal }
+      : { credentials: "omit", mode: "cors", signal: opts.signal }
+  );
+  const contentType = res.headers.get("Content-Type") || "audio/mpeg";
+  if (res.status !== 200 || NOT_AUDIO.test(contentType)) {
+    res.body?.cancel().catch(() => {});
+    return null;
+  }
+  const expected = Number(res.headers.get("Content-Length")) || null;
+  const blob = await res.blob();
+  if (blob.size === 0 || (expected !== null && blob.size !== expected)) return null;
+  return { blob, contentType };
+}
+
 // Track in-flight prefetch requests to avoid duplicates
 const prefetchInFlight = new Set<string>();
 
 /**
- * Prefetch a track into the IndexedDB cache.
- * Uses the stream API to download the full audio file as a blob.
- * Returns true if the track was cached, false if already cached or failed.
+ * Prefetch a track the server already cached into the IndexedDB cache.
+ * Returns true if the track was cached, false if skipped (already cached,
+ * not cached server-side, aborted) or failed.
  */
-export async function prefetchTrack(trackId: string): Promise<boolean> {
-  // Already cached?
-  if (await isCached(trackId)) return false;
+export async function prefetchTrack(trackId: string, opts: PrefetchOptions = {}): Promise<boolean> {
+  const { signal, resolveSource } = opts;
+  if (!resolveSource || signal?.aborted) return false;
   // Already being fetched?
   if (prefetchInFlight.has(trackId)) return false;
-
   prefetchInFlight.add(trackId);
   try {
-    const res = await fetch(`/api/v1/stream/${trackId}`, {
-      credentials: "include",
-    });
-    if (!res.ok) return false;
-
-    const contentType = res.headers.get("Content-Type") || "audio/mpeg";
-    const blob = await res.blob();
-
-    await cacheTrack(trackId, blob, contentType);
+    // Already cached?
+    if (await isCached(trackId)) return false;
+    const source = await resolveSource(trackId, signal);
+    if (!source || signal?.aborted) return false;
+    const copy = await fetchCachedCopy(source, { signal, fetchImpl: opts.fetchImpl });
+    if (!copy || signal?.aborted) return false;
+    await cacheTrack(trackId, copy.blob, copy.contentType);
     return true;
   } catch {
     return false;
@@ -291,17 +348,19 @@ export async function prefetchTrack(trackId: string): Promise<boolean> {
 
 /**
  * Prefetch multiple tracks with concurrency limit.
- * Prioritizes tracks in order (first = most important).
+ * Prioritizes tracks in order (first = most important). Stops picking up
+ * new tracks once `opts.signal` is aborted.
  */
 export async function prefetchTracks(
   trackIds: string[],
-  concurrency: number = 2
+  concurrency: number = 2,
+  opts: PrefetchOptions = {}
 ): Promise<void> {
   const queue = [...trackIds];
   const workers = Array.from({ length: concurrency }, async () => {
-    while (queue.length > 0) {
+    while (queue.length > 0 && !opts.signal?.aborted) {
       const trackId = queue.shift()!;
-      await prefetchTrack(trackId);
+      await prefetchTrack(trackId, opts);
     }
   });
   await Promise.all(workers);

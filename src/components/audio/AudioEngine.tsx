@@ -12,27 +12,16 @@ import {
 	applyNormGain,
 	resetNormGain,
 } from "@/utils/audio-context";
-import {
-	getCachedBlobUrl,
-	prefetchTrack as cachePrefetch,
-	isCached,
-	cacheTrack,
-	removeCached,
-	setCacheLimit,
-} from "@/lib/audio-cache";
-import {
-	PREFETCH_LIMIT,
-	queuePrefetchWindow,
-	createPrefetchBudget,
-} from "@/lib/prefetch-budget";
+import { getCachedBlobUrl, removeCached, setCacheLimit } from "@/lib/audio-cache";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-failure";
-import { canSeekInPlace, isPreviewSource, waitForSeekableUrl } from "@/lib/seek";
+import { canSeekInPlace, waitForSeekableUrl } from "@/lib/seek";
 import {
 	PLAY_THRESHOLD_SECONDS,
 	advanceQueue,
+	claimBackgroundPersist,
 	createTrackSession,
 	shouldNotifySkip,
 	startVolume,
@@ -46,6 +35,17 @@ import {
 	type SkipReason,
 } from "@/components/audio/engine/timers";
 import { presignedUrls, proxyUrl } from "@/components/audio/engine/presigned-urls";
+import {
+	cacheListenedTrack,
+	createAudioElement,
+	disposePrefetchPools,
+	evictedAudio,
+	persistInBackground,
+	preloadTrack,
+	queuePreloaded,
+	smartPrefetchQueue,
+	takePreloaded,
+} from "@/components/audio/engine/prefetch";
 import { classifySource, needsResign, planRecovery, resolvePlaybackUrl } from "@/components/audio/engine/source";
 
 // Restore cache limit from localStorage
@@ -80,225 +80,9 @@ function getTrackUrl(trackId: string, opts: { skipBlob?: boolean } = {}): Promis
 	});
 }
 
-// --- Prefetch caches ---
-// Three intensity levels, all funneled through warmTrack({ audio }):
-//
-//   "none"    metadata-only via /api/v1/stream-warm (~200 byte response).
-//             Used when bandwidth is constrained (saveData / 2G) or the
-//             caller doesn't want any audio bytes to flow.
-//
-//   "head"    /stream-progressive?preview=1&head=1 — server caps the response
-//             at ~64 KB (~2-3s of audio). Light enough to apply to every
-//             visible item in a list without burning megabytes; the audio
-//             element reaches readyState >= 2 (canplay) so a click can play
-//             instantly while we transparently swap to the full stream.
-//
-//   "full"    /stream-progressive?preview=1 — browser-managed full buffer
-//             (~30s with preload="auto"). Used on hover, where intent is
-//             stronger. Click-to-play is sub-200ms.
-const warmedAt = new Map<string, "none" | "head" | "full">();
-const warmInflight = new Set<string>();
-
-const hoverPreloadCache = new Map<string, HTMLAudioElement>();
-const MAX_HOVER_PRELOADED = 3;
-// Visibility-driven head prefetch. Each slot is small, but every one is a
-// storage request — capped like the other pools, and budgeted per page so
-// scrolling a long playlist doesn't head-prefetch every row.
-const headPreloadCache = new Map<string, HTMLAudioElement>();
-const MAX_HEAD_PRELOADED = PREFETCH_LIMIT;
-const headBudget = createPrefetchBudget();
-// Tracks whose prefetched audio element is head-capped (ends after ~64 KB).
-// On swap-to-play, AudioEngine seamlessly switches to the full stream so
-// playback continues past the head segment.
-const headPrefetchedTracks = new Set<string>();
-
-function shouldPrefetchAudio(): boolean {
-	if (typeof navigator === "undefined") return false;
-	const conn = (navigator as Navigator & {
-		connection?: { saveData?: boolean; effectiveType?: string };
-	}).connection;
-	if (conn) {
-		if (conn.saveData) return false;
-		const eff = conn.effectiveType;
-		if (eff && (eff.includes("2g") || eff === "slow-2g")) return false;
-	}
-	return true;
-}
-
-function evictFrom(
-	cache: Map<string, HTMLAudioElement>,
-	max: number
-) {
-	if (cache.size < max) return;
-	const oldest = cache.keys().next().value!;
-	const oldAudio = cache.get(oldest)!;
-	evictedAudio.add(oldAudio);
-	oldAudio.src = "";
-	cache.delete(oldest);
-	headPrefetchedTracks.delete(oldest);
-}
-
-function preloadAudio(trackId: string, mode: "head" | "full") {
-	const cache = mode === "head" ? headPreloadCache : hoverPreloadCache;
-	const max = mode === "head" ? MAX_HEAD_PRELOADED : MAX_HOVER_PRELOADED;
-
-	if (cache.has(trackId)) return;
-	// If already prefetched at a stronger level, keep that one
-	if (mode === "head" && hoverPreloadCache.has(trackId)) return;
-	if (preloadCache.has(trackId)) return;
-
-	// Upgrade from head → full: discard the lighter head element so we don't
-	// leak bytes / browser memory holding two prefetched streams.
-	if (mode === "full") {
-		const headElem = headPreloadCache.get(trackId);
-		if (headElem) {
-			evictedAudio.add(headElem);
-			headElem.src = "";
-			headPreloadCache.delete(trackId);
-			headPrefetchedTracks.delete(trackId);
-		}
-	}
-
-	evictFrom(cache, max);
-
-	const audio = new Audio();
-	audio.preload = "auto";
-	audio.crossOrigin = "anonymous";
-	cache.set(trackId, audio);
-	if (mode === "head") headPrefetchedTracks.add(trackId);
-
-	(async () => {
-		try {
-			const blobUrl = await getCachedBlobUrl(trackId).catch(() => null);
-			if (blobUrl) {
-				if (evictedAudio.has(audio)) return;
-				audio.src = blobUrl;
-				audio.load();
-				headPrefetchedTracks.delete(trackId);
-				return;
-			}
-
-			const presigned = await fetchPresignedUrl(trackId);
-			if (presigned) {
-				if (evictedAudio.has(audio)) return;
-				audio.src = presigned;
-				audio.load();
-				headPrefetchedTracks.delete(trackId);
-				return;
-			}
-
-			if (evictedAudio.has(audio)) return;
-			audio.src =
-				mode === "head"
-					? `/api/v1/stream-progressive/${trackId}?preview=1&head=1`
-					: `/api/v1/stream-progressive/${trackId}?preview=1`;
-			audio.load();
-		} catch {
-			// Best-effort
-		}
-	})();
-}
-
-export interface WarmOptions {
-	/** "none" = metadata only, "head" = first ~3s, "full" = browser-managed buffer */
-	audio?: "none" | "head" | "full";
-}
-
-export function warmTrack(trackId: string, opts: WarmOptions = {}) {
-	if (typeof window === "undefined") return;
-	const audio = opts.audio ?? "full";
-	const desired = shouldPrefetchAudio() ? audio : "none";
-
-	const prevLevel = warmedAt.get(trackId);
-	const rank = { none: 0, head: 1, full: 2 } as const;
-	// Skip if we already prefetched at the same or stronger level
-	if (prevLevel && rank[prevLevel] >= rank[desired]) return;
-
-	// Head prefetch is opportunistic (a row scrolled into view): only the
-	// first PREFETCH_LIMIT rows per page get one. Hover isn't budgeted.
-	if (desired === "head" && !headBudget.take(trackId, window.location.pathname)) return;
-
-	// Metadata warm — only the first time we touch this track
-	if (!prevLevel && !warmInflight.has(trackId)) {
-		warmInflight.add(trackId);
-		fetch(`/api/v1/stream-warm/${trackId}`, { credentials: "include" })
-			.catch(() => {})
-			.finally(() => {
-				warmInflight.delete(trackId);
-			});
-	}
-
-	warmedAt.set(trackId, desired);
-	if (desired === "head" || desired === "full") {
-		preloadAudio(trackId, desired);
-	}
-}
-
-/** True if AudioEngine should transparently switch to a full stream after
- *  the prefetched head segment runs out. Cleared after the swap so future
- *  plays of the same track use whichever path is freshest. */
-export function isHeadPrefetched(trackId: string): boolean {
-	return headPrefetchedTracks.has(trackId);
-}
-
-export function clearHeadFlag(trackId: string) {
-	headPrefetchedTracks.delete(trackId);
-}
-
-// --- Audio Preload Cache (in-memory HTMLAudioElement pool) ---
-const preloadCache = new Map<string, HTMLAudioElement>();
-const MAX_PRELOADED = PREFETCH_LIMIT;
-const evictedAudio = new WeakSet<HTMLAudioElement>();
-
-export function preloadTrack(trackId: string) {
-	if (preloadCache.has(trackId)) return;
-
-	// Evict oldest if at capacity
-	if (preloadCache.size >= MAX_PRELOADED) {
-		const oldest = preloadCache.keys().next().value!;
-		const oldAudio = preloadCache.get(oldest)!;
-		evictedAudio.add(oldAudio);
-		oldAudio.src = "";
-		preloadCache.delete(oldest);
-	}
-
-	const audio = new Audio();
-	audio.preload = "auto";
-	audio.crossOrigin = "anonymous";
-	// Reserve spot immediately to prevent duplicate fetches
-	preloadCache.set(trackId, audio);
-
-	getTrackUrl(trackId).then((url) => {
-		if (evictedAudio.has(audio)) return;
-		audio.src = url;
-		audio.load();
-	});
-}
-
-// --- Smart Prefetch: background cache upcoming queue tracks ---
-let prefetchAbort: AbortController | null = null;
-
-function smartPrefetchQueue() {
-	// Cancel any in-flight prefetch batch
-	prefetchAbort?.abort();
-	prefetchAbort = new AbortController();
-	const signal = prefetchAbort.signal;
-
-	const { queue, queueIndex } = usePlayerStore.getState();
-	if (queue.length === 0) return;
-
-	// Next tracks first, then the previous one — PREFETCH_LIMIT in total
-	const prefetchIds = queuePrefetchWindow(queue, queueIndex);
-
-	// Sequential background prefetch, respecting abort
-	(async () => {
-		for (const trackId of prefetchIds) {
-			if (signal.aborted) return;
-			// Don't await all at once — stagger to avoid bandwidth saturation
-			await cachePrefetch(trackId);
-		}
-	})();
-}
+// Prefetch pools, warm levels and background fills live in engine/prefetch;
+// warmTrack / preloadTrack stay importable from here.
+export { warmTrack, preloadTrack, type WarmOptions } from "@/components/audio/engine/prefetch";
 
 /**
  * Log a "real" play (≥30s of continuous playback) so the track joins the
@@ -353,53 +137,14 @@ function notifyTrackSkipped(trackId: string) {
 }
 
 /**
- * Cache current track after it starts playing (if not already cached).
- * This ensures every played track gets persisted to IndexedDB.
- *
- * Only runs when the track is actually downloaded (DownloadHistory exists).
- * If we hit /api/v1/stream/[id] for a non-downloaded track, it 404s. Worse,
- * it would race the in-progress /stream-progressive download. So we gate on
- * the presigned-URL endpoint first — if it returns null, the track isn't
- * cacheable yet (the progressive flow will create the DB row on completion,
- * and a future play will populate the cache).
- */
-// Preview streams (hover / head prefetch) aren't persisted by the server.
-// Open a real progressive stream and hang up right away: the server's persist
-// branch runs to completion on its own, so the next play hits the Blob file.
-function persistInBackground(trackId: string) {
-	fetch(`/api/v1/stream-progressive/${trackId}`, { credentials: "include" })
-		.then((res) => {
-			res.body?.cancel().catch(() => {});
-		})
-		.catch(() => {});
-}
-
-async function cacheCurrentTrackInBackground(trackId: string) {
-	if (await isCached(trackId)) return;
-
-	try {
-		// Quick existence check — no presigned URL when not yet downloaded
-		const isReady = !!(await fetchPresignedUrl(trackId));
-		if (!isReady) return;
-
-		const res = await fetch(`/api/v1/stream/${trackId}`, {
-			credentials: "include",
-		});
-		if (!res.ok) return;
-		const contentType = res.headers.get("Content-Type") || "audio/mpeg";
-		const blob = await res.blob();
-		await cacheTrack(trackId, blob, contentType);
-	} catch {
-		// Non-critical
-	}
-}
-
-/**
  * Drives full-track playback from Blob using imperatively managed Audio objects.
  * Pre-buffers adjacent tracks in the queue for instant playback.
  * Also manages the Media Session API for OS-level media controls.
  */
 const RESUME_KEY = "wavelet-resume";
+// How long before the end of a track an uncached next track may start
+// buffering through the live preview stream.
+const LIVE_PRELOAD_LEAD_S = 30;
 const RESUME_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function AudioEngine() {
@@ -570,9 +315,7 @@ export function AudioEngine() {
 	// and seek the full element to the head's position.
 	const handoffFullStream = useCallback(
 		(headAudio: HTMLAudioElement, trackId: string, gen: number) => {
-			const fullAudio = new Audio();
-			fullAudio.preload = "auto";
-			fullAudio.crossOrigin = "anonymous";
+			const fullAudio = createAudioElement();
 			fullAudio.src = `/api/v1/stream-progressive/${trackId}`;
 			fullAudio.load();
 
@@ -719,9 +462,7 @@ export function AudioEngine() {
 				evictedAudio.add(old);
 			}
 			resumePositionRef.current = position;
-			const audio = new Audio();
-			audio.preload = "auto";
-			audio.crossOrigin = "anonymous";
+			const audio = createAudioElement();
 			activateElement(audio);
 			audio.src = url;
 			audio.load();
@@ -759,7 +500,7 @@ export function AudioEngine() {
 			const gen = loadGenRef.current;
 			setBuffering(true);
 
-			if (isPreviewSource(audio.src)) persistInBackground(trackId);
+			if (claimBackgroundPersist(sessionRef.current, audio.src)) persistInBackground(trackId);
 			// Hang up so the server persists at network speed, not playback pace.
 			// Events go first: emptying src fires an error on some browsers.
 			detachEvents(audio);
@@ -814,9 +555,7 @@ export function AudioEngine() {
 	// --- Initialize audio element (client-only) ---
 	useEffect(() => {
 		if (!audioRef.current) {
-			const audio = new Audio();
-			audio.preload = "auto";
-			audio.crossOrigin = "anonymous";
+			const audio = createAudioElement();
 			audioRef.current = audio;
 			attachEvents(audio);
 		}
@@ -828,25 +567,8 @@ export function AudioEngine() {
 				audio.src = "";
 				evictedAudio.add(audio);
 			}
-			// Clean up preload caches
-			for (const [, a] of preloadCache) {
-				evictedAudio.add(a);
-				a.src = "";
-			}
-			preloadCache.clear();
-			for (const [, a] of hoverPreloadCache) {
-				evictedAudio.add(a);
-				a.src = "";
-			}
-			hoverPreloadCache.clear();
-			for (const [, a] of headPreloadCache) {
-				evictedAudio.add(a);
-				a.src = "";
-			}
-			headPreloadCache.clear();
-			headPrefetchedTracks.clear();
-			// Cancel background prefetch
-			prefetchAbort?.abort();
+			// Clean up preload pools and cancel background prefetch
+			disposePrefetchPools();
 		};
 	}, [attachEvents, detachEvents]);
 
@@ -887,7 +609,9 @@ export function AudioEngine() {
 		if (!currentTrack) return;
 		const { queue, queueIndex } = usePlayerStore.getState();
 
-		// Immediate preload: adjacent tracks (in-memory Audio elements for instant swap)
+		// Immediate preload of the adjacent tracks (in-memory Audio elements for
+		// instant swap) — cached copies only: an uncached next track is preloaded
+		// live near the end of this one (onTimeUpdate), never persisted.
 		if (queueIndex + 1 < queue.length) {
 			preloadTrack(queue[queueIndex + 1].trackId);
 		}
@@ -904,11 +628,9 @@ export function AudioEngine() {
 		if (queueIndex - 1 >= 0) upcoming.push(queue[queueIndex - 1].trackId);
 		presignedUrls.warm(upcoming);
 
-		// Background IndexedDB prefetch: PREFETCH_LIMIT tracks around the cursor
-		smartPrefetchQueue();
-
-		// Cache current track if not already cached
-		cacheCurrentTrackInBackground(currentTrack.trackId);
+		// Background IndexedDB prefetch: PREFETCH_LIMIT tracks around the
+		// cursor, only those the server already cached.
+		smartPrefetchQueue(queue, queueIndex);
 	}, [currentTrack]);
 
 	// --- Load new track ---
@@ -958,19 +680,14 @@ export function AudioEngine() {
 			evictedAudio.add(audio);
 
 			// Pick the best prefetched element, in order of buffer richness:
-			//   1. queue preload (next/prev — persisting full stream)
+			//   1. queue preload (next/prev — cached copy or live preview stream)
 			//   2. hover preload  (preview-mode full stream, ~30s buffered)
 			//   3. head preload   (preview-mode head — ~3s buffered, must
 			//                      transition to full stream when it ends)
-			const preloaded =
-				preloadCache.get(currentTrack.trackId) ||
-				hoverPreloadCache.get(currentTrack.trackId) ||
-				headPreloadCache.get(currentTrack.trackId);
+			const taken = takePreloaded(currentTrack.trackId);
+			const preloaded = taken?.audio;
 
 			if (preloaded) {
-				preloadCache.delete(currentTrack.trackId);
-				hoverPreloadCache.delete(currentTrack.trackId);
-				headPreloadCache.delete(currentTrack.trackId);
 				activateElement(preloaded, currentTrack);
 
 				// If we swapped onto a head-prefetched element, kick off the
@@ -978,10 +695,7 @@ export function AudioEngine() {
 				// out. The full stream goes through normal /stream-progressive
 				// (no preview, persisting) — first listen, server downloads
 				// from Deezer once and persists; subsequent plays hit Blob.
-				if (headPrefetchedTracks.has(currentTrack.trackId)) {
-					handoffFullStream(preloaded, currentTrack.trackId, gen);
-					headPrefetchedTracks.delete(currentTrack.trackId);
-				}
+				if (taken.head) handoffFullStream(preloaded, currentTrack.trackId, gen);
 
 				if (preloaded.readyState >= 2) {
 					// Already buffered — play immediately
@@ -995,9 +709,7 @@ export function AudioEngine() {
 				// If not ready yet, onCanPlay will fire and handle playback
 			} else {
 				// No preloaded data — load normally on a fresh element
-				const newAudio = new Audio();
-				newAudio.preload = "auto";
-				newAudio.crossOrigin = "anonymous";
+				const newAudio = createAudioElement();
 				activateElement(newAudio, currentTrack);
 
 				getTrackUrl(currentTrack.trackId).then((url) => {
@@ -1103,9 +815,7 @@ export function AudioEngine() {
 		audio.pause();
 		audio.src = "";
 		evictedAudio.add(audio);
-		const newAudio = new Audio();
-		newAudio.preload = "auto";
-		newAudio.crossOrigin = "anonymous";
+		const newAudio = createAudioElement();
 		activateElement(newAudio);
 		getTrackUrl(track.trackId).then((url) => {
 			if (loadGenRef.current !== gen) return;
@@ -1223,8 +933,12 @@ export function AudioEngine() {
 				});
 
 				// If this track is playing from a preview-mode prefetch, the server
-				// didn't persist it — start a persisting stream in the background.
-				if (isPreviewSource(audio.src || "")) persistInBackground(track.trackId);
+				// didn't persist it — start a persisting stream in the background
+				// (once per play).
+				if (claimBackgroundPersist(session, audio.src || "")) persistInBackground(track.trackId);
+				// A track really listened to is worth keeping in IndexedDB: read
+				// from its presigned R2 URL, not a second trip through the server.
+				if (classifySource(audio.src) !== "blob") void cacheListenedTrack(track.trackId);
 			}
 
 			// Connect to Web Audio API on first timeUpdate after playback starts.
@@ -1249,11 +963,15 @@ export function AudioEngine() {
 				}
 			}
 
-			// Preload next track at 50% progress
-			if (audio.duration > 0 && audio.currentTime / audio.duration > 0.5) {
-				const { queue, queueIndex } = usePlayerStore.getState();
-				if (queueIndex + 1 < queue.length) {
-					preloadTrack(queue[queueIndex + 1].trackId);
+			// Preload the next track: a cached copy from halfway through; an
+			// uncached one only through the live preview stream, and only close
+			// to the end so it neither persists nor idles on a server function.
+			if (audio.duration > 0) {
+				const left = audio.duration - audio.currentTime;
+				const live = left <= Math.max(LIVE_PRELOAD_LEAD_S, crossfadeDuration + 10);
+				if (live || audio.currentTime / audio.duration > 0.5) {
+					const { queue, queueIndex } = usePlayerStore.getState();
+					if (queueIndex + 1 < queue.length) preloadTrack(queue[queueIndex + 1].trackId, { live });
 				}
 			}
 
@@ -1278,7 +996,7 @@ export function AudioEngine() {
 
 				if (nextQueueIndex >= 0) {
 					const nextTrack = queue[nextQueueIndex];
-					const preloaded = preloadCache.get(nextTrack.trackId);
+					const preloaded = queuePreloaded(nextTrack.trackId);
 
 					if (preloaded && preloaded.readyState >= 3) {
 						crossfadeActiveRef.current = true;
@@ -1293,7 +1011,7 @@ export function AudioEngine() {
 						// reset as the load effect, which next() below then skips
 						// (was: plays via crossfade were never logged, the duration,
 						// retry budget and normalisation stayed the previous track's).
-						preloadCache.delete(nextTrack.trackId);
+						takePreloaded(nextTrack.trackId);
 						autoAdvanceRef.current = true;
 						beginTrack(nextTrack.trackId);
 						activateElement(preloaded, nextTrack);
