@@ -3,7 +3,7 @@
 	"info": {
 		"title": "Wavelet API",
 		"version": "1.0.0",
-		"description": "Music streaming / library API behind wavelet (Next.js on Vercel).\n\n## Response envelope\nEvery `/api/v1/*` JSON route returns `{ \"success\": true, \"data\": … }` or `{ \"success\": false, \"error\": { \"code\", \"message\" } }`.\nBranch on `error.code`, not on the message. `/api/auth/*` (better-auth) does NOT use this envelope.\n\n## Authentication\nbetter-auth session (Google only), accepted two ways:\n- **Bearer (native / Flutter)**: sign in with `POST /api/auth/sign-in/social` + Google `idToken`, read the `set-auth-token` response header, then send `Authorization: Bearer <token>` on every request — including the audio player's requests. Sessions last 30 days.\n- **Cookie (web)**: `__Secure-better-auth.session_token` (plus `__Secure-better-auth.session_data`, a 5-min signed cache).\nMany routes also need a connected Deezer account (`NO_DEEZER_ARL` → call `/api/v1/auth/login-arl`).\n\n## Ids\n`trackId`, `deezerAlbumId`, `deezerArtistId` are Deezer ids (as strings). `albumId` in `/library/albums/{albumId}` and playlist ids are internal cuids."
+		"description": "Music streaming / library API behind wavelet (Next.js on Vercel).\n\n## Response envelope\nEvery `/api/v1/*` JSON route returns `{ \"success\": true, \"data\": … }` or `{ \"success\": false, \"error\": { \"code\", \"message\" } }`.\nBranch on `error.code`, not on the message. `/api/auth/*` (better-auth) does NOT use this envelope.\nA 500 `INTERNAL_ERROR` always carries the generic message \"An unexpected error occurred.\" (details are only logged server-side).\n\n## Authentication\nbetter-auth session (Google only), accepted two ways:\n- **Bearer (native / Flutter)**: sign in with `POST /api/auth/sign-in/social` + Google `idToken`, read the `set-auth-token` response header, then send `Authorization: Bearer <token>` on every request — including the audio player's requests. Sessions last 30 days.\n- **Cookie (web)**: `__Secure-better-auth.session_token` (plus `__Secure-better-auth.session_data`, a 5-min signed cache).\nMany routes also need a connected Deezer account (`NO_DEEZER_ARL` → call `/api/v1/auth/login-arl`).\n\n## Ids\n`trackId`, `deezerAlbumId`, `deezerArtistId` are Deezer ids (as strings). `albumId` in `/library/albums/{albumId}` and playlist ids are internal cuids."
 	},
 	"servers": [
 		{
@@ -59,6 +59,10 @@
 		{
 			"name": "Settings",
 			"description": "Engine settings and UI preferences"
+		},
+		{
+			"name": "Internal",
+			"description": "Server maintenance (Vercel Cron) — not for app clients"
 		}
 	],
 	"security": [
@@ -382,6 +386,7 @@
 				],
 				"operationId": "changeDeezerAccount",
 				"summary": "Switch to another Deezer family/child account",
+				"description": "The session is checked before the body is read (401 / 403 come first). The choice is saved, so a later session restore logs into the same child; if that save fails, the switch is still answered as done.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -399,7 +404,8 @@
 								"properties": {
 									"child": {
 										"type": "integer",
-										"description": "Index in `childs`"
+										"minimum": 0,
+										"description": "Index in `childs` — a non-negative integer (a digit string is accepted)"
 									}
 								},
 								"required": [
@@ -435,6 +441,7 @@
 				},
 				"x-error-codes": [
 					"MISSING_CHILD_INDEX",
+					"INVALID_CHILD_INDEX",
 					"NOT_AUTHENTICATED",
 					"NO_DEEZER_ARL",
 					"DEEZER_LOGIN_FAILED"
@@ -2366,6 +2373,7 @@
 				],
 				"operationId": "getSettings",
 				"summary": "Engine settings (per-user overrides merged over global)",
+				"description": "Signed in with stored overrides → `settings` is the global settings with the user's overrides merged on top; otherwise the global settings.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -2396,16 +2404,15 @@
 					"Settings"
 				],
 				"operationId": "saveSettings",
-				"summary": "Save engine settings",
-				"description": "`settings` is stored per-user (replaces the previous object) when authenticated. `spotifySettings` is global.",
+				"summary": "Save the signed-in user's engine settings",
+				"description": "`settings` replaces the user's stored overrides (omitted or null → `{}`, i.e. back to the global settings). Server-wide settings are never written here (the streaming quality has its own route). A `spotifySettings` field is ignored. The response's `settings` is the object as sent (not merged over the global settings), or the global settings when none was sent.",
 				"security": [
 					{
 						"bearerAuth": []
 					},
 					{
 						"sessionCookie": []
-					},
-					{}
+					}
 				],
 				"requestBody": {
 					"required": true,
@@ -2415,12 +2422,13 @@
 								"type": "object",
 								"properties": {
 									"settings": {
-										"$ref": "#/components/schemas/Settings"
-									},
-									"spotifySettings": {
 										"type": "object",
-										"additionalProperties": true,
-										"description": "Spotify plugin settings"
+										"allOf": [
+											{
+												"$ref": "#/components/schemas/Settings"
+											}
+										],
+										"nullable": true
 									}
 								}
 							}
@@ -2438,10 +2446,20 @@
 							}
 						}
 					},
+					"400": {
+						"$ref": "#/components/responses/BadRequest"
+					},
+					"401": {
+						"$ref": "#/components/responses/NotAuthenticated"
+					},
 					"500": {
 						"$ref": "#/components/responses/InternalError"
 					}
-				}
+				},
+				"x-error-codes": [
+					"NOT_AUTHENTICATED",
+					"INVALID_BODY"
+				]
 			}
 		},
 		"/api/v1/settings/quality": {
@@ -2483,7 +2501,7 @@
 				],
 				"operationId": "setStreamingQuality",
 				"summary": "Change the server-wide streaming quality",
-				"description": "Applies to every listener. Tracks already cached keep the bitrate they were stored in.",
+				"description": "Applies to every listener. Tracks already cached keep the bitrate they were stored in. When `WAVELET_ADMIN_EMAILS` is set (comma-separated, case-insensitive), only those accounts may change it — anyone else gets 403 `FORBIDDEN`; when it is unset or empty, any signed-in user may.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -2532,11 +2550,16 @@
 					"401": {
 						"$ref": "#/components/responses/NotAuthenticated"
 					},
+					"403": {
+						"$ref": "#/components/responses/Forbidden"
+					},
 					"500": {
 						"$ref": "#/components/responses/InternalError"
 					}
 				},
 				"x-error-codes": [
+					"NOT_AUTHENTICATED",
+					"FORBIDDEN",
 					"INVALID_BITRATE",
 					"INVALID_BODY"
 				]
@@ -2658,6 +2681,7 @@
 				],
 				"operationId": "reportSkip",
 				"summary": "Report a skip before 30 s (lets the server free the cached file)",
+				"description": "The file is kept (`{ kept: true, reason }`) when this user already logged a real play (`already_played`), anything else references the track (`anchored`), a persist of it is in flight (`persisting`) or its cached copy is younger than 10 min (`recent`). Otherwise it is freed (`{ evicted: true }`); the metadata in saved-* tables stays, so a replay re-streams.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -2976,7 +3000,7 @@
 				],
 				"operationId": "streamShare",
 				"summary": "Public audio stream of a shared track (no auth)",
-				"description": "Range supported when served from cache (206); live fallback has `Accept-Ranges: none`. Each call increments the play counter.",
+				"description": "- **Cached copy** (the best R2 copy of the track, found by trackId — a copy persisted after the share was created is used and re-linked): proxied from R2, Range passed through (206 + `Content-Range`), `Accept-Ranges: bytes`, `Cache-Control: public, max-age=3600`.\n- **Fallback** (no cached copy, or the R2 read failed): streamed live through the share owner's Deezer account with the same Range rules as `/stream-progressive` — no Range, `bytes=0-` or `bytes=0-b` → persisting play (200, or 206 `Content-Range: bytes 0-b/n` when the Deezer CDN honours ranges; `Accept-Ranges: none` when it does not); a single range starting above 0 → 206 live-only; past the end → 416 `Content-Range: bytes */n`. Limited to 30 fallback requests per client address per 10 min (per server instance): over it → 429 `RATE_LIMITED` + `Retry-After`. Errors before the first byte: 422 `TRACK_UNAVAILABLE` / 502 `UPSTREAM_ERROR`.\n- **Play counter**: +1 per successful (status < 400) request with no Range, `bytes=0-` or `bytes=0-n` with n > 1 (Safari / AVPlayer after their `bytes=0-1` probe) — not per seek, nor for a refused or failed request.",
 				"security": [],
 				"parameters": [
 					{
@@ -3005,10 +3029,27 @@
 									"format": "binary"
 								}
 							}
+						},
+						"headers": {
+							"Accept-Ranges": {
+								"schema": {
+									"type": "string",
+									"enum": [
+										"bytes",
+										"none"
+									]
+								}
+							},
+							"Content-Length": {
+								"description": "Absent on the fallback when the decoded size is unknown",
+								"schema": {
+									"type": "integer"
+								}
+							}
 						}
 					},
 					"206": {
-						"description": "Partial content (cached file)",
+						"description": "Partial content (cached file, or fallback range)",
 						"content": {
 							"audio/mpeg": {
 								"schema": {
@@ -3022,6 +3063,18 @@
 									"format": "binary"
 								}
 							}
+						},
+						"headers": {
+							"Content-Range": {
+								"schema": {
+									"type": "string"
+								}
+							},
+							"Content-Length": {
+								"schema": {
+									"type": "integer"
+								}
+							}
 						}
 					},
 					"404": {
@@ -3030,15 +3083,31 @@
 					"410": {
 						"$ref": "#/components/responses/Gone"
 					},
+					"416": {
+						"$ref": "#/components/responses/RangeNotSatisfiable"
+					},
+					"422": {
+						"$ref": "#/components/responses/TrackUnavailable"
+					},
+					"429": {
+						"$ref": "#/components/responses/ShareRateLimited"
+					},
 					"500": {
 						"$ref": "#/components/responses/InternalError"
+					},
+					"502": {
+						"$ref": "#/components/responses/DeezerUpstreamError"
 					}
 				},
 				"x-error-codes": [
 					"NOT_FOUND",
 					"EXPIRED",
 					"SHARE_OWNER_OFFLINE",
-					"STORAGE_UNAVAILABLE"
+					"RATE_LIMITED",
+					"TRACK_UNAVAILABLE",
+					"UPSTREAM_ERROR",
+					"STORAGE_UNAVAILABLE",
+					"INTERNAL_ERROR"
 				]
 			}
 		},
@@ -3060,7 +3129,7 @@
 				],
 				"operationId": "getStreamUrl",
 				"summary": "Step 1 — presigned direct URL if the track is cached",
-				"description": "Recommended playback flow:\n1. `GET /stream-url/{id}` → if `url` is set, play it directly (CDN, Range-capable, ~15 min validity).\n2. Otherwise play `GET /stream-progressive/{id}` (live from Deezer, persisted to R2 in the background).\n`/stream/{id}` is the same-origin proxy for cached files.",
+				"description": "Recommended playback flow:\n1. `GET /stream-url/{id}` → if `url` is set, play it directly (CDN, Range-capable, valid 1 h — refresh before `expiresAt`).\n2. Otherwise play `GET /stream-progressive/{id}` (live from Deezer, persisted to R2 in the background); with `status: presigned_disabled`, play `/stream/{id}`.\n`/stream/{id}` is the same-origin proxy for cached files.\nThe copy is chosen by the shared rank rules for this user's licence: a copy below the quality this user may get counts as `not_cached`, so the progressive play upgrades it.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -3107,7 +3176,7 @@
 				],
 				"operationId": "streamCached",
 				"summary": "Stream a cached track (Range supported)",
-				"description": "Cache miss → 302 to `/api/v1/stream-progressive/{trackId}`; storage down or refusing reads → 302 to `/api/v1/stream-progressive/{trackId}?live=1`. The audio player must follow redirects and keep sending the session cookie.",
+				"description": "Same-origin proxy for the cached copy chosen by the shared rank rules for this user's licence; the Range header is passed through to R2 (206 + `Content-Range`).\n- No usable copy, or the object is gone from R2 (its rows are dropped) → 302 to `/api/v1/stream-progressive/{trackId}`.\n- A copy exists but below the quality this user may get (upgrade), the only copies are above this instance's quality setting, or storage is unreachable / refusing reads → 302 to `/api/v1/stream-progressive/{trackId}?live=1`.\n- `prefetch=1`: every non-hit (miss, upgrade, copies only in older storage, missing object, storage unavailable) → 404 `NOT_CACHED`, never a redirect to a live Deezer stream.\nThe audio player must follow redirects and keep sending the session (cookie or bearer). A Range past the end of the cached file is not answered with 416: R2's refusal surfaces as a 500.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -3117,6 +3186,18 @@
 					}
 				],
 				"parameters": [
+					{
+						"name": "prefetch",
+						"in": "query",
+						"required": false,
+						"description": "Only serve bytes that are already cached: every non-hit is a 404 NOT_CACHED instead of a 302",
+						"schema": {
+							"type": "string",
+							"enum": [
+								"1"
+							]
+						}
+					},
 					{
 						"name": "Range",
 						"in": "header",
@@ -3152,6 +3233,11 @@
 										"bytes"
 									]
 								}
+							},
+							"Content-Length": {
+								"schema": {
+									"type": "integer"
+								}
 							}
 						}
 					},
@@ -3176,11 +3262,16 @@
 								"schema": {
 									"type": "string"
 								}
+							},
+							"Content-Length": {
+								"schema": {
+									"type": "integer"
+								}
 							}
 						}
 					},
 					"302": {
-						"description": "Not cached → redirect to /stream-progressive",
+						"description": "Not served from cache → redirect to `/api/v1/stream-progressive/{trackId}` (or `…?live=1`, see description)",
 						"headers": {
 							"Location": {
 								"schema": {
@@ -3192,10 +3283,17 @@
 					"401": {
 						"$ref": "#/components/responses/NotAuthenticated"
 					},
+					"404": {
+						"$ref": "#/components/responses/NotCached"
+					},
 					"500": {
 						"$ref": "#/components/responses/InternalError"
 					}
-				}
+				},
+				"x-error-codes": [
+					"NOT_AUTHENTICATED",
+					"NOT_CACHED"
+				]
 			}
 		},
 		"/api/v1/stream-progressive/{trackId}": {
@@ -3216,7 +3314,7 @@
 				],
 				"operationId": "streamProgressive",
 				"summary": "Live stream from Deezer (decrypted on the fly, persisted in background)",
-				"description": "No Range support (`Accept-Ranges: none`) — seeking beyond the buffer requires restarting the stream. Already cached → 302 to `/api/v1/stream/{trackId}`.",
+				"description": "- **Already cached** (a usable copy for this listener's quality, object checked with a HEAD) → 302 to `/api/v1/stream/{trackId}`. Skipped with `live=1`.\n- **No Range, `bytes=0-` or `bytes=0-b`** (Safari / AVPlayer): a normal, persisting play. 200 with `Content-Length` when the decoded size is known, `Accept-Ranges: bytes` when the Deezer CDN honours ranges (else `none`); with a `bytes=0-…` Range and ranges honoured, 206 with `Content-Range: bytes 0-b/n` (body capped to that window, the persist continues).\n- **A single range starting above 0** (`bytes=a-` / `bytes=a-b`): 206 live-only (never persisted, no lock) with `Content-Range`, `Content-Length`, `Accept-Ranges: bytes`. Past the end → 416 with `Content-Range: bytes */n`. A CDN that refuses ranges → normal 200 play of the whole track. Multi-range, suffix (`bytes=-n`) and malformed headers are ignored (normal play).\n- A play never waits for another persist of the same track: on the same instance it streams the in-progress copy; while another instance persists it, it streams live, unpersisted.\n- `probe=1`: JSON `{ ok: true, cached }` when the track is streamable for this user; never opens the audio, never persists, takes no lock. Failures → 422 `TRACK_UNAVAILABLE` / 502 `UPSTREAM_ERROR` (plus the usual 401 / 403).\n- `preview=1`: live, never persisted, no lock; no `Content-Length`, `Accept-Ranges: none`, Range ignored. `head=1` caps it at ~3 s of audio at the server's `maxBitrate` (64 KiB floor, 512 KiB ceiling: 64 KiB MP3 128, 120 000 B MP3 320, 360 000 B FLAC).\nErrors before the first audio byte: 422 `TRACK_UNAVAILABLE` or 502 `UPSTREAM_ERROR`; anything else is a 500.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -3227,10 +3325,22 @@
 				],
 				"parameters": [
 					{
+						"name": "probe",
+						"in": "query",
+						"required": false,
+						"description": "Check only: JSON `{ ok, cached }`, no audio, no persistence, no lock",
+						"schema": {
+							"type": "string",
+							"enum": [
+								"1"
+							]
+						}
+					},
+					{
 						"name": "preview",
 						"in": "query",
 						"required": false,
-						"description": "Prefetch mode: no persistence, no download lock",
+						"description": "Prefetch mode: live, no persistence, no download lock, Range ignored",
 						"schema": {
 							"type": "string",
 							"enum": [
@@ -3242,7 +3352,7 @@
 						"name": "head",
 						"in": "query",
 						"required": false,
-						"description": "With preview=1: cap response at ~64 KB",
+						"description": "With preview=1: cap the response at ~3 s of audio at the server quality (64 KiB – 512 KiB)",
 						"schema": {
 							"type": "string",
 							"enum": [
@@ -3254,18 +3364,66 @@
 						"name": "live",
 						"in": "query",
 						"required": false,
-						"description": "Skip the cache check and stream from Deezer (sent by /stream when storage refuses reads)",
+						"description": "Skip the cache check and stream from Deezer; the play still persists (sent by /stream when storage refuses reads, when the cached copy needs an upgrade, or when the only copies are above this instance's quality)",
 						"schema": {
 							"type": "string",
 							"enum": [
 								"1"
 							]
 						}
+					},
+					{
+						"name": "Range",
+						"in": "header",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"example": "bytes=0-"
+						}
 					}
 				],
 				"responses": {
 					"200": {
-						"description": "Audio body (chunked or with Content-Length)",
+						"description": "Audio body (`probe=1`: the JSON probe result)",
+						"content": {
+							"audio/mpeg": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							},
+							"audio/flac": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							},
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StreamProbeEnvelope"
+								}
+							}
+						},
+						"headers": {
+							"Accept-Ranges": {
+								"schema": {
+									"type": "string",
+									"enum": [
+										"bytes",
+										"none"
+									]
+								}
+							},
+							"Content-Length": {
+								"description": "Present on a full play when the decoded size is known; never with preview=1",
+								"schema": {
+									"type": "integer"
+								}
+							}
+						}
+					},
+					"206": {
+						"description": "Partial content: `bytes=0-b` on a persisting play, or a live-only range starting above 0",
 						"content": {
 							"audio/mpeg": {
 								"schema": {
@@ -3279,10 +3437,31 @@
 									"format": "binary"
 								}
 							}
+						},
+						"headers": {
+							"Content-Range": {
+								"schema": {
+									"type": "string",
+									"example": "bytes 1048576-2097151/9437184"
+								}
+							},
+							"Content-Length": {
+								"schema": {
+									"type": "integer"
+								}
+							},
+							"Accept-Ranges": {
+								"schema": {
+									"type": "string",
+									"enum": [
+										"bytes"
+									]
+								}
+							}
 						}
 					},
 					"302": {
-						"description": "Already cached → redirect to /stream",
+						"description": "Already cached → redirect to /api/v1/stream/{trackId}",
 						"headers": {
 							"Location": {
 								"schema": {
@@ -3297,13 +3476,24 @@
 					"403": {
 						"$ref": "#/components/responses/NoDeezerArl"
 					},
+					"416": {
+						"$ref": "#/components/responses/RangeNotSatisfiable"
+					},
+					"422": {
+						"$ref": "#/components/responses/TrackUnavailable"
+					},
 					"500": {
 						"$ref": "#/components/responses/InternalError"
+					},
+					"502": {
+						"$ref": "#/components/responses/DeezerUpstreamError"
 					}
 				},
 				"x-error-codes": [
 					"NO_DEEZER_ARL",
 					"DEEZER_LOGIN_FAILED",
+					"TRACK_UNAVAILABLE",
+					"UPSTREAM_ERROR",
 					"APP_NOT_INITIALIZED",
 					"STORAGE_UNAVAILABLE"
 				]
@@ -3351,6 +3541,57 @@
 					}
 				}
 			}
+		},
+		"/api/v1/internal/gc": {
+			"get": {
+				"tags": [
+					"Internal"
+				],
+				"operationId": "runStorageGc",
+				"summary": "Daily storage garbage collection (Vercel Cron — not for app clients)",
+				"description": "Run by the daily cron in `vercel.json`. Requires `Authorization: Bearer <CRON_SECRET>` (Vercel sends it to cron invocations when `CRON_SECRET` is set) → 401 `UNAUTHORIZED` otherwise. While `CRON_SECRET` is unset it is a no-op answering 200 `{ ran: false, reason }`, whatever the Authorization header. Deletes StoredTrack rows older than 24 h that nothing references and no persist is writing (with their object unless another row uses it), then objects under `tracks/` older than 24 h that no row points at. Bounded per run.",
+				"security": [
+					{
+						"cronSecret": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GcEnvelope"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "`UNAUTHORIZED` — missing or wrong `Authorization: Bearer <CRON_SECRET>`",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorResponse"
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "`INTERNAL_ERROR` with the message \"Garbage collection failed.\"",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorResponse"
+								}
+							}
+						}
+					}
+				},
+				"x-error-codes": [
+					"UNAUTHORIZED",
+					"INTERNAL_ERROR"
+				]
+			}
 		}
 	},
 	"components": {
@@ -3365,6 +3606,11 @@
 				"in": "cookie",
 				"name": "__Secure-better-auth.session_token",
 				"description": "better-auth session cookie (`better-auth.session_token` on http://localhost)."
+			},
+			"cronSecret": {
+				"type": "http",
+				"scheme": "bearer",
+				"description": "`CRON_SECRET` env var, sent by Vercel Cron as `Authorization: Bearer <CRON_SECRET>` (internal routes only)."
 			}
 		},
 		"responses": {
@@ -3479,11 +3725,70 @@
 				}
 			},
 			"InternalError": {
-				"description": "`INTERNAL_ERROR`, `AUTH_ERROR`, `DEEZER_ERROR` or `APP_NOT_INITIALIZED`",
+				"description": "`INTERNAL_ERROR` (always the generic message \"An unexpected error occurred.\" — the detail is only logged server-side), `AUTH_ERROR`, `DEEZER_ERROR`, `APP_NOT_INITIALIZED` or (streaming) `STORAGE_UNAVAILABLE`",
 				"content": {
 					"application/json": {
 						"schema": {
 							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"NotCached": {
+				"description": "`NOT_CACHED` — `prefetch=1` and the track has no usable cached copy",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"TrackUnavailable": {
+				"description": "`TRACK_UNAVAILABLE` — Deezer will not stream this track (licence, region, removed)",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"DeezerUpstreamError": {
+				"description": "`UPSTREAM_ERROR` — Deezer did not deliver or answer; retry",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				}
+			},
+			"RangeNotSatisfiable": {
+				"description": "Range starts past the end of the track (no body)",
+				"headers": {
+					"Content-Range": {
+						"description": "`bytes */<size>` (`bytes */*` when the size is unknown)",
+						"schema": {
+							"type": "string"
+						}
+					}
+				}
+			},
+			"ShareRateLimited": {
+				"description": "`RATE_LIMITED` — too many Deezer fallback requests from this client address (30 per 10 min, per server instance)",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/ErrorResponse"
+						}
+					}
+				},
+				"headers": {
+					"Retry-After": {
+						"description": "Seconds until the window resets",
+						"schema": {
+							"type": "integer"
 						}
 					}
 				}
@@ -3569,9 +3874,6 @@
 						"type": "string",
 						"description": "Deezer picture hash (build URL via e-cdns-images.dzcdn.net/images/user/{hash}/...)"
 					},
-					"license_token": {
-						"type": "string"
-					},
 					"can_stream_hq": {
 						"type": "boolean"
 					},
@@ -3596,7 +3898,7 @@
 						"description": "Loved-tracks playlist id (may be absent)"
 					}
 				},
-				"description": "Deezer may send extra keys; they are ignored."
+				"description": "Deezer may send extra keys; they are ignored. `license_token` is never returned (it lets anyone request media as this account)."
 			},
 			"DeezerLoginResult": {
 				"type": "object",
@@ -3661,12 +3963,6 @@
 					},
 					"defaultSettings": {
 						"$ref": "#/components/schemas/Settings"
-					},
-					"spotifySettings": {
-						"type": "object",
-						"additionalProperties": true,
-						"description": "Spotify plugin settings (may be absent).",
-						"nullable": true
 					}
 				},
 				"required": [
@@ -4929,8 +5225,11 @@
 						"type": "string",
 						"enum": [
 							"already_played",
-							"anchored"
-						]
+							"anchored",
+							"persisting",
+							"recent"
+						],
+						"description": "Why the file was kept: `already_played` (this user logged a real play), `anchored` (saved, in a saved album, shared or recent-played by anyone), `persisting` (a persist of the track is in flight), `recent` (its cached copy is younger than 10 min — another listener may be playing it)."
 					},
 					"evicted": {
 						"type": "boolean"
@@ -5142,11 +5441,17 @@
 						"type": "string",
 						"nullable": true,
 						"format": "uri",
-						"description": "Presigned Cloudflare R2 URL, valid ~15 min. null → use /stream-progressive."
+						"description": "Presigned Cloudflare R2 URL, valid 1 h (3600 s, see `expiresAt`). null → see `status`."
 					},
 					"contentType": {
 						"type": "string",
-						"example": "audio/mpeg"
+						"example": "audio/mpeg",
+						"description": "Present only when `url` is set"
+					},
+					"expiresAt": {
+						"type": "string",
+						"format": "date-time",
+						"description": "Present only when `url` is set. ISO-8601 instant the presigned URL lapses (signing time + 3600 s, never later than the real expiry). Refresh it with this endpoint before then."
 					},
 					"status": {
 						"type": "string",
@@ -5156,12 +5461,65 @@
 							"file_missing",
 							"presigned_disabled"
 						],
-						"description": "Present only when `url` is null"
+						"description": "Present only when `url` is null. `not_cached`: no usable cached copy (including a copy below this listener's quality, which the progressive play upgrades) → play /stream-progressive. `unsupported_storage`: only copies in older storage → /stream-progressive. `file_missing`: the object is gone from R2 → /stream-progressive. `presigned_disabled`: presigned URLs are turned off server-side (`WAVELET_DISABLE_PRESIGNED_URLS=1`) → play the same-origin /stream."
 					}
 				},
 				"required": [
 					"url"
 				]
+			},
+			"StreamProbe": {
+				"type": "object",
+				"properties": {
+					"ok": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"cached": {
+						"type": "boolean",
+						"description": "true when a usable cached copy exists for this listener (a play would 302 to /stream; the object itself is not re-checked in R2). Always false with `live=1`."
+					}
+				},
+				"required": [
+					"ok",
+					"cached"
+				]
+			},
+			"GcResult": {
+				"type": "object",
+				"properties": {
+					"ran": {
+						"type": "boolean",
+						"description": "false while `CRON_SECRET` is unset (no work done)"
+					},
+					"reason": {
+						"type": "string",
+						"description": "Only when `ran` is false",
+						"example": "CRON_SECRET is not configured"
+					},
+					"rowsDeleted": {
+						"type": "integer",
+						"description": "Unreferenced StoredTrack rows deleted (only when `ran` is true)"
+					},
+					"objectsDeleted": {
+						"type": "integer",
+						"description": "R2 objects of those rows deleted (only when `ran` is true)"
+					},
+					"objectsScanned": {
+						"type": "integer",
+						"description": "Objects listed under `tracks/` (only when `ran` is true)"
+					},
+					"orphanObjectsDeleted": {
+						"type": "integer",
+						"description": "Objects under `tracks/` without any row deleted (only when `ran` is true)"
+					}
+				},
+				"required": [
+					"ran"
+				],
+				"description": "`{ ran: false, reason }` or `{ ran: true, rowsDeleted, objectsDeleted, objectsScanned, orphanObjectsDeleted }`."
 			},
 			"SocialSignInInput": {
 				"type": "object",
@@ -6260,6 +6618,42 @@
 					},
 					"data": {
 						"$ref": "#/components/schemas/StreamUrl"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"StreamProbeEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/StreamProbe"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				]
+			},
+			"GcEnvelope": {
+				"type": "object",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						]
+					},
+					"data": {
+						"$ref": "#/components/schemas/GcResult"
 					}
 				},
 				"required": [
