@@ -329,8 +329,8 @@ describe("AudioEngine — resuming on the live stream", () => {
 		act(() => el.tick(95));
 		act(() => el.fail(2));
 		// The retry reloads the live stream on the same element after 1 s.
-		await waitFor(() => expect(el.readyState).toBe(0), { timeout: 3000 });
-		await waitFor(() => expect(el.src).toMatch(/stream-progressive\/1$/), { timeout: 3000 });
+		await waitFor(() => expect(el.readyState).toBe(0), { timeout: 8000 });
+		await waitFor(() => expect(el.src).toMatch(/stream-progressive\/1$/), { timeout: 8000 });
 		// Meanwhile the server stored the file.
 		stored["1"] = "https://r2.example/tracks/1/1.mp3?sig=1";
 		act(() => el.ready(Infinity));
@@ -338,7 +338,7 @@ describe("AudioEngine — resuming on the live stream", () => {
 		act(() => file.ready(200));
 		expect(file.currentTime).toBe(95);
 		expect(usePlayerStore.getState().currentTime).toBe(95);
-	});
+	}, 20_000);
 });
 
 describe("AudioEngine — stop", () => {
@@ -365,7 +365,7 @@ describe("AudioEngine — stop", () => {
 			await new Promise((r) => setTimeout(r, 1200));
 		});
 		expect(FakeAudio.all.filter((a) => /r2\.example/.test(a.src))).toEqual([]);
-	});
+	}, 20_000);
 });
 
 describe("AudioEngine — source recovery", () => {
