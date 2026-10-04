@@ -123,6 +123,27 @@ describe("object-stream (R2)", () => {
 			expect(isStorageNotFound(e)).toBe(true);
 		});
 
+		it("passes a range past the end through as 416 (was: thrown, so /stream answered 500 INTERNAL_ERROR)", async () => {
+			fetchMock.mockResolvedValue(
+				new Response("<Error/>", { status: 416, headers: { "content-range": "bytes */5126686" } })
+			);
+			const r = await streamObject("tracks/1/1.mp3", "bytes=9999999-");
+			expect(r.statusCode).toBe(416);
+			expect(r.contentRange).toBe("bytes */5126686");
+			expect(r.contentLength).toBe(0);
+			expect(r.body).toBeNull();
+		});
+
+		it("learns the size with a HEAD when R2's 416 has no Content-Range", async () => {
+			fetchMock
+				.mockResolvedValueOnce(new Response("<Error/>", { status: 416 }))
+				.mockResolvedValueOnce(new Response(null, { status: 200, headers: { "content-length": "42" } }));
+			const r = await streamObject("tracks/1/1.mp3", "bytes=100-");
+			expect(r.statusCode).toBe(416);
+			expect(r.contentRange).toBe("bytes */42");
+			expect(lastRequest().method).toBe("HEAD");
+		});
+
 		it("throws StorageUnavailableError when storage refuses reads (was: Vercel Blob 'Your store is blocked' 403 → 500)", async () => {
 			fetchMock.mockResolvedValue(new Response("Your store is blocked", { status: 403 }));
 			const e = await streamObject("music/x.mp3").catch((err) => err);

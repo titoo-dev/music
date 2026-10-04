@@ -114,6 +114,26 @@ describe("GET /api/v1/shares/[shareId]/stream", () => {
 		expect(startProgressiveStreamMock).not.toHaveBeenCalled();
 	});
 
+	it("answers 416 from the cached copy for a range past the end (was: fell through to a Deezer re-download)", async () => {
+		prismaMock.sharedTrack.findUnique.mockResolvedValue(share("st1"));
+		prismaMock.storedTrack.findMany.mockResolvedValue([blobStored]);
+		streamObjectMock.mockResolvedValue({
+			body: null,
+			contentLength: 0,
+			contentRange: "bytes */100",
+			contentType: "audio/mpeg",
+			statusCode: 416,
+		});
+
+		const res = await GET(request({ range: "bytes=500-" }), makeParams({ shareId: "abc" }));
+		expect(res.status).toBe(416);
+		expect(res.headers.get("Content-Range")).toBe("bytes */100");
+		expect(startProgressiveStreamMock).not.toHaveBeenCalled();
+		expect(prismaMock.sharedTrack.update).not.toHaveBeenCalledWith(
+			expect.objectContaining({ data: { plays: { increment: 1 } } })
+		);
+	});
+
 	it("plays the copy persisted after the share was created and re-links it (was: share.storedTrack stayed null, so every visit re-downloaded from Deezer forever)", async () => {
 		prismaMock.sharedTrack.findUnique.mockResolvedValue(share(null));
 		prismaMock.storedTrack.findMany.mockResolvedValue([blobStored]);

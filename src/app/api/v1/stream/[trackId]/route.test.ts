@@ -118,6 +118,26 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		expect(streamObjectMock).toHaveBeenCalledWith("music/foo.mp3", "bytes=0-99");
 	});
 
+	it("answers 416 with the size for a range past the end (was: 500 INTERNAL_ERROR)", async () => {
+		setSessionUser("u1");
+		prismaMock.storedTrack.findMany.mockResolvedValue([blobRow]);
+		streamObjectMock.mockResolvedValue({
+			body: null,
+			contentLength: 0,
+			contentRange: "bytes */12345",
+			contentType: "audio/mpeg",
+			statusCode: 416,
+		} as any);
+
+		const res = await GET(
+			makeNextRequest({ headers: { range: "bytes=99999-" } }),
+			makeParams({ trackId: "1" })
+		);
+		expect(res.status).toBe(416);
+		expect(res.headers.get("Content-Range")).toBe("bytes */12345");
+		expect(prismaMock.storedTrack.deleteMany).not.toHaveBeenCalled();
+	});
+
 	it("on StorageNotFoundError: deletes the rows of the missing object and 302s to /stream-progressive", async () => {
 		setSessionUser("u1");
 		prismaMock.storedTrack.findMany.mockResolvedValue([blobRow]);
