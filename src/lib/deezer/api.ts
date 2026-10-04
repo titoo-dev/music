@@ -13,6 +13,23 @@ import {
 } from "./errors";
 import { SearchOrder, type APIAlbum, type APIOptions } from "./index";
 import { trackSchema, type DeezerTrack } from "./schema/track-schema";
+import {
+	DEEZER_MAX_RETRIES,
+	DEEZER_REQUEST_OPTIONS,
+	backoffDelay,
+	deezerHttp,
+	redactForLog,
+	withRetry,
+} from "./http";
+
+/** api.deezer.com answer: the resource, or an error object. */
+interface APIEnvelope {
+	error?: { code?: number; message?: string; type?: string };
+	[key: string]: unknown;
+}
+
+/** Deezer's public API allows 50 requests / 5 s: back off longer on a quota answer. */
+const QUOTA_BACKOFF_MS = 1_500;
 
 type APIArgs = Record<string | number, string | number>;
 
@@ -27,40 +44,40 @@ export class API {
 		this.access_token = null;
 	}
 
-	async call(endpoint: string, args: APIArgs = {}): Promise<unknown> {
+	/**
+	 * GET api.deezer.com/{endpoint}. Network failures and Deezer's "quota" (4) /
+	 * "service busy" (700) answers are retried at most DEEZER_MAX_RETRIES times.
+	 */
+	async call(endpoint: string, args: APIArgs = {}, _attempt = 0): Promise<unknown> {
 		if (this.access_token) args["access_token"] = this.access_token;
 
-		let response;
+		let response: APIEnvelope;
 		try {
-			response = await got
-				.get("https://api.deezer.com/" + endpoint, {
-					searchParams: args,
-					cookieJar: this.cookieJar,
-					headers: this.httpHeaders,
-				})
-				.json();
+			response = await withRetry(() =>
+				got
+					.get("https://api.deezer.com/" + endpoint, {
+						searchParams: args,
+						cookieJar: this.cookieJar,
+						headers: this.httpHeaders,
+						...DEEZER_REQUEST_OPTIONS,
+					})
+					.json<APIEnvelope>()
+			);
 		} catch (e) {
-			console.error("[ERROR] deezer.api", endpoint, args, e.name, e.message);
-			if (
-				[
-					"ECONNABORTED",
-					"ECONNREFUSED",
-					"ECONNRESET",
-					"ENETRESET",
-					"ETIMEDOUT",
-				].includes(e.code)
-			) {
-				await new Promise((resolve) => setTimeout(resolve, 2000)); // sleep(2000ms)
-				return this.call(endpoint, args);
-			}
-			throw new APIError(`${endpoint} ${args}:: ${e.name}: ${e.message}`);
+			console.error("[ERROR] deezer.api", endpoint, redactForLog(args), e?.name, e?.message);
+			throw new APIError(`${endpoint}:: ${e?.name}: ${e?.message}`);
 		}
 
 		if (response.error) {
 			if (response.error.code) {
 				if ([4, 700].indexOf(response.error.code) !== -1) {
-					await new Promise((resolve) => setTimeout(resolve, 5000)); // sleep(5000ms)
-					return await this.call(endpoint, args);
+					if (_attempt >= DEEZER_MAX_RETRIES) {
+						throw new APIError(
+							`${endpoint}:: Deezer error ${response.error.code}: ${response.error.message || ""}`
+						);
+					}
+					await deezerHttp.sleep(backoffDelay(_attempt, QUOTA_BACKOFF_MS));
+					return await this.call(endpoint, args, _attempt + 1);
 				}
 				if (response.error.code === 100)
 					throw new ItemsLimitExceededException(
@@ -101,7 +118,7 @@ export class API {
 						}`
 					);
 			}
-			throw new APIError(response.error);
+			throw new APIError(JSON.stringify(response.error));
 		}
 
 		return response;

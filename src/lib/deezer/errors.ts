@@ -5,6 +5,24 @@ export class DeezerError extends Error {
 	}
 }
 
+/**
+ * A transient failure talking to Deezer (socket reset, DNS, timeout, 5xx/429).
+ * It says nothing about whether the requested resource exists: callers must
+ * not treat it as "unavailable" (e.g. fall back to a lower bitrate).
+ */
+export class DeezerNetworkError extends DeezerError {
+	code?: string;
+	status?: number;
+
+	constructor(message: string, opts: { code?: string; status?: number; cause?: unknown } = {}) {
+		super(message);
+		this.name = "DeezerNetworkError";
+		this.code = opts.code;
+		this.status = opts.status;
+		if (opts.cause !== undefined) (this as { cause?: unknown }).cause = opts.cause;
+	}
+}
+
 export class WrongLicense extends DeezerError {
 	format: string;
 
