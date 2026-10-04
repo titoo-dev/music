@@ -239,6 +239,40 @@ describe("GET /api/v1/shares/[shareId]/stream", () => {
 		expect(prismaMock.sharedTrack.update).toHaveBeenCalledWith({ where: { shareId: "abc" }, data: { plays: { increment: 1 } } });
 	});
 
+	it("counts a Safari / AVPlayer listen once (was: its bytes=0-1 probe and bytes=0-n play were never counted)", async () => {
+		prismaMock.sharedTrack.findUnique.mockResolvedValue(share("st1"));
+		prismaMock.storedTrack.findMany.mockResolvedValue([blobStored]);
+		streamObjectMock.mockImplementation(async () => ({ body: fakeBody(), contentLength: 1, contentType: "audio/mpeg", statusCode: 206 }));
+
+		await GET(request({ range: "bytes=0-1" }), makeParams({ shareId: "abc" }));
+		await GET(request({ range: "bytes=0-3623704" }), makeParams({ shareId: "abc" }));
+		await GET(request({ range: "bytes=1800000-3623704" }), makeParams({ shareId: "abc" }));
+		for (const [cb] of afterMock.mock.calls) (cb as () => void)();
+		expect(prismaMock.sharedTrack.update).toHaveBeenCalledTimes(1);
+		expect(prismaMock.sharedTrack.update).toHaveBeenCalledWith({ where: { shareId: "abc" }, data: { plays: { increment: 1 } } });
+	});
+
+	it("does not count a request that was refused or failed (was: plays++ before the 429 / 410 / 422 answer)", async () => {
+		prismaMock.sharedTrack.findUnique.mockResolvedValue(share(null));
+		arrangeProgressive();
+		startProgressiveStreamMock.mockRejectedValue(new UpstreamHttpError(404));
+		expect((await GET(request(), makeParams({ shareId: "abc" }))).status).toBe(422);
+
+		serverStateMock.getOrLoginUserDz.mockResolvedValue(null);
+		expect((await GET(request(), makeParams({ shareId: "abc" }))).status).toBe(410);
+
+		const same = { "x-forwarded-for": "203.0.113.77" };
+		serverStateMock.getOrLoginUserDz.mockResolvedValue({ loggedIn: true });
+		startProgressiveStreamMock.mockResolvedValue({ body: fakeBody(), contentType: "audio/mpeg", contentLength: 0, totalLength: null, start: 0, end: null, rangeSupported: false, persisted: Promise.resolve() });
+		for (let i = 0; i < 30; i++) await GET(makeNextRequest({ headers: same }), makeParams({ shareId: "abc" }));
+		prismaMock.sharedTrack.update.mockClear();
+		afterMock.mockClear();
+		expect((await GET(makeNextRequest({ headers: same }), makeParams({ shareId: "abc" }))).status).toBe(429);
+
+		for (const [cb] of afterMock.mock.calls) await (cb as () => unknown)();
+		expect(prismaMock.sharedTrack.update).not.toHaveBeenCalled();
+	});
+
 	it("rate-limits the Deezer fallback per client address (was: every visitor re-streamed with the owner's account, unlimited)", async () => {
 		prismaMock.sharedTrack.findUnique.mockResolvedValue(share(null));
 		arrangeProgressive();

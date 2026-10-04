@@ -8,7 +8,7 @@ import { classifyStreamError } from "@/lib/wavelet/progressive-stream";
 import { capByLicence, loadStreamLicence } from "@/lib/wavelet/storage/cached-copy";
 import { clientAddress, createRateLimiter } from "@/lib/wavelet/cache/rate-limit";
 import { getWaveletApp, getOrLoginUserDz } from "@/lib/server-state";
-import { servePlay } from "../../../stream-progressive/_lib/play";
+import { parseRangeHeader, servePlay } from "../../../stream-progressive/_lib/play";
 
 // The progressive fallback persists the file in after(); see stream-progressive.
 export const maxDuration = 300;
@@ -28,8 +28,9 @@ const fallbackLimiter = createRateLimiter({ limit: 30, windowMs: 10 * 60_000 });
 //      stored Deezer credentials (rate-limited per client; same Range, lock
 //      and persist-lease rules as /stream-progressive — the first visit
 //      persists, later visits use R2).
-// A play is counted once per listen: requests without Range or with
-// "bytes=0-", not every seek.
+// A play is counted once per listen: a successful request without Range,
+// with "bytes=0-" or with "bytes=0-n" (Safari / AVPlayer, after their
+// "bytes=0-1" probe) — not every seek, nor a refused or failed request.
 export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ shareId: string }> }
@@ -43,10 +44,16 @@ export async function GET(
 
 		const { share, copy } = resolved;
 
-		const range = request.headers.get("range")?.trim();
-		if (!range || range === "bytes=0-") {
+		const rangeHeader = request.headers.get("range");
+		const range = parseRangeHeader(rangeHeader);
+		const listenStart =
+			!rangeHeader?.trim() || (range.kind === "from-start" && (range.end === undefined || range.end > 1));
+		// Set once this request is actually answered with audio.
+		let served = false;
+		if (listenStart) {
 			// Increment play count after the response is sent
 			after(() => {
+				if (!served) return;
 				prisma.sharedTrack
 					.update({ where: { shareId }, data: { plays: { increment: 1 } } })
 					.catch(() => {});
@@ -56,7 +63,9 @@ export async function GET(
 		// Fast path: file already cached in R2
 		if (copy) {
 			try {
-				return await streamFromStorage(request, copy.storagePath);
+				const res = await streamFromStorage(request, copy.storagePath);
+				served = res.status < 400;
+				return res;
 			} catch (e) {
 				if (isStorageNotFound(e)) {
 					// Evicted between the DB lookup and the R2 fetch: drop the rows of
@@ -79,7 +88,9 @@ export async function GET(
 		}
 
 		// Fallback: re-stream via progressive using the share creator's ARL
-		return await streamProgressive(request, share);
+		const res = await streamProgressive(request, share);
+		served = res.status < 400;
+		return res;
 	} catch (e) {
 		console.error("[shares/stream] failed:", e);
 		const c = classifyStreamError(e);
