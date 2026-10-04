@@ -22,7 +22,9 @@ export async function streamObject(storagePath: string, range?: string) {
 	if (raw.status === 416) {
 		// A range past the end is the client's mistake, not a storage failure:
 		// answer 416 with the size (Safari and players retry from there).
-		await raw.body?.cancel();
+		// Not awaited: under Next's patched fetch, awaiting cancel() on an
+		// error body can stall the response for the whole request timeout.
+		void raw.body?.cancel().catch(() => {});
 		const contentRange =
 			raw.headers.get("content-range") ?? `bytes */${(await headObject(storagePath)).contentLength}`;
 		return {

@@ -100,7 +100,9 @@ export async function r2Fetch(url: string, init: RequestInit = {}): Promise<Resp
 			});
 			const retryable = res.status === 429 || res.status >= 500;
 			if (!retryable || attempt >= RETRY_DELAYS_MS.length) return res;
-			await res.body?.cancel();
+			// Not awaited: under Next's patched fetch, awaiting cancel() on an
+			// error body can stall until the request times out.
+			void res.body?.cancel().catch(() => {});
 			await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
 		}
 	} catch (e) {
