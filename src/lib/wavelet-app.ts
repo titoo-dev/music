@@ -95,7 +95,6 @@ export class WaveletApp {
 					Cookie:
 						"dz_lang=en; Domain=deezer.com; Path=/; Secure; hostOnly=false;",
 				},
-				https: { rejectUnauthorized: false },
 				retry: { limit: 3 },
 			});
 			const title = (

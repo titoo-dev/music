@@ -51,9 +51,6 @@ export class Deezer {
 			.post("https://www.deezer.com/ajax/action.php", {
 				headers: this.httpHeaders,
 				cookieJar: this.cookieJar,
-				https: {
-					rejectUnauthorized: false,
-				},
 				form: {
 					type: "login",
 					mail: email,
@@ -86,6 +83,7 @@ export class Deezer {
 			domain: ".deezer.com",
 			path: "/",
 			httpOnly: true,
+			secure: true,
 		});
 		await this.cookieJar.setCookie(
 			cookie_obj.toString(),
@@ -191,9 +189,6 @@ export class Deezer {
 				.post("https://media.deezer.com/v1/get_url", {
 					headers: this.httpHeaders,
 					cookieJar: this.cookieJar,
-					https: {
-						rejectUnauthorized: false,
-					},
 					json: {
 						license_token: this.currentUser.license_token,
 						media: [

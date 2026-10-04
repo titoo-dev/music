@@ -51,7 +51,6 @@ export async function getPreferredBitrate(
 			request = got
 				.get(url, {
 					headers: { "User-Agent": USER_AGENT_HEADER },
-					https: { rejectUnauthorized: false },
 					timeout: { request: TEST_URL_TIMEOUT_MS },
 				})
 				.on("response", (response) => {

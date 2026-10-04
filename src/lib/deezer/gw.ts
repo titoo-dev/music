@@ -102,14 +102,11 @@ export class GW {
 		let result_json;
 		try {
 			result_json = await got
-				.post("http://www.deezer.com/ajax/gw-light.php", {
+				.post("https://www.deezer.com/ajax/gw-light.php", {
 					searchParams: p,
 					json: args,
 					cookieJar: this.cookieJar,
 					headers: this.httpHeaders,
-					https: {
-						rejectUnauthorized: false,
-					},
 				})
 				.json();
 		} catch (e) {

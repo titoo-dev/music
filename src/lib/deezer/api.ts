@@ -37,9 +37,6 @@ export class API {
 					searchParams: args,
 					cookieJar: this.cookieJar,
 					headers: this.httpHeaders,
-					https: {
-						rejectUnauthorized: false,
-					},
 				})
 				.json();
 		} catch (e) {

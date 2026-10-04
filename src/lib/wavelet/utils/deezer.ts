@@ -21,7 +21,6 @@ export async function getDeezerAccessTokenFromEmailPassword(email, password) {
 				password,
 				hash,
 			},
-			https: { rejectUnauthorized: false },
 			headers: { "User-Agent": USER_AGENT_HEADER },
 		});
 		const responseData = (await response.json()) as { access_token?: string };
@@ -43,14 +42,12 @@ export async function getDeezerArlFromAccessToken(accessToken) {
 				Authorization: `Bearer ${accessToken}`,
 				"User-Agent": USER_AGENT_HEADER,
 			},
-			https: { rejectUnauthorized: false },
 			cookieJar,
 		});
 		const response = got.get(
 			"https://www.deezer.com/ajax/gw-light.php?method=user.getArl&input=3&api_version=1.0&api_token=null",
 			{
 				headers: { "User-Agent": USER_AGENT_HEADER },
-				https: { rejectUnauthorized: false },
 				cookieJar,
 			}
 		);

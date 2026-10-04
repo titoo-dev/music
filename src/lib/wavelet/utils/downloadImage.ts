@@ -54,7 +54,6 @@ async function downloadImageWithProvider(
 	const downloadStream = got
 		.stream(url, {
 			headers: { "User-Agent": USER_AGENT_HEADER },
-			https: { rejectUnauthorized: false },
 		})
 		.on("data", function () {
 			clearTimeout(timeout);
@@ -139,7 +138,6 @@ async function downloadImageLocal(
 	const downloadStream = got
 		.stream(url, {
 			headers: { "User-Agent": USER_AGENT_HEADER },
-			https: { rejectUnauthorized: false },
 		})
 		.on("data", function () {
 			clearTimeout(timeout);

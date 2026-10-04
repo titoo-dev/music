@@ -136,7 +136,6 @@ export async function streamTrack(writepath, track, downloadObject, listener, st
 	const request = got
 		.stream(track.downloadURL, {
 			headers,
-			https: { rejectUnauthorized: false },
 		})
 		.on("response", (response) => {
 			clearTimeout(timeout);
@@ -283,7 +282,7 @@ export function streamTrackToReadable(track: any): ProgressiveStream {
 	});
 
 	const request = got
-		.stream(track.downloadURL, { headers, https: { rejectUnauthorized: false } })
+		.stream(track.downloadURL, { headers })
 		.on("response", (response) => {
 			const raw = response.headers["content-length"];
 			const len = parseInt(Array.isArray(raw) ? raw[0] : (raw ?? "0"), 10);
