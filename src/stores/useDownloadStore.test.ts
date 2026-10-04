@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
 	useDownloadStore,
 	setDownloadTransport,
@@ -88,6 +88,24 @@ describe("useDownloadStore — lifecycle", () => {
 		expect(statusOf("1")).toBe("done");
 		expect(statusOf("3")).toBe("downloading");
 		expect(pending.map((p) => p.trackId)).toEqual(["1", "2", "3"]);
+	});
+
+	it("throttles progress updates (was: one store update per network chunk)", () => {
+		let t = 1000;
+		const now = vi.spyOn(Date, "now").mockImplementation(() => t);
+		try {
+			useDownloadStore.getState().enqueue([track("1")]);
+			const writes: number[] = [];
+			const stop = useDownloadStore.subscribe((s) => writes.push(s.items[0].loaded));
+			for (let i = 1; i <= 50; i++) pending[0].onProgress({ loaded: i, total: 100 });
+			t += 250;
+			pending[0].onProgress({ loaded: 60, total: 100 });
+			pending[0].onProgress({ loaded: 100, total: 100 });
+			stop();
+			expect(writes).toEqual([1, 60, 100]);
+		} finally {
+			now.mockRestore();
+		}
 	});
 
 	it("marks failures with the error message and frees the slot", async () => {

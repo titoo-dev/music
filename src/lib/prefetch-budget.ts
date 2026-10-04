@@ -32,6 +32,33 @@ export function queuePrefetchWindow(
 	return ids;
 }
 
+/** Structural subset of navigator.connection (Network Information API). */
+export interface NetworkInfoLike {
+	saveData?: boolean;
+	effectiveType?: string;
+}
+
+/**
+ * May the client fetch audio it hasn't been asked to play yet? Not on
+ * Save-Data, not on 2G-class links. Every background prefetch path (page
+ * prefetch, queue prefetch, in-memory preloads, the IndexedDB fill of the
+ * playing track) checks this first.
+ */
+export function shouldPrefetchAudio(
+	nav: { connection?: NetworkInfoLike } | null = typeof navigator === "undefined"
+		? null
+		: (navigator as Navigator & { connection?: NetworkInfoLike })
+): boolean {
+	if (!nav) return false;
+	const conn = nav.connection;
+	if (conn) {
+		if (conn.saveData) return false;
+		const eff = conn.effectiveType;
+		if (eff && eff.includes("2g")) return false;
+	}
+	return true;
+}
+
 /**
  * A per-scope allowance for opportunistic prefetches (rows scrolling into
  * view). Each scope — the current page — gets `limit` takes; moving to a

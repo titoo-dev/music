@@ -1,103 +1,228 @@
 /**
- * Web Audio API singleton — shared across AudioEngine and AudioVisualizer.
- * Chain: HTMLAudioElement → MediaElementSource → AnalyserNode → NormGainNode → destination
+ * Web Audio graph for the player's <audio> elements — shared by AudioEngine,
+ * AudioVisualizer and useAudioLevel.
  *
- * Lazy-initialised on first call to initAudioCtx() (requires a user gesture).
- * Connecting an element routes its output through the Web Audio pipeline;
- * the NormGainNode defaults to 1.0 (no change) when normalization is off.
+ *   element → MediaElementSource → meter (Analyser) → norm (Gain) → volume (Gain)
+ *     → shared Analyser (visualiser) → destination
+ *
+ * • The AudioContext is created / resumed from a user gesture only
+ *   (installGestureUnlock): iOS keeps a context created elsewhere suspended
+ *   (was: created on the first timeupdate, outside any gesture).
+ * • An element is routed only while the context runs — a routed element
+ *   plays nothing through a suspended context. Until then it keeps
+ *   element.volume.
+ * • A routed element's volume, fades and crossfades go through its own
+ *   GainNode: element.volume is read-only on iOS Safari.
+ *   setElementVolume / getElementVolume hide the difference.
+ * • Loudness normalisation is per element (meter + norm nodes): a new track's
+ *   element starts at unity, never with the previous track's gain.
+ * • releaseElement() disconnects a discarded element's nodes (was: one
+ *   MediaElementSource per element, never disconnected).
  */
+
+type AudioContextCtor = new () => AudioContext;
+
+interface Route {
+	source: MediaElementAudioSourceNode;
+	meter: AnalyserNode;
+	norm: GainNode;
+	volume: GainNode;
+}
+
+/** Normalisation never moves a track by more than ±6 dB. */
+export const NORM_MIN_GAIN = 0.5;
+export const NORM_MAX_GAIN = 2;
 
 let _ctx: AudioContext | null = null;
 let _analyser: AnalyserNode | null = null;
-let _normGain: GainNode | null = null;
-const _connected = new WeakSet<HTMLAudioElement>();
-const _failed = new WeakSet<HTMLAudioElement>(); // CORS or duplicate-source failures
+let _routes = new WeakMap<HTMLAudioElement, Route>();
+let _failed = new WeakSet<HTMLAudioElement>(); // CORS or duplicate-source failures
+let _volumes = new WeakMap<HTMLAudioElement, number>();
+// element.volume as read back right after our last write to an unrouted
+// element (1 on iOS, where it is read-only): tells a write made elsewhere.
+let _written = new WeakMap<HTMLAudioElement, number>();
 
-function _ensureCtx(): boolean {
-	if (_ctx) {
-		if (_ctx.state === "suspended") _ctx.resume().catch(() => {});
-		return _ctx.state !== "closed";
-	}
-	try {
-		_ctx = new AudioContext();
+function defaultFactory(): AudioContext | null {
+	if (typeof window === "undefined") return null;
+	const w = window as unknown as { AudioContext?: AudioContextCtor; webkitAudioContext?: AudioContextCtor };
+	const Ctor = w.AudioContext ?? w.webkitAudioContext;
+	return Ctor ? new Ctor() : null;
+}
+
+let _factory: () => AudioContext | null = defaultFactory;
+
+/** Test seam: swap the AudioContext constructor and forget the current graph. */
+export function __setAudioContextFactory(factory?: () => AudioContext | null) {
+	_factory = factory ?? defaultFactory;
+	_ctx = null;
+	_analyser = null;
+	_routes = new WeakMap();
+	_failed = new WeakSet();
+	_volumes = new WeakMap();
+	_written = new WeakMap();
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * Create or resume the AudioContext. Call it from a user gesture: a context
+ * created or resumed outside one stays suspended on iOS.
+ */
+export function initAudioCtx(): boolean {
+	if (!_ctx) {
+		try {
+			_ctx = _factory();
+		} catch {
+			_ctx = null;
+		}
+		if (!_ctx) return false;
 		_analyser = _ctx.createAnalyser();
 		_analyser.fftSize = 256;
 		_analyser.smoothingTimeConstant = 0.8;
-		_normGain = _ctx.createGain();
-		_normGain.gain.value = 1.0;
-		_analyser.connect(_normGain);
-		_normGain.connect(_ctx.destination);
+		_analyser.connect(_ctx.destination);
+		// Routed elements play through the context: if the system suspends
+		// it (iOS interruption, audio session change) try to get it back.
+		const ctx = _ctx;
+		ctx.onstatechange = () => {
+			if (ctx.state !== "running" && ctx.state !== "closed") ctx.resume().catch(() => {});
+		};
+	}
+	if (_ctx.state !== "running" && _ctx.state !== "closed") _ctx.resume().catch(() => {});
+	return _ctx.state !== "closed";
+}
+
+export function isAudioCtxRunning(): boolean {
+	return _ctx?.state === "running";
+}
+
+/**
+ * Resume (or create, when `shouldCreate` says playback wants it) the context
+ * on every click / tap / key press: those are the gestures iOS and the
+ * autoplay policies accept. Listeners sit on the document's bubble phase,
+ * after React handled the event — a click that just started a track sees it.
+ */
+export function installGestureUnlock(shouldCreate: () => boolean = () => true, target: Document = document): () => void {
+	const onGesture = () => {
+		if (_ctx ? _ctx.state !== "running" : shouldCreate()) initAudioCtx();
+	};
+	const events = ["click", "keydown", "touchend", "pointerup"] as const;
+	for (const type of events) target.addEventListener(type, onGesture, { passive: true });
+	return () => {
+		for (const type of events) target.removeEventListener(type, onGesture);
+	};
+}
+
+/**
+ * Route an element through the graph — only while the context runs.
+ * Idempotent; returns whether the element is routed. Its current volume
+ * moves to its GainNode and element.volume stays at 1.
+ */
+export function routeElement(audio: HTMLAudioElement): boolean {
+	if (_routes.has(audio)) return true;
+	if (!_ctx || !_analyser || _ctx.state !== "running" || _failed.has(audio)) return false;
+	try {
+		const source = _ctx.createMediaElementSource(audio);
+		const meter = _ctx.createAnalyser();
+		meter.fftSize = 2048;
+		const norm = _ctx.createGain();
+		const volume = _ctx.createGain();
+		volume.gain.value = getElementVolume(audio);
+		source.connect(meter);
+		meter.connect(norm);
+		norm.connect(volume);
+		volume.connect(_analyser);
+		_routes.set(audio, { source, meter, norm, volume });
+		try {
+			audio.volume = 1;
+		} catch {}
 		return true;
 	} catch {
+		_failed.add(audio);
 		return false;
 	}
 }
 
-/** Call once after first user gesture to initialise/resume the AudioContext. */
-export function initAudioCtx(): boolean {
-	return _ensureCtx();
+export function isRouted(audio: HTMLAudioElement): boolean {
+	return _routes.has(audio);
+}
+
+/** Disconnect the nodes of an element that is being discarded. */
+export function releaseElement(audio: HTMLAudioElement): void {
+	const route = _routes.get(audio);
+	if (!route) return;
+	for (const node of [route.source, route.meter, route.norm, route.volume]) {
+		try {
+			node.disconnect();
+		} catch {}
+	}
+	_routes.delete(audio);
 }
 
 /**
- * Route an audio element through the Web Audio chain.
- * Idempotent — safe to call on every timeUpdate.
- * Failed elements (CORS, already-connected errors) are tracked to avoid retries.
+ * The volume the player set on this element (0..1), routed or not. An
+ * unrouted element whose element.volume was changed by other code since
+ * (AudioPreview mutes its element directly) reports that real volume (was:
+ * the stale remembered one, so the next fade-in started at full volume).
  */
-export function connectAudioElement(audio: HTMLAudioElement): void {
-	if (!_ensureCtx() || !_ctx || !_analyser) return;
-	if (_connected.has(audio) || _failed.has(audio)) return;
-	try {
-		_ctx.createMediaElementSource(audio).connect(_analyser);
-		_connected.add(audio);
-	} catch {
-		_failed.add(audio);
+export function getElementVolume(audio: HTMLAudioElement): number {
+	const remembered = _volumes.get(audio);
+	if (remembered === undefined) return audio.volume;
+	if (!_routes.has(audio) && _written.has(audio) && audio.volume !== _written.get(audio)) return audio.volume;
+	return remembered;
+}
+
+/**
+ * Set an element's volume: its GainNode when routed (element.volume is
+ * read-only on iOS), element.volume otherwise.
+ */
+export function setElementVolume(audio: HTMLAudioElement, value: number): void {
+	const v = clamp(value, 0, 1);
+	_volumes.set(audio, v);
+	const route = _routes.get(audio);
+	if (route) {
+		route.volume.gain.value = v;
+		return;
 	}
+	try {
+		audio.volume = v;
+	} catch {}
+	_written.set(audio, audio.volume);
 }
 
-/** True if the element is connected OR has permanently failed (so we stop retrying). */
-export function isConnectedOrFailed(audio: HTMLAudioElement): boolean {
-	return _connected.has(audio) || _failed.has(audio);
-}
-
-/** True only if the element is successfully connected and audio flows through Web Audio. */
-export function isConnectedToCtx(audio: HTMLAudioElement): boolean {
-	return _connected.has(audio);
-}
-
-/** Returns the AnalyserNode (null if not yet initialised). Used by AudioVisualizer. */
+/** Returns the shared AnalyserNode (null if not yet initialised). Used by AudioVisualizer. */
 export function getAnalyser(): AnalyserNode | null {
 	return _analyser;
 }
 
 /**
- * Measure current RMS amplitude from time-domain data.
- * Returns 0 if the analyser isn't ready or the signal is inaudibly quiet.
+ * RMS and peak of what a routed element plays right now, before
+ * normalisation and volume; null when it isn't routed.
  */
-export function measureRms(): number {
-	if (!_analyser) return 0;
-	const buf = new Float32Array(_analyser.fftSize);
-	_analyser.getFloatTimeDomainData(buf);
+export function readLevel(audio: HTMLAudioElement): { rms: number; peak: number } | null {
+	const route = _routes.get(audio);
+	if (!route) return null;
+	const buf = new Float32Array(route.meter.fftSize);
+	route.meter.getFloatTimeDomainData(buf);
 	let sumSq = 0;
-	for (const s of buf) sumSq += s * s;
-	const rms = Math.sqrt(sumSq / buf.length);
-	return rms < 0.001 ? 0 : rms;
+	let peak = 0;
+	for (const s of buf) {
+		sumSq += s * s;
+		const a = Math.abs(s);
+		if (a > peak) peak = a;
+	}
+	return { rms: Math.sqrt(sumSq / buf.length), peak };
 }
 
-/**
- * Smoothly set the normalisation gain node.
- * Clamped to [0.2, 2.0] — up to −14 dB reduction or +6 dB boost.
- */
-export function applyNormGain(gain: number): void {
-	if (!_ctx || !_normGain) return;
-	_normGain.gain.setTargetAtTime(
-		Math.max(0.2, Math.min(2.0, gain)),
-		_ctx.currentTime,
-		0.5, // 0.5 s time constant — smooth ~1 s ramp
-	);
+/** Smoothly set an element's normalisation gain, clamped to ±6 dB. */
+export function setNormGain(audio: HTMLAudioElement, gain: number): void {
+	const route = _routes.get(audio);
+	if (!_ctx || !route) return;
+	route.norm.gain.setTargetAtTime(clamp(gain, NORM_MIN_GAIN, NORM_MAX_GAIN), _ctx.currentTime, 0.5);
 }
 
-/** Reset the normalisation gain to unity (1.0) smoothly. */
-export function resetNormGain(): void {
-	if (!_ctx || !_normGain) return;
-	_normGain.gain.setTargetAtTime(1.0, _ctx.currentTime, 0.3);
+/** Back to unity gain (normalisation turned off). */
+export function resetNormGain(audio: HTMLAudioElement | null): void {
+	const route = audio ? _routes.get(audio) : undefined;
+	if (!_ctx || !route) return;
+	route.norm.gain.setTargetAtTime(1, _ctx.currentTime, 0.3);
 }

@@ -26,43 +26,62 @@ function openAudioDB() {
 	});
 }
 
+// The page (src/lib/audio-cache.ts) is the only writer of this database and
+// enforces its size limit; the worker only reads it (was: it also stored
+// every full /api/v1/stream response, with no eviction at all).
+// A read never rewrites the audio record: the access time goes into a small
+// "atime:{trackId}" record of the meta store, at most once a minute.
+const TOUCH_INTERVAL_MS = 60 * 1000;
+const touchedAt = new Map();
+
 function getCachedAudio(trackId) {
 	return openAudioDB().then(
 		(db) =>
 			new Promise((resolve) => {
-				const tx = db.transaction(AUDIO_STORE, "readwrite");
-				const store = tx.objectStore(AUDIO_STORE);
-				const req = store.get(trackId);
+				const tx = db.transaction(AUDIO_STORE, "readonly");
+				const req = tx.objectStore(AUDIO_STORE).get(trackId);
 				req.onsuccess = () => {
 					const record = req.result;
-					if (!record) return resolve(null);
-					// Update LRU timestamp
-					record.lastAccessed = Date.now();
-					store.put(record);
-					resolve(record);
+					if (record) touchAudio(db, trackId);
+					resolve(record || null);
 				};
 				req.onerror = () => resolve(null);
 			})
 	).catch(() => null);
 }
 
-function cacheAudio(trackId, blob, contentType) {
-	return openAudioDB().then(
-		(db) =>
-			new Promise((resolve) => {
-				const tx = db.transaction(AUDIO_STORE, "readwrite");
-				tx.objectStore(AUDIO_STORE).put({
-					trackId,
-					blob,
-					contentType,
-					size: blob.size,
-					lastAccessed: Date.now(),
-					createdAt: Date.now(),
-				});
-				tx.oncomplete = () => resolve();
-				tx.onerror = () => resolve();
-			})
-	).catch(() => {});
+function touchAudio(db, trackId) {
+	const now = Date.now();
+	if (now - (touchedAt.get(trackId) || 0) < TOUCH_INTERVAL_MS) return;
+	touchedAt.set(trackId, now);
+	try {
+		const tx = db.transaction("meta", "readwrite");
+		tx.objectStore("meta").put({ key: "atime:" + trackId, trackId, lastAccessed: now });
+	} catch {
+		// LRU bookkeeping is best-effort
+	}
+}
+
+/**
+ * Resolve a single "Range: bytes=..." header against a body of `total` bytes.
+ * Returns { start, end } (inclusive, end clamped to the last byte),
+ * "unsatisfiable" when the range starts past the end (-> 416), or null when the
+ * header isn't a single byte range we understand (-> serve the whole body).
+ */
+function parseByteRange(header, total) {
+	const m = /^bytes=(\d*)-(\d*)$/.exec(String(header || "").trim());
+	if (!m || (m[1] === "" && m[2] === "")) return null;
+	if (m[1] === "") {
+		// Suffix range: the last N bytes
+		const n = parseInt(m[2], 10);
+		if (n === 0 || total === 0) return "unsatisfiable";
+		return { start: Math.max(0, total - n), end: total - 1 };
+	}
+	const start = parseInt(m[1], 10);
+	if (start >= total) return "unsatisfiable";
+	const end = m[2] === "" ? total - 1 : Math.min(parseInt(m[2], 10), total - 1);
+	if (end < start) return null;
+	return { start, end };
 }
 
 // --- Extract trackId from stream URL ---
@@ -218,23 +237,10 @@ async function handleAudioRequest(request, trackId) {
 		// Cache miss — fall through to network
 	}
 
-	// Network fetch
+	// Network fetch, passed through as is (the page decides what to cache).
 	try {
-		const response = await fetch(request);
-
-		// Only cache successful full responses (not partial/range)
-		if (response.ok && response.status === 200 && !rangeHeader) {
-			const contentType = response.headers.get("Content-Type") || "audio/mpeg";
-			const clone = response.clone();
-
-			// Cache in background (don't block response)
-			clone.blob().then((blob) => {
-				cacheAudio(trackId, blob, contentType);
-			}).catch(() => {});
-		}
-
-		return response;
-	} catch (error) {
+		return await fetch(request);
+	} catch {
 		return new Response("Audio unavailable", { status: 503 });
 	}
 }
@@ -242,9 +248,17 @@ async function handleAudioRequest(request, trackId) {
 // --- Serve range requests from cached blob ---
 function handleRangeFromBlob(blob, contentType, rangeHeader) {
 	const total = blob.size;
-	const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+	const range = parseByteRange(rangeHeader, total);
 
-	if (!match) {
+	if (range === "unsatisfiable") {
+		// Was: a start past the end produced a negative Content-Length.
+		return new Response(null, {
+			status: 416,
+			headers: { "Content-Range": `bytes */${total}`, "Accept-Ranges": "bytes" },
+		});
+	}
+
+	if (!range) {
 		return new Response(blob, {
 			status: 200,
 			headers: {
@@ -256,8 +270,9 @@ function handleRangeFromBlob(blob, contentType, rangeHeader) {
 		});
 	}
 
-	const start = parseInt(match[1], 10);
-	const end = match[2] ? parseInt(match[2], 10) : total - 1;
+	// End clamped to the last byte (was: "bytes=0-999999" on a smaller file
+	// announced a Content-Length the body didn't have).
+	const { start, end } = range;
 	const chunkSize = end - start + 1;
 
 	const sliced = blob.slice(start, end + 1, contentType);

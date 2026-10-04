@@ -1,34 +1,66 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { adjustVolume } from "@/utils/adjust-volume";
 import {
 	initAudioCtx,
-	connectAudioElement,
-	isConnectedOrFailed,
-	measureRms,
-	applyNormGain,
+	installGestureUnlock,
+	isAudioCtxRunning,
+	isRouted,
+	readLevel,
 	resetNormGain,
+	routeElement,
+	setElementVolume,
+	setNormGain,
 } from "@/utils/audio-context";
-import {
-	getCachedBlobUrl,
-	prefetchTrack as cachePrefetch,
-	isCached,
-	cacheTrack,
-	setCacheLimit,
-} from "@/lib/audio-cache";
-import {
-	PREFETCH_LIMIT,
-	queuePrefetchWindow,
-	createPrefetchBudget,
-} from "@/lib/prefetch-budget";
+import { createLoudnessMeter, type LoudnessMeter } from "@/components/audio/engine/loudness";
+import { startHandoff } from "@/components/audio/engine/handoff";
+import { mediaMetadataInit } from "@/components/audio/engine/media-session";
+import { getCachedBlobUrl, removeCached, setCacheLimit } from "@/lib/audio-cache";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-failure";
-import { canSeekInPlace, isPreviewSource, waitForSeekableUrl } from "@/lib/seek";
+import { canSeekInPlace, inRanges, isRangelessSource, planResume, seekLanded, waitForSeekableUrl } from "@/lib/seek";
+import { formatTime } from "@/utils/format-time";
+import {
+	accumulateListened,
+	advanceQueue,
+	claimBackgroundPersist,
+	createTrackSession,
+	reachedPlayThreshold,
+	shouldNotifySkip,
+	startVolume,
+	type TrackSession,
+} from "@/components/audio/engine/session";
+import {
+	createAutoSkip,
+	createTimerBag,
+	sameTarget,
+	type PlaybackTarget,
+	type SkipReason,
+} from "@/components/audio/engine/timers";
+import {
+	presignedUrls,
+	progressiveUrl,
+	proxyUrl,
+	resolveCachedSource,
+} from "@/components/audio/engine/presigned-urls";
+import {
+	cacheListenedTrack,
+	createAudioElement,
+	discardElement,
+	disposePrefetchPools,
+	persistInBackground,
+	preloadTrack,
+	queuePreloaded,
+	smartPrefetchQueue,
+	takePreloaded,
+} from "@/components/audio/engine/prefetch";
+import { classifySource, needsResign, planRecovery, resolvePlaybackUrl } from "@/components/audio/engine/source";
+import { forgetSignedInState, watchSignOut } from "@/components/audio/engine/sign-out";
 
 // Restore cache limit from localStorage
 if (typeof window !== "undefined") {
@@ -41,330 +73,28 @@ if (typeof window !== "undefined") {
 	} catch {}
 }
 
-// --- URL Cache (for presigned URLs only) ---
-const urlCache = new Map<string, { url: string; fetchedAt: number }>();
-// Presigned URLs are signed for 900s (15min). We allow 14min of client reuse
-// so we never hand the audio element a URL with <60s of validity left.
-const URL_CACHE_TTL = 14 * 60 * 1000;
-let usePresigned = true;
-
-// Dedup in-flight presigned URL requests so prefetch + on-demand calls share one fetch
-const inflightPresigned = new Map<string, Promise<string | null>>();
-
-// Tracks whose presigned URL failed (mixed-content, storage denial, etc.) — we go
-// straight to progressive for these without burning a sign roundtrip.
-const presignedDenied = new Set<string>();
-
-function pruneUrlCache() {
-	const now = Date.now();
-	for (const [key, val] of urlCache) {
-		if (now - val.fetchedAt >= URL_CACHE_TTL) urlCache.delete(key);
-	}
-}
-
-async function fetchPresignedUrl(trackId: string): Promise<string | null> {
-	// Session-wide kill switch — once the storage host is known unreachable,
-	// short-circuit every caller (on-demand, prefetch, hover-preload) so we
-	// don't burn a DNS-timeout per track.
-	if (!usePresigned) return null;
-
-	const cached = urlCache.get(trackId);
-	if (cached && Date.now() - cached.fetchedAt < URL_CACHE_TTL) {
-		return cached.url;
-	}
-
-	const existing = inflightPresigned.get(trackId);
-	if (existing) return existing;
-
-	pruneUrlCache();
-
-	const promise = (async () => {
-		try {
-			const res = await fetch(`/api/v1/stream-url/${trackId}`);
-			if (!res.ok) return null;
-			const json = await res.json();
-			const url = json.data?.url;
-			if (url) {
-				urlCache.set(trackId, { url, fetchedAt: Date.now() });
-			}
-			return url || null;
-		} catch {
-			return null;
-		} finally {
-			inflightPresigned.delete(trackId);
-		}
-	})();
-
-	inflightPresigned.set(trackId, promise);
-	return promise;
-}
-
-// Warm the URL cache for upcoming tracks. Cheap (one DB query + Blob sign per
-// track) and turns the next click-to-play into a cache hit on the URL fetch.
-function prefetchPresignedUrls(trackIds: string[]) {
-	if (!usePresigned) return;
-	for (const trackId of trackIds) {
-		const cached = urlCache.get(trackId);
-		if (cached && Date.now() - cached.fetchedAt < URL_CACHE_TTL) continue;
-		if (inflightPresigned.has(trackId)) continue;
-		void fetchPresignedUrl(trackId);
-	}
-}
+// Presigned URLs come from one app-wide cache (engine/presigned-urls): reused
+// until shortly before each URL's own expiresAt, refused per track after a
+// failure — never a session-wide kill switch.
 
 /**
  * Resolve audio URL for a track. Priority:
  * 1. IndexedDB blob URL (instant, zero network)
- * 2. Presigned Blob URL (direct browser streaming for downloaded tracks)
- * 3. Progressive endpoint (live decrypts from Deezer; auto-redirects to /stream once cached)
+ * 2. Presigned R2 URL (direct browser streaming for cached tracks)
+ * 3. Progressive endpoint (live decrypts from Deezer; redirects to /stream once cached)
  */
-async function getTrackUrl(trackId: string): Promise<string> {
-	// 1. Check IndexedDB cache — instant blob URL
-	try {
-		const blobUrl = await getCachedBlobUrl(trackId);
-		if (blobUrl) return blobUrl;
-	} catch {
-		// Cache miss — continue to network
-	}
-
-	// 2. Presigned URL — only succeeds for tracks already in user's DownloadHistory
-	if (usePresigned && !presignedDenied.has(trackId)) {
-		const url = await fetchPresignedUrl(trackId);
-		if (url) {
-			// Skip presigned URL if it would cause mixed content (HTTPS page → HTTP audio)
-			if (window.location.protocol === "https:" && url.startsWith("http://")) {
-				usePresigned = false;
-				urlCache.clear();
-				return `/api/v1/stream-progressive/${trackId}`;
-			}
-			return url;
-		}
-	}
-
-	// 3. Progressive stream — server decides:
-	//    • Already downloaded → 302 redirect to /api/v1/stream/[trackId]
-	//    • Not downloaded → live stream from Deezer with parallel persistence
-	return `/api/v1/stream-progressive/${trackId}`;
-}
-
-// --- Prefetch caches ---
-// Three intensity levels, all funneled through warmTrack({ audio }):
-//
-//   "none"    metadata-only via /api/v1/stream-warm (~200 byte response).
-//             Used when bandwidth is constrained (saveData / 2G) or the
-//             caller doesn't want any audio bytes to flow.
-//
-//   "head"    /stream-progressive?preview=1&head=1 — server caps the response
-//             at ~64 KB (~2-3s of audio). Light enough to apply to every
-//             visible item in a list without burning megabytes; the audio
-//             element reaches readyState >= 2 (canplay) so a click can play
-//             instantly while we transparently swap to the full stream.
-//
-//   "full"    /stream-progressive?preview=1 — browser-managed full buffer
-//             (~30s with preload="auto"). Used on hover, where intent is
-//             stronger. Click-to-play is sub-200ms.
-const warmedAt = new Map<string, "none" | "head" | "full">();
-const warmInflight = new Set<string>();
-
-const hoverPreloadCache = new Map<string, HTMLAudioElement>();
-const MAX_HOVER_PRELOADED = 3;
-// Visibility-driven head prefetch. Each slot is small, but every one is a
-// storage request — capped like the other pools, and budgeted per page so
-// scrolling a long playlist doesn't head-prefetch every row.
-const headPreloadCache = new Map<string, HTMLAudioElement>();
-const MAX_HEAD_PRELOADED = PREFETCH_LIMIT;
-const headBudget = createPrefetchBudget();
-// Tracks whose prefetched audio element is head-capped (ends after ~64 KB).
-// On swap-to-play, AudioEngine seamlessly switches to the full stream so
-// playback continues past the head segment.
-const headPrefetchedTracks = new Set<string>();
-
-function shouldPrefetchAudio(): boolean {
-	if (typeof navigator === "undefined") return false;
-	const conn = (navigator as Navigator & {
-		connection?: { saveData?: boolean; effectiveType?: string };
-	}).connection;
-	if (conn) {
-		if (conn.saveData) return false;
-		const eff = conn.effectiveType;
-		if (eff && (eff.includes("2g") || eff === "slow-2g")) return false;
-	}
-	return true;
-}
-
-function evictFrom(
-	cache: Map<string, HTMLAudioElement>,
-	max: number
-) {
-	if (cache.size < max) return;
-	const oldest = cache.keys().next().value!;
-	const oldAudio = cache.get(oldest)!;
-	evictedAudio.add(oldAudio);
-	oldAudio.src = "";
-	cache.delete(oldest);
-	headPrefetchedTracks.delete(oldest);
-}
-
-function preloadAudio(trackId: string, mode: "head" | "full") {
-	const cache = mode === "head" ? headPreloadCache : hoverPreloadCache;
-	const max = mode === "head" ? MAX_HEAD_PRELOADED : MAX_HOVER_PRELOADED;
-
-	if (cache.has(trackId)) return;
-	// If already prefetched at a stronger level, keep that one
-	if (mode === "head" && hoverPreloadCache.has(trackId)) return;
-	if (preloadCache.has(trackId)) return;
-
-	// Upgrade from head → full: discard the lighter head element so we don't
-	// leak bytes / browser memory holding two prefetched streams.
-	if (mode === "full") {
-		const headElem = headPreloadCache.get(trackId);
-		if (headElem) {
-			evictedAudio.add(headElem);
-			headElem.src = "";
-			headPreloadCache.delete(trackId);
-			headPrefetchedTracks.delete(trackId);
-		}
-	}
-
-	evictFrom(cache, max);
-
-	const audio = new Audio();
-	audio.preload = "auto";
-	audio.crossOrigin = "anonymous";
-	cache.set(trackId, audio);
-	if (mode === "head") headPrefetchedTracks.add(trackId);
-
-	(async () => {
-		try {
-			const blobUrl = await getCachedBlobUrl(trackId).catch(() => null);
-			if (blobUrl) {
-				if (evictedAudio.has(audio)) return;
-				audio.src = blobUrl;
-				audio.load();
-				headPrefetchedTracks.delete(trackId);
-				return;
-			}
-
-			const presigned = await fetchPresignedUrl(trackId);
-			if (presigned) {
-				if (evictedAudio.has(audio)) return;
-				audio.src = presigned;
-				audio.load();
-				headPrefetchedTracks.delete(trackId);
-				return;
-			}
-
-			if (evictedAudio.has(audio)) return;
-			audio.src =
-				mode === "head"
-					? `/api/v1/stream-progressive/${trackId}?preview=1&head=1`
-					: `/api/v1/stream-progressive/${trackId}?preview=1`;
-			audio.load();
-		} catch {
-			// Best-effort
-		}
-	})();
-}
-
-export interface WarmOptions {
-	/** "none" = metadata only, "head" = first ~3s, "full" = browser-managed buffer */
-	audio?: "none" | "head" | "full";
-}
-
-export function warmTrack(trackId: string, opts: WarmOptions = {}) {
-	if (typeof window === "undefined") return;
-	const audio = opts.audio ?? "full";
-	const desired = shouldPrefetchAudio() ? audio : "none";
-
-	const prevLevel = warmedAt.get(trackId);
-	const rank = { none: 0, head: 1, full: 2 } as const;
-	// Skip if we already prefetched at the same or stronger level
-	if (prevLevel && rank[prevLevel] >= rank[desired]) return;
-
-	// Head prefetch is opportunistic (a row scrolled into view): only the
-	// first PREFETCH_LIMIT rows per page get one. Hover isn't budgeted.
-	if (desired === "head" && !headBudget.take(trackId, window.location.pathname)) return;
-
-	// Metadata warm — only the first time we touch this track
-	if (!prevLevel && !warmInflight.has(trackId)) {
-		warmInflight.add(trackId);
-		fetch(`/api/v1/stream-warm/${trackId}`, { credentials: "include" })
-			.catch(() => {})
-			.finally(() => {
-				warmInflight.delete(trackId);
-			});
-	}
-
-	warmedAt.set(trackId, desired);
-	if (desired === "head" || desired === "full") {
-		preloadAudio(trackId, desired);
-	}
-}
-
-/** True if AudioEngine should transparently switch to a full stream after
- *  the prefetched head segment runs out. Cleared after the swap so future
- *  plays of the same track use whichever path is freshest. */
-export function isHeadPrefetched(trackId: string): boolean {
-	return headPrefetchedTracks.has(trackId);
-}
-
-export function clearHeadFlag(trackId: string) {
-	headPrefetchedTracks.delete(trackId);
-}
-
-// --- Audio Preload Cache (in-memory HTMLAudioElement pool) ---
-const preloadCache = new Map<string, HTMLAudioElement>();
-const MAX_PRELOADED = PREFETCH_LIMIT;
-const evictedAudio = new WeakSet<HTMLAudioElement>();
-
-export function preloadTrack(trackId: string) {
-	if (preloadCache.has(trackId)) return;
-
-	// Evict oldest if at capacity
-	if (preloadCache.size >= MAX_PRELOADED) {
-		const oldest = preloadCache.keys().next().value!;
-		const oldAudio = preloadCache.get(oldest)!;
-		evictedAudio.add(oldAudio);
-		oldAudio.src = "";
-		preloadCache.delete(oldest);
-	}
-
-	const audio = new Audio();
-	audio.preload = "auto";
-	audio.crossOrigin = "anonymous";
-	// Reserve spot immediately to prevent duplicate fetches
-	preloadCache.set(trackId, audio);
-
-	getTrackUrl(trackId).then((url) => {
-		if (evictedAudio.has(audio)) return;
-		audio.src = url;
-		audio.load();
+function getTrackUrl(trackId: string, opts: { skipBlob?: boolean } = {}): Promise<string> {
+	return resolvePlaybackUrl(trackId, {
+		urls: presignedUrls,
+		blobUrl: getCachedBlobUrl,
+		pageProtocol: window.location.protocol,
+		skipBlob: opts.skipBlob,
 	});
 }
 
-// --- Smart Prefetch: background cache upcoming queue tracks ---
-let prefetchAbort: AbortController | null = null;
-
-function smartPrefetchQueue() {
-	// Cancel any in-flight prefetch batch
-	prefetchAbort?.abort();
-	prefetchAbort = new AbortController();
-	const signal = prefetchAbort.signal;
-
-	const { queue, queueIndex } = usePlayerStore.getState();
-	if (queue.length === 0) return;
-
-	// Next tracks first, then the previous one — PREFETCH_LIMIT in total
-	const prefetchIds = queuePrefetchWindow(queue, queueIndex);
-
-	// Sequential background prefetch, respecting abort
-	(async () => {
-		for (const trackId of prefetchIds) {
-			if (signal.aborted) return;
-			// Don't await all at once — stagger to avoid bandwidth saturation
-			await cachePrefetch(trackId);
-		}
-	})();
-}
+// Prefetch pools, warm levels and background fills live in engine/prefetch;
+// warmTrack / preloadTrack stay importable from here.
+export { warmTrack, preloadTrack, type WarmOptions } from "@/components/audio/engine/prefetch";
 
 /**
  * Log a "real" play (≥30s of continuous playback) so the track joins the
@@ -419,60 +149,14 @@ function notifyTrackSkipped(trackId: string) {
 }
 
 /**
- * Cache current track after it starts playing (if not already cached).
- * This ensures every played track gets persisted to IndexedDB.
- *
- * Only runs when the track is actually downloaded (DownloadHistory exists).
- * If we hit /api/v1/stream/[id] for a non-downloaded track, it 404s. Worse,
- * it would race the in-progress /stream-progressive download. So we gate on
- * the presigned-URL endpoint first — if it returns null, the track isn't
- * cacheable yet (the progressive flow will create the DB row on completion,
- * and a future play will populate the cache).
- */
-// Preview streams (hover / head prefetch) aren't persisted by the server.
-// Open a real progressive stream and hang up right away: the server's persist
-// branch runs to completion on its own, so the next play hits the Blob file.
-function persistInBackground(trackId: string) {
-	fetch(`/api/v1/stream-progressive/${trackId}`, { credentials: "include" })
-		.then((res) => {
-			res.body?.cancel().catch(() => {});
-		})
-		.catch(() => {});
-}
-
-async function cacheCurrentTrackInBackground(trackId: string) {
-	if (await isCached(trackId)) return;
-
-	try {
-		// Quick existence check — returns { url: null } when not yet downloaded
-		const cached = urlCache.get(trackId);
-		const probe =
-			cached && Date.now() - cached.fetchedAt < URL_CACHE_TTL
-				? { ok: true }
-				: await fetch(`/api/v1/stream-url/${trackId}`, { credentials: "include" })
-						.then((r) => (r.ok ? r.json() : null))
-						.catch(() => null);
-		const isReady = !!(cached || probe?.data?.url);
-		if (!isReady) return;
-
-		const res = await fetch(`/api/v1/stream/${trackId}`, {
-			credentials: "include",
-		});
-		if (!res.ok) return;
-		const contentType = res.headers.get("Content-Type") || "audio/mpeg";
-		const blob = await res.blob();
-		await cacheTrack(trackId, blob, contentType);
-	} catch {
-		// Non-critical
-	}
-}
-
-/**
  * Drives full-track playback from Blob using imperatively managed Audio objects.
  * Pre-buffers adjacent tracks in the queue for instant playback.
  * Also manages the Media Session API for OS-level media controls.
  */
 const RESUME_KEY = "wavelet-resume";
+// How long before the end of a track an uncached next track may start
+// buffering through the live preview stream.
+const LIVE_PRELOAD_LEAD_S = 30;
 const RESUME_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function AudioEngine() {
@@ -507,28 +191,52 @@ export function AudioEngine() {
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewIsPlaying = usePreviewStore((s) => s.isPlaying);
 
-	// Error retry counter
-	const retryCountRef = useRef(0);
+	// Per-track state (play logging, retries, auto-advance…) — replaced as a
+	// whole by beginTrack() whenever a track becomes current.
+	const sessionRef = useRef<TrackSession | null>(null);
 	const MAX_RETRIES = 2;
 	// Consecutive track failures across the queue. If too many tracks fail
 	// back-to-back, stop auto-skipping and show a clearer error so we don't
 	// silently burn through the whole queue.
 	const consecutiveFailuresRef = useRef(0);
 	const MAX_CONSECUTIVE_FAILURES = 3;
+	// Set right before the queue advances on its own (ended, auto-skip): the
+	// next track starts without a fade-in.
+	const autoAdvanceRef = useRef(false);
 
-	// Play tracking — Spotify-like 30s rule.
-	// playLoggedRef: did we already POST /recent-plays for the *current* track?
-	// playLoggedTrackIdRef: which trackId that flag refers to (avoids stale state).
-	const playLoggedRef = useRef(false);
-	const playLoggedTrackIdRef = useRef<string | null>(null);
-	const PLAY_THRESHOLD_SECONDS = 30;
+	// Retry / auto-skip timers of the current track: cleared on every track
+	// change and reload, and re-checked against the current target on fire.
+	const [timers] = useState(createTimerBag);
+	const [autoSkip] = useState(() =>
+		createAutoSkip({
+			timers,
+			currentTrackId: () => usePlayerStore.getState().currentTrack?.trackId ?? null,
+		})
+	);
+	const currentTarget = useCallback(
+		(): PlaybackTarget => ({
+			gen: loadGenRef.current,
+			element: audioRef.current,
+			trackId: sessionRef.current?.trackId ?? null,
+		}),
+		[]
+	);
 
 	// Crossfade state
 	const crossfadeActiveRef = useRef(false);
 	const outgoingAudioRef = useRef<HTMLAudioElement | null>(null);
 
-	// Normalization: measured once per track at t=3s
-	const normMeasuredRef = useRef(false);
+	// Normalisation of the current track: its level averaged over several
+	// seconds, then one gain, applied to the element(s) playing that track.
+	// Replaced on every track change (was: a 256-sample snapshot at 3 s, and
+	// a shared gain node that carried the previous track's gain over).
+	const normRef = useRef<{ meter: LoudnessMeter; gain: number | null; appliedTo: HTMLAudioElement | null }>({
+		meter: createLoudnessMeter(),
+		gain: null,
+		appliedTo: null,
+	});
+	// Head → full handoff in flight (cancelled when the track changes).
+	const cancelHandoffRef = useRef<(() => void) | null>(null);
 
 	// --- Stable event handler delegation via refs ---
 	const handlersRef = useRef({
@@ -564,71 +272,123 @@ export function AudioEngine() {
 		audio.onprogress = null;
 	}, []);
 
+	// Element-level activation. Every element that becomes the playing one —
+	// fresh load, preload hit, crossfade, head→full handoff, retry, source
+	// swap — goes through here.
+	const activateElement = useCallback(
+		(audio: HTMLAudioElement, track: { duration: number | null } | null = null) => {
+			audioRef.current = audio;
+			attachEvents(audio);
+			// A prefetched element fired loadedmetadata before we listened:
+			// report its duration now (was: a crossfaded track kept the
+			// previous track's duration).
+			if (audio.readyState >= 1 && isFinite(audio.duration) && audio.duration > 0) {
+				setDuration(audio.duration);
+			} else if (track) {
+				setDuration(track.duration ?? 0);
+			}
+		},
+		[attachEvents, setDuration]
+	);
+
+	// First play() of an element: a user-initiated start fades in, a queue
+	// advance starts at full volume.
+	const startPlayback = useCallback((audio: HTMLAudioElement) => {
+		const session = sessionRef.current;
+		const target = usePlayerStore.getState().volume / 100;
+		const { from, fadeMs } = startVolume(!!session?.autoAdvance, target);
+		if (session) session.autoAdvance = false;
+		// A routed element is silent while the context is suspended.
+		if (isRouted(audio) && !isAudioCtxRunning()) initAudioCtx();
+		setElementVolume(audio, from);
+		audio.play().catch(() => {});
+		// duration 0 still cancels a fade-out left running on this element
+		adjustVolume(audio, target, { duration: fadeMs });
+	}, []);
+
+	const pendingSeekRef = useRef<{ target: number } | null>(null);
+	// An in-place seek on the live stream is checked on the next timeupdate:
+	// a browser that snapped back to the start falls back to the stored file.
+	const seekCheckRef = useRef<{ target: number; element: HTMLAudioElement } | null>(null);
+	// The persisted file never showed up: the next resume plays on whatever
+	// the live stream allows instead of waiting again.
+	const lastResortSeekRef = useRef(false);
+
+	// Track-level activation: ends the previous track's session (skip
+	// notification) and starts a fresh one. Both paths that change the
+	// current track — the load effect and the crossfade — go through here.
+	const beginTrack = useCallback(
+		(trackId: string) => {
+			const prev = sessionRef.current;
+			if (prev && prev.trackId !== trackId && shouldNotifySkip(prev)) {
+				notifyTrackSkipped(prev.trackId);
+			}
+			sessionRef.current = createTrackSession(trackId, { autoAdvance: autoAdvanceRef.current });
+			autoAdvanceRef.current = false;
+			prevTrackIdRef.current = trackId;
+			// Timers of the previous track must never fire on this one.
+			timers.clear();
+			autoSkip.cancel();
+			pendingSeekRef.current = null;
+			seekCheckRef.current = null;
+			lastResortSeekRef.current = false;
+			normRef.current = { meter: createLoudnessMeter(), gain: null, appliedTo: null };
+			cancelHandoffRef.current?.();
+			cancelHandoffRef.current = null;
+			setError(null);
+		},
+		[timers, autoSkip, setError]
+	);
+
 	// Hand off from a head-prefetched audio element (~3s buffered) to the
 	// full progressive stream so playback continues seamlessly past the head.
 	// We open the full stream right after the swap and ride out the head
 	// segment; once the head approaches its end we copy state, swap refs,
 	// and seek the full element to the head's position.
+	// The head is server-capped (?head=1); only its cleanup is ours: the
+	// handoff is cancelled by any track change, reload or stop (W8).
 	const handoffFullStream = useCallback(
 		(headAudio: HTMLAudioElement, trackId: string, gen: number) => {
-			const fullAudio = new Audio();
-			fullAudio.preload = "auto";
-			fullAudio.crossOrigin = "anonymous";
-			fullAudio.src = `/api/v1/stream-progressive/${trackId}`;
+			const fullAudio = createAudioElement();
+			fullAudio.src = progressiveUrl(trackId);
 			fullAudio.load();
 
-			let swapped = false;
-			const cleanup = () => {
-				headAudio.removeEventListener("timeupdate", onTimeUpdate);
-				headAudio.removeEventListener("ended", onEnded);
-			};
-
-			const swap = () => {
-				if (swapped) return;
-				swapped = true;
-				cleanup();
-				if (loadGenRef.current !== gen || audioRef.current !== headAudio) {
-					evictedAudio.add(fullAudio);
-					fullAudio.src = "";
-					return;
-				}
-				const seekTo = headAudio.currentTime || 0;
-				const userVol = usePlayerStore.getState().volume / 100;
-				const wasPlaying = !headAudio.paused;
-
-				detachEvents(headAudio);
-				evictedAudio.add(headAudio);
-				headAudio.pause();
-				headAudio.src = "";
-
-				audioRef.current = fullAudio;
-				attachEvents(fullAudio);
-				try {
-					fullAudio.currentTime = seekTo;
-				} catch {
-					// Seek may throw if not enough buffered; the audio element
-					// will handle it by re-buffering and seeking when ready.
-				}
-				fullAudio.volume = userVol;
-				if (wasPlaying || usePlayerStore.getState().isPlaying) {
-					fullAudio.play().catch(() => {});
-				}
-			};
-
-			// Swap 300ms before head ends for smoother transition; fall back
-			// to the ended event in case timeupdate granularity misses it.
-			const onTimeUpdate = () => {
-				if (swapped) return;
-				const dur = headAudio.duration;
-				if (!isFinite(dur) || dur <= 0) return;
-				if (headAudio.currentTime > dur - 0.3) swap();
-			};
-			const onEnded = () => swap();
-
-			headAudio.addEventListener("timeupdate", onTimeUpdate);
-			headAudio.addEventListener("ended", onEnded);
+			cancelHandoffRef.current?.();
+			cancelHandoffRef.current = startHandoff({
+				head: headAudio,
+				full: fullAudio,
+				stillCurrent: () => loadGenRef.current === gen && audioRef.current === headAudio,
+				discard: discardElement,
+				swap: (full, { position, wasPlaying }) => {
+					cancelHandoffRef.current = null;
+					detachEvents(headAudio);
+					discardElement(headAudio);
+					activateElement(full);
+					try {
+						full.currentTime = position;
+					} catch {
+						// Seek may throw if not enough buffered; the audio element
+						// will handle it by re-buffering and seeking when ready.
+					}
+					setElementVolume(full, usePlayerStore.getState().volume / 100);
+					if (wasPlaying || usePlayerStore.getState().isPlaying) {
+						full.play().catch(() => {});
+					}
+				},
+			});
 		},
-		[attachEvents, detachEvents]
+		[activateElement, detachEvents]
+	);
+
+	// Element-level teardown shared by every path that drops the current
+	// element: events first (emptying src fires an error on some browsers),
+	// then network and Web Audio nodes.
+	const dropElement = useCallback(
+		(audio: HTMLAudioElement) => {
+			detachEvents(audio);
+			discardElement(audio);
+		},
+		[detachEvents]
 	);
 
 	// --- Restore playback position from previous session ---
@@ -708,29 +468,40 @@ export function AudioEngine() {
 	// hang up the live stream (the server then drains Deezer at full speed into
 	// Blob), wait for the persisted file and reopen it — Blob URLs support
 	// Range — at the requested position. While a seek is pending, further
-	// seeks only move its target.
-	const pendingSeekRef = useRef<{ target: number } | null>(null);
-
+	// seeks only move its target (pendingSeekRef).
 	const swapSource = useCallback(
 		(url: string, position: number | null) => {
 			const old = audioRef.current;
 			++loadGenRef.current;
-			if (old) {
-				detachEvents(old);
-				old.pause();
-				old.src = "";
-				evictedAudio.add(old);
-			}
+			timers.clear();
+			cancelHandoffRef.current?.();
+			cancelHandoffRef.current = null;
+			if (old) dropElement(old);
 			resumePositionRef.current = position;
-			const audio = new Audio();
-			audio.preload = "auto";
-			audio.crossOrigin = "anonymous";
-			audioRef.current = audio;
-			attachEvents(audio);
+			const audio = createAudioElement();
+			activateElement(audio);
 			audio.src = url;
 			audio.load();
 		},
-		[attachEvents, detachEvents]
+		[activateElement, dropElement, timers]
+	);
+
+	// Point the current element at another URL of the same track and resume
+	// where it was (error recovery). Dropped if the engine moved on while the
+	// URL was being resolved.
+	const reloadFrom = useCallback(
+		(audio: HTMLAudioElement, url: Promise<string>, position: number) => {
+			const scheduled = currentTarget();
+			setBuffering(true);
+			void url.then((next) => {
+				if (!sameTarget(scheduled, currentTarget())) return;
+				pendingSeekRef.current = null;
+				resumePositionRef.current = isFinite(position) && position >= 1 ? position : null;
+				audio.src = next;
+				audio.load();
+			});
+		},
+		[currentTarget, setBuffering]
 	);
 
 	const seekViaPersistedFile = useCallback(
@@ -745,7 +516,7 @@ export function AudioEngine() {
 			const gen = loadGenRef.current;
 			setBuffering(true);
 
-			if (isPreviewSource(audio.src)) persistInBackground(trackId);
+			if (claimBackgroundPersist(sessionRef.current, audio.src)) persistInBackground(trackId);
 			// Hang up so the server persists at network speed, not playback pace.
 			// Events go first: emptying src fires an error on some browsers.
 			detachEvents(audio);
@@ -754,87 +525,101 @@ export function AudioEngine() {
 
 			const cancelled = () => pendingSeekRef.current !== pending || loadGenRef.current !== gen;
 			void waitForSeekableUrl({
-				resolve: () => fetchPresignedUrl(trackId),
+				// The presigned URL, or the range-capable proxy as soon as the
+				// file is stored when presigned URLs are off or refused for this
+				// track (was: waited the full minute, then restarted at 0).
+				resolve: () => resolveCachedSource(trackId).then((source) => source?.url ?? null),
 				isCancelled: cancelled,
+				intervalMs: 1000,
+				maxIntervalMs: 4000,
 			}).then((url) => {
 				if (cancelled()) return;
 				pendingSeekRef.current = null;
 				if (url) {
 					swapSource(url, pending.target);
 				} else {
-					// Never persisted in time — restart the live stream rather
-					// than leave the player silent.
-					setCurrentTime(0);
-					swapSource(`/api/v1/stream-progressive/${trackId}`, null);
+					// Not stored in time: reopen the live stream at the target (it
+					// seeks there when served with ranges, C2); otherwise it plays
+					// from the start and says so (applyResumePosition).
+					lastResortSeekRef.current = true;
+					swapSource(progressiveUrl(trackId), pending.target);
 				}
 			});
 		},
 		[detachEvents, setBuffering, setCurrentTime, swapSource]
 	);
 
+	const seekInPlace = useCallback((audio: HTMLAudioElement, target: number) => {
+		audio.currentTime = target;
+		const buffered = inRanges(target, audio.buffered);
+		seekCheckRef.current = isRangelessSource(audio.src) && !buffered ? { target, element: audio } : null;
+	}, []);
+
 	const applyResumePosition = useCallback(
 		(audio: HTMLAudioElement) => {
 			const resume = resumePositionRef.current;
 			if (resume === null) return;
 			resumePositionRef.current = null;
-			const dur = audio.duration;
-			if (!isFinite(dur) || dur <= 0 || resume >= dur - 1) return;
+			const lastResort = lastResortSeekRef.current;
+			lastResortSeekRef.current = false;
 			const track = usePlayerStore.getState().currentTrack;
-			if (
-				track &&
-				!canSeekInPlace({ src: audio.src, target: resume, seekable: audio.seekable, buffered: audio.buffered })
-			) {
+			const plan = planResume({
+				resume,
+				src: audio.src,
+				duration: audio.duration,
+				seekable: audio.seekable,
+				buffered: audio.buffered,
+				lastResort,
+			});
+			if (plan === "skip") return;
+			if (track && plan === "via-file") {
 				seekViaPersistedFile(audio, track.trackId, resume);
 				return;
 			}
+			if (track && plan === "from-start") {
+				// The file wasn't stored within the wait and this stream can't
+				// seek: play from the start, but say so (was: silently at 0).
+				setCurrentTime(0);
+				toast(`Couldn't jump to ${formatTime(resume)} yet`, {
+					id: "seek-fallback",
+					description: "The track is still loading, so it plays from the start.",
+				});
+				return;
+			}
 			try {
-				audio.currentTime = resume;
+				seekInPlace(audio, resume);
 				setCurrentTime(resume);
 			} catch {
 				// Buffer might not cover seek target yet — browser will catch up
 			}
 		},
-		[setCurrentTime, seekViaPersistedFile]
+		[setCurrentTime, seekViaPersistedFile, seekInPlace]
 	);
 
 	// --- Initialize audio element (client-only) ---
 	useEffect(() => {
 		if (!audioRef.current) {
-			const audio = new Audio();
-			audio.preload = "auto";
-			audio.crossOrigin = "anonymous";
+			const audio = createAudioElement();
 			audioRef.current = audio;
 			attachEvents(audio);
 		}
+		// The AudioContext is created / resumed inside the click, tap or key
+		// press that plays something (iOS ignores it anywhere else).
+		const removeUnlock = installGestureUnlock(() => !!usePlayerStore.getState().currentTrack);
 		return () => {
+			removeUnlock();
+			cancelHandoffRef.current?.();
+			cancelHandoffRef.current = null;
 			const audio = audioRef.current;
-			if (audio) {
-				detachEvents(audio);
-				audio.pause();
-				audio.src = "";
-				evictedAudio.add(audio);
-			}
-			// Clean up preload caches
-			for (const [, a] of preloadCache) {
-				evictedAudio.add(a);
-				a.src = "";
-			}
-			preloadCache.clear();
-			for (const [, a] of hoverPreloadCache) {
-				evictedAudio.add(a);
-				a.src = "";
-			}
-			hoverPreloadCache.clear();
-			for (const [, a] of headPreloadCache) {
-				evictedAudio.add(a);
-				a.src = "";
-			}
-			headPreloadCache.clear();
-			headPrefetchedTracks.clear();
-			// Cancel background prefetch
-			prefetchAbort?.abort();
+			if (audio) dropElement(audio);
+			// Clean up preload pools and cancel background prefetch
+			disposePrefetchPools();
 		};
-	}, [attachEvents, detachEvents]);
+	}, [attachEvents, dropElement]);
+
+	// Sign-out / account switch: forget the presigned URLs, prefetch state and
+	// the IndexedDB audio the Service Worker would keep serving.
+	useEffect(() => watchSignOut(useAuthStore, () => void forgetSignedInState()), []);
 
 	// Stop preview when full player resumes
 	useEffect(() => {
@@ -873,7 +658,9 @@ export function AudioEngine() {
 		if (!currentTrack) return;
 		const { queue, queueIndex } = usePlayerStore.getState();
 
-		// Immediate preload: adjacent tracks (in-memory Audio elements for instant swap)
+		// Immediate preload of the adjacent tracks (in-memory Audio elements for
+		// instant swap) — cached copies only: an uncached next track is preloaded
+		// live near the end of this one (onTimeUpdate), never persisted.
 		if (queueIndex + 1 < queue.length) {
 			preloadTrack(queue[queueIndex + 1].trackId);
 		}
@@ -888,13 +675,11 @@ export function AudioEngine() {
 			upcoming.push(queue[queueIndex + i].trackId);
 		}
 		if (queueIndex - 1 >= 0) upcoming.push(queue[queueIndex - 1].trackId);
-		prefetchPresignedUrls(upcoming);
+		presignedUrls.warm(upcoming);
 
-		// Background IndexedDB prefetch: PREFETCH_LIMIT tracks around the cursor
-		smartPrefetchQueue();
-
-		// Cache current track if not already cached
-		cacheCurrentTrackInBackground(currentTrack.trackId);
+		// Background IndexedDB prefetch: PREFETCH_LIMIT tracks around the
+		// cursor, only those the server already cached.
+		smartPrefetchQueue(queue, queueIndex);
 	}, [currentTrack]);
 
 	// --- Load new track ---
@@ -905,15 +690,20 @@ export function AudioEngine() {
 		if (!currentTrack) {
 			// Stopping playback (queue cleared / explicit stop). If the last
 			// track wasn't counted, it's a skip.
-			if (
-				prevTrackIdRef.current &&
-				playLoggedTrackIdRef.current === prevTrackIdRef.current &&
-				!playLoggedRef.current
-			) {
-				notifyTrackSkipped(prevTrackIdRef.current);
-			}
-			playLoggedRef.current = false;
-			playLoggedTrackIdRef.current = null;
+			if (shouldNotifySkip(sessionRef.current)) notifyTrackSkipped(sessionRef.current.trackId);
+			sessionRef.current = null;
+			// Nothing started for the stopped track may land afterwards: a URL
+			// still resolving, a seek waiting for the stored file, a resume
+			// position (was: the late URL loaded — and for an uncached track
+			// persisted — the track the user had just stopped).
+			++loadGenRef.current;
+			pendingSeekRef.current = null;
+			seekCheckRef.current = null;
+			resumePositionRef.current = null;
+			timers.clear();
+			autoSkip.cancel();
+			cancelHandoffRef.current?.();
+			cancelHandoffRef.current = null;
 			audio.pause();
 			audio.src = "";
 			prevTrackIdRef.current = null;
@@ -921,99 +711,60 @@ export function AudioEngine() {
 		}
 
 		if (currentTrack.trackId !== prevTrackIdRef.current) {
-			// If the *previous* track never reached the 30s threshold, treat it
-			// as a skip → ask the server to evict its file (metadata stays).
-			if (
-				prevTrackIdRef.current &&
-				playLoggedTrackIdRef.current === prevTrackIdRef.current &&
-				!playLoggedRef.current
-			) {
-				notifyTrackSkipped(prevTrackIdRef.current);
-			}
-			// Reset play-tracking state for the incoming track
-			playLoggedRef.current = false;
-			playLoggedTrackIdRef.current = currentTrack.trackId;
-
-			// Cancel any in-progress crossfade on manual track change
-			if (crossfadeActiveRef.current) {
-				crossfadeActiveRef.current = false;
-				if (outgoingAudioRef.current) {
-					outgoingAudioRef.current.pause();
-					outgoingAudioRef.current.src = "";
-					evictedAudio.add(outgoingAudioRef.current);
-					outgoingAudioRef.current = null;
-				}
-			}
-			// Reset normalization for the incoming track
-			normMeasuredRef.current = false;
-			resetNormGain();
-			const gen = ++loadGenRef.current;
-			retryCountRef.current = 0;
-			setError(null);
-
 			// Drop any pending resume position when the user navigates to a
 			// different track before the first one finishes loading.
 			if (prevTrackIdRef.current !== null) {
 				resumePositionRef.current = null;
 			}
-			pendingSeekRef.current = null;
+			// Ends the previous session (skip notification if it never
+			// reached 30 s) and resets every per-track flag.
+			beginTrack(currentTrack.trackId);
+
+			// Cancel any in-progress crossfade on manual track change
+			if (crossfadeActiveRef.current) {
+				crossfadeActiveRef.current = false;
+				if (outgoingAudioRef.current) {
+					discardElement(outgoingAudioRef.current);
+					outgoingAudioRef.current = null;
+				}
+			}
+			const gen = ++loadGenRef.current;
 
 			// Immediately kill the old audio — hard stop, no fade
-			detachEvents(audio);
-			audio.pause();
-			audio.src = "";
-			evictedAudio.add(audio);
-
-			prevTrackIdRef.current = currentTrack.trackId;
+			dropElement(audio);
 
 			// Pick the best prefetched element, in order of buffer richness:
-			//   1. queue preload (next/prev — persisting full stream)
+			//   1. queue preload (next/prev — cached copy or live preview stream)
 			//   2. hover preload  (preview-mode full stream, ~30s buffered)
 			//   3. head preload   (preview-mode head — ~3s buffered, must
 			//                      transition to full stream when it ends)
-			const preloaded =
-				preloadCache.get(currentTrack.trackId) ||
-				hoverPreloadCache.get(currentTrack.trackId) ||
-				headPreloadCache.get(currentTrack.trackId);
+			const taken = takePreloaded(currentTrack.trackId);
+			const preloaded = taken?.audio;
 
 			if (preloaded) {
-				audioRef.current = preloaded;
-				preloadCache.delete(currentTrack.trackId);
-				hoverPreloadCache.delete(currentTrack.trackId);
-				headPreloadCache.delete(currentTrack.trackId);
-				attachEvents(preloaded);
+				activateElement(preloaded, currentTrack);
 
 				// If we swapped onto a head-prefetched element, kick off the
 				// full stream now so it can take over before the head runs
 				// out. The full stream goes through normal /stream-progressive
 				// (no preview, persisting) — first listen, server downloads
 				// from Deezer once and persists; subsequent plays hit Blob.
-				if (headPrefetchedTracks.has(currentTrack.trackId)) {
-					handoffFullStream(preloaded, currentTrack.trackId, gen);
-					headPrefetchedTracks.delete(currentTrack.trackId);
-				}
+				if (taken.head) handoffFullStream(preloaded, currentTrack.trackId, gen);
 
 				if (preloaded.readyState >= 2) {
 					// Already buffered — play immediately
 					setBuffering(false);
-					setDuration(preloaded.duration || 0);
 					applyResumePosition(preloaded);
 					if (usePlayerStore.getState().isPlaying) {
 						skipPlayEffectRef.current = true;
-						preloaded.volume = 0;
-						preloaded.play().catch(() => {});
-						const targetVol = usePlayerStore.getState().volume / 100;
-						adjustVolume(preloaded, targetVol, { duration: 200 });
+						startPlayback(preloaded);
 					}
 				}
 				// If not ready yet, onCanPlay will fire and handle playback
 			} else {
 				// No preloaded data — load normally on a fresh element
-				const newAudio = new Audio();
-				newAudio.preload = "auto";
-				newAudio.crossOrigin = "anonymous";
-				audioRef.current = newAudio;
-				attachEvents(newAudio);
+				const newAudio = createAudioElement();
+				activateElement(newAudio, currentTrack);
 
 				getTrackUrl(currentTrack.trackId).then((url) => {
 					if (loadGenRef.current !== gen) return;
@@ -1022,7 +773,7 @@ export function AudioEngine() {
 				});
 			}
 		}
-	}, [currentTrack, attachEvents, detachEvents, setDuration, applyResumePosition]);
+	}, [currentTrack, activateElement, beginTrack, startPlayback, dropElement, applyResumePosition, timers, autoSkip, handoffFullStream, setBuffering]);
 
 	// --- Play / pause with fade effects ---
 	useEffect(() => {
@@ -1035,20 +786,40 @@ export function AudioEngine() {
 				skipPlayEffectRef.current = false;
 				return;
 			}
-			if (audio.readyState >= 2) {
-				audio.volume = 0;
-				audio.play().catch(() => {});
-				const targetVolume = usePlayerStore.getState().volume / 100;
-				adjustVolume(audio, targetVolume, { duration: 200 });
+			// Resuming after a long pause on a presigned URL that expired (C1
+			// expiresAt): sign it again and resume at the same position instead
+			// of letting the next range request fail with a 403.
+			if (
+				audio.readyState >= 1 &&
+				needsResign({
+					usableUntil: presignedUrls.usableUntil(audio.src),
+					now: Date.now(),
+					currentTime: audio.currentTime,
+					duration: audio.duration,
+					buffered: audio.buffered,
+				})
+			) {
+				const trackId = currentTrack.trackId;
+				presignedUrls.invalidate(trackId);
+				reloadFrom(
+					audio,
+					presignedUrls.get(trackId).then((url) => url ?? proxyUrl(trackId)),
+					audio.currentTime
+				);
+				return;
 			}
+			if (audio.readyState >= 2) startPlayback(audio);
 		} else {
+			// The next start is the user's: it fades in, even if the queue
+			// advanced to this track and it never started (was: no fade-in).
+			if (sessionRef.current) sessionRef.current.autoAdvance = false;
 			adjustVolume(audio, 0, { duration: 500 }).then(() => {
 				if (!usePlayerStore.getState().isPlaying) {
 					audio.pause();
 				}
 			});
 		}
-	}, [isPlaying, currentTrack]);
+	}, [isPlaying, currentTrack, startPlayback, reloadFrom]);
 
 	// Volume — smooth transition
 	useEffect(() => {
@@ -1057,11 +828,12 @@ export function AudioEngine() {
 		adjustVolume(audio, volume / 100, { duration: 300 });
 	}, [volume, isPlaying]);
 
-	// Normalization toggle — reset gain when turned off
+	// Normalization toggle — back to unity when turned off (the measured gain
+	// is kept and re-applied by onTimeUpdate if it's turned on again).
 	useEffect(() => {
 		if (!normalizationEnabled) {
-			normMeasuredRef.current = false;
-			resetNormGain();
+			resetNormGain(audioRef.current);
+			normRef.current.appliedTo = null;
 		}
 	}, [normalizationEnabled]);
 
@@ -1087,26 +859,30 @@ export function AudioEngine() {
 			resumePositionRef.current = liveTime;
 		}
 
-		retryCountRef.current = 0;
+		// Same track, fresh attempt: drop its retry budget and any pending
+		// retry / auto-skip timer (was: "Retry" in the toast was followed by
+		// the auto-skip that was still armed).
+		if (sessionRef.current) {
+			sessionRef.current.retryCount = 0;
+			sessionRef.current.failed = false;
+		}
+		timers.clear();
+		autoSkip.cancel();
 		setError(null);
 		setBuffering(true);
 		// Force a clean reload — new audio element to drop any error state.
 		const gen = ++loadGenRef.current;
-		detachEvents(audio);
-		audio.pause();
-		audio.src = "";
-		evictedAudio.add(audio);
-		const newAudio = new Audio();
-		newAudio.preload = "auto";
-		newAudio.crossOrigin = "anonymous";
-		audioRef.current = newAudio;
-		attachEvents(newAudio);
+		cancelHandoffRef.current?.();
+		cancelHandoffRef.current = null;
+		dropElement(audio);
+		const newAudio = createAudioElement();
+		activateElement(newAudio);
 		getTrackUrl(track.trackId).then((url) => {
 			if (loadGenRef.current !== gen) return;
 			newAudio.src = url;
 			newAudio.load();
 		});
-	}, [retryLoadCount, currentTrack, attachEvents, detachEvents, setBuffering, setError]);
+	}, [retryLoadCount, currentTrack, activateElement, dropElement, setBuffering, setError, timers, autoSkip]);
 
 	// Seek: respond to _seekTo signal from prev() restart or seek()
 	const seekTo = usePlayerStore((s) => s._seekTo);
@@ -1120,12 +896,18 @@ export function AudioEngine() {
 			if (
 				track &&
 				audio.readyState >= 1 &&
-				!canSeekInPlace({ src: audio.src, target: seekTo, seekable: audio.seekable, buffered: audio.buffered })
+				!canSeekInPlace({
+					src: audio.src,
+					target: seekTo,
+					seekable: audio.seekable,
+					buffered: audio.buffered,
+					duration: audio.duration,
+				})
 			) {
 				seekViaPersistedFile(audio, track.trackId, seekTo);
 			} else if (audio.readyState >= 1 && isFinite(audio.duration) && audio.duration > 0) {
 				try {
-					audio.currentTime = seekTo;
+					seekInPlace(audio, seekTo);
 				} catch {
 					// Buffer not yet covering the seek target — fall through to
 					// queue it for after canplay/loadedmetadata.
@@ -1138,7 +920,7 @@ export function AudioEngine() {
 		}
 		// Clear the signal so it doesn't re-fire
 		usePlayerStore.setState({ _seekTo: null });
-	}, [seekTo, seekViaPersistedFile]);
+	}, [seekTo, seekViaPersistedFile, seekInPlace]);
 
 	// --- Media Session position update ---
 	const onPositionUpdate = useCallback(() => {
@@ -1156,358 +938,420 @@ export function AudioEngine() {
 		}
 	}, []);
 
-	// --- Update handler refs (always point to latest closures) ---
-	handlersRef.current.onCanPlay = () => {
-		const audio = audioRef.current;
-		if (!audio) return;
-		setBuffering(false);
-		setDuration(audio.duration || 0);
-		applyResumePosition(audio);
-		onPositionUpdate();
-		if (usePlayerStore.getState().isPlaying) {
-			const targetVolume = usePlayerStore.getState().volume / 100;
-			// Only reset volume and call play() if not already playing — prevents
-			// double-fade when canplay fires after we already started the element.
-			if (audio.paused) {
-				audio.volume = 0;
-				audio.play().catch(() => {});
-			}
-			adjustVolume(audio, targetVolume, { duration: 200 });
-		}
-	};
-
-	handlersRef.current.onTimeUpdate = () => {
-		const audio = audioRef.current;
-		if (!audio) return;
-		// Don't write timeUpdates back to the store while a seek is pending —
-		// audio.currentTime may briefly be the pre-seek value, which would
-		// rubber-band the SeekBar visually after the user releases.
-		if (usePlayerStore.getState()._seekTo !== null || pendingSeekRef.current) {
-			onPositionUpdate();
-			return;
-		}
-		// Throttle store writes to ~4Hz to avoid excessive re-renders
-		const now = audio.currentTime;
-		const last = usePlayerStore.getState().currentTime;
-		if (Math.abs(now - last) >= 0.25) {
-			setCurrentTime(now);
-		}
-		onPositionUpdate();
-
-		// Spotify rule: count a real play once playback crosses 30s.
-		// This is the moment the track "joins" the user's recently-played
-		// history and its Blob file is locked from eviction-on-skip.
-		const track = usePlayerStore.getState().currentTrack;
-		if (
-			track &&
-			!playLoggedRef.current &&
-			playLoggedTrackIdRef.current === track.trackId &&
-			audio.currentTime >= PLAY_THRESHOLD_SECONDS
-		) {
-			playLoggedRef.current = true;
-			void logRecentPlay({
-				trackId: track.trackId,
-				title: track.title,
-				artist: track.artist,
-				album: track.album,
-				albumId: track.albumId,
-				cover: track.cover,
-				duration: track.duration,
-			});
-
-			// If this track is playing from a preview-mode prefetch, the server
-			// didn't persist it — start a persisting stream in the background.
-			if (isPreviewSource(audio.src || "")) persistInBackground(track.trackId);
-		}
-
-		// Connect to Web Audio API on first timeUpdate after playback starts.
-		// This provides audio data for the visualizer and normalization.
-		// Idempotent — skipped once connected or if connection fails (CORS etc.).
-		if (!isConnectedOrFailed(audio)) {
-			initAudioCtx();
-			connectAudioElement(audio);
-		}
-
-		// Normalization: measure RMS at t=3s (once per track, if enabled)
-		if (normalizationEnabled && !normMeasuredRef.current && audio.currentTime >= 3.0) {
-			normMeasuredRef.current = true;
-			const rms = measureRms();
-			if (rms > 0) {
-				// Target −18.4 dBFS (≈ −14 LUFS for most music)
-				const rawGain = 0.12 / rms;
-				// Cap boost so normGain × userVol ≤ 1.0 to prevent clipping
-				const userVol = usePlayerStore.getState().volume / 100;
-				const maxBoost = userVol > 0 ? 1.0 / userVol : 1.5;
-				applyNormGain(Math.min(rawGain, maxBoost));
-			}
-		}
-
-		// Preload next track at 50% progress
-		if (audio.duration > 0 && audio.currentTime / audio.duration > 0.5) {
-			const { queue, queueIndex } = usePlayerStore.getState();
-			if (queueIndex + 1 < queue.length) {
-				preloadTrack(queue[queueIndex + 1].trackId);
-			}
-		}
-
-		// --- Crossfade ---
-		const timeLeft = audio.duration - audio.currentTime;
-		if (
-			crossfadeDuration > 0 &&
-			!crossfadeActiveRef.current &&
-			audio.duration > crossfadeDuration * 2 && // skip very short tracks
-			timeLeft > 0 &&
-			timeLeft <= crossfadeDuration &&
-			repeat !== "one"
-		) {
-			const { queue, queueIndex, repeat: rep } = usePlayerStore.getState();
-
-			// Determine next queue index (mirrors next() logic). The queue is
-			// already in physical play order — shuffle just reorders it ahead
-			// of time — so plain queueIndex+1 covers both modes.
-			let nextQueueIndex = -1;
-			if (queueIndex + 1 < queue.length) nextQueueIndex = queueIndex + 1;
-			else if (rep === "all") nextQueueIndex = 0;
-
-			if (nextQueueIndex >= 0) {
-				const nextTrack = queue[nextQueueIndex];
-				const preloaded = preloadCache.get(nextTrack.trackId);
-
-				if (preloaded && preloaded.readyState >= 3) {
-					crossfadeActiveRef.current = true;
-					const fadeDuration = timeLeft * 1000;
-
-					// Detach events from outgoing audio so its onended doesn't trigger next()
-					const outgoing = audio;
-					detachEvents(outgoing);
-					outgoingAudioRef.current = outgoing;
-
-					// Swap to incoming audio
-					preloadCache.delete(nextTrack.trackId);
-					attachEvents(preloaded);
-					audioRef.current = preloaded;
-					prevTrackIdRef.current = nextTrack.trackId;
-					skipPlayEffectRef.current = true;
-
-					preloaded.volume = 0;
-					preloaded.currentTime = 0;
-					preloaded.play().catch(() => {});
-
-					const targetVol = usePlayerStore.getState().volume / 100;
-					adjustVolume(outgoing, 0, { duration: fadeDuration });
-					adjustVolume(preloaded, targetVol, { duration: fadeDuration });
-
-					// Advance store state to next track
-					usePlayerStore.getState().next();
-
-					// Clean up outgoing after fade
-					setTimeout(() => {
-						outgoing.pause();
-						outgoing.src = "";
-						evictedAudio.add(outgoing);
-						outgoingAudioRef.current = null;
-						crossfadeActiveRef.current = false;
-					}, fadeDuration + 300);
-				}
-			}
-		}
-	};
-
-	handlersRef.current.onEnded = () => {
-		if (repeat === "one") {
+	// --- Event handlers (always point to the latest closures) ---
+	// Assigned after every commit rather than during render: refs must not
+	// be written while rendering.
+	useEffect(() => {
+		handlersRef.current.onCanPlay = () => {
 			const audio = audioRef.current;
-			if (audio) {
-				audio.currentTime = 0;
-				audio.play().catch(() => {});
+			if (!audio) return;
+			setBuffering(false);
+			setDuration(audio.duration || 0);
+			applyResumePosition(audio);
+			onPositionUpdate();
+			if (usePlayerStore.getState().isPlaying) {
+				// Only start (and fade in) if not already playing — prevents a
+				// double fade when canplay fires after we already started the element.
+				if (audio.paused) startPlayback(audio);
+				else adjustVolume(audio, usePlayerStore.getState().volume / 100, { duration: 200 });
 			}
-		} else {
-			next();
-		}
-	};
+		};
 
-	handlersRef.current.onError = () => {
-		const audio = audioRef.current;
-		if (!audio || !currentTrack) return;
-		const src = audio.src;
-		const mediaErr = audio.error;
-		console.warn("[AudioEngine] playback error", {
-			trackId: currentTrack.trackId,
-			title: currentTrack.title,
-			src,
-			currentSrc: audio.currentSrc,
-			retryCount: retryCountRef.current,
-			usePresigned,
-			mediaErrorCode: mediaErr?.code,
-			mediaErrorMessage: mediaErr?.message,
-			networkState: audio.networkState,
-			readyState: audio.readyState,
-		});
-
-		// First: try falling back from presigned URL to proxy stream.
-		if (src && !src.includes("/api/v1/stream-progressive/") && !src.includes("/api/v1/stream/")) {
-			presignedDenied.add(currentTrack.trackId);
-			urlCache.delete(currentTrack.trackId);
-
-			// MEDIA_ERR_NETWORK (2) and MEDIA_ERR_SRC_NOT_SUPPORTED (4) on a
-			// presigned URL almost always mean the storage host is unreachable
-			// from the browser (DNS failure, expired tunnel, mixed content,
-			// firewall). Disable presigned URLs globally for the rest of the
-			// session so subsequent tracks don't each pay a DNS-timeout before
-			// falling back. The proxy stream at /stream-progressive still works
-			// because the server-side fallback handles unreachable storage too.
-			const code = mediaErr?.code;
-			if (code === 2 || code === 4) {
-				usePresigned = false;
-				urlCache.clear();
-				inflightPresigned.clear();
-			}
-
-			audio.src = `/api/v1/stream-progressive/${currentTrack.trackId}`;
-			audio.load();
-			return;
-		}
-
-		// A signed-out session gets the same 401 on every retry — go straight
-		// to the diagnosis instead of burning the retry budget.
-		const { isAuthenticated, isLoading: authLoading } = useAuthStore.getState();
-		const knownGuest = !authLoading && !isAuthenticated;
-
-		// Retry up to MAX_RETRIES times
-		retryCountRef.current++;
-		if (!knownGuest && retryCountRef.current <= MAX_RETRIES) {
-			setTimeout(() => {
-				if (audioRef.current && currentTrack) {
-					audioRef.current.src = `/api/v1/stream-progressive/${currentTrack.trackId}`;
-					audioRef.current.load();
+		handlersRef.current.onTimeUpdate = () => {
+			const audio = audioRef.current;
+			if (!audio) return;
+			// An in-place seek on the live stream that snapped back to the start
+			// (the browser thought it could range it): use the stored file.
+			const check = seekCheckRef.current;
+			if (check && !audio.seeking) {
+				seekCheckRef.current = null;
+				const track = usePlayerStore.getState().currentTrack;
+				if (check.element === audio && track && !seekLanded(check.target, audio.currentTime)) {
+					seekViaPersistedFile(audio, track.trackId, check.target);
+					return;
 				}
-			}, 1000 * retryCountRef.current);
-			return;
-		}
-
-		// All retries exhausted — fetch the route once with credentials so we
-		// can surface the server's actual error (the <audio> element only sees
-		// "Format error") and react to account-wide failures.
-		const failingTrack = currentTrack;
-		void diagnoseStreamFailure(`/api/v1/stream-progressive/${failingTrack.trackId}`).then(
-			(diagnosis) => {
-				if (diagnosis.error) {
-					console.error("[AudioEngine] giving up — fetch failed", diagnosis.error);
-				} else if (diagnosis.status && diagnosis.status >= 400) {
-					console.error(`[AudioEngine] giving up — server says ${diagnosis.status}`, {
-						trackId: failingTrack.trackId,
-						finalUrl: diagnosis.url,
-						errorCode: diagnosis.code,
-						errorMessage: diagnosis.message,
-						body: diagnosis.body,
-					});
-				}
-				// The user moved on while we were probing — nothing to report.
-				if (usePlayerStore.getState().currentTrack?.trackId !== failingTrack.trackId) return;
-				handleGiveUp(failingTrack, diagnosis.kind);
 			}
-		);
-	};
+			// Don't write timeUpdates back to the store while a seek is pending —
+			// audio.currentTime may briefly be the pre-seek value, which would
+			// rubber-band the SeekBar visually after the user releases.
+			if (usePlayerStore.getState()._seekTo !== null || pendingSeekRef.current) {
+				onPositionUpdate();
+				return;
+			}
+			// Throttle store writes to ~4Hz to avoid excessive re-renders
+			const now = audio.currentTime;
+			const last = usePlayerStore.getState().currentTime;
+			if (Math.abs(now - last) >= 0.25) {
+				setCurrentTime(now);
+			}
+			onPositionUpdate();
 
-	const handleGiveUp = (failingTrack: PlayerTrack, kind: StreamFailureKind) => {
-		// Auth / Deezer problems fail every track the same way: stop here
-		// instead of skipping through the queue with "Can't play".
-		if (kind === "auth" || kind === "deezer") {
-			consecutiveFailuresRef.current = 0;
-			pause();
-			const signIn = kind === "auth";
-			const title = signIn ? "Sign in to play full tracks" : "Connect your Deezer account";
-			setError(title);
-			toast.error(title, {
-				id: "stream-account-error",
-				description: signIn
-					? "Your session has expired or you're not signed in."
-					: "Add a valid Deezer ARL in Settings to stream tracks.",
-				duration: 10000,
-				action: {
-					label: signIn ? "Sign in" : "Settings",
-					// Client-side navigation: a full load would stop playback and reset the app.
-					onClick: () => router.push(signIn ? "/login" : "/settings"),
-				},
+			// Spotify rule: count a real play once 30 s were actually listened
+			// to (was: currentTime >= 30, so a seek past 0:30 counted).
+			// This is the moment the track "joins" the user's recently-played
+			// history and its stored file is locked from eviction-on-skip.
+			const track = usePlayerStore.getState().currentTrack;
+			const session = sessionRef.current;
+			if (session && !audio.paused && !audio.seeking) accumulateListened(session, audio.currentTime);
+			if (
+				track &&
+				session &&
+				!session.logged &&
+				session.trackId === track.trackId &&
+				reachedPlayThreshold(session)
+			) {
+				session.logged = true;
+				void logRecentPlay({
+					trackId: track.trackId,
+					title: track.title,
+					artist: track.artist,
+					album: track.album,
+					albumId: track.albumId,
+					cover: track.cover,
+					duration: track.duration,
+				});
+
+				// If this track is playing from a preview-mode prefetch, the server
+				// didn't persist it — start a persisting stream in the background
+				// (once per play).
+				if (claimBackgroundPersist(session, audio.src || "")) persistInBackground(track.trackId);
+				// A track really listened to is worth keeping in IndexedDB: read
+				// from its presigned R2 URL, not a second trip through the server.
+				if (classifySource(audio.src) !== "blob") void cacheListenedTrack(track.trackId);
+			}
+
+			// Route the element through Web Audio (visualiser, normalisation,
+			// GainNode volume) once a gesture got the context running — never
+			// into a suspended context, which would play silence. Idempotent.
+			if (isAudioCtxRunning()) routeElement(audio);
+
+			// Normalisation (if enabled): average this track's level over
+			// several seconds, then apply one gain to its element(s).
+			const norm = normRef.current;
+			if (normalizationEnabled && isRouted(audio)) {
+				if (norm.gain === null && !audio.paused) {
+					const level = readLevel(audio);
+					if (level) norm.meter.add(level, audio.currentTime);
+					norm.gain = norm.meter.gain();
+				}
+				if (norm.gain !== null && norm.appliedTo !== audio) {
+					setNormGain(audio, norm.gain);
+					norm.appliedTo = audio;
+				}
+			}
+
+			// Preload the next track: a cached copy from halfway through; an
+			// uncached one only through the live preview stream, and only close
+			// to the end so it neither persists nor idles on a server function.
+			if (audio.duration > 0) {
+				const left = audio.duration - audio.currentTime;
+				const live = left <= Math.max(LIVE_PRELOAD_LEAD_S, crossfadeDuration + 10);
+				if (live || audio.currentTime / audio.duration > 0.5) {
+					const { queue, queueIndex } = usePlayerStore.getState();
+					if (queueIndex + 1 < queue.length) preloadTrack(queue[queueIndex + 1].trackId, { live });
+				}
+			}
+
+			// --- Crossfade ---
+			const timeLeft = audio.duration - audio.currentTime;
+			if (
+				crossfadeDuration > 0 &&
+				!crossfadeActiveRef.current &&
+				audio.duration > crossfadeDuration * 2 && // skip very short tracks
+				timeLeft > 0 &&
+				timeLeft <= crossfadeDuration &&
+				repeat !== "one"
+			) {
+				const { queue, queueIndex, repeat: rep } = usePlayerStore.getState();
+
+				// Determine next queue index (mirrors next() logic). The queue is
+				// already in physical play order — shuffle just reorders it ahead
+				// of time — so plain queueIndex+1 covers both modes.
+				let nextQueueIndex = -1;
+				if (queueIndex + 1 < queue.length) nextQueueIndex = queueIndex + 1;
+				else if (rep === "all") nextQueueIndex = 0;
+
+				if (nextQueueIndex >= 0) {
+					const nextTrack = queue[nextQueueIndex];
+					const preloaded = queuePreloaded(nextTrack.trackId);
+
+					if (preloaded && preloaded.readyState >= 3) {
+						crossfadeActiveRef.current = true;
+						const fadeDuration = timeLeft * 1000;
+
+						// Detach events from outgoing audio so its onended doesn't trigger next()
+						const outgoing = audio;
+						detachEvents(outgoing);
+						outgoingAudioRef.current = outgoing;
+
+						// Swap to incoming audio. beginTrack runs the same per-track
+						// reset as the load effect, which next() below then skips
+						// (was: plays via crossfade were never logged, the duration,
+						// retry budget and normalisation stayed the previous track's).
+						// Not flagged as an auto-advance: the crossfade ramps the
+						// volume itself, and the flag would make the next user
+						// resume skip its fade-in.
+						takePreloaded(nextTrack.trackId);
+						beginTrack(nextTrack.trackId);
+						activateElement(preloaded, nextTrack);
+						skipPlayEffectRef.current = true;
+
+						setElementVolume(preloaded, 0);
+						preloaded.currentTime = 0;
+						preloaded.play().catch(() => {});
+
+						const targetVol = usePlayerStore.getState().volume / 100;
+						adjustVolume(outgoing, 0, { duration: fadeDuration });
+						adjustVolume(preloaded, targetVol, { duration: fadeDuration });
+
+						// Advance store state to next track
+						usePlayerStore.getState().next();
+						// next() flags the new track as buffering; this one is already playing.
+						setBuffering(false);
+
+						// Clean up outgoing after fade
+						// (only this crossfade's state: a track change meanwhile
+						// already dropped it, and may have started another one).
+						setTimeout(() => {
+							discardElement(outgoing);
+							if (outgoingAudioRef.current !== outgoing) return;
+							outgoingAudioRef.current = null;
+							crossfadeActiveRef.current = false;
+						}, fadeDuration + 300);
+					}
+				}
+			}
+		};
+
+		handlersRef.current.onEnded = () => {
+			if (repeat === "one") {
+				const audio = audioRef.current;
+				if (audio) {
+					audio.currentTime = 0;
+					audio.play().catch(() => {});
+				}
+			} else {
+				// Queue advance: the next track starts without a fade-in.
+				advanceQueue(autoAdvanceRef, true, usePlayerStore);
+			}
+		};
+
+		handlersRef.current.onError = () => {
+			const audio = audioRef.current;
+			if (!audio || !currentTrack) return;
+			const src = audio.src;
+			const mediaErr = audio.error;
+			const session = sessionRef.current;
+			const source = classifySource(src, window.location.origin);
+			console.warn("[AudioEngine] playback error", {
+				trackId: currentTrack.trackId,
+				title: currentTrack.title,
+				src,
+				source,
+				currentSrc: audio.currentSrc,
+				retryCount: session?.retryCount,
+				mediaErrorCode: mediaErr?.code,
+				mediaErrorMessage: mediaErr?.message,
+				networkState: audio.networkState,
+				readyState: audio.readyState,
 			});
-			return;
-		}
 
-		// Count this as a queue-wide failure
-		consecutiveFailuresRef.current++;
+			// A signed-out session gets the same 401 on every retry — go straight
+			// to the diagnosis instead of burning the retry budget.
+			const { isAuthenticated, isLoading: authLoading } = useAuthStore.getState();
+			const knownGuest = !authLoading && !isAuthenticated;
+			const trackId = currentTrack.trackId;
+			const position = pendingSeekRef.current?.target ?? audio.currentTime;
+			const recovery = planRecovery({
+				source,
+				resigned: !!session?.resigned,
+				urlExpired: presignedUrls.isExpired(src),
+				retryCount: session?.retryCount ?? MAX_RETRIES,
+				maxRetries: MAX_RETRIES,
+				knownGuest,
+			});
 
-		if (consecutiveFailuresRef.current >= MAX_CONSECUTIVE_FAILURES) {
-			// Multiple tracks failing back-to-back almost always means a
-			// network/auth problem, not isolated bad files. Stop auto-skipping
-			// so we don't silently chew through the queue.
-			setError(`Multiple tracks failed to load. Check your connection.`);
-			pause();
-			toast.error("Multiple tracks failed to load", {
-				description: "Check your connection and try again.",
-				duration: 8000,
+			switch (recovery.action) {
+				case "evict-blob":
+					// Corrupt IndexedDB copy: remove it and play from the network
+					// (was: a bad blob disabled presigned URLs and stayed cached).
+					void removeCached(trackId);
+					reloadFrom(audio, getTrackUrl(trackId, { skipBlob: true }), position);
+					return;
+				case "resign":
+					// The presigned URL most likely expired during a long pause:
+					// sign it again once and resume at the same position.
+					if (session) session.resigned = true;
+					presignedUrls.invalidate(trackId);
+					reloadFrom(
+						audio,
+						presignedUrls.get(trackId).then((url) => url ?? proxyUrl(trackId)),
+						position
+					);
+					return;
+				case "proxy":
+					// Presigned playback failed for this track: refuse it for this
+					// track only (was: a session-wide kill switch) and resume on the
+					// range-capable proxy.
+					presignedUrls.deny(trackId);
+					reloadFrom(audio, Promise.resolve(proxyUrl(trackId)), position);
+					return;
+				case "retry": {
+					// The timer is bound to this element and this track: a track
+					// change, a reload or a manual retry clears it, and it re-checks
+					// on fire (was: the retry loaded the old track's stream into the
+					// next track's element).
+					if (session) session.retryCount++;
+					const scheduled = currentTarget();
+					timers.after(recovery.delayMs, () => {
+						if (!sameTarget(scheduled, currentTarget())) return;
+						// Re-resolve (the track may be stored by now) and resume
+						// where it broke instead of restarting the live stream at 0.
+						reloadFrom(audio, getTrackUrl(trackId, { skipBlob: true }), position);
+					});
+					return;
+				}
+			}
+
+			// All retries exhausted — ask the route once (?probe=1, C3: no audio
+			// is opened or stored) so we can surface the server's actual error
+			// (the <audio> element only sees "Format error") and react to
+			// account-wide failures. The track failed: leaving it isn't a skip.
+			if (session) session.failed = true;
+			const failingTrack = currentTrack;
+			void diagnoseStreamFailure(progressiveUrl(failingTrack.trackId, { probe: true })).then(
+				(diagnosis) => {
+					if (diagnosis.error) {
+						console.error("[AudioEngine] giving up — fetch failed", diagnosis.error);
+					} else if (diagnosis.status && diagnosis.status >= 400) {
+						console.error(`[AudioEngine] giving up — server says ${diagnosis.status}`, {
+							trackId: failingTrack.trackId,
+							finalUrl: diagnosis.url,
+							errorCode: diagnosis.code,
+							errorMessage: diagnosis.message,
+							body: diagnosis.body,
+						});
+					}
+					// The user moved on while we were probing — nothing to report.
+					if (usePlayerStore.getState().currentTrack?.trackId !== failingTrack.trackId) return;
+					handleGiveUp(failingTrack, diagnosis.kind);
+				}
+			);
+		};
+
+		const skipTo = (reason: SkipReason) => advanceQueue(autoAdvanceRef, reason === "auto", usePlayerStore);
+
+		const handleGiveUp = (failingTrack: PlayerTrack, kind: StreamFailureKind) => {
+			// Auth / Deezer problems fail every track the same way: stop here
+			// instead of skipping through the queue with "Can't play".
+			if (kind === "auth" || kind === "deezer") {
+				consecutiveFailuresRef.current = 0;
+				pause();
+				const signIn = kind === "auth";
+				const title = signIn ? "Sign in to play full tracks" : "Connect your Deezer account";
+				setError(title);
+				toast.error(title, {
+					id: "stream-account-error",
+					description: signIn
+						? "Your session has expired or you're not signed in."
+						: "Add a valid Deezer ARL in Settings to stream tracks.",
+					duration: 10000,
+					action: {
+						label: signIn ? "Sign in" : "Settings",
+						// Client-side navigation: a full load would stop playback and reset the app.
+						onClick: () => router.push(signIn ? "/login" : "/settings"),
+					},
+				});
+				return;
+			}
+
+			// Count this as a queue-wide failure
+			consecutiveFailuresRef.current++;
+
+			if (consecutiveFailuresRef.current >= MAX_CONSECUTIVE_FAILURES) {
+				// Multiple tracks failing back-to-back almost always means a
+				// network/auth problem, not isolated bad files. Stop auto-skipping
+				// so we don't silently chew through the queue.
+				setError(`Multiple tracks failed to load. Check your connection.`);
+				pause();
+				toast.error("Multiple tracks failed to load", {
+					description: "Check your connection and try again.",
+					duration: 8000,
+					action: {
+						label: "Retry",
+						onClick: () => {
+							consecutiveFailuresRef.current = 0;
+							usePlayerStore.getState().retryTrack();
+						},
+					},
+				});
+				return;
+			}
+
+			setError(`Can't play "${failingTrack.title}"`);
+			const { queue, queueIndex } = usePlayerStore.getState();
+			const hasNext = queueIndex + 1 < queue.length;
+
+			// The auto-skip only ever skips the failing track, once: "Skip",
+			// "Retry" or a manual track change cancel it (was: an unconditional
+			// setTimeout(next) skipped twice after "Skip", skipped after "Retry"
+			// and skipped a track picked by hand in the meantime).
+			toast.error(`Can't play "${failingTrack.title}"`, {
+				description: failingTrack.artist,
+				duration: hasNext ? 5000 : 8000,
 				action: {
 					label: "Retry",
 					onClick: () => {
-						consecutiveFailuresRef.current = 0;
+						autoSkip.cancel();
 						usePlayerStore.getState().retryTrack();
 					},
 				},
+				cancel: hasNext
+					? {
+							label: "Skip",
+							onClick: () => autoSkip.skipNow(failingTrack.trackId, skipTo),
+						}
+					: undefined,
 			});
-			return;
-		}
 
-		setError(`Can't play "${failingTrack.title}"`);
-		const { queue, queueIndex } = usePlayerStore.getState();
-		const hasNext = queueIndex + 1 < queue.length;
+			if (hasNext) {
+				autoSkip.arm(failingTrack.trackId, 1500, skipTo);
+			} else {
+				pause();
+			}
+		};
 
-		toast.error(`Can't play "${failingTrack.title}"`, {
-			description: failingTrack.artist,
-			duration: hasNext ? 5000 : 8000,
-			action: {
-				label: "Retry",
-				onClick: () => usePlayerStore.getState().retryTrack(),
-			},
-			cancel: hasNext
-				? {
-						label: "Skip",
-						onClick: () => next(),
-					}
-				: undefined,
-		});
+		handlersRef.current.onLoadedMetadata = () => {
+			const audio = audioRef.current;
+			if (audio) setDuration(audio.duration || 0);
+		};
 
-		if (hasNext) {
-			setTimeout(() => next(), 1500);
-		} else {
-			pause();
-		}
-	};
+		handlersRef.current.onWaiting = () => {
+			setBuffering(true);
+		};
 
-	handlersRef.current.onLoadedMetadata = () => {
-		const audio = audioRef.current;
-		if (audio) setDuration(audio.duration || 0);
-	};
+		handlersRef.current.onPlaying = () => {
+			setBuffering(false);
+			// Successful playback resets the consecutive-failure streak.
+			consecutiveFailuresRef.current = 0;
+			const audio = audioRef.current;
+			const session = sessionRef.current;
+			if (audio && session) session.playedFrom = audio.src;
+		};
 
-	handlersRef.current.onWaiting = () => {
-		setBuffering(true);
-	};
-
-	handlersRef.current.onPlaying = () => {
-		setBuffering(false);
-		// Successful playback resets the consecutive-failure streak.
-		consecutiveFailuresRef.current = 0;
-	};
-
-	handlersRef.current.onProgress = () => {
-		const audio = audioRef.current;
-		if (!audio) return;
-		const ranges = audio.buffered;
-		if (ranges.length === 0) {
-			setBuffered(0);
-			return;
-		}
-		// Use the end of the last range — for HLS-like progressive streams this
-		// reflects how much the browser has buffered ahead of currentTime.
-		setBuffered(ranges.end(ranges.length - 1));
-	};
+		handlersRef.current.onProgress = () => {
+			const audio = audioRef.current;
+			if (!audio) return;
+			const ranges = audio.buffered;
+			if (ranges.length === 0) {
+				setBuffered(0);
+				return;
+			}
+			// Use the end of the last range — for HLS-like progressive streams this
+			// reflects how much the browser has buffered ahead of currentTime.
+			setBuffered(ranges.end(ranges.length - 1));
+		};
+	});
 
 	// --- Media Session API ---
 
@@ -1519,26 +1363,7 @@ export function AudioEngine() {
 			return;
 		}
 
-		const artwork: MediaImage[] = currentTrack.cover
-			? [
-					{
-						src: currentTrack.cover.replace(/\/\d+x\d+-/, "/256x256-"),
-						sizes: "256x256",
-						type: "image/jpeg",
-					},
-					{
-						src: currentTrack.cover.replace(/\/\d+x\d+-/, "/512x512-"),
-						sizes: "512x512",
-						type: "image/jpeg",
-					},
-				]
-			: [];
-
-		navigator.mediaSession.metadata = new MediaMetadata({
-			title: currentTrack.title,
-			artist: currentTrack.artist,
-			artwork,
-		});
+		navigator.mediaSession.metadata = new MediaMetadata(mediaMetadataInit(currentTrack));
 	}, [currentTrack]);
 
 	useEffect(() => {
@@ -1558,6 +1383,7 @@ export function AudioEngine() {
 			["pause", () => pause()],
 			["previoustrack", () => prev()],
 			["nexttrack", () => next()],
+			["stop", () => usePlayerStore.getState().stop()],
 			[
 				"seekto",
 				(details) => {

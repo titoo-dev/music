@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { sanitizeFileName, extensionFor, fileNameFor, fetchTrackFile, saveBlob } from "./download";
+import { sanitizeFileName, extensionFor, fileNameFor, fetchTrackFile, saveBlob, throttleProgress } from "./download";
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -101,6 +101,54 @@ describe("fetchTrackFile", () => {
 	it("throws a status message when the error body isn't JSON", async () => {
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 502 })));
 		await expect(fetchTrackFile("1", () => {})).rejects.toThrow("Download failed (502)");
+	});
+
+	it("reads a stored track from its presigned URL, with a total for the progress bar (was: an untagged live stream with no progress)", async () => {
+		const fetchMock = vi.fn(async () =>
+			new Response(streamOf(["abcd"]), { headers: { "content-type": "audio/flac", "content-length": "4" } })
+		);
+		vi.stubGlobal("fetch", fetchMock);
+		const totals: (number | null)[] = [];
+		const out = await fetchTrackFile("7", (p) => totals.push(p.total), undefined, {
+			presignedUrl: async () => "https://r2.example/tracks/7/9.flac?sig=1",
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(fetchMock).toHaveBeenCalledWith(
+			"https://r2.example/tracks/7/9.flac?sig=1",
+			expect.objectContaining({ credentials: "omit", mode: "cors" })
+		);
+		expect(totals).toEqual([4]);
+		expect(out.contentType).toBe("audio/flac");
+	});
+
+	it("falls back to /api/v1/stream without a presigned URL or when R2 refuses", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response("denied", { status: 403 }))
+			.mockResolvedValueOnce(new Response(streamOf(["x"]), { headers: { "content-length": "1" } }))
+			.mockResolvedValueOnce(new Response(streamOf(["y"]), { headers: { "content-length": "1" } }));
+		vi.stubGlobal("fetch", fetchMock);
+		await fetchTrackFile("8", () => {}, undefined, { presignedUrl: async () => "https://r2.example/8?sig=1" });
+		expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/stream/8");
+		await fetchTrackFile("9", () => {}, undefined, { presignedUrl: async () => null });
+		expect(fetchMock.mock.calls[2][0]).toBe("/api/v1/stream/9");
+	});
+});
+
+describe("throttleProgress", () => {
+	it("passes the first and the final report, and at most one per interval in between", () => {
+		let t = 0;
+		const seen: number[] = [];
+		const report = throttleProgress((p) => seen.push(p.loaded), 200, () => t);
+		report({ loaded: 1, total: 10 });
+		report({ loaded: 2, total: 10 });
+		t = 199;
+		report({ loaded: 3, total: 10 });
+		t = 200;
+		report({ loaded: 4, total: 10 });
+		report({ loaded: 10, total: 10 });
+		report({ loaded: 5, total: null });
+		expect(seen).toEqual([1, 4, 10]);
 	});
 });
 
