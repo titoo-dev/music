@@ -14,6 +14,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getWaveletApp } from "@/lib/server-state";
+import { findCachedCopy, serverMaxBitrate } from "@/lib/wavelet/storage/cached-copy";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -448,15 +449,16 @@ export async function shareTrack(
 	const { randomBytes } = await import("crypto");
 	const shareId = randomBytes(8).toString("hex");
 
-	// If a StoredTrack already exists for this trackId at any bitrate, link
-	// to the highest-quality one so the public player can fast-path through Blob.
-	// If not (track never persisted), the share is created with storedTrackId=null
-	// and the public stream route will lazily re-fetch via progressive.
-	const stored = await prisma.storedTrack.findFirst({
-		where: { trackId: t.trackId },
-		orderBy: { bitrate: "desc" },
-		select: { id: true },
+	// If a usable StoredTrack copy already exists, link the best one (shared
+	// rank rules) so the public player can fast-path through R2. If not, the
+	// share is created with storedTrackId=null; playback resolves the copy by
+	// trackId and re-links it once a play persisted the track.
+	const copy = await findCachedCopy(t.trackId, {
+		maxBitrate: await serverMaxBitrate(),
+		licence: null,
+		upgrade: false,
 	});
+	const stored = copy.kind === "hit" ? copy.row : null;
 
 	return prisma.sharedTrack.create({
 		data: {
@@ -474,16 +476,32 @@ export async function shareTrack(
 	});
 }
 
+/**
+ * The share and the cached copy to play. The copy is resolved by trackId with
+ * the shared rank rules (public listeners have no licence: best copy, no
+ * upgrades), so a copy persisted after the share was created is found, and
+ * the share is re-linked to it.
+ */
 export async function resolveShareForPlayback(shareId: string) {
-	const share = await prisma.sharedTrack.findUnique({
-		where: { shareId },
-		include: { storedTrack: true },
-	});
+	const share = await prisma.sharedTrack.findUnique({ where: { shareId } });
 	if (!share) return null;
 	if (share.expiresAt && share.expiresAt < new Date()) {
-		return { share, expired: true } as const;
+		return { share, expired: true, copy: null } as const;
 	}
-	return { share, expired: false } as const;
+	const decision = await findCachedCopy(share.trackId, {
+		maxBitrate: await serverMaxBitrate(),
+		licence: null,
+		upgrade: false,
+	});
+	const copy = decision.kind === "hit" ? decision.row : null;
+	if (copy && share.storedTrackId !== copy.id) {
+		try {
+			await prisma.sharedTrack.update({ where: { id: share.id }, data: { storedTrackId: copy.id } });
+		} catch (e) {
+			console.warn("[library] share re-link failed:", e);
+		}
+	}
+	return { share, expired: false, copy } as const;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -26,6 +26,8 @@ import {
 	isArtistFollowed,
 	getFollowedArtistIds,
 	listFollowedArtists,
+	shareTrack,
+	resolveShareForPlayback,
 } from "./library";
 import { getWaveletApp } from "@/lib/server-state";
 
@@ -690,5 +692,81 @@ describe("listFollowedArtists", () => {
 			take: 20,
 			skip: 40,
 		});
+	});
+});
+
+describe("shareTrack", () => {
+	it("links the best copy by quality rank (was: orderBy bitrate desc linked MP3_MISC=8 over MP3_320=3)", async () => {
+		prismaMock.storedTrack.findMany.mockResolvedValue([
+			{ id: "misc", trackId: "t1", bitrate: 8, storagePath: "tracks/t1/8.mp3", storageType: "r2" },
+			{ id: "hq", trackId: "t1", bitrate: 3, storagePath: "tracks/t1/3.mp3", storageType: "r2" },
+		] as never);
+		prismaMock.sharedTrack.create.mockImplementation(async (args: { data: Record<string, unknown> }) => args.data);
+
+		const share = await shareTrack("u1", { trackId: "t1", title: "T", artist: "A" });
+		expect(share.storedTrackId).toBe("hq");
+		expect(share.shareId).toMatch(/^[0-9a-f]{16}$/);
+	});
+
+	it("creates an unlinked share when nothing is cached", async () => {
+		prismaMock.storedTrack.findMany.mockResolvedValue([] as never);
+		prismaMock.sharedTrack.create.mockImplementation(async (args: { data: Record<string, unknown> }) => args.data);
+		const share = await shareTrack("u1", { trackId: "t1", title: "T", artist: "A" }, { expiresAt: null });
+		expect(share.storedTrackId).toBeNull();
+	});
+});
+
+describe("resolveShareForPlayback", () => {
+	const share = { id: "s1", shareId: "abc", trackId: "t1", userId: "owner", storedTrackId: null, expiresAt: null };
+
+	it("returns null for an unknown share", async () => {
+		prismaMock.sharedTrack.findUnique.mockResolvedValue(null);
+		expect(await resolveShareForPlayback("nope")).toBeNull();
+	});
+
+	it("flags an expired share without looking up a copy", async () => {
+		prismaMock.sharedTrack.findUnique.mockResolvedValue({ ...share, expiresAt: new Date(Date.now() - 1000) } as never);
+		const r = await resolveShareForPlayback("abc");
+		expect(r).toMatchObject({ expired: true, copy: null });
+		expect(prismaMock.storedTrack.findMany).not.toHaveBeenCalled();
+	});
+
+	it("finds the copy persisted after the share was created and re-links it (was: share.storedTrack stayed null, every visit re-downloaded from Deezer)", async () => {
+		prismaMock.sharedTrack.findUnique.mockResolvedValue(share as never);
+		prismaMock.storedTrack.findMany.mockResolvedValue([
+			{ id: "st1", trackId: "t1", bitrate: 1, storagePath: "tracks/t1/1.mp3", storageType: "r2" },
+		] as never);
+		prismaMock.sharedTrack.update.mockResolvedValue({} as never);
+
+		const r = await resolveShareForPlayback("abc");
+		expect(r).toMatchObject({ expired: false, copy: { id: "st1", storagePath: "tracks/t1/1.mp3" } });
+		expect(prismaMock.storedTrack.findMany).toHaveBeenCalledWith({ where: { trackId: "t1" } });
+		expect(prismaMock.sharedTrack.update).toHaveBeenCalledWith({ where: { id: "s1" }, data: { storedTrackId: "st1" } });
+	});
+
+	it("serves the best copy without asking for an upgrade (public listeners have no licence)", async () => {
+		getWaveletAppMock.mockResolvedValue({ freshSettings: vi.fn(async () => ({ maxBitrate: 9 })) } as never);
+		prismaMock.sharedTrack.findUnique.mockResolvedValue({ ...share, storedTrackId: "st1" } as never);
+		prismaMock.storedTrack.findMany.mockResolvedValue([
+			{ id: "st1", trackId: "t1", bitrate: 1, requestedBitrate: 1, storagePath: "tracks/t1/1.mp3", storageType: "r2" },
+		] as never);
+
+		const r = await resolveShareForPlayback("abc");
+		expect(r?.copy?.id).toBe("st1");
+		expect(prismaMock.sharedTrack.update).not.toHaveBeenCalled();
+	});
+
+	it("returns no copy when only older storage rows exist, and survives a failed re-link", async () => {
+		prismaMock.sharedTrack.findUnique.mockResolvedValue(share as never);
+		prismaMock.storedTrack.findMany.mockResolvedValue([
+			{ id: "old", trackId: "t1", bitrate: 1, storagePath: "music/x.mp3", storageType: "blob" },
+		] as never);
+		expect((await resolveShareForPlayback("abc"))?.copy).toBeNull();
+
+		prismaMock.storedTrack.findMany.mockResolvedValue([
+			{ id: "st1", trackId: "t1", bitrate: 1, storagePath: "tracks/t1/1.mp3", storageType: "r2" },
+		] as never);
+		prismaMock.sharedTrack.update.mockRejectedValue(new Error("db"));
+		expect((await resolveShareForPlayback("abc"))?.copy?.id).toBe("st1");
 	});
 });
