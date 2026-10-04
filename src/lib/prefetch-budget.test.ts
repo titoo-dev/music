@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PREFETCH_LIMIT, queuePrefetchWindow, createPrefetchBudget } from "./prefetch-budget";
+import { PREFETCH_LIMIT, queuePrefetchWindow, createPrefetchBudget, shouldPrefetchAudio } from "./prefetch-budget";
 
 const q = (n: number) => Array.from({ length: n }, (_, i) => ({ trackId: `t${i}` }));
 
@@ -54,5 +54,23 @@ describe("createPrefetchBudget", () => {
 		expect(budget.take("a", "/p1")).toBe(true);
 		expect(budget.take("b", "/p1")).toBe(false);
 		expect(budget.take("b", "/p2")).toBe(true);
+	});
+});
+
+describe("shouldPrefetchAudio", () => {
+	it("refuses background audio on Save-Data or a 2G link (was: prefetch ignored the network conditions)", () => {
+		expect(shouldPrefetchAudio({ connection: { saveData: true, effectiveType: "4g" } })).toBe(false);
+		expect(shouldPrefetchAudio({ connection: { effectiveType: "2g" } })).toBe(false);
+		expect(shouldPrefetchAudio({ connection: { effectiveType: "slow-2g" } })).toBe(false);
+	});
+
+	it("allows it on a normal link or when the browser doesn't say", () => {
+		expect(shouldPrefetchAudio({ connection: { effectiveType: "4g", saveData: false } })).toBe(true);
+		expect(shouldPrefetchAudio({ connection: { effectiveType: "3g" } })).toBe(true);
+		expect(shouldPrefetchAudio({})).toBe(true);
+	});
+
+	it("never prefetches without a navigator (server render)", () => {
+		expect(shouldPrefetchAudio(null)).toBe(false);
 	});
 });

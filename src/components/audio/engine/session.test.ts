@@ -2,10 +2,30 @@ import { describe, it, expect, vi } from "vitest";
 import {
 	PLAY_THRESHOLD_SECONDS,
 	advanceQueue,
+	claimBackgroundPersist,
 	createTrackSession,
 	shouldNotifySkip,
 	startVolume,
 } from "./session";
+
+describe("claimBackgroundPersist", () => {
+	const PREVIEW = "https://app/api/v1/stream-progressive/7?preview=1";
+
+	it("asks the server to store a track playing from a preview stream once per play (was: every seek and the 30 s mark each opened a persisting stream)", () => {
+		const s = createTrackSession("7");
+		expect(claimBackgroundPersist(s, PREVIEW)).toBe(true);
+		expect(claimBackgroundPersist(s, PREVIEW)).toBe(false);
+		expect(claimBackgroundPersist(createTrackSession("7"), PREVIEW)).toBe(true);
+	});
+
+	it("never for a source that already persists or is already stored", () => {
+		const s = createTrackSession("7");
+		expect(claimBackgroundPersist(s, "https://app/api/v1/stream-progressive/7")).toBe(false);
+		expect(claimBackgroundPersist(s, "https://r2.example/t.mp3?sig=1")).toBe(false);
+		expect(claimBackgroundPersist(s, "blob:https://app/1")).toBe(false);
+		expect(claimBackgroundPersist(null, PREVIEW)).toBe(false);
+	});
+});
 
 describe("createTrackSession", () => {
 	it("starts every per-track flag over (was: crossfade kept the previous track's play flag, retries and norm state)", () => {

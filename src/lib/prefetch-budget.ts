@@ -45,8 +45,8 @@ export interface NetworkInfoLike {
  * playing track) checks this first.
  */
 export function shouldPrefetchAudio(
-	nav: { connection?: NetworkInfoLike } | undefined = typeof navigator === "undefined"
-		? undefined
+	nav: { connection?: NetworkInfoLike } | null = typeof navigator === "undefined"
+		? null
 		: (navigator as Navigator & { connection?: NetworkInfoLike })
 ): boolean {
 	if (!nav) return false;
