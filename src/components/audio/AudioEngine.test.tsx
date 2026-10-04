@@ -65,6 +65,7 @@ class FakeAudio extends EventTarget {
 	set src(v: string) {
 		this._src = new URL(v, window.location.href).href;
 		this.readyState = 0;
+		this.currentTime = 0;
 		this.error = null;
 	}
 	get currentSrc() {
@@ -315,5 +316,27 @@ describe("AudioEngine — fades", () => {
 		expect(second.plays).toBe(1);
 		expect(second.volume).toBe(0);
 		await waitFor(() => expect(second.volume).toBeCloseTo(0.8));
+	});
+});
+
+describe("AudioEngine — resuming on the live stream", () => {
+	it("a retry on a live stream of unknown length resumes where it broke (was: restarted silently at 0)", async () => {
+		render(<AudioEngine />);
+		act(() => usePlayerStore.getState().play(track("1")));
+		const el = await waitFor(() => elementWithSrc(/stream-progressive\/1$/));
+		// No Content-Length on the live stream: the browser doesn't know the duration.
+		act(() => el.ready(Infinity));
+		act(() => el.tick(95));
+		act(() => el.fail(2));
+		// The retry reloads the live stream on the same element after 1 s.
+		await waitFor(() => expect(el.readyState).toBe(0), { timeout: 3000 });
+		await waitFor(() => expect(el.src).toMatch(/stream-progressive\/1$/), { timeout: 3000 });
+		// Meanwhile the server stored the file.
+		stored["1"] = "https://r2.example/tracks/1/1.mp3?sig=1";
+		act(() => el.ready(Infinity));
+		const file = await waitFor(() => elementWithSrc(/r2\.example\/tracks\/1\//));
+		act(() => file.ready(200));
+		expect(file.currentTime).toBe(95);
+		expect(usePlayerStore.getState().currentTime).toBe(95);
 	});
 });

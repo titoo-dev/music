@@ -5,6 +5,7 @@ import {
 	isPreviewSource,
 	isRangeCapable,
 	isRangelessSource,
+	planResume,
 	seekLanded,
 	waitForSeekableUrl,
 	type TimeRangesLike,
@@ -111,6 +112,37 @@ describe("seekLanded", () => {
 		expect(seekLanded(120, 120.2)).toBe(true);
 		expect(seekLanded(120, 118)).toBe(true);
 		expect(seekLanded(120, 0.3)).toBe(false);
+	});
+});
+
+describe("planResume", () => {
+	const base = { seekable: ranges(), buffered: ranges() };
+
+	it("waits for the stored file when the live stream's length is unknown (was: the position was dropped, playback restarted at 0)", () => {
+		expect(planResume({ ...base, resume: 95, src: PROGRESSIVE, duration: Infinity })).toBe("via-file");
+		expect(planResume({ ...base, resume: 95, src: PROGRESSIVE, duration: NaN })).toBe("via-file");
+		expect(planResume({ ...base, resume: 95, src: PROGRESSIVE, duration: Infinity, lastResort: true })).toBe(
+			"from-start"
+		);
+	});
+
+	it("seeks in place where the live stream already holds the position, known length or not", () => {
+		const held = { seekable: ranges([0, 100]), buffered: ranges([0, 100]) };
+		expect(planResume({ ...held, resume: 95, src: PROGRESSIVE, duration: Infinity })).toBe("in-place");
+		expect(planResume({ ...held, resume: 95, src: PROGRESSIVE, duration: 200 })).toBe("in-place");
+	});
+
+	it("seeks a range-capable source in place, and a ranged live stream (C2)", () => {
+		expect(planResume({ ...base, resume: 95, src: PRESIGNED, duration: 200 })).toBe("in-place");
+		const ranged = { seekable: ranges([0, 200]), buffered: ranges([0, 10]) };
+		expect(planResume({ ...ranged, resume: 95, src: PROGRESSIVE, duration: 200 })).toBe("in-place");
+		expect(planResume({ ...base, resume: 95, src: PROGRESSIVE, duration: 200 })).toBe("via-file");
+	});
+
+	it("skips a position at the very end, or of unknown length on a range-capable source (unchanged)", () => {
+		expect(planResume({ ...base, resume: 199.5, src: PRESIGNED, duration: 200 })).toBe("skip");
+		expect(planResume({ ...base, resume: 199.5, src: PROGRESSIVE, duration: 200 })).toBe("skip");
+		expect(planResume({ ...base, resume: 95, src: PRESIGNED, duration: NaN })).toBe("skip");
 	});
 });
 

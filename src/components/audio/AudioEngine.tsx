@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-failure";
-import { canSeekInPlace, inRanges, isRangelessSource, seekLanded, waitForSeekableUrl } from "@/lib/seek";
+import { canSeekInPlace, inRanges, isRangelessSource, planResume, seekLanded, waitForSeekableUrl } from "@/lib/seek";
 import { formatTime } from "@/utils/format-time";
 import {
 	accumulateListened,
@@ -560,25 +560,23 @@ export function AudioEngine() {
 			const resume = resumePositionRef.current;
 			if (resume === null) return;
 			resumePositionRef.current = null;
-			const dur = audio.duration;
-			if (!isFinite(dur) || dur <= 0 || resume >= dur - 1) return;
-			const track = usePlayerStore.getState().currentTrack;
 			const lastResort = lastResortSeekRef.current;
 			lastResortSeekRef.current = false;
-			if (
-				track &&
-				!canSeekInPlace({
-					src: audio.src,
-					target: resume,
-					seekable: audio.seekable,
-					buffered: audio.buffered,
-					duration: dur,
-				})
-			) {
-				if (!lastResort) {
-					seekViaPersistedFile(audio, track.trackId, resume);
-					return;
-				}
+			const track = usePlayerStore.getState().currentTrack;
+			const plan = planResume({
+				resume,
+				src: audio.src,
+				duration: audio.duration,
+				seekable: audio.seekable,
+				buffered: audio.buffered,
+				lastResort,
+			});
+			if (plan === "skip") return;
+			if (track && plan === "via-file") {
+				seekViaPersistedFile(audio, track.trackId, resume);
+				return;
+			}
+			if (track && plan === "from-start") {
 				// The file wasn't stored within the wait and this stream can't
 				// seek: play from the start, but say so (was: silently at 0).
 				setCurrentTime(0);

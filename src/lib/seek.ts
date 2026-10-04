@@ -78,6 +78,42 @@ export function seekLanded(target: number, currentTime: number, tolerance = 3): 
 }
 
 /**
+ * What to do with a position to resume at once an element can play
+ * (session restore, retry, source swap):
+ *   "skip"       nothing to resume (at or past the end; unknown length on a
+ *                range-capable source)
+ *   "in-place"   set currentTime
+ *   "via-file"   the live stream can't get there: wait for the stored file
+ *   "from-start" the stored file never came (`lastResort`): play from the
+ *                start, and say so
+ * The live stream is served without Content-Length, so its duration is often
+ * unknown at canplay: it still can't seek past its buffer (was: the position
+ * was dropped and the track restarted at 0 without a word).
+ */
+export type ResumePlan = "skip" | "in-place" | "via-file" | "from-start";
+
+export function planResume(opts: {
+	resume: number;
+	src: string;
+	duration: number;
+	seekable: TimeRangesLike;
+	buffered: TimeRangesLike;
+	lastResort?: boolean;
+}): ResumePlan {
+	const known = isFinite(opts.duration) && opts.duration > 0;
+	if (known ? opts.resume >= opts.duration - 1 : !isRangelessSource(opts.src)) return "skip";
+	const inPlace = canSeekInPlace({
+		src: opts.src,
+		target: opts.resume,
+		seekable: opts.seekable,
+		buffered: opts.buffered,
+		duration: known ? opts.duration : undefined,
+	});
+	if (inPlace) return "in-place";
+	return opts.lastResort ? "from-start" : "via-file";
+}
+
+/**
  * Poll `resolve` until it yields a range-capable URL (the track finished
  * persisting to storage), the wait is cancelled, or the timeout elapses.
  * Returns null when no URL showed up in time or the wait was cancelled.
