@@ -4,7 +4,7 @@ import { requireDeezerAndApp, handleError } from "../../_lib/helpers";
 import { getPreferredBitrate } from "@/lib/wavelet/utils/getPreferredBitrate";
 import { utils, type Deezer } from "@/lib/deezer";
 import Track from "@/lib/wavelet/types/Track";
-import { gwTrackCache } from "@/lib/wavelet/cache/deezer-track-cache";
+import { gwTrackCache, gwTrackKey } from "@/lib/wavelet/cache/deezer-track-cache";
 
 const { mapGwTrackToDeezer } = utils;
 
@@ -35,8 +35,8 @@ export async function GET(
 		});
 		if (stored) return new NextResponse(null, { status: 204 });
 
-		// Already warm? Skip the work.
-		if (gwTrackCache.get(String(trackId))) {
+		// Already warm for this Deezer account? Skip the work.
+		if (gwTrackCache.get(gwTrackKey(dz.currentUser?.id, trackId))) {
 			return new NextResponse(null, { status: 204 });
 		}
 
@@ -59,7 +59,7 @@ async function warmInBackground(
 ) {
 	try {
 		const gwTrack = await dz.gw.get_track_with_fallback(trackId);
-		gwTrackCache.set(String(trackId), gwTrack);
+		gwTrackCache.set(gwTrackKey(dz.currentUser?.id, trackId), gwTrack);
 
 		// Also warm the per-format URL cache. getPreferredBitrate is parallel
 		// across formats and will fill trackUrlCache as a side effect.

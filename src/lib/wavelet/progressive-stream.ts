@@ -18,7 +18,7 @@ import { downloadImage } from "./utils/downloadImage";
 import Track, { formatsName } from "./types/Track";
 import type { Settings } from "./types/Settings";
 import type { StorageProvider } from "./storage/StorageProvider";
-import { gwTrackCache } from "./cache/deezer-track-cache";
+import { gwTrackCache, gwTrackKey } from "./cache/deezer-track-cache";
 import { STORAGE_TYPE } from "./storage/objects";
 import { pumpTee } from "./tee-pump";
 import { mkdirSync } from "fs";
@@ -101,12 +101,13 @@ export async function startProgressiveStream(
 	// In-memory TTL cache: track metadata is global to all users, so caching
 	// by trackId is safe. The TRACK_TOKEN inside is short-lived but valid
 	// well beyond our 5-min TTL window.
-	let gwTrack = gwTrackCache.get(String(trackId)) as Awaited<
+	const gwKey = gwTrackKey(dz.currentUser?.id, trackId);
+	let gwTrack = gwTrackCache.get(gwKey) as Awaited<
 		ReturnType<typeof dz.gw.get_track_with_fallback>
 	> | null;
 	if (!gwTrack) {
 		gwTrack = await dz.gw.get_track_with_fallback(trackId);
-		gwTrackCache.set(String(trackId), gwTrack);
+		gwTrackCache.set(gwKey, gwTrack);
 	}
 	const apiTrack: any = mapGwTrackToDeezer(gwTrack);
 
