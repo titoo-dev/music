@@ -172,7 +172,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 			{ ...blobRow, id: "misc", bitrate: 8, storagePath: "tracks/1/8.mp3" },
 			{ ...blobRow, id: "hq", bitrate: 3, storagePath: "tracks/1/3.mp3" },
 		]);
-		streamObjectMock.mockResolvedValue({ body: fakeBody(), contentLength: 3, contentType: "audio/mpeg", statusCode: 200 } as any);
+		streamObjectMock.mockResolvedValue({ body: fakeBody(), contentLength: 3, contentType: "audio/mpeg", statusCode: 200 } as never);
 
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(200);
@@ -198,7 +198,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		serverStateMock.getWaveletApp.mockResolvedValue({ freshSettings: vi.fn(async () => ({ maxBitrate: 3 })) });
 		prismaMock.deezerCredential.findUnique.mockResolvedValue({ canStreamHq: true, canStreamLossless: false });
 		prismaMock.storedTrack.findMany.mockResolvedValue([{ ...blobRow, bitrate: 1, requestedBitrate: 3 }]);
-		streamObjectMock.mockResolvedValue({ body: fakeBody(), contentLength: 3, contentType: "audio/mpeg", statusCode: 200 } as any);
+		streamObjectMock.mockResolvedValue({ body: fakeBody(), contentLength: 3, contentType: "audio/mpeg", statusCode: 200 } as never);
 
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(200);
@@ -240,7 +240,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		it("streams a cached copy as usual", async () => {
 			setSessionUser("u1");
 			prismaMock.storedTrack.findMany.mockResolvedValue([blobRow]);
-			streamObjectMock.mockResolvedValue({ body: fakeBody(), contentLength: 3, contentType: "audio/mpeg", statusCode: 200 } as any);
+			streamObjectMock.mockResolvedValue({ body: fakeBody(), contentLength: 3, contentType: "audio/mpeg", statusCode: 200 } as never);
 
 			const res = await GET(prefetch(), makeParams({ trackId: "1" }));
 			expect(res.status).toBe(200);

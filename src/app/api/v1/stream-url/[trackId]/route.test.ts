@@ -104,7 +104,7 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 			prismaMock.storedTrack.findMany.mockResolvedValue([
 				{ id: "x", trackId: "1", bitrate: 1, storagePath: "tracks/1/1.mp3", storageType: "r2" },
 			]);
-			getPresignedUrlMock.mockResolvedValue({ url: "https://example.com/1.mp3", contentType: "audio/mpeg" } as any);
+			getPresignedUrlMock.mockResolvedValue({ url: "https://example.com/1.mp3", contentType: "audio/mpeg" } as never);
 
 			const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 			const body = await readJson<{ data: { url: string; contentType: string; expiresAt: string } }>(res);
@@ -159,7 +159,7 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 			{ id: "a", trackId: "1", bitrate: 8, storagePath: "tracks/1/8.mp3", storageType: "r2" },
 			{ id: "b", trackId: "1", bitrate: 3, storagePath: "tracks/1/3.mp3", storageType: "r2" },
 		]);
-		getPresignedUrlMock.mockResolvedValue({ url: "https://example.com/3.mp3", contentType: "audio/mpeg" } as any);
+		getPresignedUrlMock.mockResolvedValue({ url: "https://example.com/3.mp3", contentType: "audio/mpeg" } as never);
 
 		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
 		expect(res.status).toBe(200);
