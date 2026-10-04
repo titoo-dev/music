@@ -134,7 +134,7 @@ export class R2StorageProvider implements StorageProvider {
 			await r2Fetch(objectUrl(key), {
 				method: "PUT",
 				// A view, not a copy: tracks are several MB (FLAC tens of MB).
-				body: new Uint8Array(body.buffer, body.byteOffset, body.byteLength),
+				body: new Uint8Array(body.buffer as ArrayBuffer, body.byteOffset, body.byteLength),
 				headers: { "Content-Type": inferContentType(key) },
 			}),
 			key
