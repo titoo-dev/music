@@ -133,7 +133,9 @@ describe("POST /api/v1/recent-plays/[trackId]/skip", () => {
 			res
 		);
 		expect(body?.error.code).toBe("INTERNAL_ERROR");
-		expect(body?.error.message).toBe("db down");
+		// C8: 500s carry a generic message; "db down" is only logged server-side.
+		expect(body?.error.message).toBe("An unexpected error occurred.");
+		expect(JSON.stringify(body)).not.toContain("db down");
 	});
 
 	it("returns 500 INTERNAL_ERROR when getTrackRefCount throws", async () => {
