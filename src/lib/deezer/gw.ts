@@ -8,6 +8,28 @@ import {
 } from "./utils";
 import { GWAPIError } from "./errors";
 import { type APIOptions } from "./index";
+import { errorSummary } from "@/lib/log-safe";
+import {
+	DEEZER_REQUEST_OPTIONS,
+	isPreSendError,
+	isTransientNetworkError,
+	redactForLog,
+	withRetry,
+} from "./http";
+
+/** gw-light.php answer envelope. */
+interface GwEnvelope {
+	error?: unknown[] | Record<string, unknown>;
+	payload?: { FALLBACK?: Record<string, unknown> } | null;
+	results?: unknown;
+}
+
+/** How many payload.FALLBACK hops one call may follow. */
+const MAX_FALLBACK_DEPTH = 3;
+
+/** gw methods that change state: only retried when the request never left. */
+const GW_WRITE_METHOD =
+	/^(playlist\.(create|update|addSongs|deleteSongs|delete|addFavorite|deleteFavorite)|favorite_song\.(add|remove)|album\.(addFavorite|deleteFavorite)|artist\.(addFavorite|deleteFavorite))$/;
 
 export const PlaylistStatus = {
 	PUBLIC: 0,
@@ -87,7 +109,18 @@ export class GW {
 		this.api_token = null;
 	}
 
-	async api_call(method: string, args?: any, params?: any): Promise<any> {
+	/**
+	 * One gw-light call. Network failures are retried at most
+	 * DEEZER_MAX_RETRIES times (writes only when the request never left), an
+	 * invalid api token is refreshed at most once, and a FALLBACK chain is
+	 * followed at most MAX_FALLBACK_DEPTH times.
+	 */
+	async api_call(
+		method: string,
+		args?: any,
+		params?: any,
+		_state: { tokenRefreshed?: boolean; fallbackDepth?: number } = {}
+	): Promise<any> {
 		if (args === undefined) args = {};
 		if (params === undefined) params = {};
 		if (!this.api_token && method !== "deezer.getUserData")
@@ -99,52 +132,50 @@ export class GW {
 			method,
 			...params,
 		};
-		let result_json;
+		const isWrite = GW_WRITE_METHOD.test(method);
+		let result_json: GwEnvelope;
 		try {
-			result_json = await got
-				.post("https://www.deezer.com/ajax/gw-light.php", {
-					searchParams: p,
-					json: args,
-					cookieJar: this.cookieJar,
-					headers: this.httpHeaders,
-				})
-				.json();
+			result_json = await withRetry(
+				() =>
+					got
+						.post("https://www.deezer.com/ajax/gw-light.php", {
+							searchParams: p,
+							json: args,
+							cookieJar: this.cookieJar,
+							headers: this.httpHeaders,
+							...DEEZER_REQUEST_OPTIONS,
+						})
+						.json<GwEnvelope>(),
+				(e) => (isWrite ? isPreSendError(e) : isTransientNetworkError(e))
+			);
 		} catch (e) {
-			console.error("[ERROR] deezer.gw", method, args, e.name, e.message);
-			if (
-				[
-					"ECONNABORTED",
-					"ECONNREFUSED",
-					"ECONNRESET",
-					"ENETRESET",
-					"ETIMEDOUT",
-				].includes(e.code)
-			) {
-				await new Promise((resolve) => setTimeout(resolve, 2000)); // sleep(2000ms)
-				return this.api_call(method, args, params);
-			}
-			throw new GWAPIError(`${method} ${args}:: ${e.name}: ${e.message}`);
+			// got's message embeds the request URL (api_token): summarize it masked.
+			console.error("[ERROR] deezer.gw", method, redactForLog(args), errorSummary(e));
+			throw new GWAPIError(`${method}:: ${errorSummary(e)}`);
 		}
-		if (result_json.error.length || Object.keys(result_json.error).length) {
+		const error = result_json?.error ?? [];
+		if (Array.isArray(error) ? error.length > 0 : Object.keys(error).length > 0) {
+			const errorJson = JSON.stringify(error);
 			if (
-				JSON.stringify(result_json.error) ===
-					'{"GATEWAY_ERROR":"invalid api token"}' ||
-				JSON.stringify(result_json.error) ===
-					'{"VALID_TOKEN_REQUIRED":"Invalid CSRF token"}'
+				!_state.tokenRefreshed &&
+				method !== "deezer.getUserData" &&
+				(errorJson === '{"GATEWAY_ERROR":"invalid api token"}' ||
+					errorJson === '{"VALID_TOKEN_REQUIRED":"Invalid CSRF token"}')
 			) {
 				this.api_token = await this._get_token();
-				return this.api_call(method, args, params);
+				return this.api_call(method, args, params, { ..._state, tokenRefreshed: true });
 			}
-			if (result_json.payload && result_json.payload.FALLBACK) {
+			const depth = _state.fallbackDepth ?? 0;
+			if (result_json.payload && result_json.payload.FALLBACK && depth < MAX_FALLBACK_DEPTH) {
 				Object.keys(result_json.payload.FALLBACK).forEach((key) => {
 					args[key] = result_json.payload.FALLBACK[key];
 				});
-				return this.api_call(method, args, params);
+				return this.api_call(method, args, params, { ..._state, fallbackDepth: depth + 1 });
 			}
-			throw new GWAPIError(JSON.stringify(result_json.error));
+			throw new GWAPIError(errorJson);
 		}
 		if (!this.api_token && method === "deezer.getUserData")
-			this.api_token = result_json.results.checkForm;
+			this.api_token = (result_json.results as { checkForm?: string } | undefined)?.checkForm;
 		return result_json.results;
 	}
 
@@ -193,7 +224,7 @@ export class GW {
 		const body = await this.api_call("song.getListData", { SNG_IDS: sng_ids });
 		let errors = 0;
 		for (let i = 0; i < sng_ids.length; i++) {
-			if (sng_ids[0] !== 0) {
+			if (String(sng_ids[i]) !== "0") {
 				tracks_array.push(body.data[i - errors]);
 			} else {
 				errors++;

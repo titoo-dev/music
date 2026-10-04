@@ -1,22 +1,38 @@
 import { NextRequest } from "next/server";
 import { ok, fail, handleError, requireDeezer } from "../../_lib/helpers";
+import { saveSelectedAccount } from "@/lib/deezer-session";
+import { toPublicDeezerUser } from "@/lib/deezer/public-user";
+import { errorSummary } from "@/lib/log-safe";
 
 export async function POST(request: NextRequest) {
 	try {
-		const { child } = await request.json();
-		const { dz, error } = await requireDeezer(request);
+		const { userId, dz, error } = await requireDeezer(request);
 		if (error) return error;
+		const { child } = await request.json();
 
 		if (child === undefined || child === null) {
 			return fail("MISSING_CHILD_INDEX", "Child account index is required.", 400);
 		}
+		const index =
+			typeof child === "number" ? child : typeof child === "string" && /^\d+$/.test(child.trim()) ? Number(child) : NaN;
+		if (!Number.isInteger(index) || index < 0) {
+			return fail("INVALID_CHILD_INDEX", "Child account index must be a non-negative integer.", 400);
+		}
 
-		const [user, selectedAccount] = dz.changeAccount(child);
+		const [user, selectedAccount] = dz.changeAccount(index);
+		// Persist the choice: a cold restore (other instance, after TTL) logs into the same child.
+		// Best effort: the switch itself is done, so a failed save must not turn it into a 500.
+		try {
+			await saveSelectedAccount(userId, dz);
+		} catch (e) {
+			console.warn("[change-account] could not save the selected account:", errorSummary(e));
+		}
 
+		// Never hand the license token to the client (it requests media as this account)
 		return ok({
-			user,
+			user: toPublicDeezerUser(user),
 			selectedAccount,
-			childs: dz.childs,
+			childs: (dz.childs ?? []).map(toPublicDeezerUser),
 		});
 	} catch (e) {
 		return handleError(e);

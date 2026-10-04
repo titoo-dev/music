@@ -11,7 +11,9 @@ export async function createConfigStore(): Promise<ConfigStore> {
 			"DATABASE_URL is required. PostgreSQL is needed for config storage."
 		);
 	}
-	const store = new PostgresConfigStore(databaseUrl);
+	// The app-wide Prisma client: its pool is attached with attachDatabasePool.
+	const { prisma } = await import("@/lib/prisma");
+	const store = new PostgresConfigStore(prisma);
 	await store.init();
 	return store;
 }

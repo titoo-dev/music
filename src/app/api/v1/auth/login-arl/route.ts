@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { setUserDz } from "@/lib/server-state";
-import { prisma } from "@/lib/prisma";
+import { saveDeezerCredential } from "@/lib/deezer-session";
+import { deezerAccountPayload } from "@/lib/deezer/public-user";
 import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
 
 export async function POST(request: NextRequest) {
@@ -25,36 +26,13 @@ export async function POST(request: NextRequest) {
 		// Store Deezer session in memory (keyed by better-auth user ID)
 		setUserDz(userResult.userId, dz);
 
-		// Persist ARL and Deezer user info in database
-		await prisma.deezerCredential.upsert({
-			where: { userId: userResult.userId },
-			update: {
-				arl,
-				deezerUserId: dz.currentUser?.id ?? null,
-				deezerUserName: dz.currentUser?.name ?? null,
-				deezerPicture: dz.currentUser?.picture ?? null,
-				canStreamHq: dz.currentUser?.can_stream_hq ?? false,
-				canStreamLossless: dz.currentUser?.can_stream_lossless ?? false,
-			},
-			create: {
-				userId: userResult.userId,
-				arl,
-				deezerUserId: dz.currentUser?.id ?? null,
-				deezerUserName: dz.currentUser?.name ?? null,
-				deezerPicture: dz.currentUser?.picture ?? null,
-				canStreamHq: dz.currentUser?.can_stream_hq ?? false,
-				canStreamLossless: dz.currentUser?.can_stream_lossless ?? false,
-			},
-		});
+		// Persist the ARL (encrypted) with the selected child account and profile
+		await saveDeezerCredential(userResult.userId, arl, dz);
 
-		return ok({
-			user: dz.currentUser,
-			childs: dz.childs,
-			currentChild: dz.selectedAccount,
-			hasMultipleAccounts: dz.childs.length > 1,
-		});
+		// Never hand the license token to the client (it requests media as this account)
+		return ok(deezerAccountPayload(dz));
 	} catch (e) {
-		console.error("[login-arl] Error:", e);
+		// handleError logs the detail server-side.
 		return handleError(e);
 	}
 }

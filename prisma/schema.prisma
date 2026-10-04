@@ -96,7 +96,10 @@ model Config {
 model DeezerCredential {
   id                String   @id @default(cuid())
   userId            String   @unique
+  /// ARL cookie; "enc:v1:…" (AES-256-GCM, src/lib/secret-box.ts) or legacy plaintext.
   arl               String
+  /// Selected family / child account index, restored on every re-login.
+  childAccount      Int      @default(0)
   deezerUserId      BigInt?
   deezerUserName    String?
   deezerPicture     String?
