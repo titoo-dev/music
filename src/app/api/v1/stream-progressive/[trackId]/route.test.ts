@@ -647,6 +647,85 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 			expect(res.headers.get("Content-Length")).toBe("1000");
 		});
 
+		it("persists a play that opens with bytes=0-1 and answers only those bytes (was: Safari / AVPlayer's bytes=0-1 then bytes=0-n were live-only, so iOS plays never cached the track)", async () => {
+			arrange();
+			let cancelled = false;
+			const body = new ReadableStream<Uint8Array>({
+				start(c) {
+					c.enqueue(new Uint8Array([1, 2, 3, 4]));
+				},
+				cancel() {
+					cancelled = true;
+				},
+			});
+			startProgressiveStreamMock.mockResolvedValue(result({ body }));
+
+			const res = await GET(makeNextRequest({ url, headers: { range: "bytes=0-1" } }), makeParams({ trackId: "1" }));
+			expect(res.status).toBe(206);
+			expect(res.headers.get("Content-Range")).toBe("bytes 0-1/1000");
+			expect(res.headers.get("Content-Length")).toBe("2");
+			expect(res.headers.get("Accept-Ranges")).toBe("bytes");
+			expect(Array.from(new Uint8Array(await res.arrayBuffer()))).toEqual([1, 2]);
+			// The rest of the spool reader is released; the persist goes on.
+			expect(cancelled).toBe(true);
+			expect(startProgressiveStreamMock).toHaveBeenCalledWith(expect.objectContaining({ persist: true }));
+			expect(startProgressiveStreamMock.mock.calls[0][0].range).toBeUndefined();
+			expect(afterMock).toHaveBeenCalledOnce();
+		});
+
+		it("errors a capped bytes=0-n body when the stream fails before the window is sent", async () => {
+			arrange();
+			const body = new ReadableStream<Uint8Array>({
+				start(c) {
+					c.enqueue(new Uint8Array([1]));
+					c.error(new Error("truncated"));
+				},
+			});
+			startProgressiveStreamMock.mockResolvedValue(result({ body }));
+			const res = await GET(makeNextRequest({ url, headers: { range: "bytes=0-9" } }), makeParams({ trackId: "1" }));
+			expect(res.status).toBe(206);
+			await expect(res.arrayBuffer()).rejects.toThrow("truncated");
+		});
+
+		it("persists bytes=0-n and clamps an end past the track to the whole file", async () => {
+			arrange();
+			startProgressiveStreamMock.mockResolvedValue(result());
+			const res = await GET(makeNextRequest({ url, headers: { range: "bytes=0-5000" } }), makeParams({ trackId: "1" }));
+			expect(res.status).toBe(206);
+			expect(res.headers.get("Content-Range")).toBe("bytes 0-999/1000");
+			expect(res.headers.get("Content-Length")).toBe("1000");
+			expect(startProgressiveStreamMock).toHaveBeenCalledWith(expect.objectContaining({ persist: true }));
+		});
+
+		it("serves bytes=0-n to a same-instance follower from the holder's spool, capped to the window", async () => {
+			const { app } = makeApp({ lockAlreadyInProgress: true, shared: { spool: {} } });
+			arrangeAuthOk(app);
+			prismaMock.storedTrack.findMany.mockResolvedValue([]);
+			const body = new ReadableStream<Uint8Array>({
+				start(c) {
+					c.enqueue(new Uint8Array([9, 8, 7]));
+					c.close();
+				},
+			});
+			followMock.mockReturnValue(result({ body }));
+
+			const res = await GET(makeNextRequest({ url, headers: { range: "bytes=0-1" } }), makeParams({ trackId: "1" }));
+			expect(res.status).toBe(206);
+			expect(res.headers.get("Content-Range")).toBe("bytes 0-1/1000");
+			expect(Array.from(new Uint8Array(await res.arrayBuffer()))).toEqual([9, 8]);
+			expect(startProgressiveStreamMock).not.toHaveBeenCalled();
+		});
+
+		it("answers bytes=0-1 with the whole track (200) when the CDN refuses ranges", async () => {
+			arrange();
+			startProgressiveStreamMock.mockResolvedValue(result({ rangeSupported: false }));
+			const res = await GET(makeNextRequest({ url, headers: { range: "bytes=0-1" } }), makeParams({ trackId: "1" }));
+			expect(res.status).toBe(200);
+			expect(res.headers.get("Accept-Ranges")).toBe("none");
+			expect(res.headers.get("Content-Length")).toBe("1000");
+			expect(res.headers.get("Content-Range")).toBeNull();
+		});
+
 		it("serves a mid-track range live-only: 206, never persisted, no lock (was: Range ignored, a seek restarted the track)", async () => {
 			const { acquireDownloadLock } = arrange();
 			startProgressiveStreamMock.mockResolvedValue(result({ start: 100, end: 199, contentLength: 100 }));

@@ -22,10 +22,10 @@ export const maxDuration = 300;
 // Range support — unless `live=1`: /stream sends that when storage refuses
 // reads or the cached copy needs an upgrade.
 //
-//  - Range (C2): "bytes=a-b" other than "bytes=0-" is served live-only (206,
-//    never persisted, lock-free) when the Deezer CDN allows ranges; no Range
-//    or "bytes=0-" is a normal persisting play with Content-Length (206 +
-//    Content-Range for "bytes=0-").
+//  - Range (C2): "bytes=a-b" with a > 0 is served live-only (206, never
+//    persisted, lock-free) when the Deezer CDN allows ranges; no Range,
+//    "bytes=0-" or "bytes=0-b" (Safari / AVPlayer) is a normal persisting
+//    play with Content-Length (206 + Content-Range for [0, b]).
 //  - A play never waits for another in-flight persist of the same track (C4):
 //    a follower on this instance reads the in-progress bytes; while another
 //    instance holds the persist lease, the track streams live unpersisted.

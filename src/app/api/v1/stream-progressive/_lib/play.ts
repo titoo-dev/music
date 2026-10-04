@@ -19,9 +19,13 @@ import { fail } from "../../_lib/helpers";
 export type ParsedRange =
 	/** No usable Range header: a normal play. */
 	| { kind: "none" }
-	/** "bytes=0-": a normal play answered with 206 when the CDN allows ranges. */
-	| { kind: "open-start" }
-	/** Any other single range: live-only, never persisted. */
+	/**
+	 * "bytes=0-" or "bytes=0-b": a normal (persisting) play, answered with 206
+	 * for [0, b] when the CDN allows ranges. Safari / AVPlayer open every play
+	 * with "bytes=0-1" then "bytes=0-(n-1)", never "bytes=0-".
+	 */
+	| { kind: "from-start"; end?: number }
+	/** A single range not starting at 0: live-only, never persisted. */
 	| { kind: "range"; start: number; end?: number };
 
 /**
@@ -37,8 +41,41 @@ export function parseRangeHeader(header: string | null): ParsedRange {
 	if (!Number.isSafeInteger(start) || (end !== undefined && (!Number.isSafeInteger(end) || end < start))) {
 		return { kind: "none" };
 	}
-	if (start === 0 && end === undefined) return { kind: "open-start" };
+	if (start === 0) return { kind: "from-start", end };
 	return { kind: "range", start, end };
+}
+
+/**
+ * The first `maxBytes` of `body`; the rest of the source is cancelled (a
+ * spool reader releases the file, a live stream closes the CDN request).
+ */
+function limitBody(body: ReadableStream<Uint8Array>, maxBytes: number): ReadableStream<Uint8Array> {
+	const reader = body.getReader();
+	let left = maxBytes;
+	const finish = (controller: ReadableStreamDefaultController<Uint8Array>) => {
+		controller.close();
+		void reader.cancel().catch(() => {});
+	};
+	return new ReadableStream<Uint8Array>({
+		async pull(controller) {
+			const r = await reader.read();
+			if (r.done) {
+				controller.close();
+				return;
+			}
+			if (r.value.byteLength < left) {
+				left -= r.value.byteLength;
+				controller.enqueue(r.value);
+				return;
+			}
+			controller.enqueue(r.value.subarray(0, left));
+			left = 0;
+			finish(controller);
+		},
+		cancel(reason) {
+			return reader.cancel(reason);
+		},
+	});
 }
 
 export interface PlayContext {
@@ -55,22 +92,30 @@ export interface PlayContext {
 	cacheControl: string;
 }
 
-function fullResponse(result: ProgressiveResult, ctx: PlayContext, rangeRequested: boolean): Response {
+/** The Range of a normal play: null without one, else its (optional) inclusive end. */
+type FromStart = { end?: number } | null;
+
+function fullResponse(result: ProgressiveResult, ctx: PlayContext, fromStart: FromStart): Response {
 	const headers: Record<string, string> = {
 		"Content-Type": result.contentType,
 		"Cache-Control": ctx.cacheControl,
 		"Accept-Ranges": result.rangeSupported ? "bytes" : "none",
 	};
-	if (result.contentLength > 0) headers["Content-Length"] = String(result.contentLength);
-	if (rangeRequested && result.rangeSupported && result.totalLength) {
-		headers["Content-Range"] = `bytes 0-${result.totalLength - 1}/${result.totalLength}`;
-		return new Response(result.body, { status: 206, headers });
+	const total = result.totalLength;
+	if (fromStart && result.rangeSupported && total) {
+		// "bytes=0-b": answer [0, min(b, total - 1)] of the whole-track body.
+		const last = Math.min(fromStart.end ?? total - 1, total - 1);
+		headers["Content-Range"] = `bytes 0-${last}/${total}`;
+		headers["Content-Length"] = String(last + 1);
+		const body = last + 1 < total ? limitBody(result.body, last + 1) : result.body;
+		return new Response(body, { status: 206, headers });
 	}
+	if (result.contentLength > 0) headers["Content-Length"] = String(result.contentLength);
 	return new Response(result.body, { status: 200, headers });
 }
 
 /** Streams the track without persisting it, at the listener's pace. */
-async function liveFull(ctx: PlayContext, rangeRequested: boolean): Promise<Response> {
+async function liveFull(ctx: PlayContext, rangeRequested: FromStart): Promise<Response> {
 	const result = await startProgressiveStream({
 		dz: ctx.dz,
 		trackId: ctx.trackId,
@@ -90,7 +135,7 @@ async function liveFull(ctx: PlayContext, rangeRequested: boolean): Promise<Resp
  *    persist; live stream if the holder never opened one);
  *  - another instance holds the PersistLease: stream live without persisting.
  */
-async function persistingPlay(ctx: PlayContext, rangeRequested: boolean): Promise<Response> {
+async function persistingPlay(ctx: PlayContext, rangeRequested: FromStart): Promise<Response> {
 	const lock = ctx.app.acquireDownloadLock(ctx.trackId, ctx.requestedBitrate);
 	if (lock.alreadyInProgress) {
 		const shared = await lock.follow<SharedSpool>();
@@ -142,9 +187,9 @@ async function persistingPlay(ctx: PlayContext, rangeRequested: boolean): Promis
 }
 
 /**
- * C2: "bytes=a-b" (other than "bytes=0-") → 206 live-only, lock-free; a CDN
- * that refuses ranges → normal play (200, Accept-Ranges: none); past the end
- * → 416. Everything else is a normal play.
+ * C2: "bytes=a-b" with a > 0 → 206 live-only, lock-free; a CDN that refuses
+ * ranges → normal play (200, Accept-Ranges: none); past the end → 416.
+ * Everything else ("bytes=0-", "bytes=0-b", no Range) is a normal play.
  */
 export async function servePlay(ctx: PlayContext): Promise<Response> {
 	const range = parseRangeHeader(ctx.request.headers.get("range"));
@@ -181,8 +226,8 @@ export async function servePlay(ctx: PlayContext): Promise<Response> {
 			}
 			if (!(e instanceof RangeNotSupportedError)) throw e;
 			// The CDN ignores Range for this file: serve the whole track (200).
-			return persistingPlay(ctx, false);
+			return persistingPlay(ctx, null);
 		}
 	}
-	return persistingPlay(ctx, range.kind === "open-start");
+	return persistingPlay(ctx, range.kind === "from-start" ? { end: range.end } : null);
 }
