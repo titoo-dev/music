@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { inspect } from "node:util";
 import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
 import {
 	authMock,
@@ -707,7 +708,20 @@ describe("handleError()", () => {
 		);
 		expect(body?.error).toEqual(GENERIC);
 		expect(JSON.stringify(body)).not.toContain("ECONNREFUSED");
-		expect(logged).toHaveBeenCalledWith(expect.any(String), err);
+		expect(String(logged.mock.calls[0])).toContain("ECONNREFUSED db.internal:5432");
+	});
+
+	it("logs name, message and stack only — never a got error's request options or URL query", async () => {
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+		const gotError = Object.assign(
+			new Error("Request failed with status code 500: GET https://api.deezer.com/user/me?access_token=SECRET-ACCESS"),
+			{ name: "HTTPError", options: { json: { license_token: "LT-SECRET" }, cookieJar: { arl: "ARL-SECRET" } } }
+		);
+		handleError(new Error("wrapped", { cause: gotError }));
+		const printed = logged.mock.calls.map((args) => args.map((a) => inspect(a, { depth: 10 })).join(" ")).join("\n");
+		expect(printed).toContain("wrapped");
+		expect(printed).toContain("HTTPError");
+		for (const secret of ["SECRET-ACCESS", "LT-SECRET", "ARL-SECRET"]) expect(printed).not.toContain(secret);
 	});
 
 	it("uses the same generic message for non-Error values", async () => {

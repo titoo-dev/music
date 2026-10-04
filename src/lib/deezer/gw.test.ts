@@ -118,6 +118,22 @@ describe("GW.api_call", () => {
 		expect(logged).not.toContain("SECRET-ARL");
 		expect(logged).not.toContain("SECRET-TOK");
 	});
+
+	it("keeps the api_token in got's error message out of the log and the thrown error (was: the full request URL was logged and rethrown)", async () => {
+		const url = "https://www.deezer.com/ajax/gw-light.php?api_version=1.0&api_token=SECRET-CSRF&input=3&method=song.getData";
+		replies({
+			err: Object.assign(new Error(`Request failed with status code 400 (Bad Request): POST ${url}`), {
+				name: "HTTPError",
+				response: { statusCode: 400 },
+			}),
+		});
+		const err = await makeGw().api_call("song.getData", { SNG_ID: 1 }).catch((e) => e);
+		expect(err).toBeInstanceOf(GWAPIError);
+		expect(err.message).not.toContain("SECRET-CSRF");
+		expect(err.message).toContain("gw-light.php?[redacted]");
+		const logged = JSON.stringify((console.error as unknown as { mock: { calls: unknown[] } }).mock.calls);
+		expect(logged).not.toContain("SECRET-CSRF");
+	});
 });
 
 describe("GW.get_tracks", () => {

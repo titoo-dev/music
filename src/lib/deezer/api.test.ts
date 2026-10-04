@@ -74,4 +74,18 @@ describe("API.call", () => {
 		expect(logged).not.toContain("SECRET-ACCESS");
 		expect(getMock.mock.calls[0][1].searchParams.access_token).toBe("SECRET-ACCESS");
 	});
+
+	it("keeps the access token in got's error message out of the log and the thrown error (was: the full request URL was logged and rethrown)", async () => {
+		replies({
+			err: Object.assign(
+				new Error("Request failed with status code 400 (Bad Request): GET https://api.deezer.com/user/me?access_token=SECRET-ACCESS"),
+				{ name: "HTTPError", response: { statusCode: 400 } }
+			),
+		});
+		const err = (await makeApi().call("user/me").catch((e: unknown) => e)) as Error;
+		expect(err).toBeInstanceOf(APIError);
+		expect(err.message).not.toContain("SECRET-ACCESS");
+		const logged = JSON.stringify((console.error as unknown as { mock: { calls: unknown[] } }).mock.calls);
+		expect(logged).not.toContain("SECRET-ACCESS");
+	});
 });

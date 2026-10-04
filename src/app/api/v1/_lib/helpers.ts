@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getWaveletApp, getGuestDz } from "@/lib/server-state";
 import { auth } from "@/lib/auth";
 import { restoreUserDz } from "@/lib/deezer-session";
+import { describeErrorForLog } from "@/lib/log-safe";
 
 // ── Consistent response envelope ──
 
@@ -89,7 +90,7 @@ export async function requireDeezer(request: NextRequest) {
 		case "login-failed":
 			return { userId: null as never, dz: null as never, error: fail("DEEZER_LOGIN_FAILED", "Stored Deezer ARL is invalid. Please update it in Settings.", 401) };
 		default:
-			console.error("[requireDeezer] Deezer session restore failed:", restored.error);
+			console.error("[requireDeezer] Deezer session restore failed:", describeErrorForLog(restored.error));
 			return { userId: null as never, dz: null as never, error: fail("DEEZER_ERROR", "Failed to connect to Deezer.", 500) };
 	}
 }
@@ -154,9 +155,11 @@ export async function getGuestOrUserDz(request: NextRequest) {
 
 /**
  * 500 INTERNAL_ERROR with a generic message: internal error text (Prisma,
- * Deezer, R2 — hosts, tables, sometimes tokens) is only logged server-side.
+ * Deezer, R2 — hosts, tables, sometimes tokens) is only logged server-side,
+ * as name / message / stack with URL queries masked (never the raw object: a
+ * got error carries its request options, license_token and cookie jar included).
  */
 export function handleError(e: unknown) {
-	console.error("[api] unhandled error:", e);
+	console.error("[api] unhandled error:", describeErrorForLog(e));
 	return fail("INTERNAL_ERROR", "An unexpected error occurred.", 500);
 }

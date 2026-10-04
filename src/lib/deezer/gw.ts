@@ -8,6 +8,7 @@ import {
 } from "./utils";
 import { GWAPIError } from "./errors";
 import { type APIOptions } from "./index";
+import { errorSummary } from "@/lib/log-safe";
 import {
 	DEEZER_REQUEST_OPTIONS,
 	isPreSendError,
@@ -148,8 +149,9 @@ export class GW {
 				(e) => (isWrite ? isPreSendError(e) : isTransientNetworkError(e))
 			);
 		} catch (e) {
-			console.error("[ERROR] deezer.gw", method, redactForLog(args), e?.name, e?.message);
-			throw new GWAPIError(`${method}:: ${e?.name}: ${e?.message}`);
+			// got's message embeds the request URL (api_token): summarize it masked.
+			console.error("[ERROR] deezer.gw", method, redactForLog(args), errorSummary(e));
+			throw new GWAPIError(`${method}:: ${errorSummary(e)}`);
 		}
 		const error = result_json?.error ?? [];
 		if (Array.isArray(error) ? error.length > 0 : Object.keys(error).length > 0) {

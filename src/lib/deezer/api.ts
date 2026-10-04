@@ -13,6 +13,7 @@ import {
 } from "./errors";
 import { SearchOrder, type APIAlbum, type APIOptions } from "./index";
 import { trackSchema, type DeezerTrack } from "./schema/track-schema";
+import { errorSummary } from "@/lib/log-safe";
 import {
 	DEEZER_MAX_RETRIES,
 	DEEZER_REQUEST_OPTIONS,
@@ -64,8 +65,9 @@ export class API {
 					.json<APIEnvelope>()
 			);
 		} catch (e) {
-			console.error("[ERROR] deezer.api", endpoint, redactForLog(args), e?.name, e?.message);
-			throw new APIError(`${endpoint}:: ${e?.name}: ${e?.message}`);
+			// got's message embeds the request URL (access_token): summarize it masked.
+			console.error("[ERROR] deezer.api", endpoint, redactForLog(args), errorSummary(e));
+			throw new APIError(`${endpoint}:: ${errorSummary(e)}`);
 		}
 
 		if (response.error) {

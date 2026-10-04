@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { inspect } from "node:util";
 import {
 	backoffDelay,
 	deezerHttp,
@@ -88,12 +89,21 @@ describe("withRetry", () => {
 });
 
 describe("toDeezerNetworkError", () => {
-	it("keeps code, status and cause", () => {
-		const cause = { name: "HTTPError", message: "bad gateway", response: { statusCode: 502 } };
-		const e = toDeezerNetworkError("get_url", cause);
+	it("keeps code and status but not the raw got error (was: kept as cause, so logging it printed the request's license_token and cookie jar)", () => {
+		const gotError = {
+			name: "HTTPError",
+			code: "ERR_NON_2XX_3XX_RESPONSE",
+			message: "Request failed with status code 502: POST https://media.deezer.com/v1/get_url?sid=SECRET-SID",
+			response: { statusCode: 502 },
+			options: { json: { license_token: "LT-SECRET" } },
+		};
+		const e = toDeezerNetworkError("get_url", gotError);
 		expect(e).toBeInstanceOf(DeezerNetworkError);
 		expect(e.status).toBe(502);
-		expect((e as { cause?: unknown }).cause).toBe(cause);
+		expect(e.code).toBe("ERR_NON_2XX_3XX_RESPONSE");
+		expect((e as { cause?: unknown }).cause).toBeUndefined();
+		expect(e.message).toBe("get_url: HTTPError: Request failed with status code 502: POST https://media.deezer.com/v1/get_url?[redacted]");
+		expect(inspect(e, { depth: 10 })).not.toContain("LT-SECRET");
 		expect(toDeezerNetworkError("x", e)).toBe(e);
 	});
 });

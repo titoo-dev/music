@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { inspect } from "node:util";
 
 const { postMock } = vi.hoisted(() => ({ postMock: vi.fn() }));
 vi.mock("got", () => ({ default: { post: postMock, get: vi.fn() } }));
@@ -45,6 +46,21 @@ describe("Deezer.get_tracks_url", () => {
 		const err = await makeDz().get_tracks_url(["t1"], "FLAC").catch((e) => e);
 		expect(err).toBeInstanceOf(DeezerNetworkError);
 		expect(err).toBeInstanceOf(DeezerError);
+	});
+
+	it("does not carry the request (license_token in its JSON body) inside the network error (was: the got error was kept as cause)", async () => {
+		getUrlReplies({
+			err: Object.assign(new Error("socket hang up"), {
+				code: "ECONNRESET",
+				name: "RequestError",
+				options: { json: { license_token: "LT-SECRET", track_tokens: ["TT-SECRET"] } },
+			}),
+		});
+		const err = await makeDz().get_tracks_url(["t1"], "FLAC").catch((e) => e);
+		expect(err).toBeInstanceOf(DeezerNetworkError);
+		const printed = inspect(err, { depth: 10 });
+		expect(printed).not.toContain("LT-SECRET");
+		expect(printed).not.toContain("TT-SECRET");
 	});
 
 	it("throws a DeezerNetworkError on a 5xx from media.deezer.com", async () => {

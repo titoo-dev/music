@@ -4,6 +4,7 @@ import { GW } from "./gw";
 import got from "got";
 import { Cookie, CookieJar } from "tough-cookie";
 import type { User } from "./types";
+import { errorSummary } from "@/lib/log-safe";
 import {
 	DEEZER_REQUEST_OPTIONS,
 	DEEZER_USER_AGENT,
@@ -255,7 +256,7 @@ export class Deezer {
 			if (mediaErrorsOf(e?.response?.body).some((err) => err?.code === MEDIA_NO_RIGHTS)) {
 				throw new WrongLicense(format);
 			}
-			throw new DeezerError(`get_url ${format}:: ${e?.name}: ${e?.message}`);
+			throw new DeezerError(`get_url ${format}:: ${errorSummary(e)}`);
 		}
 
 		const data = Array.isArray(response?.data) ? response.data : undefined;

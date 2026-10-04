@@ -6,6 +6,7 @@
 // request until the function's maxDuration. got's own retry is switched off
 // (`retry: { limit: 0 }`) so the only retries are the bounded ones below.
 
+import { errorSummary } from "@/lib/log-safe";
 import { DeezerNetworkError } from "./errors";
 
 /** A current desktop Chrome UA (Deezer serves the web player to it). */
@@ -100,14 +101,18 @@ export function isPreSendError(e: unknown): boolean {
 	return !!err.code && PRE_SEND_CODES.has(err.code);
 }
 
-/** Wraps a got/socket failure in a DeezerNetworkError (keeps code + status). */
+/**
+ * Wraps a got/socket failure in a DeezerNetworkError (keeps code + status).
+ * The got error itself is not kept: its enumerable `options` hold the request
+ * (license_token in the JSON body, the cookie jar with the ARL), and its
+ * message the full URL, so it must never reach a log line.
+ */
 export function toDeezerNetworkError(what: string, e: unknown): DeezerNetworkError {
 	if (e instanceof DeezerNetworkError) return e;
-	const err = e as ErrorLike & { message?: string };
-	return new DeezerNetworkError(`${what}: ${err?.name ?? "Error"}: ${err?.message ?? String(e)}`, {
+	const err = e as ErrorLike;
+	return new DeezerNetworkError(`${what}: ${errorSummary(e)}`, {
 		code: err?.code,
 		status: statusOf(err),
-		cause: e,
 	});
 }
 
