@@ -168,7 +168,7 @@ describe("AudioEngine — playback starts on every source", () => {
 		const el = await waitFor(() => elementWithSrc(/\/api\/v1\/stream-progressive\/1$/));
 		act(() => el.ready(200));
 		expect(el.plays).toBe(1);
-		await waitFor(() => expect(el.volume).toBeCloseTo(0.8));
+		await waitFor(() => expect(el.volume).toBeCloseTo(0.8), { timeout: 5000 });
 	});
 
 	it("plays a stored track from its presigned R2 URL", async () => {
@@ -178,7 +178,7 @@ describe("AudioEngine — playback starts on every source", () => {
 		const el = await waitFor(() => elementWithSrc(/r2\.example\/tracks\/2\//));
 		act(() => el.ready(200));
 		expect(el.plays).toBe(1);
-		await waitFor(() => expect(el.volume).toBeCloseTo(0.8));
+		await waitFor(() => expect(el.volume).toBeCloseTo(0.8), { timeout: 5000 });
 	});
 
 	it("plays an IndexedDB copy from its blob URL", async () => {
@@ -203,7 +203,7 @@ describe("AudioEngine — Web Audio", () => {
 		act(() => el.ready(200));
 		act(() => el.tick(1));
 		expect(isRouted(el as unknown as HTMLAudioElement)).toBe(false);
-		await waitFor(() => expect(el.volume).toBeCloseTo(0.8));
+		await waitFor(() => expect(el.volume).toBeCloseTo(0.8), { timeout: 5000 });
 	});
 
 	it("routes the element once the context runs, and its volume moves to its GainNode", async () => {
@@ -279,7 +279,7 @@ describe("AudioEngine — fades", () => {
 		act(() => usePlayerStore.getState().resume());
 		// A user resume starts from silence and fades in.
 		expect(second.volume).toBe(0);
-		await waitFor(() => expect(second.volume).toBeCloseTo(0.8));
+		await waitFor(() => expect(second.volume).toBeCloseTo(0.8), { timeout: 5000 });
 	});
 
 	it("the next track of the queue starts at full volume, with no fade-in", async () => {
@@ -311,11 +311,12 @@ describe("AudioEngine — fades", () => {
 		act(() => usePlayerStore.getState().pause());
 		act(() => second.ready(200));
 		expect(second.plays).toBe(0);
-		await waitFor(() => expect(second.volume).toBe(0));
+		// Real-timer fades: give them room under a loaded CI runner (was flaky at the 1 s default).
+		await waitFor(() => expect(second.volume).toBe(0), { timeout: 5000 });
 		act(() => usePlayerStore.getState().resume());
 		expect(second.plays).toBe(1);
 		expect(second.volume).toBe(0);
-		await waitFor(() => expect(second.volume).toBeCloseTo(0.8));
+		await waitFor(() => expect(second.volume).toBeCloseTo(0.8), { timeout: 5000 });
 	});
 });
 

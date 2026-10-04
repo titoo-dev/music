@@ -581,7 +581,7 @@
 						"description": "Numeric Deezer id",
 						"schema": {
 							"type": "string",
-							"pattern": "^d+$"
+							"pattern": "^[0-9]+$"
 						}
 					},
 					{

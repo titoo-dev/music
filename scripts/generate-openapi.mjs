@@ -834,7 +834,7 @@ const paths = {
 			summary: "Album / playlist / artist page with tracks",
 			security: optionalAuth,
 			parameters: [
-				query("id", str({ pattern: "^\d+$" }), "Numeric Deezer id", true),
+				query("id", str({ pattern: "^[0-9]+$" }), "Numeric Deezer id", true),
 				query("type", str({ enum: ["album", "playlist", "artist"] }), "Entity type", true),
 			],
 			responses: { ...okRes("DeezerTracklistEnvelope", ref("DeezerTracklist")), ...E_400, ...E_404, 502: err("UpstreamError"), ...E_GUEST },
