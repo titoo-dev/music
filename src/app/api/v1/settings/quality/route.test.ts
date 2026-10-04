@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { prismaMock } from "@/test/helpers/mockPrisma";
 import { authMock, setSessionUser, clearSession } from "@/test/helpers/mockAuth";
 import { makeNextRequest, readJson } from "@/test/helpers/nextRequest";
@@ -25,9 +25,18 @@ function makeApp(maxBitrate = 1) {
 
 const post = (body: unknown) => POST(makeNextRequest({ method: "POST", body }));
 
+function signIn(email: string) {
+	authMock.api.getSession.mockResolvedValue({ user: { id: "u1", email } } as never);
+}
+
 beforeEach(() => {
 	clearSession();
 	serverStateMock.getWaveletApp.mockReset();
+	vi.stubEnv("WAVELET_ADMIN_EMAILS", "");
+});
+
+afterEach(() => {
+	vi.unstubAllEnvs();
 });
 
 describe("GET /api/v1/settings/quality", () => {
@@ -79,5 +88,59 @@ describe("POST /api/v1/settings/quality", () => {
 		// Re-read first so another instance's newer settings aren't overwritten.
 		expect(app.freshSettings).toHaveBeenCalledWith(0);
 		expect(app.saveSettings).toHaveBeenCalledWith({ maxBitrate, tags: { title: true } });
+	});
+
+	describe("WAVELET_ADMIN_EMAILS (C7)", () => {
+		it("refuses a signed-in non-admin with 403 FORBIDDEN (was: any user could change the quality of every listener)", async () => {
+			vi.stubEnv("WAVELET_ADMIN_EMAILS", "admin@example.com");
+			signIn("someone@example.com");
+			const app = makeApp(1);
+			const res = await post({ maxBitrate: 9 });
+			expect(res.status).toBe(403);
+			expect((await readJson<{ error: { code: string } }>(res))?.error.code).toBe("FORBIDDEN");
+			expect(app.saveSettings).not.toHaveBeenCalled();
+		});
+
+		it("lets a listed admin change it, case-insensitively and among several comma-separated emails", async () => {
+			vi.stubEnv("WAVELET_ADMIN_EMAILS", " ops@example.com , Admin@Example.COM ");
+			signIn("admin@example.com");
+			const app = makeApp(1);
+			const res = await post({ maxBitrate: 9 });
+			expect(res.status).toBe(200);
+			expect(app.saveSettings).toHaveBeenCalledWith({ maxBitrate: 9, tags: { title: true } });
+		});
+
+		it("refuses a session without an email when admins are listed", async () => {
+			vi.stubEnv("WAVELET_ADMIN_EMAILS", "admin@example.com");
+			setSessionUser("u1");
+			const app = makeApp(1);
+			const res = await post({ maxBitrate: 9 });
+			expect(res.status).toBe(403);
+			expect(app.saveSettings).not.toHaveBeenCalled();
+		});
+
+		it("still answers 401 (not 403) when not signed in", async () => {
+			vi.stubEnv("WAVELET_ADMIN_EMAILS", "admin@example.com");
+			makeApp(1);
+			const res = await post({ maxBitrate: 9 });
+			expect(res.status).toBe(401);
+		});
+
+		it.each([["unset", undefined], ["empty", ""]])("lets any signed-in user change it when the variable is %s (unchanged)", async (_label, value) => {
+			if (value === undefined) delete process.env.WAVELET_ADMIN_EMAILS;
+			else vi.stubEnv("WAVELET_ADMIN_EMAILS", value);
+			signIn("someone@example.com");
+			const app = makeApp(1);
+			const res = await post({ maxBitrate: 3 });
+			expect(res.status).toBe(200);
+			expect(app.saveSettings).toHaveBeenCalled();
+		});
+
+		it("keeps GET public whatever the admin list", async () => {
+			vi.stubEnv("WAVELET_ADMIN_EMAILS", "admin@example.com");
+			makeApp(3);
+			const res = await GET();
+			expect(res.status).toBe(200);
+		});
 	});
 });

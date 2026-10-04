@@ -53,6 +53,8 @@ import {
 	ok,
 	fail,
 	requireUser,
+	requireAdmin,
+	adminEmails,
 	requireDeezer,
 	requireApp,
 	requireUserAndApp,
@@ -180,6 +182,57 @@ describe("requireUser()", () => {
 		expect(result.error!.status).toBe(500);
 		const body = await readJson<{ error: { code: string } }>(result.error!);
 		expect(body?.error.code).toBe("AUTH_ERROR");
+	});
+});
+
+// ────────────────────────────────────────────────────────────
+// adminEmails / requireAdmin
+// ────────────────────────────────────────────────────────────
+
+describe("adminEmails()", () => {
+	it("parses a comma-separated, case-insensitive list and drops blanks", () => {
+		expect(adminEmails({ WAVELET_ADMIN_EMAILS: " A@x.io, ,b@Y.io ," })).toEqual(["a@x.io", "b@y.io"]);
+	});
+
+	it("is empty when the variable is unset or blank", () => {
+		expect(adminEmails({})).toEqual([]);
+		expect(adminEmails({ WAVELET_ADMIN_EMAILS: "  " })).toEqual([]);
+	});
+});
+
+describe("requireAdmin()", () => {
+	const signIn = (email?: string) =>
+		authMock.api.getSession.mockResolvedValue({ user: { id: "u1", email } } as never);
+
+	it("passes any signed-in user when WAVELET_ADMIN_EMAILS is unset", async () => {
+		vi.stubEnv("WAVELET_ADMIN_EMAILS", "");
+		signIn("someone@example.com");
+		const result = await requireAdmin(makeNextRequest());
+		expect(result.error).toBeNull();
+		expect(result.userId).toBe("u1");
+	});
+
+	it("passes a listed admin whatever the case", async () => {
+		vi.stubEnv("WAVELET_ADMIN_EMAILS", "Admin@Example.com");
+		signIn("ADMIN@example.COM");
+		const result = await requireAdmin(makeNextRequest());
+		expect(result.error).toBeNull();
+	});
+
+	it("returns 403 FORBIDDEN for a signed-in user who is not listed (was: every signed-in user could change server-wide settings)", async () => {
+		vi.stubEnv("WAVELET_ADMIN_EMAILS", "admin@example.com");
+		signIn("someone@example.com");
+		const result = await requireAdmin(makeNextRequest());
+		expect(result.error!.status).toBe(403);
+		const body = await readJson<{ error: { code: string } }>(result.error!);
+		expect(body?.error.code).toBe("FORBIDDEN");
+	});
+
+	it("passes requireUser's 401 / 500 through unchanged", async () => {
+		vi.stubEnv("WAVELET_ADMIN_EMAILS", "admin@example.com");
+		expect((await requireAdmin(makeNextRequest())).error!.status).toBe(401);
+		failSession();
+		expect((await requireAdmin(makeNextRequest())).error!.status).toBe(500);
 	});
 });
 

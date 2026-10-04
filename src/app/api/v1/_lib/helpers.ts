@@ -41,6 +41,36 @@ export async function requireUser(request: NextRequest) {
 	}
 }
 
+// ── Admin guard (server-wide settings) ──
+
+/** The lower-cased emails listed in WAVELET_ADMIN_EMAILS (comma separated); empty when unset. */
+export function adminEmails(env: Record<string, string | undefined> = process.env): string[] {
+	return (env.WAVELET_ADMIN_EMAILS ?? "")
+		.split(",")
+		.map((email) => email.trim().toLowerCase())
+		.filter(Boolean);
+}
+
+/**
+ * A signed-in user allowed to change server-wide settings. When
+ * WAVELET_ADMIN_EMAILS lists emails, only those (case-insensitive) pass and
+ * everyone else gets 403 FORBIDDEN; when it is unset or empty, any signed-in
+ * user passes.
+ */
+export async function requireAdmin(request: NextRequest) {
+	const userResult = await requireUser(request);
+	if (userResult.error) return userResult;
+
+	const admins = adminEmails();
+	if (admins.length === 0) return userResult;
+
+	const email = userResult.session.user.email?.trim().toLowerCase();
+	if (!email || !admins.includes(email)) {
+		return { userId: null as never, session: null as never, error: fail("FORBIDDEN", "Only an administrator can change this setting.", 403) };
+	}
+	return userResult;
+}
+
 // ── Deezer session guard (requires better-auth + Deezer ARL) ──
 
 export async function requireDeezer(request: NextRequest) {

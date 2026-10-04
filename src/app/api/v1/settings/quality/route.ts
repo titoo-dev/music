@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { TrackFormats } from "@/lib/deezer/types";
-import { ok, fail, handleError, requireApp, requireUser } from "../../_lib/helpers";
+import { ok, fail, handleError, requireAdmin, requireApp } from "../../_lib/helpers";
 
 /** MP3 128 (data saver), MP3 320 (high), FLAC (lossless). */
 const BITRATES: readonly number[] = [TrackFormats.MP3_128, TrackFormats.MP3_320, TrackFormats.FLAC];
@@ -18,9 +18,10 @@ export async function GET() {
 }
 
 // POST /api/v1/settings/quality — change it for every listener. Body: { maxBitrate: 1 | 3 | 9 }
+// Admins only when WAVELET_ADMIN_EMAILS is set (403 FORBIDDEN otherwise); any signed-in user when it is not.
 export async function POST(request: NextRequest) {
 	try {
-		const { error: userError } = await requireUser(request);
+		const { error: userError } = await requireAdmin(request);
 		if (userError) return userError;
 		const { app, error } = await requireApp();
 		if (error) return error;
