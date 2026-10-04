@@ -47,6 +47,7 @@ import {
 	takePreloaded,
 } from "@/components/audio/engine/prefetch";
 import { classifySource, needsResign, planRecovery, resolvePlaybackUrl } from "@/components/audio/engine/source";
+import { forgetSignedInState, watchSignOut } from "@/components/audio/engine/sign-out";
 
 // Restore cache limit from localStorage
 if (typeof window !== "undefined") {
@@ -571,6 +572,10 @@ export function AudioEngine() {
 			disposePrefetchPools();
 		};
 	}, [attachEvents, detachEvents]);
+
+	// Sign-out / account switch: forget the presigned URLs, prefetch state and
+	// the IndexedDB audio the Service Worker would keep serving.
+	useEffect(() => watchSignOut(useAuthStore, () => void forgetSignedInState()), []);
 
 	// Stop preview when full player resumes
 	useEffect(() => {

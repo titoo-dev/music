@@ -309,3 +309,20 @@ export function disposePrefetchPools() {
 	for (const ctl of backgroundFills) ctl.abort();
 	backgroundFills.clear();
 }
+
+/**
+ * Forget everything learnt during this sign-in (sign-out / account switch):
+ * pools, warm levels, "not cached" verdicts. The next user starts cold
+ * (was: module state outlived the session that filled it).
+ */
+export function resetPrefetchState() {
+	disposePrefetchPools();
+	warmedAt.clear();
+	warmInflight.clear();
+	preloadMisses.clear();
+}
+
+/** Has warmTrack() already handled this track (any level)? */
+export function warmLevel(trackId: string): "none" | "head" | "full" | null {
+	return warmedAt.get(trackId) ?? null;
+}
