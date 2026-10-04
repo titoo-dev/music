@@ -17,6 +17,7 @@ import {
 } from "@/utils/audio-context";
 import { createLoudnessMeter, type LoudnessMeter } from "@/components/audio/engine/loudness";
 import { startHandoff } from "@/components/audio/engine/handoff";
+import { mediaMetadataInit } from "@/components/audio/engine/media-session";
 import { getCachedBlobUrl, removeCached, setCacheLimit } from "@/lib/audio-cache";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -25,10 +26,11 @@ import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-fail
 import { canSeekInPlace, inRanges, isRangelessSource, seekLanded, waitForSeekableUrl } from "@/lib/seek";
 import { formatTime } from "@/utils/format-time";
 import {
-	PLAY_THRESHOLD_SECONDS,
+	accumulateListened,
 	advanceQueue,
 	claimBackgroundPersist,
 	createTrackSession,
+	reachedPlayThreshold,
 	shouldNotifySkip,
 	startVolume,
 	type TrackSession,
@@ -851,7 +853,10 @@ export function AudioEngine() {
 		// Same track, fresh attempt: drop its retry budget and any pending
 		// retry / auto-skip timer (was: "Retry" in the toast was followed by
 		// the auto-skip that was still armed).
-		if (sessionRef.current) sessionRef.current.retryCount = 0;
+		if (sessionRef.current) {
+			sessionRef.current.retryCount = 0;
+			sessionRef.current.failed = false;
+		}
 		timers.clear();
 		autoSkip.cancel();
 		setError(null);
@@ -972,17 +977,19 @@ export function AudioEngine() {
 			}
 			onPositionUpdate();
 
-			// Spotify rule: count a real play once playback crosses 30s.
+			// Spotify rule: count a real play once 30 s were actually listened
+			// to (was: currentTime >= 30, so a seek past 0:30 counted).
 			// This is the moment the track "joins" the user's recently-played
-			// history and its Blob file is locked from eviction-on-skip.
+			// history and its stored file is locked from eviction-on-skip.
 			const track = usePlayerStore.getState().currentTrack;
 			const session = sessionRef.current;
+			if (session && !audio.paused && !audio.seeking) accumulateListened(session, audio.currentTime);
 			if (
 				track &&
 				session &&
 				!session.logged &&
 				session.trackId === track.trackId &&
-				audio.currentTime >= PLAY_THRESHOLD_SECONDS
+				reachedPlayThreshold(session)
 			) {
 				session.logged = true;
 				void logRecentPlay({
@@ -1195,11 +1202,13 @@ export function AudioEngine() {
 				}
 			}
 
-			// All retries exhausted — fetch the route once with credentials so we
-			// can surface the server's actual error (the <audio> element only sees
-			// "Format error") and react to account-wide failures.
+			// All retries exhausted — ask the route once (?probe=1, C3: no audio
+			// is opened or stored) so we can surface the server's actual error
+			// (the <audio> element only sees "Format error") and react to
+			// account-wide failures. The track failed: leaving it isn't a skip.
+			if (session) session.failed = true;
 			const failingTrack = currentTrack;
-			void diagnoseStreamFailure(`/api/v1/stream-progressive/${failingTrack.trackId}`).then(
+			void diagnoseStreamFailure(progressiveUrl(failingTrack.trackId, { probe: true })).then(
 				(diagnosis) => {
 					if (diagnosis.error) {
 						console.error("[AudioEngine] giving up — fetch failed", diagnosis.error);
@@ -1314,6 +1323,9 @@ export function AudioEngine() {
 			setBuffering(false);
 			// Successful playback resets the consecutive-failure streak.
 			consecutiveFailuresRef.current = 0;
+			const audio = audioRef.current;
+			const session = sessionRef.current;
+			if (audio && session) session.playedFrom = audio.src;
 		};
 
 		handlersRef.current.onProgress = () => {
@@ -1340,26 +1352,7 @@ export function AudioEngine() {
 			return;
 		}
 
-		const artwork: MediaImage[] = currentTrack.cover
-			? [
-					{
-						src: currentTrack.cover.replace(/\/\d+x\d+-/, "/256x256-"),
-						sizes: "256x256",
-						type: "image/jpeg",
-					},
-					{
-						src: currentTrack.cover.replace(/\/\d+x\d+-/, "/512x512-"),
-						sizes: "512x512",
-						type: "image/jpeg",
-					},
-				]
-			: [];
-
-		navigator.mediaSession.metadata = new MediaMetadata({
-			title: currentTrack.title,
-			artist: currentTrack.artist,
-			artwork,
-		});
+		navigator.mediaSession.metadata = new MediaMetadata(mediaMetadataInit(currentTrack));
 	}, [currentTrack]);
 
 	useEffect(() => {
@@ -1379,6 +1372,7 @@ export function AudioEngine() {
 			["pause", () => pause()],
 			["previoustrack", () => prev()],
 			["nexttrack", () => next()],
+			["stop", () => usePlayerStore.getState().stop()],
 			[
 				"seekto",
 				(details) => {

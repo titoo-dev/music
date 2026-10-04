@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Client-side file download of a track. Streams /api/v1/stream/[trackId]
-// (which falls back to the progressive Deezer engine on a cache miss, and
-// persists the file server-side on the way), reports byte progress, and
-// hands the blob to the browser as a named file.
+// Client-side file download of a track. Reads the stored (tagged) copy from
+// its presigned R2 URL when the server holds it, else streams
+// /api/v1/stream/[trackId] (which falls back to the progressive Deezer engine
+// on a cache miss, and persists the file server-side on the way), reports
+// byte progress, and hands the blob to the browser as a named file.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface DownloadableTrack {
@@ -40,15 +41,42 @@ export function fileNameFor(track: Pick<DownloadableTrack, "title" | "artist">, 
 	return `${sanitizeFileName(base)}.${extensionFor(contentType)}`;
 }
 
+/**
+ * Fetch the stored copy straight from R2 when the server holds the track:
+ * the tagged file, with a Content-Length for the progress bar (was: an
+ * uncached track came untagged from the live stream, with no total).
+ * Null when there is no presigned URL or R2 refused — the caller then goes
+ * through /api/v1/stream.
+ */
+async function fetchFromPresigned(
+	trackId: string,
+	presignedUrl: (trackId: string) => Promise<string | null>,
+	signal?: AbortSignal
+): Promise<Response | null> {
+	const url = await presignedUrl(trackId).catch(() => null);
+	if (!url || signal?.aborted) return null;
+	try {
+		const res = await fetch(url, { credentials: "omit", mode: "cors", signal });
+		if (res.ok) return res;
+		res.body?.cancel().catch(() => {});
+	} catch (e) {
+		if (signal?.aborted) throw e;
+	}
+	return null;
+}
+
 export async function fetchTrackFile(
 	trackId: string,
 	onProgress: (p: DownloadProgress) => void,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	opts: { presignedUrl?: (trackId: string) => Promise<string | null> } = {}
 ): Promise<{ blob: Blob; contentType: string | null }> {
-	const res = await fetch(`/api/v1/stream/${encodeURIComponent(trackId)}`, {
-		credentials: "include",
-		signal,
-	});
+	const res =
+		(opts.presignedUrl && (await fetchFromPresigned(trackId, opts.presignedUrl, signal))) ||
+		(await fetch(`/api/v1/stream/${encodeURIComponent(trackId)}`, {
+			credentials: "include",
+			signal,
+		}));
 	if (!res.ok) {
 		let message = `Download failed (${res.status})`;
 		try {
@@ -84,6 +112,26 @@ export async function fetchTrackFile(
 	}
 	const blob = new Blob(chunks as BlobPart[], { type: contentType || "audio/mpeg" });
 	return { blob, contentType };
+}
+
+/**
+ * Rate-limit progress reports: the first one and the last one (loaded ===
+ * total) always go through, the rest at most every `intervalMs` (was: one
+ * store update per network chunk — hundreds per file).
+ */
+export function throttleProgress(
+	report: (p: DownloadProgress) => void,
+	intervalMs = 200,
+	now: () => number = Date.now
+): (p: DownloadProgress) => void {
+	let last = -Infinity;
+	return (p) => {
+		const t = now();
+		const complete = p.total !== null && p.loaded >= p.total;
+		if (!complete && t - last < intervalMs) return;
+		last = t;
+		report(p);
+	};
 }
 
 export function saveBlob(blob: Blob, fileName: string) {

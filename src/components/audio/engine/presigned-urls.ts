@@ -44,8 +44,17 @@ export function proxyUrl(trackId: string): string {
 	return `/api/v1/stream/${encodeURIComponent(trackId)}`;
 }
 
-export function progressiveUrl(trackId: string, opts: { preview?: boolean; head?: boolean } = {}): string {
+/**
+ * The live stream: persisting by default, `preview` never stores the track,
+ * `head` caps a preview at its first bytes, and `probe` (contract C3) only
+ * says whether the track is streamable for this user — no audio is opened.
+ */
+export function progressiveUrl(
+	trackId: string,
+	opts: { preview?: boolean; head?: boolean; probe?: boolean } = {}
+): string {
 	const base = `/api/v1/stream-progressive/${encodeURIComponent(trackId)}`;
+	if (opts.probe) return `${base}?probe=1`;
 	if (!opts.preview) return base;
 	return opts.head ? `${base}?preview=1&head=1` : `${base}?preview=1`;
 }

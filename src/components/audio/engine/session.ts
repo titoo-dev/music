@@ -20,6 +20,14 @@ export interface TrackSession {
 	resigned: boolean;
 	/** persistInBackground() was already opened for this play. */
 	persistRequested: boolean;
+	/** Seconds actually played (seeks and pauses excluded). */
+	listened: number;
+	/** Playback position at the previous timeupdate (null = none yet). */
+	lastPosition: number | null;
+	/** The source playback last started from (the "playing" event). */
+	playedFrom: string | null;
+	/** The engine gave up on this track (retries exhausted). */
+	failed: boolean;
 }
 
 export function createTrackSession(trackId: string, opts: { autoAdvance?: boolean } = {}): TrackSession {
@@ -30,7 +38,31 @@ export function createTrackSession(trackId: string, opts: { autoAdvance?: boolea
 		retryCount: 0,
 		resigned: false,
 		persistRequested: false,
+		listened: 0,
+		lastPosition: null,
+		playedFrom: null,
+		failed: false,
 	};
+}
+
+/** Longest gap between two timeupdates still counted as continuous playback. */
+export const MAX_LISTEN_TICK_SECONDS = 2;
+
+/**
+ * Add the time played since the previous timeupdate. A jump forward (seek)
+ * or backward isn't listening; neither is a gap longer than a normal tick.
+ */
+export function accumulateListened(session: TrackSession, position: number): void {
+	const prev = session.lastPosition;
+	session.lastPosition = position;
+	if (prev === null || !isFinite(position)) return;
+	const delta = position - prev;
+	if (delta > 0 && delta <= MAX_LISTEN_TICK_SECONDS) session.listened += delta;
+}
+
+/** The track was listened to long enough to count as a play (Spotify's 30 s rule). */
+export function reachedPlayThreshold(session: TrackSession): boolean {
+	return session.listened >= PLAY_THRESHOLD_SECONDS;
 }
 
 /**
@@ -46,10 +78,13 @@ export function claimBackgroundPersist(session: TrackSession | null, src: string
 
 /**
  * Ask the server to evict the file of a track left before it counted as a
- * play (the skip endpoint keeps anything still referenced).
+ * play (the skip endpoint keeps anything still referenced). Not for a track
+ * that failed (the user didn't skip it), nor one that only played from a
+ * preview stream — that play never stored anything.
  */
-export function shouldNotifySkip(session: TrackSession | null): boolean {
-	return !!session && !session.logged;
+export function shouldNotifySkip(session: TrackSession | null): session is TrackSession {
+	if (!session || session.logged || session.failed) return false;
+	return !(session.playedFrom && isPreviewSource(session.playedFrom));
 }
 
 /**

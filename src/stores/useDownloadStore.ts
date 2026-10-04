@@ -3,9 +3,11 @@ import {
 	fetchTrackFile,
 	fileNameFor,
 	saveBlob,
+	throttleProgress,
 	type DownloadableTrack,
 	type DownloadProgress,
 } from "@/lib/download";
+import { presignedUrls } from "@/components/audio/engine/presigned-urls";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Download queue — the single place every "download" action in the UI goes
@@ -39,7 +41,9 @@ export interface DownloadTransport {
 }
 
 const defaultTransport: DownloadTransport = {
-	fetchFile: fetchTrackFile,
+	// A stored track comes tagged straight from R2 (presigned URL).
+	fetchFile: (trackId, onProgress, signal) =>
+		fetchTrackFile(trackId, onProgress, signal, { presignedUrl: (id) => presignedUrls.get(id) }),
 	save: saveBlob,
 };
 
@@ -146,7 +150,7 @@ async function run(item: DownloadItem) {
 	try {
 		const { blob, contentType } = await transport.fetchFile(
 			item.trackId,
-			(p) => patch(item.id, () => ({ loaded: p.loaded, total: p.total })),
+			throttleProgress((p) => patch(item.id, () => ({ loaded: p.loaded, total: p.total }))),
 			controller.signal
 		);
 		if (controller.signal.aborted) return;

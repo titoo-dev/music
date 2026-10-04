@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import {
 	PLAY_THRESHOLD_SECONDS,
+	accumulateListened,
 	advanceQueue,
 	claimBackgroundPersist,
+	reachedPlayThreshold,
 	createTrackSession,
 	shouldNotifySkip,
 	startVolume,
@@ -46,6 +48,53 @@ describe("shouldNotifySkip", () => {
 		s.logged = true;
 		expect(shouldNotifySkip(s)).toBe(false);
 		expect(shouldNotifySkip(null)).toBe(false);
+	});
+
+	it("doesn't report a failed track as skipped (was: the give-up auto-skip sent a skip notification)", () => {
+		const s = createTrackSession("1");
+		s.failed = true;
+		expect(shouldNotifySkip(s)).toBe(false);
+	});
+
+	it("doesn't report a track that only played from a preview stream (was: a skip for a play that stored nothing)", () => {
+		const s = createTrackSession("1");
+		s.playedFrom = "https://app/api/v1/stream-progressive/1?preview=1";
+		expect(shouldNotifySkip(s)).toBe(false);
+		s.playedFrom = "https://r2.example/t.mp3?sig=1";
+		expect(shouldNotifySkip(s)).toBe(true);
+	});
+});
+
+describe("accumulateListened", () => {
+	function play(s: ReturnType<typeof createTrackSession>, from: number, to: number) {
+		for (let t = from; t <= to + 1e-9; t += 0.25) accumulateListened(s, t);
+	}
+
+	it("a seek past 0:30 doesn't count as a play (was: currentTime >= 30 logged it)", () => {
+		const s = createTrackSession("1");
+		play(s, 0, 2);
+		accumulateListened(s, 95);
+		play(s, 95, 100);
+		expect(s.listened).toBeCloseTo(7);
+		expect(reachedPlayThreshold(s)).toBe(false);
+	});
+
+	it("counts 30 s of real playback, across seeks", () => {
+		const s = createTrackSession("1");
+		play(s, 0, 20);
+		accumulateListened(s, 120);
+		play(s, 120, 130);
+		expect(reachedPlayThreshold(s)).toBe(true);
+	});
+
+	it("ignores backward jumps and long gaps", () => {
+		const s = createTrackSession("1");
+		accumulateListened(s, 10);
+		accumulateListened(s, 2);
+		accumulateListened(s, 5);
+		expect(s.listened).toBe(0);
+		accumulateListened(s, 6);
+		expect(s.listened).toBe(1);
 	});
 });
 

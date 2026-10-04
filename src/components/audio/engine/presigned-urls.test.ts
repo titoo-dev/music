@@ -160,6 +160,10 @@ describe("URL builders", () => {
 			"/api/v1/stream-progressive/12?preview=1&head=1"
 		);
 	});
+
+	it("diagnoses a failure with the probe (C3) instead of opening the stream again (was: a real GET that could start a persist)", () => {
+		expect(progressiveUrl("12", { probe: true })).toBe("/api/v1/stream-progressive/12?probe=1");
+	});
 });
 
 describe("resolveCachedSource", () => {
