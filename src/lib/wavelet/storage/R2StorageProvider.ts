@@ -4,7 +4,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import type { StorageProvider } from "./StorageProvider";
 import { StorageNotFoundError, inferContentType, toObjectKey } from "./objects";
-import { assertOk, copySource, objectUrl, r2Fetch } from "./r2";
+import { assertOk, copySource, decodeXml, objectUrl, r2Fetch } from "./r2";
 
 // Streams are buffered to /tmp (the only writable path on Vercel Functions)
 // so the tagger can edit the file in place before it is uploaded. A single
@@ -142,11 +142,3 @@ export class R2StorageProvider implements StorageProvider {
 	}
 }
 
-function decodeXml(s: string): string {
-	return s
-		.replace(/&lt;/g, "<")
-		.replace(/&gt;/g, ">")
-		.replace(/&quot;/g, '"')
-		.replace(/&apos;/g, "'")
-		.replace(/&amp;/g, "&");
-}

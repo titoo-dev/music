@@ -122,6 +122,47 @@ export async function presignGet(key: string, expiresIn: number): Promise<string
 	return signed.url;
 }
 
+export function decodeXml(s: string): string {
+	return s
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&apos;/g, "'")
+		.replace(/&amp;/g, "&");
+}
+
+export interface ListedObject {
+	key: string;
+	lastModified: Date;
+	size: number;
+}
+
+/** One page (up to 1000 keys) of ListObjectsV2 under `prefix`. */
+export async function listObjectsPage(
+	prefix: string,
+	continuationToken?: string
+): Promise<{ objects: ListedObject[]; nextToken?: string }> {
+	const url = new URL(objectUrl(""));
+	url.searchParams.set("list-type", "2");
+	url.searchParams.set("prefix", prefix);
+	if (continuationToken) url.searchParams.set("continuation-token", continuationToken);
+	const xml = await (await assertOk(await r2Fetch(url.toString()), prefix)).text();
+
+	const objects: ListedObject[] = [];
+	for (const [, block] of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+		const key = block.match(/<Key>([^<]*)<\/Key>/)?.[1];
+		if (!key) continue;
+		objects.push({
+			key: decodeXml(key),
+			lastModified: new Date(block.match(/<LastModified>([^<]*)<\/LastModified>/)?.[1] ?? 0),
+			size: Number(block.match(/<Size>([^<]*)<\/Size>/)?.[1] ?? 0),
+		});
+	}
+	const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
+	const next = xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)?.[1];
+	return { objects, nextToken: truncated && next ? decodeXml(next) : undefined };
+}
+
 /** Test hook: forget the client so a test can change R2_* env vars. */
 export function _resetR2Client() {
 	cached = null;
