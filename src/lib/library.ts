@@ -15,6 +15,7 @@
 import { prisma } from "@/lib/prisma";
 import { getWaveletApp } from "@/lib/server-state";
 import { findCachedCopy, serverMaxBitrate } from "@/lib/wavelet/storage/cached-copy";
+import { hasActivePersistLease } from "@/lib/wavelet/storage/persist-lease";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -403,18 +404,24 @@ export async function forceEvictFile(trackId: string): Promise<number> {
 	const storageProvider = app?.storageProvider;
 	let deleted = 0;
 
+	const storedIds = stored.map((s) => s.id);
+
 	if (storageProvider) {
-		for (const row of stored) {
+		for (const path of new Set(stored.map((row) => row.storagePath))) {
+			// Legacy template keys could be shared by several tracks / bitrates:
+			// never delete an object another StoredTrack row still serves.
+			const others = await prisma.storedTrack.count({
+				where: { storagePath: path, id: { notIn: storedIds } },
+			});
+			if (others > 0) continue;
 			try {
-				await storageProvider.deleteFile(row.storagePath);
+				await storageProvider.deleteFile(path);
 				deleted++;
 			} catch (e) {
-				console.error(`[library] failed to delete ${row.storagePath}:`, e);
+				console.error(`[library] failed to delete ${path}:`, e);
 			}
 		}
 	}
-
-	const storedIds = stored.map((s) => s.id);
 
 	// Drop SharedTrack→StoredTrack links so the deletion doesn't FK-fail.
 	// The shares survive (storedTrackId becomes null) and the next playback
@@ -429,12 +436,34 @@ export async function forceEvictFile(trackId: string): Promise<number> {
 	return deleted;
 }
 
-/** Evict the file ONLY if no entity still needs it. Safe to call after any unsave. */
-export async function maybeEvictFile(trackId: string) {
+/**
+ * A copy younger than this is never evicted by the ref-count path: refs only
+ * count RecentPlay after 30 s of playback, so a skip right after the first
+ * play would otherwise delete the file another listener just got.
+ */
+export const EVICTION_GRACE_MS = 10 * 60 * 1000;
+
+export interface EvictionResult {
+	/** Objects deleted from storage. */
+	evicted: number;
+	/** Why nothing was evicted. */
+	kept?: "anchored" | "persisting" | "recent";
+}
+
+/**
+ * Evict the file ONLY if no entity still needs it, no persist of the track
+ * is in flight and no copy is younger than EVICTION_GRACE_MS. Safe to call
+ * after any unsave / skip.
+ */
+export async function maybeEvictFile(trackId: string, now = Date.now()): Promise<EvictionResult> {
 	const refs = await getTrackRefCount(trackId);
-	if (refs.total === 0) {
-		await forceEvictFile(trackId);
-	}
+	if (refs.total > 0) return { evicted: 0, kept: "anchored" };
+	if (await hasActivePersistLease(trackId, now)) return { evicted: 0, kept: "persisting" };
+	const recent = await prisma.storedTrack.count({
+		where: { trackId, createdAt: { gt: new Date(now - EVICTION_GRACE_MS) } },
+	});
+	if (recent > 0) return { evicted: 0, kept: "recent" };
+	return { evicted: await forceEvictFile(trackId) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -28,6 +28,7 @@ import {
 	listFollowedArtists,
 	shareTrack,
 	resolveShareForPlayback,
+	EVICTION_GRACE_MS,
 } from "./library";
 import { getWaveletApp } from "@/lib/server-state";
 
@@ -768,5 +769,73 @@ describe("resolveShareForPlayback", () => {
 		] as never);
 		prismaMock.sharedTrack.update.mockRejectedValue(new Error("db"));
 		expect((await resolveShareForPlayback("abc"))?.copy?.id).toBe("st1");
+	});
+});
+
+describe("eviction guards", () => {
+	function noRefs() {
+		prismaMock.savedTrack.count.mockResolvedValue(0 as never);
+		prismaMock.albumTrack.count.mockResolvedValue(0 as never);
+		prismaMock.sharedTrack.count.mockResolvedValue(0 as never);
+		prismaMock.recentPlay.count.mockResolvedValue(0 as never);
+	}
+
+	it("keeps an object that another StoredTrack row still points at (was: evicting one legacy row deleted another track's file)", async () => {
+		const deleteFile = vi.fn().mockResolvedValue(undefined);
+		getWaveletAppMock.mockResolvedValue({ storageProvider: { deleteFile } } as never);
+		prismaMock.storedTrack.findMany.mockResolvedValue([
+			{ id: "st1", storagePath: "music/Artist - Song.mp3" },
+			{ id: "st2", storagePath: "tracks/t1/3.mp3" },
+		] as never);
+		prismaMock.storedTrack.count.mockImplementation((async (args: { where: { storagePath: string } }) =>
+			args.where.storagePath === "music/Artist - Song.mp3" ? 1 : 0) as never);
+
+		const deleted = await forceEvictFile("t1");
+		expect(deleted).toBe(1);
+		expect(deleteFile).toHaveBeenCalledTimes(1);
+		expect(deleteFile).toHaveBeenCalledWith("tracks/t1/3.mp3");
+		expect(prismaMock.storedTrack.count).toHaveBeenCalledWith({
+			where: { storagePath: "music/Artist - Song.mp3", id: { notIn: ["st1", "st2"] } },
+		});
+		// Both rows of this track are still dropped.
+		expect(prismaMock.storedTrack.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ["st1", "st2"] } } });
+	});
+
+	it("does not evict a copy persisted less than 10 minutes ago (was: a skip right after the first play evicted the file just cached for everyone)", async () => {
+		noRefs();
+		prismaMock.persistLease.count.mockResolvedValue(0 as never);
+		prismaMock.storedTrack.count.mockResolvedValue(1 as never);
+
+		const r = await maybeEvictFile("t1");
+		expect(r).toEqual({ evicted: 0, kept: "recent" });
+		expect(prismaMock.storedTrack.count).toHaveBeenCalledWith({
+			where: { trackId: "t1", createdAt: { gt: expect.any(Date) } },
+		});
+		const cutoff = prismaMock.storedTrack.count.mock.calls[0][0].where.createdAt.gt as Date;
+		expect(Date.now() - cutoff.getTime()).toBeGreaterThanOrEqual(EVICTION_GRACE_MS - 1000);
+		expect(prismaMock.storedTrack.findMany).not.toHaveBeenCalled();
+	});
+
+	it("does not evict while a persist lease is held (was: a skip during the persist left an orphan that was never evicted)", async () => {
+		noRefs();
+		prismaMock.persistLease.count.mockResolvedValue(1 as never);
+
+		const r = await maybeEvictFile("t1");
+		expect(r).toEqual({ evicted: 0, kept: "persisting" });
+		expect(prismaMock.storedTrack.findMany).not.toHaveBeenCalled();
+	});
+
+	it("reports anchored tracks and evictions", async () => {
+		prismaMock.savedTrack.count.mockResolvedValue(1 as never);
+		prismaMock.albumTrack.count.mockResolvedValue(0 as never);
+		prismaMock.sharedTrack.count.mockResolvedValue(0 as never);
+		prismaMock.recentPlay.count.mockResolvedValue(0 as never);
+		expect(await maybeEvictFile("t1")).toEqual({ evicted: 0, kept: "anchored" });
+
+		noRefs();
+		prismaMock.persistLease.count.mockResolvedValue(0 as never);
+		prismaMock.storedTrack.count.mockResolvedValue(0 as never);
+		prismaMock.storedTrack.findMany.mockResolvedValue([] as never);
+		expect(await maybeEvictFile("t1")).toEqual({ evicted: 0 });
 	});
 });
