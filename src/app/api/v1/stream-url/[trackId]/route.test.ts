@@ -119,6 +119,25 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 		}
 	});
 
+	it("never reports an expiry later than the signature's (was: up to 1 s late, X-Amz-Date is whole seconds)", async () => {
+		vi.useFakeTimers({ toFake: ["Date"] });
+		// The signer stamps X-Amz-Date 20261004T100000Z: the URL lapses at 11:00:00.000.
+		vi.setSystemTime(new Date("2026-10-04T10:00:00.700Z"));
+		try {
+			setSessionUser("u1");
+			prismaMock.storedTrack.findMany.mockResolvedValue([
+				{ id: "x", trackId: "1", bitrate: 1, storagePath: "tracks/1/1.mp3", storageType: "r2" },
+			]);
+			getPresignedUrlMock.mockResolvedValue({ url: "https://example.com/1.mp3", contentType: "audio/mpeg" } as never);
+
+			const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
+			const body = await readJson<{ data: { expiresAt: string } }>(res);
+			expect(body?.data.expiresAt).toBe("2026-10-04T11:00:00.000Z");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("returns null url when signing reports the blob is missing", async () => {
 		setSessionUser("u1");
 		prismaMock.storedTrack.findMany.mockResolvedValue([{

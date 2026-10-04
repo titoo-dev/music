@@ -39,9 +39,10 @@ export async function GET(
 			return ok({ url: null, status: legacyOnly ? "unsupported_storage" : "not_cached" });
 		}
 
-		// Taken before signing: the signature's own clock is a few ms later, so
-		// the URL never expires before the reported time.
-		const expiresAt = new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString();
+		// Taken before signing and truncated to the second like the signature's
+		// X-Amz-Date, so the URL never expires before the reported time.
+		const signedAt = Math.floor(Date.now() / 1000) * 1000;
+		const expiresAt = new Date(signedAt + PRESIGN_TTL_SECONDS * 1000).toISOString();
 		const { url, contentType } = await getPresignedUrl(copy.row.storagePath, PRESIGN_TTL_SECONDS);
 		return ok({ url, contentType, expiresAt });
 	} catch (e: unknown) {
