@@ -11,7 +11,9 @@ This project uses Next.js 16 which has breaking changes from earlier versions. *
 - **Frontend**: Next.js 16 (app router), React 19, Zustand stores, Tailwind CSS 4, shadcn/ui, Motion
 - **Backend**: Next.js API routes (`src/app/api/v1/`) on Vercel Functions (Fluid compute). Background work after a response goes through `after()` — a bare fire-and-forget promise is frozen when the response ends.
 - **Database**: PostgreSQL (Neon via Vercel Marketplace) through Prisma 7 + `pg` pool attached with `attachDatabasePool` (schema at `prisma/schema.prisma`; migrations in `prisma/migrations/` are applied by `prisma migrate deploy` during the Vercel build — create new ones with `npm run db:migrate`)
-- **Storage**: private Cloudflare R2 buckets (`wavelet-music` prod/preview, `wavelet-music-dev` dev; `R2_*` env vars) — writes via `R2StorageProvider` (`src/lib/wavelet/storage/`, signed with `aws4fetch` in `r2.ts`), reads/presigned URLs via `src/lib/object-stream.ts`. Moved off Vercel Blob after its Hobby quota suspended the stores (setup: `docs/vercel.md`). `/tmp` is the only writable path.
+- **Storage**: private Cloudflare R2 buckets (`wavelet-music` prod/preview, `wavelet-music-dev` dev; `R2_*` env vars) — writes via `R2StorageProvider` (`src/lib/wavelet/storage/`, signed with `aws4fetch` in `r2.ts`), reads/presigned URLs via `src/lib/object-stream.ts`. Moved off Vercel Blob after its Hobby quota suspended the stores (setup: `docs/vercel.md`). `/tmp` is the only writable path. New copies are keyed `tracks/{trackId}/{bitrate}{ext}` (legacy rows keep their `music/…` path; run `npx tsx scripts/repair-stored-track-keys.ts --apply` once to drop legacy rows that share an object). Which cached copy a play gets is decided in one place: `storage/cached-copy.ts`. A daily Vercel Cron hits `GET /api/v1/internal/gc` (needs `CRON_SECRET`, no-op without it).
+- **Streaming engine** (`src/lib/wavelet/`): `decryption.ts` opens the Deezer CDN with ranges, timeouts and truncation checks (`stripe.ts` = pure BF_CBC_STRIPE maths); `progressive-stream.ts` spools persisting plays to `/tmp` first (the HTTP response tails the spool) and uploads after; same-instance followers share the spool, other instances see the `PersistLease` row and stream live. Live checks: `npx tsx scripts/smoke-deezer.ts 3135556 1` (needs `WAVELET_SERVICE_ARL`) and `scripts/e2e-progressive-persist.ts` (throwaway DB + dev bucket).
+- **Secrets**: Deezer ARLs are stored encrypted (`src/lib/secret-box.ts`, key `WAVELET_ENCRYPTION_KEY` else derived from `BETTER_AUTH_SECRET` — keep it identical across environments sharing the DB). Every Deezer HTTP call goes through `src/lib/deezer/http.ts` (timeouts, bounded retries, redacted logs).
 - **Auth**: better-auth (`src/lib/auth.ts`, `src/lib/auth-client.ts`)
 
 ## Design language — Geist minimal + the mobile app's expressive layer
@@ -30,12 +32,13 @@ src/
 ├── app/
 │   ├── (auth)/              # Login flow
 │   ├── (main)/              # Main app pages (home, search, playlists, albums, settings)
-│   ├── api/                 # Legacy API routes (IGNORED — see note below)
-│   ├── api/v1/              # Canonical API — downloads, library, search, shares, streaming
-│   │   └── _lib/helpers.ts  # Shared helpers (ok, fail, handleError, requireDeezerAndApp)
+│   ├── api/auth/[...all]/   # better-auth handler
+│   ├── api/v1/              # API — library, search, shares, streaming, internal/gc (cron)
+│   │   └── _lib/helpers.ts  # Shared helpers (ok, fail, handleError, requireDeezerAndApp, requireAdmin)
 │   └── share/t/[shareId]/   # Public share player + OG image
 ├── components/
 │   ├── audio/               # Player (floating pill, bottom-center), MiniPlayer (preview pill), FullscreenPlayer, SeekBar
+│   │   └── engine/          # Pure, tested pieces of AudioEngine.tsx (source policy, timers, prefetch, handoff, loudness, media session)
 │   ├── layout/              # AppHeader (glass top bar: nav + ⌘K trigger)
 │   ├── expressive/          # Design kit mirroring the Flutter app (heroes, pills, carousels, CoverTheme, CollectionScaffold)
 │   ├── command/             # CommandPalette — ⌘K search + downloads (single entry point)
@@ -44,15 +47,17 @@ src/
 │   ├── playlists/           # AddToPlaylist
 │   ├── tracks/              # ShareButton, ShareDialog, TrackActionSheet
 │   └── ui/                  # shadcn primitives (IGNORED — generated, rarely modified)
-├── hooks/                   # useDownload, useSocket, useQueuePolling, useUserPreferences
+├── hooks/                   # usePrefetch, useLibrary, useUserPreferences, useKeyboardShortcuts, …
 ├── lib/
-│   ├── wavelet/              # Core download engine (decryption, tagger, downloader, settings)
-│   │   ├── download-objects/ # Single/Collection download items + generators
-│   │   ├── plugins/         # Spotify integration
-│   │   ├── storage/         # R2 provider + client (r2.ts) + pure key/error helpers (objects.ts)
+│   ├── wavelet/              # Streaming engine (decryption + stripe maths, progressive-stream, tagger, settings)
+│   │   ├── cache/           # Per-user gw track cache, album metadata cache, per-IP rate limit
+│   │   ├── config-store/    # Global settings on the Prisma `Config` table
+│   │   ├── storage/         # R2 provider + client (r2.ts), cached-copy selection, persist lease, GC, key repair
 │   │   ├── types/           # Track, Album, Artist, Playlist, Settings
-│   │   └── utils/           # Crypto, bitrate, path templates, image download
-│   ├── deezer/              # Deezer API client (api, gw, schemas, store)
+│   │   └── utils/           # Crypto, bitrate selection, image download
+│   ├── deezer/              # Deezer API client (http policy, api, gw, public-user, schemas)
+│   ├── deezer-session.ts    # Single-flight Deezer login per user (stored ARL + child account)
+│   ├── secret-box.ts        # AES-256-GCM for secrets at rest (ARL)
 │   ├── auth.ts              # Server-side auth config
 │   ├── auth-client.ts       # Client-side auth
 │   ├── prisma.ts            # Prisma client singleton
@@ -78,6 +83,8 @@ npm run openapi      # Regenerate openapi.json (scripts/generate-openapi.mjs) �
 npm run openapi:dart # Regenerate the Dart client in clients/dart (Docker + Dart SDK)
 ```
 
+If `tsc --noEmit` reports errors in `pathtemplates.ts` / `Track.ts`, delete `tsconfig.tsbuildinfo` first: a stale incremental file produces them, not the code.
+
 ## Testing & Regression Prevention
 
 This project uses **Vitest 4** + **vitest-mock-extended** for tests. Config at `vitest.config.ts`. Reusable helpers in `src/test/helpers/` (`nextRequest.ts`, `mockPrisma.ts`, `mockAuth.ts`). Reference test to mirror: `src/app/api/v1/stream-url/[trackId]/route.test.ts`.
@@ -92,7 +99,7 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Preview store | `src/stores/usePreviewStore.ts` | `usePreviewStore.test.ts` (14 tests) |
 | Track-action sheet | `src/stores/useTrackActionStore.ts` | `useTrackActionStore.test.ts` (5 tests) |
 | Library logic | `src/lib/library.ts` | `library.test.ts` (26 tests) |
-| API auth guards | `src/app/api/v1/_lib/helpers.ts` | `helpers.test.ts` (40 tests) |
+| API auth guards (+ admin guard, generic 500 message) | `src/app/api/v1/_lib/helpers.ts` | `helpers.test.ts` (54 tests) |
 | Streaming routes | `src/app/api/v1/stream{,-progressive,-url}/[trackId]/route.ts` | `route.test.ts` (32 tests) |
 | Library routes | `src/app/api/v1/library/*` | `route.test.ts` (50 tests) |
 | Recent plays | `src/app/api/v1/recent-plays/**` | `route.test.ts` (26 tests) |
@@ -103,12 +110,25 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Keyboard shortcuts | `src/hooks/useKeyboardShortcuts.ts` | `useKeyboardShortcuts.test.ts` |
 | Player seek bar | `src/components/audio/SeekBar.tsx` | `SeekBar.test.tsx` (+ `Player.test.tsx`) |
 | Seeking on the live stream | `src/lib/seek.ts` (used by `AudioEngine.tsx` seek / resume paths) | `seek.test.ts` |
-| DB connection string | `src/lib/db-url.ts` (used by `prisma.ts`, `PostgresConfigStore.ts`) | `db-url.test.ts` |
+| DB connection string | `src/lib/db-url.ts` (used by `prisma.ts`) | `db-url.test.ts` |
 | Fullscreen wave seek | `src/components/audio/WaveSeek.tsx`, `src/lib/wave.ts`, `src/lib/spectrum.ts` | `WaveSeek.test.tsx`, `wave.test.ts`, `spectrum.test.ts` (+ `FullscreenPlayer.test.tsx`) |
 | Stream failure diagnosis | `src/lib/stream-failure.ts` (used by `AudioEngine.tsx` give-up path) | `stream-failure.test.ts` |
 | Logo / icons | `src/lib/logo.ts` (shared by `LogoMark`, OG image, `scripts/generate-icons.ts`) | `logo.test.ts` |
 | Object storage (R2) | `src/lib/object-stream.ts`, `src/lib/wavelet/storage/{objects,r2,R2StorageProvider}.ts` | `object-stream.test.ts`, `objects.test.ts`, `R2StorageProvider.test.ts` |
-| Live-stream tee (persisting streams never wait for a paused listener; preview streams keep backpressure) + download-lock TTL | `src/lib/wavelet/tee-pump.ts` (used by `progressive-stream.ts`), `src/lib/wavelet-app.ts` `acquireDownloadLock` | `tee-pump.test.ts`, `wavelet-app.test.ts` |
+| Progressive persist pipeline (disk-first spool: the writer never waits for a listener, tail readers follow their client; preview / live keep backpressure; truncation never persists; untagged upload when enrichment fails; `tracks/{trackId}/{bitrate}` keys) + download-lock TTL / follower hand-off + `PersistLease` | `src/lib/wavelet/{tee-pump,progressive-stream}.ts`, `src/lib/wavelet-app.ts`, `src/lib/wavelet/storage/persist-lease.ts` | `tee-pump.test.ts`, `progressive-stream.test.ts`, `wavelet-app.test.ts`, `persist-lease.test.ts` (+ live: `scripts/e2e-progressive-persist.ts`) |
+| Deezer stream decryption (BF_CBC_STRIPE, decoded byte ranges + probe cache, truncation → `TruncatedStreamError`, CDN connect/response/idle timeouts, one retry before the first byte) | `src/lib/wavelet/{decryption,stripe,stream-errors}.ts`, `src/lib/wavelet/utils/crypto.ts` | `decryption.test.ts`, `stripe.test.ts`, `utils/crypto.test.ts` (+ live: `npx tsx scripts/smoke-deezer.ts 3135556 1`) |
+| Streaming routes v2 (Range 206/416 on the live stream, `?probe=1`, `?prefetch=1` → 404 NOT_CACHED, `expiresAt`, head prefetch sized in seconds) | `src/app/api/v1/stream{,-progressive,-url,-warm}/**`, `stream-progressive/_lib/{play,head}.ts` | `route.test.ts` ×4, `play.test.ts`, `head.test.ts` |
+| Cached-copy selection (quality rank, licence cap, `requestedBitrate`) | `src/lib/wavelet/storage/cached-copy.ts` | `cached-copy.test.ts` |
+| Storage GC + eviction guards (grace period, lease, shared-object guard) | `src/lib/wavelet/storage/{gc,key-repair}.ts`, `src/app/api/v1/internal/gc/route.ts`, `library.ts` `maybeEvictFile` / `forceEvictFile` | `gc.test.ts`, `key-repair.test.ts`, `internal/gc/route.test.ts`, `library.test.ts` |
+| Public share stream (cached copy by trackId, lease/follower fallback, per-IP limit, honest play count) | `src/app/api/v1/shares/[shareId]/stream/route.ts`, `src/lib/wavelet/cache/rate-limit.ts` | `route.test.ts`, `rate-limit.test.ts` |
+| Deezer client hardening (timeouts, bounded retries, typed network errors, licence refusal → `WrongLicense`, secret-free logs) | `src/lib/deezer/{http,gw,api,deezer,errors,public-user}.ts`, `src/lib/log-safe.ts` | `http.test.ts`, `gw.test.ts`, `api.test.ts`, `deezer.test.ts`, `public-user.test.ts`, `log-safe.test.ts` |
+| Bitrate selection (falls back only when a format is really unavailable) | `src/lib/wavelet/utils/getPreferredBitrate.ts` | `getPreferredBitrate.test.ts` |
+| Deezer sessions + encrypted ARL (single-flight login, persisted child account) | `src/lib/deezer-session.ts`, `src/lib/secret-box.ts`, `src/lib/server-state.ts` | `helpers.test.ts`, `secret-box.test.ts`, `server-state.test.ts` |
+| Auth + settings routes (no `license_token` in responses; admin-only server quality via `WAVELET_ADMIN_EMAILS`; authenticated settings POST) | `src/app/api/v1/auth/{login-arl,login-email,change-account,connect}/route.ts`, `src/app/api/v1/settings/{route,quality/route}.ts` | `route.test.ts` ×6 |
+| Config store on Prisma (no runtime DDL) | `src/lib/wavelet/config-store/PostgresConfigStore.ts` | `PostgresConfigStore.test.ts` |
+| Player engine (source policy, presigned cache + re-sign, guarded timers, per-track session, prefetch that never persists, head handoff, loudness, media session, sign-out reset) | `src/components/audio/engine/*.ts`, `src/components/audio/AudioEngine.tsx` | `engine/*.test.ts`, `AudioEngine.test.tsx` |
+| Audio cache + Service Worker (one-transaction IndexedDB, LRU plan, read-only worker, Range maths) | `src/lib/audio-cache.ts`, `public/sw.js` (vm sandbox: listed, not measured by coverage) | `audio-cache.test.ts`, `audio-cache.idb.test.ts`, `service-worker.test.ts` |
+| Web Audio volume + prefetch budget | `src/utils/{audio-context,adjust-volume}.ts`, `src/lib/prefetch-budget.ts`, `src/hooks/usePrefetch.ts` | `audio-context.test.ts`, `prefetch-budget.test.ts`, `usePrefetch.test.ts` |
 | Cover palette (CoverTheme seed) | `src/lib/cover-palette.ts` | `cover-palette.test.ts` |
 | Home discover parsing | `src/lib/discover.ts` (used by `hooks/useDiscover.ts`) | `discover.test.ts` |
 | Bearer auth (native clients) | `src/lib/auth.ts` (better-auth `bearer()` plugin) | `auth.test.ts` |
@@ -142,9 +162,9 @@ Examples already in the suite (search for `TODO` in `*.test.ts`):
 
 ### Out of scope (still to be locked)
 
-- `AudioEngine.tsx` and audio prefetch helpers (`getTrackUrl`, `fetchPresignedUrl`, `preloadAudio`) — too coupled to `HTMLAudioElement` / `IndexedDB` for unit tests. Plan: extract pure helpers, then add Playwright for the full flow.
-- Routes: `playlists/**`, `shares/**`, `search/**`, `auth/**`, `settings/**`, `content/**`, `stream-warm/**`.
-- Wavelet engine: `decryption.ts`, `tagger.ts`, `progressive-stream.ts`, `downloader.ts` (need real Deezer/R2 — gate them behind `[skip]` until we have a recorded-cassette setup).
+- `AudioEngine.tsx` React wiring end-to-end in a real browser (the pure helpers live in `components/audio/engine/` and are tested; `AudioEngine.test.tsx` drives a fake `<audio>`). Plan: Playwright for the full flow, incl. iOS Safari background playback.
+- Routes: `playlists/**`, `shares/route.ts` + `shares/[shareId]/route.ts`, `search/**`, `content/**`, `auth/logout`.
+- Deezer client remainder: `gw.ts` / `api.ts` / `utils.ts` page parsers (retry/timeout policy is locked; the mappers are not), `wavelet-app.ts` settings code.
 - Stores: `useAuthStore`, `useAppStore`, `useShareStore`, `useLoginStore`, `useErrorStore`.
 
 When you finish locking in any of the above, append it to the table above and to `vitest.config.ts` `coverage.include`.
@@ -152,25 +172,24 @@ When you finish locking in any of the above, append it to the table above and to
 ## Database Models (Prisma)
 
 ```
-User            ── 1:many ── Session, Account, Playlist, DownloadHistory, Album, SharedTrack
+User            ── 1:many ── Session, Account, Playlist, SavedTrack, Album, FollowedArtist, SharedTrack, RecentPlay
                 ── 1:1 ──── UserSettings (JSON blob), UserPreferences (JSON blob), DeezerCredential
-Config          ── key/value store (userId + key composite PK, JSON value) — Spotify plugin & global settings
+DeezerCredential── encrypted ARL (enc:v1), licence flags (canStreamHq / canStreamLossless), childAccount
+Config          ── key/value store (userId + key composite PK, JSON value) — global settings (server-wide maxBitrate, …)
 Playlist        ── 1:many ── PlaylistTrack (trackId, title, artist, album, coverUrl, position)
-StoredTrack     ── deduplicated file storage (trackId + bitrate unique) — shared across users
-                ── 1:many ── DownloadHistory, SharedTrack
-DownloadHistory ── per-user download log, links to StoredTrack for file dedup
+StoredTrack     ── global file cache (trackId + bitrate unique), shared across users; storagePath tracks/{trackId}/{bitrate}{ext}
+                   for new copies; requestedBitrate = the licence-capped quality asked for when it was persisted
+                ── 1:many ── SharedTrack
+PersistLease    ── (trackId, bitrate) lease of an in-flight progressive persist, expiresAt-based takeover
 SharedTrack     ── public share links (shareId unique), optional expiresAt, play counter
-Album           ── per-user album tracking (userId + deezerAlbumId unique)
+Album / AlbumTrack, SavedTrack, RecentPlay ── per-user library; they ref-count StoredTrack files (see library.ts)
+TrackMatch      ── Spotify → Deezer match cache
 Verification    ── better-auth verification tokens
 ```
 
-## Legacy API Routes (`src/app/api/` non-v1)
-
-These are the **original** route implementations — not thin proxies. They contain real logic but use the same `v1/_lib/helpers.ts` utilities. The `v1/` routes are the **canonical, refactored** API. When modifying API behavior, edit only `v1/` routes. Legacy routes are in `.claudeignore` — read on-demand only if specifically asked about them.
-
 ## Conventions
 
-- API routes live in `src/app/api/v1/` (versioned). Legacy routes at `src/app/api/` are original implementations, ignored by default.
+- API routes live in `src/app/api/v1/` (versioned). The legacy non-v1 routes are gone; only `src/app/api/auth/[...all]` (better-auth) sits outside v1.
 - State management: Zustand stores in `src/stores/`
 - UI components: shadcn/ui in `src/components/ui/`, app components alongside their feature
 - Wavelet core logic is self-contained in `src/lib/wavelet/` — modify carefully
@@ -183,21 +202,16 @@ Many internal files are in `.claudeignore` to save tokens. Only **entry points**
 ### Always visible (entry points)
 | Module | Visible files | Purpose |
 |--------|--------------|---------|
-| wavelet | `index.ts`, `downloader.ts`, `settings.ts`, `decryption.ts`, `tagger.ts` | Core API + orchestration |
+| wavelet | `index.ts`, `settings.ts`, `decryption.ts`, `stripe.ts`, `progressive-stream.ts`, `tagger.ts` | Streaming engine |
 | wavelet/types | `index.ts`, `Track.ts`, `Album.ts` | Domain models |
-| wavelet/download-objects | `index.ts`, `DownloadObject.ts`, `Single.ts`, `Collection.ts` | Download containers |
-| wavelet/storage | `index.ts`, `StorageProvider.ts`, `factory.ts`, `objects.ts`, `r2.ts`, `R2StorageProvider.ts` | Storage abstraction + Cloudflare R2 |
+| wavelet/storage | `index.ts`, `StorageProvider.ts`, `factory.ts`, `objects.ts`, `r2.ts`, `R2StorageProvider.ts`, `cached-copy.ts`, `persist-lease.ts`, `gc.ts` | Storage abstraction + Cloudflare R2 |
 | wavelet/config-store | `index.ts`, `ConfigStore.ts` | Config abstraction |
-| wavelet/plugins | `index.ts`, `base.ts` | Plugin contract |
-| deezer | `index.ts`, `deezer.ts`, `api.ts`, `gw.ts` | Deezer API client |
+| deezer | `index.ts`, `http.ts`, `deezer.ts`, `api.ts`, `gw.ts` | Deezer API client |
 | components/ui | `cover-image.tsx` only | Custom UI (shadcn primitives ignored) |
 
 ### Ignored (read on-demand when modifying)
-- `src/app/api/` (non-v1) — legacy API routes
 - `wavelet/utils/*` — internal helpers (crypto, paths, bitrate, images)
-- `wavelet/download-objects/generate*.ts` — factory functions
-- `wavelet/config-store/PostgresConfigStore.ts` — concrete implementation
-- `wavelet/plugins/spotify.ts` — Spotify plugin implementation
+- `wavelet/config-store/PostgresConfigStore.ts` — concrete implementation (Prisma)
 - `wavelet/types/{Artist,Playlist,Lyrics,Picture,CustomDate,listener,Settings}.ts` — secondary models
 - `wavelet/errors.ts`, `deezer/{types,utils,errors,store,schema/*}.ts` — internals
 - `components/ui/*.tsx` — shadcn generated primitives
