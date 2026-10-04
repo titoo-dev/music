@@ -10,6 +10,7 @@ import { headObject } from "@/lib/object-stream";
 import { isStorageNotFound } from "@/lib/wavelet/storage/objects";
 import { capByLicence, findCachedCopy, loadStreamLicence } from "@/lib/wavelet/storage/cached-copy";
 import { servePlay } from "../_lib/play";
+import { headPrefetchBytes } from "../_lib/head";
 
 // The persist pipeline (tag + R2 upload) runs in after() once the audio
 // response ends; give it room on long FLAC tracks.
@@ -46,18 +47,18 @@ export async function GET(
 		// to the browser without persisting to storage / DB and without taking
 		// the per-track download lock — so it never blocks a real play.
 		const preview = search.get("preview") === "1";
-		// Head mode (only valid with preview=1): cap the response at ~64 KB
-		// so a sliding-window prefetch over a search-results list doesn't
-		// burn megabytes per track. ~64 KB is enough for an MP3 320 / FLAC
-		// header + a couple of seconds of audio — the browser's audio element
-		// gets to readyState >= 2 (canplay) and fires duration metadata.
+		// Head mode (only valid with preview=1): cap the response at ~3 s of
+		// audio at the streamed quality (64 KiB floor, 512 KiB ceiling) so a
+		// sliding-window prefetch over a search-results list doesn't burn
+		// megabytes per track, yet the audio element reaches readyState >= 2
+		// (canplay) and fires duration metadata — FLAC included.
 		const head = preview && search.get("head") === "1";
-		const headBytes = head ? 64 * 1024 : 0;
 		const live = search.get("live") === "1";
 		const probe = search.get("probe") === "1";
 
 		const settings = await app.freshSettings();
 		const preferredBitrate = Number(settings.maxBitrate);
+		const headBytes = head ? headPrefetchBytes(preferredBitrate) : 0;
 		const licence = await loadStreamLicence(userId);
 
 		// Already cached → fast path through /stream. The copy is chosen by the

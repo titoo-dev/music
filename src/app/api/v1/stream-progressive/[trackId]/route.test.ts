@@ -401,6 +401,28 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		);
 	});
 
+	it("head mode sizes the cap by seconds at the server quality (was: a flat 64 KiB, ~0.5 s of FLAC)", async () => {
+		const { app } = makeApp({ maxBitrate: 9 });
+		arrangeAuthOk(app);
+		prismaMock.storedTrack.findMany.mockResolvedValue([]);
+		startProgressiveStreamMock.mockResolvedValue({
+			body: fakeBody(),
+			contentType: "audio/flac",
+			contentLength: 0,
+		});
+
+		const res = await GET(
+			makeNextRequest({
+				url: "http://localhost:3000/api/v1/stream-progressive/1?preview=1&head=1",
+			}),
+			makeParams({ trackId: "1" })
+		);
+		expect(res.status).toBe(200);
+		expect(startProgressiveStreamMock).toHaveBeenCalledWith(
+			expect.objectContaining({ persist: false, maxBytes: 360_000 })
+		);
+	});
+
 	// C4 (contract change): a follower reads the holder's in-progress bytes at
 	// once instead of waiting for its persist and bouncing to /stream.
 	it("when lock is already in progress: streams the holder's in-progress bytes right away (was: waited up to 330 s without sending a byte, then 302)", async () => {
