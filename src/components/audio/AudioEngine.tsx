@@ -804,6 +804,9 @@ export function AudioEngine() {
 			}
 			if (audio.readyState >= 2) startPlayback(audio);
 		} else {
+			// The next start is the user's: it fades in, even if the queue
+			// advanced to this track and it never started (was: no fade-in).
+			if (sessionRef.current) sessionRef.current.autoAdvance = false;
 			adjustVolume(audio, 0, { duration: 500 }).then(() => {
 				if (!usePlayerStore.getState().isPlaying) {
 					audio.pause();
@@ -1079,8 +1082,10 @@ export function AudioEngine() {
 						// reset as the load effect, which next() below then skips
 						// (was: plays via crossfade were never logged, the duration,
 						// retry budget and normalisation stayed the previous track's).
+						// Not flagged as an auto-advance: the crossfade ramps the
+						// volume itself, and the flag would make the next user
+						// resume skip its fade-in.
 						takePreloaded(nextTrack.trackId);
-						autoAdvanceRef.current = true;
 						beginTrack(nextTrack.trackId);
 						activateElement(preloaded, nextTrack);
 						skipPlayEffectRef.current = true;
