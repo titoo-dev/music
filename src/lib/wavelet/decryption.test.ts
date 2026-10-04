@@ -5,7 +5,7 @@ import http from "http";
 import type { AddressInfo } from "net";
 import { createRequire } from "module";
 import { PassThrough, type Readable } from "stream";
-import { pumpTee } from "./tee-pump";
+import { pumpTee, pumpToSpool, TrackSpool } from "./tee-pump";
 import * as decryption from "./decryption";
 import {
 	clearProbeCache,
@@ -712,42 +712,47 @@ describe("streamTrackToReadable (legacy shape, delegates to openDecryptedStream)
 		expect(await p.contentLengthPromise).toBe(80_000);
 	});
 
-	it("still drives pumpTee: response and persist branches both get the whole decoded track", async () => {
+	// B2: persisting plays now spool to disk (pumpToSpool) and the response
+	// tails the spool; pumpTee only drives live-only streams. Same contract.
+	it("still drives the persist spool: the response reader and the spooled file both get the whole decoded track", async () => {
+		const file = encryptFile(makePlain(300_000, 6));
+		const p = streamTrackToReadable(track(file), { fetcher: fakeCdn(file).fetcher });
+		const spool = await TrackSpool.create();
+		const reader = spool.createReader()!;
+		const collected = new Promise<Buffer>((resolve, reject) => {
+			const parts: Buffer[] = [];
+			reader.on("data", (c: Buffer) => parts.push(c));
+			reader.on("end", () => resolve(Buffer.concat(parts)));
+			reader.on("error", reject);
+		});
+		await pumpToSpool({ source: p.readable, spool, abort: p.abort });
+		const expected = legacyDecode(file);
+		expect((await collected).equals(expected)).toBe(true);
+		expect((await spool.readAll()).equals(expected)).toBe(true);
+		spool.dispose();
+	});
+
+	it("still drives pumpTee for live-only streams: the response gets the whole decoded track", async () => {
 		const file = encryptFile(makePlain(300_000, 6));
 		const p = streamTrackToReadable(track(file), { fetcher: fakeCdn(file).fetcher });
 		const responseBranch = new PassThrough();
-		const persistBranch = new PassThrough();
-		const collected = (b: PassThrough) =>
-			new Promise<Buffer>((resolve, reject) => {
-				const parts: Buffer[] = [];
-				b.on("data", (c: Buffer) => parts.push(c));
-				b.on("end", () => resolve(Buffer.concat(parts)));
-				b.on("error", reject);
-			});
-		const [res, persisted] = await Promise.all([
-			collected(responseBranch),
-			collected(persistBranch),
-			pumpTee({ source: p.readable, responseBranch, persistBranch, abort: p.abort }),
-		]);
-		const expected = legacyDecode(file);
-		expect(res.equals(expected)).toBe(true);
-		expect(persisted.equals(expected)).toBe(true);
+		const collected = new Promise<Buffer>((resolve, reject) => {
+			const parts: Buffer[] = [];
+			responseBranch.on("data", (c: Buffer) => parts.push(c));
+			responseBranch.on("end", () => resolve(Buffer.concat(parts)));
+			responseBranch.on("error", reject);
+		});
+		await pumpTee({ source: p.readable, responseBranch, abort: p.abort });
+		expect((await collected).equals(legacyDecode(file))).toBe(true);
 	});
 
-	it("makes pumpTee fail the persist branch on a truncated upstream (was: truncated file uploaded and served forever)", async () => {
+	it("makes the persist spool fail on a truncated upstream (was: truncated file uploaded and served forever)", async () => {
 		const file = encryptFile(makePlain(300_000));
 		const p = streamTrackToReadable(track(file), { fetcher: fakeCdn(file, { truncateAfter: 150_000 }).fetcher });
-		const responseBranch = new PassThrough();
-		const persistBranch = new PassThrough();
-		responseBranch.resume();
-		responseBranch.on("error", () => {});
-		const persistError = new Promise<unknown>((resolve) => {
-			persistBranch.on("error", resolve);
-			persistBranch.on("end", () => resolve(null));
-			persistBranch.resume();
-		});
-		await pumpTee({ source: p.readable, responseBranch, persistBranch, abort: p.abort });
-		expect(await persistError).toBeInstanceOf(TruncatedStreamError);
+		const spool = await TrackSpool.create();
+		await pumpToSpool({ source: p.readable, spool, abort: p.abort });
+		await expect(spool.done).rejects.toBeInstanceOf(TruncatedStreamError);
+		spool.dispose();
 	});
 
 	it("errors the readable on a truncated upstream (was: ended cleanly and got persisted)", async () => {
