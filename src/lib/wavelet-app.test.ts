@@ -135,3 +135,34 @@ describe("WaveletApp.acquireDownloadLock follower hand-off (C4)", () => {
 		expect(app.acquireDownloadLock("1", 3).alreadyInProgress).toBe(false);
 	});
 });
+
+describe("WaveletApp.isDeezerAvailable", () => {
+	afterEach(() => {
+		vi.doUnmock("got");
+		vi.resetModules();
+	});
+
+	it("does not cache a network failure for the instance's lifetime (was: one outage reported no-network until the instance was recycled)", async () => {
+		const get = vi
+			.fn()
+			.mockRejectedValueOnce(Object.assign(new Error("reset"), { code: "ECONNRESET" }))
+			.mockResolvedValueOnce({ body: "<title>Deezer</title>" });
+		vi.doMock("got", () => ({ default: { get } }));
+		const app = makeApp();
+		expect(await app.isDeezerAvailable()).toBe("no-network");
+		expect(await app.isDeezerAvailable()).toBe("yes");
+		expect(await app.isDeezerAvailable()).toBe("yes");
+		expect(get).toHaveBeenCalledTimes(2);
+	});
+
+	it("bounds the check with the Deezer timeouts (was: no timeout, got retry 3)", async () => {
+		const get = vi.fn().mockResolvedValue({ body: "<title>Deezer will soon be available in your country.</title>" });
+		vi.doMock("got", () => ({ default: { get } }));
+		const { DEEZER_TIMEOUT } = await import("@/lib/deezer/http");
+		expect(await makeApp().isDeezerAvailable()).toBe("no");
+		expect(get).toHaveBeenCalledWith(
+			"https://www.deezer.com/",
+			expect.objectContaining({ timeout: DEEZER_TIMEOUT, retry: { limit: 0 } })
+		);
+	});
+});

@@ -95,26 +95,34 @@ export class WaveletApp {
 		return this.settings;
 	}
 
+	/**
+	 * Whether Deezer serves this deployment's region. "yes" / "no" are cached
+	 * for the instance's lifetime; a network failure is not, so one outage
+	 * doesn't report "no-network" until the instance is recycled. The request
+	 * follows the Deezer timeout policy (S5) instead of hanging.
+	 */
 	async isDeezerAvailable(): Promise<"yes" | "no" | "no-network"> {
 		if (this.deezerAvailable) return this.deezerAvailable;
 		try {
 			const got = (await import("got")).default;
+			const { DEEZER_REQUEST_OPTIONS, DEEZER_USER_AGENT } = await import("@/lib/deezer/http");
 			const response = await got.get("https://www.deezer.com/", {
+				...DEEZER_REQUEST_OPTIONS,
 				headers: {
+					"User-Agent": DEEZER_USER_AGENT,
 					Cookie:
 						"dz_lang=en; Domain=deezer.com; Path=/; Secure; hostOnly=false;",
 				},
-				retry: { limit: 3 },
 			});
 			const title = (
 				response.body.match(/<title[^>]*>([^<]+)<\/title>/)?.[1] || ""
 			).trim();
 			this.deezerAvailable =
 				title !== "Deezer will soon be available in your country." ? "yes" : "no";
+			return this.deezerAvailable;
 		} catch {
-			this.deezerAvailable = "no-network";
+			return "no-network";
 		}
-		return this.deezerAvailable;
 	}
 
 	getSettings() {
