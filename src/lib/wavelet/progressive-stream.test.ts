@@ -4,8 +4,9 @@ import { Readable } from "stream";
 import fs from "fs";
 import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
 
-const { openMock, preferredMock, coverMock, tagMock } = vi.hoisted(() => ({
+const { openMock, probeMock, preferredMock, coverMock, tagMock } = vi.hoisted(() => ({
 	openMock: vi.fn(),
+	probeMock: vi.fn(),
 	preferredMock: vi.fn(),
 	coverMock: vi.fn(),
 	tagMock: vi.fn(),
@@ -14,6 +15,7 @@ const { openMock, preferredMock, coverMock, tagMock } = vi.hoisted(() => ({
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("./decryption", () => ({
 	openDecryptedStream: openMock,
+	probeTrack: probeMock,
 	inferContentTypeFromBitrate: (b: number) => (b === 9 ? "audio/flac" : "audio/mpeg"),
 }));
 vi.mock("./utils/getPreferredBitrate", () => ({ getPreferredBitrate: preferredMock }));
@@ -25,6 +27,7 @@ import {
 	followProgressiveStream,
 	classifyStreamError,
 	resolveStreamTrack,
+	probeProgressiveStream,
 	type SharedSpool,
 } from "./progressive-stream";
 import Track from "./types/Track";
@@ -122,6 +125,7 @@ let parseSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
 	resetPrismaMock();
 	openMock.mockReset();
+	probeMock.mockReset();
 	preferredMock.mockReset();
 	coverMock.mockReset();
 	tagMock.mockReset();
@@ -409,6 +413,20 @@ describe("resolveStreamTrack", () => {
 
 		preferredMock.mockResolvedValueOnce(3);
 		await expect(resolveStreamTrack(dz, "42", 3, settings)).rejects.toThrow("Track URL not available");
+	});
+});
+
+describe("probeProgressiveStream (C3)", () => {
+	it("resolves the track and probes the CDN without opening the audio stream", async () => {
+		probeMock.mockResolvedValue({ upstreamLength: 10, pad: 0, decodedLength: 10, rangeSupported: true });
+		await probeProgressiveStream(fakeDz(), "42", 3, settings);
+		expect(probeMock).toHaveBeenCalledWith(expect.objectContaining({ downloadURL: "https://cdn/x" }));
+		expect(openMock).not.toHaveBeenCalled();
+	});
+
+	it("surfaces CDN refusals", async () => {
+		probeMock.mockRejectedValue(new UpstreamHttpError(403));
+		await expect(probeProgressiveStream(fakeDz(), "42", 3, settings)).rejects.toBeInstanceOf(UpstreamHttpError);
 	});
 });
 

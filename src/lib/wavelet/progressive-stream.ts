@@ -14,7 +14,7 @@
 
 import { PassThrough } from "stream";
 import { utils, type Deezer } from "@/lib/deezer";
-import { openDecryptedStream, inferContentTypeFromBitrate } from "./decryption";
+import { openDecryptedStream, inferContentTypeFromBitrate, probeTrack } from "./decryption";
 import { DeezerStreamError, TruncatedStreamError, UpstreamHttpError } from "./stream-errors";
 import { TrackUnavailableError } from "./errors";
 import { tagTrackBuffer } from "./utils/downloadUtils";
@@ -132,6 +132,20 @@ export async function resolveStreamTrack(dz: Deezer, trackId: string, bitrate: n
 	track.downloadURL = track.urls[formatsName[track.bitrate]];
 	if (!track.downloadURL) throw new TrackUnavailableError("Track URL not available");
 	return { track, apiTrack, resolvedBitrate };
+}
+
+/**
+ * C3: proves the track is streamable for this account (gw + URL + the first
+ * 2 KiB from the CDN) without opening the audio stream or persisting.
+ */
+export async function probeProgressiveStream(
+	dz: Deezer,
+	trackId: string,
+	bitrate: number,
+	settings: Settings
+): Promise<void> {
+	const { track } = await resolveStreamTrack(dz, trackId, bitrate, settings);
+	await probeTrack(track);
 }
 
 const UNAVAILABLE = new Set([
