@@ -382,7 +382,7 @@ export function AudioEngine() {
 
 	// Element-level teardown shared by every path that drops the current
 	// element: events first (emptying src fires an error on some browsers),
-	// then network, Web Audio nodes and any pending handoff.
+	// then network and Web Audio nodes.
 	const dropElement = useCallback(
 		(audio: HTMLAudioElement) => {
 			detachEvents(audio);
