@@ -4,13 +4,13 @@
 // plays from the same album.
 //
 // We cache two types of responses:
-//   1. gw.get_track_with_fallback(trackId)   → keyed by trackId only
+//   1. gw.get_track_with_fallback(trackId)   → keyed by Deezer user + trackId
 //   2. get_tracks_url(trackToken, format)    → keyed by trackToken+format
 //
-// Track metadata (gw track) is global to all users — same trackId always
-// returns the same metadata. We can cache by trackId without leaking between
-// users. The TRACK_TOKEN inside that response is a short-lived signed token,
-// so we keep TTL well under its expiry (typically ~1 hour) to be safe.
+// The gw track answer carries the caller's TRACK_TOKEN, a short-lived token
+// signed for that Deezer user (and filesizes that depend on their licence),
+// so it is cached per Deezer user (gwTrackKey), never shared between
+// accounts. TTL stays well under the token's expiry (typically ~1 hour).
 //
 // Track URLs (the encrypted CDN URL) are derived from a user-specific
 // trackToken, so caching by trackToken is also safe across users (each user
@@ -55,6 +55,17 @@ class TtlCache<T> {
 
 export const gwTrackCache = new TtlCache<unknown>();
 export const trackUrlCache = new TtlCache<string>();
+
+/**
+ * gwTrackCache key: the Deezer user the answer was fetched for + the track.
+ * `deezerUserId` is dz.currentUser.id (undefined before login: "anon").
+ */
+export function gwTrackKey(
+	deezerUserId: string | number | null | undefined,
+	trackId: string | number
+): string {
+	return `${deezerUserId ?? "anon"}::${trackId}`;
+}
 
 export function trackUrlKey(trackToken: string, format: string): string {
 	return `${trackToken}::${format}`;

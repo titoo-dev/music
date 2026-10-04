@@ -19,6 +19,37 @@ export function toObjectKey(storagePath: string): string {
 	return storagePath.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^\//, "");
 }
 
+/** Prefix of every object written by progressive persists (C9). */
+export const TRACKS_PREFIX = "tracks/";
+
+const EXTENSIONS: Record<number, string> = {
+	9: ".flac", // FLAC
+	3: ".mp3", // MP3_320
+	1: ".mp3", // MP3_128
+	8: ".mp3", // MP3_MISC
+	0: ".mp3", // LOCAL
+	13: ".mp4", // MP4_RA1
+	14: ".mp4", // MP4_RA2
+	15: ".mp4", // MP4_RA3
+};
+
+/** File extension of a TrackFormats value. */
+export function trackExtension(bitrate: number): string {
+	return EXTENSIONS[bitrate] ?? ".mp3";
+}
+
+/**
+ * Object key of a cached track (C9): "tracks/{trackId}/{bitrate}{ext}".
+ * Known before any metadata is fetched and unique per StoredTrack row — the
+ * old template path ("music/{artist} - {title}.mp3") was shared by every
+ * version of a song and by MP3 128 vs 320, so copies overwrote each other.
+ */
+export function trackObjectKey(trackId: string | number, bitrate: number): string {
+	const id = String(trackId);
+	if (!/^\d+$/.test(id)) throw new Error(`invalid track id for an object key: "${id}"`);
+	return `${TRACKS_PREFIX}${id}/${bitrate}${trackExtension(bitrate)}`;
+}
+
 export function inferContentType(path: string): string {
 	const ext = path.split(".").pop()?.toLowerCase();
 	switch (ext) {

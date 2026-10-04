@@ -92,6 +92,20 @@ describe("POST /api/v1/recent-plays/[trackId]/skip", () => {
 		expect(libraryMock.maybeEvictFile).toHaveBeenCalledWith("t1");
 	});
 
+	it.each(["recent", "persisting", "anchored"])(
+		"keeps the file when eviction is refused (%s) instead of claiming it was evicted (was: a skip evicted a copy another listener had just started)",
+		async (reason) => {
+			setSessionUser("u1");
+			prismaMock.recentPlay.findUnique.mockResolvedValue(null);
+			libraryMock.getTrackRefCount.mockResolvedValue({ total: 0 } as never);
+			libraryMock.maybeEvictFile.mockResolvedValue({ evicted: 0, kept: reason } as never);
+
+			const res = await POST(makeNextRequest({ method: "POST" }), makeParams({ trackId: "t1" }));
+			const body = await readJson<{ data: { kept: boolean; reason: string } }>(res);
+			expect(body?.data).toEqual({ kept: true, reason });
+		}
+	);
+
 	it("queries with the correct composite key", async () => {
 		setSessionUser("u1");
 		prismaMock.recentPlay.findUnique.mockResolvedValue({ id: "rp1" } as any);
