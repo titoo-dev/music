@@ -98,4 +98,13 @@ describe("GET /api/v1/auth/connect", () => {
 		expect(data.arl).toMatch(/^enc:v1:/);
 		expect(decryptSecret(data.arl)).toBe("service-arl");
 	});
+
+	it("never returns the license token (was: deezerUser.license_token in the response)", async () => {
+		signIn();
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({ userId: "u1", arl: "plain-arl", childAccount: 0 });
+		const res = await GET(makeNextRequest());
+		const text = await res.text();
+		expect(text).not.toContain("LT-SECRET");
+		expect(JSON.parse(text).data.deezerUser).toEqual({ id: 11, name: "Parent", can_stream_hq: true, can_stream_lossless: true });
+	});
 });

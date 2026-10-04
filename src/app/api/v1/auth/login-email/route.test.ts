@@ -84,4 +84,17 @@ describe("POST /api/v1/auth/login-email", () => {
 		expect((await post({ email: "a@b.c", password: "pw" })).status).toBe(200);
 		expect(prismaMock.deezerCredential.upsert).not.toHaveBeenCalled();
 	});
+
+	it("never returns the license token (was: user.license_token in the response)", async () => {
+		setSessionUser("u1");
+		const res = await post({ email: "a@b.c", password: "pw" });
+		const text = await res.text();
+		expect(text).not.toContain("LT-SECRET");
+		expect(JSON.parse(text).data).toEqual({
+			user: { id: 11, name: "Parent", can_stream_hq: true, can_stream_lossless: false },
+			childs: [{ id: 11, name: "Parent", can_stream_hq: true, can_stream_lossless: false }],
+			currentChild: 0,
+			hasMultipleAccounts: false,
+		});
+	});
 });

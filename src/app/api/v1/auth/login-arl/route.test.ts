@@ -102,4 +102,22 @@ describe("POST /api/v1/auth/login-arl", () => {
 		expect(args.create.childAccount).toBe(1);
 		expect(serverStateMock.setUserDz).toHaveBeenCalledWith("u1", instance);
 	});
+
+	it("never returns the license token (was: user.license_token and childs[].license_token in the response)", async () => {
+		setSessionUser("u1");
+		const res = await post({ arl: "my-arl", child: 1 });
+		const text = await res.text();
+		expect(text).not.toContain("license_token");
+		expect(text).not.toContain("LT-SECRET");
+		const body = JSON.parse(text);
+		expect(body.data).toEqual({
+			user: { id: 12, name: "Kid", can_stream_hq: true, can_stream_lossless: true },
+			childs: [
+				{ id: 11, name: "Parent", can_stream_hq: true, can_stream_lossless: true },
+				{ id: 12, name: "Kid", can_stream_hq: true, can_stream_lossless: true },
+			],
+			currentChild: 1,
+			hasMultipleAccounts: true,
+		});
+	});
 });

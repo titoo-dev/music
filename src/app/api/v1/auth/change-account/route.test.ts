@@ -78,4 +78,15 @@ describe("POST /api/v1/auth/change-account", () => {
 			data: expect.objectContaining({ childAccount: 1, deezerUserId: 12, deezerUserName: "Kid" }),
 		});
 	});
+
+	it("never returns the license token (was: user / childs carried license_token)", async () => {
+		setSessionUser("u1");
+		sessionDz();
+		const res = await post({ child: 1 });
+		const text = await res.text();
+		expect(text).not.toContain("LT-SECRET");
+		const body = JSON.parse(text);
+		expect(body.data.user).toEqual({ id: 12, name: "Kid", can_stream_hq: true, can_stream_lossless: true });
+		expect(body.data.childs).toHaveLength(2);
+	});
 });
