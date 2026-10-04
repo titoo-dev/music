@@ -11,6 +11,7 @@ import { clearCache } from "@/lib/audio-cache";
 import { presignedUrls } from "./presigned-urls";
 import { warmLevel, warmTrack } from "./prefetch";
 import { forgetSignedInState, watchSignOut } from "./sign-out";
+import { usePlayerStore } from "@/stores/usePlayerStore";
 
 beforeEach(() => {
 	vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
@@ -56,5 +57,19 @@ describe("forgetSignedInState", () => {
 		expect(presignedUrls.isDenied("t1")).toBe(false);
 		expect(warmLevel("t2")).toBeNull();
 		expect(clearCache).toHaveBeenCalled();
+	});
+
+	it("stops the player and forgets the queue and the resume position (was: the previous user's track stayed in the player after sign-out)", async () => {
+		const track = { trackId: "t1", title: "One More Time", artist: "Daft Punk", cover: null, duration: 320 };
+		usePlayerStore.setState({ currentTrack: track, queue: [track], queueIndex: 0, isPlaying: true });
+		localStorage.setItem("wavelet-resume", JSON.stringify({ trackId: "t1", time: 100, ts: Date.now() }));
+
+		await forgetSignedInState();
+
+		const s = usePlayerStore.getState();
+		expect(s.currentTrack).toBeNull();
+		expect(s.queue).toEqual([]);
+		expect(s.isPlaying).toBe(false);
+		expect(localStorage.getItem("wavelet-resume")).toBeNull();
 	});
 });

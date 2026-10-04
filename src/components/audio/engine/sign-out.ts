@@ -5,12 +5,25 @@
 // server (was: cached audio kept playing after sign-out).
 
 import { clearCache } from "@/lib/audio-cache";
+import { usePlayerStore } from "@/stores/usePlayerStore";
 import { presignedUrls } from "./presigned-urls";
 import { resetPrefetchState } from "./prefetch";
+
+/** Written by AudioEngine on pagehide to resume a refresh where it was. */
+const RESUME_KEY = "wavelet-resume";
 
 export function forgetSignedInState(deps: { clearAudioCache?: () => Promise<void> } = {}): Promise<void> {
 	presignedUrls.reset();
 	resetPrefetchState();
+	// The player too: the persisted queue and resume position are the previous
+	// user's, and they can't be streamed without a session anyway (was: the
+	// last track stayed in the player bar after sign-out).
+	usePlayerStore.getState().stop();
+	try {
+		localStorage.removeItem(RESUME_KEY);
+	} catch {
+		// Storage disabled — nothing to forget
+	}
 	return (deps.clearAudioCache ?? clearCache)().catch(() => {});
 }
 
