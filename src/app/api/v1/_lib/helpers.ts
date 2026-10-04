@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWaveletApp, getUserDz, setUserDz, getGuestDz } from "@/lib/server-state";
+import { getWaveletApp, getGuestDz } from "@/lib/server-state";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { restoreUserDz } from "@/lib/deezer-session";
 
 // ── Consistent response envelope ──
 
@@ -49,32 +49,18 @@ export async function requireDeezer(request: NextRequest) {
 
 	const userId = userResult.userId;
 
-	// Check in-memory session first
-	let dz = getUserDz(userId);
-	if (dz?.loggedIn) {
-		return { userId, dz, error: null };
-	}
-
-	// Try to restore from stored ARL in database
-	try {
-		const cred = await prisma.deezerCredential.findUnique({
-			where: { userId },
-		});
-		if (!cred) {
+	// In-memory session, else one shared (single-flight) login with the stored ARL.
+	const restored = await restoreUserDz(userId);
+	switch (restored.status) {
+		case "ok":
+			return { userId, dz: restored.dz, error: null };
+		case "no-arl":
 			return { userId: null as never, dz: null as never, error: fail("NO_DEEZER_ARL", "No Deezer account connected. Please add your ARL in Settings.", 403) };
-		}
-
-		const { Deezer } = await import("@/lib/deezer");
-		dz = new Deezer();
-		const loggedIn = await dz.loginViaArl(cred.arl);
-		if (!loggedIn) {
+		case "login-failed":
 			return { userId: null as never, dz: null as never, error: fail("DEEZER_LOGIN_FAILED", "Stored Deezer ARL is invalid. Please update it in Settings.", 401) };
-		}
-
-		setUserDz(userId, dz);
-		return { userId, dz, error: null };
-	} catch {
-		return { userId: null as never, dz: null as never, error: fail("DEEZER_ERROR", "Failed to connect to Deezer.", 500) };
+		default:
+			console.error("[requireDeezer] Deezer session restore failed:", restored.error);
+			return { userId: null as never, dz: null as never, error: fail("DEEZER_ERROR", "Failed to connect to Deezer.", 500) };
 	}
 }
 
@@ -119,22 +105,9 @@ export async function getGuestOrUserDz(request: NextRequest) {
 	try {
 		const session = await auth.api.getSession({ headers: request.headers });
 		if (session?.user?.id) {
-			const dz = getUserDz(session.user.id);
-			if (dz?.loggedIn) return { dz, userId: session.user.id };
-
-			// Try to restore from DB
-			const cred = await prisma.deezerCredential.findUnique({
-				where: { userId: session.user.id },
-			});
-			if (cred) {
-				const { Deezer } = await import("@/lib/deezer");
-				const newDz = new Deezer();
-				const loggedIn = await newDz.loginViaArl(cred.arl);
-				if (loggedIn) {
-					setUserDz(session.user.id, newDz);
-					return { dz: newDz, userId: session.user.id };
-				}
-			}
+			// Cached session or the shared restore from the stored ARL.
+			const restored = await restoreUserDz(session.user.id);
+			if (restored.status === "ok") return { dz: restored.dz, userId: session.user.id };
 		}
 	} catch {
 		// Fall through to guest

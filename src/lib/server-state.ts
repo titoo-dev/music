@@ -2,6 +2,7 @@
 // This module is only imported in API routes (server-side)
 
 import type { Listener } from "@/lib/wavelet/types/listener";
+import type { Deezer } from "@/lib/deezer";
 
 // ── Per-user Deezer session with TTL eviction ──
 
@@ -15,7 +16,8 @@ const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const globalForWavelet = globalThis as unknown as {
 	waveletApp: any;
 	sessionDZ: Map<string, DzSession>;
-	guestDZ: any;
+	guestSession?: { dz: Deezer; loggedInAt: number };
+	guestLogin?: Promise<Deezer | null>;
 	initialized: boolean;
 };
 
@@ -50,7 +52,8 @@ export function removeUserDz(userId: string): void {
 
 /**
  * Resolve a Deezer session for a specific user — uses the in-memory cache
- * if available, otherwise logs in fresh with the user's stored ARL.
+ * if available, otherwise logs in with the user's stored ARL and child
+ * account through the shared single-flight restore (src/lib/deezer-session).
  * Used by routes that act on behalf of a user (e.g. public share playback
  * falling back to progressive re-stream with the share creator's ARL).
  */
@@ -59,37 +62,45 @@ export async function getOrLoginUserDz(userId: string): Promise<any | null> {
 	if (cached?.loggedIn) return cached;
 
 	try {
-		const { prisma } = await import("@/lib/prisma");
-		const cred = await prisma.deezerCredential.findUnique({
-			where: { userId },
-		});
-		if (!cred) return null;
-
-		const { Deezer } = await import("@/lib/deezer");
-		const dz = new Deezer();
-		const loggedIn = await dz.loginViaArl(cred.arl);
-		if (!loggedIn) return null;
-
-		setUserDz(userId, dz);
-		return dz;
+		const { restoreUserDz } = await import("@/lib/deezer-session");
+		const restored = await restoreUserDz(userId);
+		return restored.status === "ok" ? restored.dz : null;
 	} catch {
 		return null;
 	}
 }
 
+/** The guest session is re-logged in after this long (license / api tokens age out). */
+export const GUEST_SESSION_TTL_MS = 30 * 60 * 1000;
+
 /** Get or create a shared guest Deezer session (for browsing without auth) */
 export async function getGuestDz(): Promise<any | null> {
-	if (globalForWavelet.guestDZ?.loggedIn) return globalForWavelet.guestDZ;
+	const current = globalForWavelet.guestSession;
+	if (current?.dz?.loggedIn && Date.now() - current.loggedInAt < GUEST_SESSION_TTL_MS) {
+		return current.dz;
+	}
 
 	const serviceArl = process.env.WAVELET_SERVICE_ARL;
 	if (!serviceArl) return null;
 
+	// One login at a time, shared by every concurrent caller.
+	if (!globalForWavelet.guestLogin) {
+		globalForWavelet.guestLogin = loginGuest(serviceArl).finally(() => {
+			globalForWavelet.guestLogin = undefined;
+		});
+	}
+	const fresh = await globalForWavelet.guestLogin;
+	// A failed refresh keeps serving the previous session rather than nothing.
+	return fresh ?? (current?.dz?.loggedIn ? current.dz : null);
+}
+
+async function loginGuest(serviceArl: string): Promise<Deezer | null> {
 	try {
 		const { Deezer } = await import("@/lib/deezer");
 		const dz = new Deezer();
 		const loggedIn = await dz.loginViaArl(serviceArl);
 		if (loggedIn) {
-			globalForWavelet.guestDZ = dz;
+			globalForWavelet.guestSession = { dz, loggedInAt: Date.now() };
 			return dz;
 		}
 	} catch {

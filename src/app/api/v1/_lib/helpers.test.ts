@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
 import {
 	authMock,
@@ -7,6 +7,7 @@ import {
 	failSession,
 } from "@/test/helpers/mockAuth";
 import { makeNextRequest, readJson } from "@/test/helpers/nextRequest";
+import { decryptSecret, encryptSecret } from "@/lib/secret-box";
 
 // ── Mock setup ──
 
@@ -67,6 +68,10 @@ beforeEach(() => {
 	DeezerCtor.mockClear();
 	deezerInstances.length = 0;
 	deezerLoginBehavior.next = "ok";
+});
+
+afterEach(() => {
+	vi.unstubAllEnvs();
 });
 
 // ────────────────────────────────────────────────────────────
@@ -218,12 +223,134 @@ describe("requireDeezer()", () => {
 		expect(result.error).toBeNull();
 		expect(result.userId).toBe("u1");
 		expect(DeezerCtor).toHaveBeenCalledTimes(1);
-		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("stored-arl");
+		// Contract change (S14): the stored child account is passed on every restore.
+		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("stored-arl", 0);
 		expect(serverStateMock.setUserDz).toHaveBeenCalledWith(
 			"u1",
 			deezerInstances[0]
 		);
 		expect(result.dz).toBe(deezerInstances[0]);
+	});
+
+	it("restores the saved child account (was: every restore logged in as child 0)", async () => {
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({
+			userId: "u1",
+			arl: "stored-arl",
+			childAccount: 2,
+		});
+
+		const result = await requireDeezer(makeNextRequest());
+		expect(result.error).toBeNull();
+		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("stored-arl", 2);
+	});
+
+	it("logs in once for concurrent cold requests (was: N concurrent requests → N ARL logins)", async () => {
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({
+			userId: "u1",
+			arl: "stored-arl",
+		});
+
+		const results = await Promise.all([
+			requireDeezer(makeNextRequest()),
+			requireDeezer(makeNextRequest()),
+			getGuestOrUserDz(makeNextRequest()),
+		]);
+		expect(DeezerCtor).toHaveBeenCalledTimes(1);
+		expect(prismaMock.deezerCredential.findUnique).toHaveBeenCalledTimes(1);
+		for (const r of results) expect(r.dz).toBe(deezerInstances[0]);
+
+		// Once settled, a later cold request logs in again (nothing is pinned).
+		await requireDeezer(makeNextRequest());
+		expect(DeezerCtor).toHaveBeenCalledTimes(2);
+	});
+
+	it("decrypts an encrypted stored ARL before logging in", async () => {
+		vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({
+			userId: "u1",
+			arl: encryptSecret("real-arl"),
+			childAccount: 0,
+		});
+
+		const result = await requireDeezer(makeNextRequest());
+		expect(result.error).toBeNull();
+		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("real-arl", 0);
+		expect(prismaMock.deezerCredential.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("re-encrypts a legacy plaintext ARL after it logs in (was: ARL stored in plaintext)", async () => {
+		vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({
+			userId: "u1",
+			arl: "legacy-plain",
+		});
+
+		await requireDeezer(makeNextRequest());
+		expect(prismaMock.deezerCredential.updateMany).toHaveBeenCalledTimes(1);
+		const args = prismaMock.deezerCredential.updateMany.mock.calls[0][0];
+		expect(args.where).toEqual({ userId: "u1", arl: "legacy-plain" });
+		expect(args.data.arl).toMatch(/^enc:v1:/);
+		expect(decryptSecret(args.data.arl)).toBe("legacy-plain");
+	});
+
+	it("does not re-encrypt when Deezer refuses the legacy ARL", async () => {
+		vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({ userId: "u1", arl: "legacy-plain" });
+		deezerLoginBehavior.next = "fail";
+
+		await requireDeezer(makeNextRequest());
+		expect(prismaMock.deezerCredential.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("still logs in when re-encryption fails", async () => {
+		vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({ userId: "u1", arl: "legacy-plain" });
+		prismaMock.deezerCredential.updateMany.mockRejectedValue(new Error("db down"));
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		const result = await requireDeezer(makeNextRequest());
+		expect(result.error).toBeNull();
+		expect(result.dz).toBe(deezerInstances[0]);
+	});
+
+	it("returns 401 DEEZER_LOGIN_FAILED, without crashing, when the stored ARL cannot be decrypted", async () => {
+		vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({
+			userId: "u1",
+			arl: "enc:v1:AAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAAAAAAAA==:AAAA",
+		});
+
+		const result = await requireDeezer(makeNextRequest());
+		expect(result.error!.status).toBe(401);
+		const body = await readJson<{ error: { code: string } }>(result.error!);
+		expect(body?.error.code).toBe("DEEZER_LOGIN_FAILED");
+		expect(DeezerCtor).not.toHaveBeenCalled();
+	});
+
+	it("keeps a session that another request stored while this one was logging in", async () => {
+		setSessionUser("u1");
+		const fresh = { loggedIn: true, id: "fresh" };
+		serverStateMock.getUserDz.mockReturnValueOnce(null).mockReturnValue(fresh);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({ userId: "u1", arl: "stored-arl" });
+
+		const result = await requireDeezer(makeNextRequest());
+		expect(result.dz).toBe(fresh);
+		expect(serverStateMock.setUserDz).not.toHaveBeenCalled();
 	});
 
 	it("re-logs in when cached dz exists but loggedIn=false", async () => {
@@ -442,7 +569,8 @@ describe("getGuestOrUserDz()", () => {
 		const result = await getGuestOrUserDz(makeNextRequest());
 		expect(result.userId).toBe("u1");
 		expect(result.dz).toBe(deezerInstances[0]);
-		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("stored-arl");
+		// Contract change (S14): the stored child account is passed on every restore.
+		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("stored-arl", 0);
 		expect(serverStateMock.setUserDz).toHaveBeenCalledWith(
 			"u1",
 			deezerInstances[0]
