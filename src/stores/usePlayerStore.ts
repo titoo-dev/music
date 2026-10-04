@@ -55,6 +55,8 @@ interface PlayerState {
 	// P2 features
 	crossfadeDuration: number;
 	normalizationEnabled: boolean;
+	/** Sample-accurate transitions between cached MP3 tracks (MSE deck); off by default. Not with crossfade. */
+	gapless: boolean;
 
 	play: (track: PlayerTrack, queue?: PlayerTrack[]) => void;
 	pause: () => void;
@@ -86,6 +88,7 @@ interface PlayerState {
 	playQueue: (queue: PlayerTrack[], startIndex?: number) => void;
 	setCrossfadeDuration: (seconds: number) => void;
 	toggleNormalization: () => void;
+	toggleGapless: () => void;
 
 	// Queue management (P2)
 	/** Insert a track right after the current track ("Play Next"). */
@@ -151,6 +154,7 @@ export const usePlayerStore = create<PlayerState>()(
 			queuePanelOpen: false,
 			crossfadeDuration: 0,
 			normalizationEnabled: false,
+			gapless: false,
 
 			play: (track, queue) => {
 				const state = get();
@@ -342,6 +346,7 @@ export const usePlayerStore = create<PlayerState>()(
 
 			setCrossfadeDuration: (crossfadeDuration) => set({ crossfadeDuration }),
 			toggleNormalization: () => set((s) => ({ normalizationEnabled: !s.normalizationEnabled })),
+			toggleGapless: () => set((s) => ({ gapless: !s.gapless })),
 			toggleRepeat: () =>
 				set((s) => ({
 					repeat: s.repeat === "off" ? "all" : s.repeat === "all" ? "one" : "off",
@@ -473,6 +478,7 @@ export const usePlayerStore = create<PlayerState>()(
 				currentTrack: state.currentTrack,
 				crossfadeDuration: state.crossfadeDuration,
 				normalizationEnabled: state.normalizationEnabled,
+				gapless: state.gapless,
 			}),
 		}
 	)

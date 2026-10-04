@@ -1,13 +1,21 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser, ok, handleError } from "../../_lib/helpers";
 import { getPresignedUrl } from "@/lib/object-stream";
-import { STORAGE_TYPE, isStorageNotFound } from "@/lib/wavelet/storage/objects";
+import { isStorageNotFound } from "@/lib/wavelet/storage/objects";
+import { findCachedCopy, resolveCacheQuery } from "@/lib/wavelet/storage/cached-copy";
+
+/**
+ * Lifetime of the presigned URL (C1). One hour covers a long FLAC with
+ * pauses; the response's expiresAt lets the client refresh before it lapses.
+ */
+const PRESIGN_TTL_SECONDS = 3600;
 
 // GET /api/v1/stream-url/[trackId] — return a presigned R2 URL for direct
 // browser playback. Returns { url: null } when the track isn't cached so
 // the client can fall through to /api/v1/stream-progressive without a 404
-// in the Network tab.
+// in the Network tab. The copy is chosen by the shared rank rules
+// (storage/cached-copy.ts) for this user's licence; a copy below what the
+// user may get counts as not cached, so the progressive play upgrades it.
 export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ trackId: string }> }
@@ -25,21 +33,18 @@ export async function GET(
 			return ok({ url: null, status: "presigned_disabled" });
 		}
 
-		const stored = await prisma.storedTrack.findFirst({
-			where: { trackId },
-			orderBy: { bitrate: "desc" },
-		});
-
-		if (!stored) {
-			return ok({ url: null, status: "not_cached" });
+		const copy = await findCachedCopy(trackId, await resolveCacheQuery(userResult.userId));
+		if (copy.kind !== "hit") {
+			const legacyOnly = copy.kind === "miss" && copy.stale.length > 0;
+			return ok({ url: null, status: legacyOnly ? "unsupported_storage" : "not_cached" });
 		}
 
-		if (stored.storageType !== STORAGE_TYPE) {
-			return ok({ url: null, status: "unsupported_storage" });
-		}
-
-		const { url, contentType } = await getPresignedUrl(stored.storagePath, 900);
-		return ok({ url, contentType });
+		// Taken before signing and truncated to the second like the signature's
+		// X-Amz-Date, so the URL never expires before the reported time.
+		const signedAt = Math.floor(Date.now() / 1000) * 1000;
+		const expiresAt = new Date(signedAt + PRESIGN_TTL_SECONDS * 1000).toISOString();
+		const { url, contentType } = await getPresignedUrl(copy.row.storagePath, PRESIGN_TTL_SECONDS);
+		return ok({ url, contentType, expiresAt });
 	} catch (e: unknown) {
 		if (isStorageNotFound(e)) {
 			return ok({ url: null, status: "file_missing" });

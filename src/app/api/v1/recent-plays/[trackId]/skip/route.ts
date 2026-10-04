@@ -8,6 +8,9 @@ import { maybeEvictFile, getTrackRefCount } from "@/lib/library";
 // user hasn't already logged a real play AND the track isn't anchored by
 // any other entity (saved, in saved album, shared, recent-played by anyone),
 // the file is freed. Metadata in saved-* tables stays so replay re-streams.
+// The file is also kept while a persist of the track is in flight or when
+// its copy is younger than 10 minutes (maybeEvictFile): refs only count
+// RecentPlay after 30 s, so another listener may be playing it right now.
 export async function POST(
 	request: NextRequest,
 	{ params }: { params: Promise<{ trackId: string }> }
@@ -35,7 +38,8 @@ export async function POST(
 			return ok({ kept: true, reason: "anchored" });
 		}
 
-		await maybeEvictFile(trackId);
+		const result = await maybeEvictFile(trackId);
+		if (result?.kept) return ok({ kept: true, reason: result.kept });
 		return ok({ evicted: true });
 	} catch (e) {
 		return handleError(e);

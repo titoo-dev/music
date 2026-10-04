@@ -26,6 +26,7 @@ import { AudioVisualizer } from "./AudioVisualizer";
 import { LyricsDisplay } from "./LyricsDisplay";
 import { WaveSeek } from "./WaveSeek";
 import { ImmersiveBackdrop } from "./ImmersiveBackdrop";
+import { GaplessMenuItem } from "./GaplessMenuItem";
 import { SaveButton } from "@/components/tracks/SaveButton";
 import { ShareDialog } from "@/components/tracks/ShareDialog";
 import { AddToPlaylist } from "@/components/playlists/AddToPlaylist";
@@ -407,6 +408,8 @@ function ExtraControls() {
 	const setCrossfadeDuration = usePlayerStore((s) => s.setCrossfadeDuration);
 	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
 	const toggleNormalization = usePlayerStore((s) => s.toggleNormalization);
+	const gapless = usePlayerStore((s) => s.gapless);
+	const toggleGapless = usePlayerStore((s) => s.toggleGapless);
 
 	return (
 		<DropdownMenu>
@@ -437,6 +440,7 @@ function ExtraControls() {
 				<DropdownMenuCheckboxItem checked={normalizationEnabled} onClick={toggleNormalization} className="rounded-xl py-2">
 					Loudness normalization
 				</DropdownMenuCheckboxItem>
+				<GaplessMenuItem on={gapless} crossfade={crossfadeDuration > 0} onToggle={toggleGapless} />
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);

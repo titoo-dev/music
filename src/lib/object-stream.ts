@@ -18,13 +18,27 @@ export async function headObject(storagePath: string) {
 /** Stream an object through the server, optionally with a byte range */
 export async function streamObject(storagePath: string, range?: string) {
 	const key = toObjectKey(storagePath);
-	const res = await assertOk(
-		await r2Fetch(objectUrl(key), range ? { headers: { range } } : {}),
-		key
-	);
+	const raw = await r2Fetch(objectUrl(key), range ? { headers: { range } } : {});
+	if (raw.status === 416) {
+		// A range past the end is the client's mistake, not a storage failure:
+		// answer 416 with the size (Safari and players retry from there).
+		// Not awaited: under Next's patched fetch, awaiting cancel() on an
+		// error body can stall the response for the whole request timeout.
+		void raw.body?.cancel().catch(() => {});
+		const contentRange =
+			raw.headers.get("content-range") ?? `bytes */${(await headObject(storagePath)).contentLength}`;
+		return {
+			body: null,
+			contentLength: 0,
+			contentRange,
+			contentType: inferContentType(storagePath),
+			statusCode: 416,
+		};
+	}
+	const res = await assertOk(raw, key);
 	const contentRange = res.headers.get("content-range") ?? undefined;
 	return {
-		body: res.body as ReadableStream<Uint8Array>,
+		body: res.body as ReadableStream<Uint8Array> | null,
 		contentLength: Number(res.headers.get("content-length")) || 0,
 		contentRange,
 		contentType: res.headers.get("content-type") || inferContentType(storagePath),

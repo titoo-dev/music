@@ -1,6 +1,6 @@
 import got from "got";
 import { CookieJar } from "tough-cookie";
-import { USER_AGENT_HEADER } from "./index";
+import { DEEZER_REQUEST_OPTIONS, DEEZER_USER_AGENT } from "@/lib/deezer/http";
 import { _md5 } from "./crypto";
 
 const CLIENT_ID = "172365";
@@ -21,8 +21,8 @@ export async function getDeezerAccessTokenFromEmailPassword(email, password) {
 				password,
 				hash,
 			},
-			https: { rejectUnauthorized: false },
-			headers: { "User-Agent": USER_AGENT_HEADER },
+			headers: { "User-Agent": DEEZER_USER_AGENT },
+			...DEEZER_REQUEST_OPTIONS,
 		});
 		const responseData = (await response.json()) as { access_token?: string };
 
@@ -41,17 +41,17 @@ export async function getDeezerArlFromAccessToken(accessToken) {
 		await got.get("https://api.deezer.com/platform/generic/track/3135556", {
 			headers: {
 				Authorization: `Bearer ${accessToken}`,
-				"User-Agent": USER_AGENT_HEADER,
+				"User-Agent": DEEZER_USER_AGENT,
 			},
-			https: { rejectUnauthorized: false },
 			cookieJar,
+			...DEEZER_REQUEST_OPTIONS,
 		});
 		const response = got.get(
 			"https://www.deezer.com/ajax/gw-light.php?method=user.getArl&input=3&api_version=1.0&api_token=null",
 			{
-				headers: { "User-Agent": USER_AGENT_HEADER },
-				https: { rejectUnauthorized: false },
+				headers: { "User-Agent": DEEZER_USER_AGENT },
 				cookieJar,
+				...DEEZER_REQUEST_OPTIONS,
 			}
 		);
 		const responseData = (await response.json()) as { results?: string };

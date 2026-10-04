@@ -1,4 +1,5 @@
 import { Deezer, TrackFormats, errors as _errors, utils } from "@/lib/deezer";
+import { isTransientNetworkError } from "@/lib/deezer/http";
 import {
 	HTTPError,
 	ReadError,
@@ -15,6 +16,17 @@ import { trackUrlCache, trackUrlKey } from "../cache/deezer-track-cache";
 
 const { WrongLicense, WrongGeolocation } = _errors;
 const { mapGwTrackToDeezer: map_track } = utils;
+
+/** A format that failed transiently gets this many more tries before we give up. */
+const MAX_TRANSIENT_RETRIES = 1;
+
+interface FormatCheck {
+	url: string | undefined;
+	/** The account's licence does not cover this format. */
+	wrongLicense: boolean;
+	/** Not streamable in the account's country. */
+	geolocked: boolean;
+}
 
 const formats_non_360 = {
 	[TrackFormats.FLAC]: "FLAC",
@@ -38,8 +50,6 @@ export async function getPreferredBitrate(
 ) {
 	let falledBack = false;
 	let hasAlternative = track.fallbackID !== 0;
-	let isGeolocked = false;
-	let wrongLicense = false;
 
 	const MAX_TEST_URL_RETRIES = 1;
 	const TEST_URL_TIMEOUT_MS = 3000;
@@ -51,7 +61,6 @@ export async function getPreferredBitrate(
 			request = got
 				.get(url, {
 					headers: { "User-Agent": USER_AGENT_HEADER },
-					https: { rejectUnauthorized: false },
 					timeout: { request: TEST_URL_TIMEOUT_MS },
 				})
 				.on("response", (response) => {
@@ -78,18 +87,47 @@ export async function getPreferredBitrate(
 		}
 	}
 
+	/**
+	 * Asks Deezer for one format's URL. Resolves with the URL, or with
+	 * `unavailable` when Deezer definitively has none for this account
+	 * (null URL, WrongLicense, WrongGeolocation). A transient failure is
+	 * retried once and then thrown: it must never read as "unavailable",
+	 * or the caller would fall back and persist a degraded copy for good.
+	 */
+	async function fetchFormatURL(
+		track: Track,
+		formatName: string
+	): Promise<{ url?: string; unavailable?: "license" | "geolocation" }> {
+		for (let attempt = 0; ; attempt++) {
+			try {
+				const url = await dz.get_track_url(track.trackToken, formatName);
+				return { url: url ?? undefined };
+			} catch (e) {
+				if (e?.name === "WrongLicense") return { unavailable: "license" };
+				if (e?.name === "WrongGeolocation") return { unavailable: "geolocation" };
+				if (isTransientNetworkError(e) && attempt < MAX_TRANSIENT_RETRIES) {
+					console.warn(`[getPreferredBitrate] ${formatName} failed transiently, retrying:`, e?.message);
+					continue;
+				}
+				throw e;
+			}
+		}
+	}
+
+	/** One format check; its flags describe this check only (never shared). */
 	async function getCorrectURL(
 		track: Track,
 		formatName: string,
 		formatNumber: number,
 		feelingLucky: boolean
-	) {
+	): Promise<FormatCheck> {
 		// Check the track with the legit method
-		let url: string;
-		wrongLicense =
+		let url: string | undefined;
+		let wrongLicense =
 			((formatName === "FLAC" || formatName.startsWith("MP4_RA")) &&
 				!dz.currentUser?.can_stream_lossless) ||
 			(formatName === "MP3_320" && !dz.currentUser?.can_stream_hq);
+		let geolocked = false;
 		if (
 			track.filesizes[`${formatName.toLowerCase()}`] &&
 			track.filesizes[`${formatName.toLowerCase()}`] !== "0"
@@ -102,31 +140,34 @@ export async function getPreferredBitrate(
 			if (cached) {
 				url = cached;
 			} else {
-				try {
-					url = await dz.get_track_url(track.trackToken, formatName);
-					if (url) trackUrlCache.set(cacheKey, url);
-				} catch (e) {
-					wrongLicense = e.name === "WrongLicense";
-					isGeolocked = e.name === "WrongGeolocation";
+				const result = await fetchFormatURL(track, formatName);
+				url = result.url;
+				if (url) trackUrlCache.set(cacheKey, url);
+				if (result.unavailable) {
+					wrongLicense = result.unavailable === "license";
+					geolocked = result.unavailable === "geolocation";
 				}
 			}
 		}
-		// Fallback to old method
+		// Fallback to old method (best effort: an unreachable legacy URL is just "no URL")
 		if (!url && feelingLucky) {
-			url = generateCryptedStreamURL(
+			const luckyURL = generateCryptedStreamURL(
 				track.id,
 				track.MD5,
 				track.mediaVersion,
 				formatNumber
 			);
-			if (await testURL(track, url, formatName)) return url;
-			url = undefined;
+			try {
+				if (await testURL(track, luckyURL, formatName)) url = luckyURL;
+			} catch {
+				/* legacy CDN unreachable */
+			}
 		}
-		return url;
+		return { url, wrongLicense, geolocked };
 	}
 
 	if (track.local) {
-		const url = await getCorrectURL(
+		const { url } = await getCorrectURL(
 			track,
 			"MP3_MISC",
 			TrackFormats.LOCAL,
@@ -164,14 +205,22 @@ export async function getPreferredBitrate(
 	// the highest-bitrate success in preference order. This eliminates the
 	// sequential per-format Deezer API roundtrip.
 	if (shouldFallback && !hasAlternative && candidateFormats.length > 1) {
-		const parallelResults = await Promise.all(
+		const parallelResults = await Promise.allSettled(
 			candidateFormats.map(({ formatNumber, formatName }) =>
-				getCorrectURL(track, formatName, formatNumber, feelingLucky)
-					.then((url) => ({ formatNumber, formatName, url }))
-					.catch(() => ({ formatNumber, formatName, url: undefined as string | undefined }))
+				getCorrectURL(track, formatName, formatNumber, feelingLucky).then((check) => ({
+					formatNumber,
+					formatName,
+					url: check.url,
+				}))
 			)
 		);
-		for (const r of parallelResults) {
+		// Preference order: a lower format only wins when every higher one is
+		// genuinely unavailable. A higher format that failed (transiently,
+		// even after its retry) stops the walk — erroring beats persisting a
+		// degraded copy.
+		for (const settled of parallelResults) {
+			if (settled.status === "rejected") throw settled.reason;
+			const r = settled.value;
 			if (r.url) {
 				track.urls[r.formatName] = r.url;
 				return r.formatNumber;
@@ -197,40 +246,37 @@ export async function getPreferredBitrate(
 		// and shouldFallback emits a fallback event then continues to lower bitrates.
 		for (const { formatNumber, formatName } of candidateFormats) {
 			let currentTrack = track;
-			let url = await getCorrectURL(
+			let check = await getCorrectURL(
 				currentTrack,
 				formatName,
 				formatNumber,
 				feelingLucky
 			);
 			let newTrack;
-			do {
-				if (!url && hasAlternative) {
-					newTrack = await dz.gw.get_track_with_fallback(currentTrack.fallbackID);
-					newTrack = map_track(newTrack);
-					currentTrack = new Track();
-					currentTrack.parseEssentialData(newTrack);
-					hasAlternative = currentTrack.fallbackID !== 0;
-				}
-				if (!url) {
-					url = await getCorrectURL(
-						currentTrack,
-						formatName,
-						formatNumber,
-						feelingLucky
-					);
-				}
-			} while (!url && hasAlternative);
+			// Walk the alternative-track chain until one has this format.
+			while (!check.url && hasAlternative) {
+				newTrack = await dz.gw.get_track_with_fallback(currentTrack.fallbackID);
+				newTrack = map_track(newTrack);
+				currentTrack = new Track();
+				currentTrack.parseEssentialData(newTrack);
+				hasAlternative = currentTrack.fallbackID !== 0;
+				check = await getCorrectURL(
+					currentTrack,
+					formatName,
+					formatNumber,
+					feelingLucky
+				);
+			}
 
-			if (url) {
+			if (check.url) {
 				if (newTrack) track.parseEssentialData(newTrack);
-				track.urls[formatName] = url;
+				track.urls[formatName] = check.url;
 				return formatNumber;
 			}
 
 			if (!shouldFallback) {
-				if (wrongLicense) throw new WrongLicense(formatName);
-				if (isGeolocked) throw new WrongGeolocation(dz.currentUser.country);
+				if (check.wrongLicense) throw new WrongLicense(formatName);
+				if (check.geolocked) throw new WrongGeolocation(dz.currentUser.country);
 				throw new PreferredBitrateNotFound();
 			} else if (!falledBack) {
 				falledBack = true;
@@ -249,7 +295,7 @@ export async function getPreferredBitrate(
 		}
 	}
 	if (is360Format) throw new TrackNot360();
-	const url = await getCorrectURL(
+	const { url } = await getCorrectURL(
 		track,
 		"MP3_MISC",
 		TrackFormats.DEFAULT,

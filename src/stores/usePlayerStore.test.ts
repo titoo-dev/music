@@ -836,4 +836,15 @@ describe("usePlayerStore — misc setters", () => {
 		usePlayerStore.getState().toggleNormalization();
 		expect(usePlayerStore.getState().normalizationEnabled).toBe(!before);
 	});
+
+	it("gapless playback is off by default, toggles, and is remembered across reloads", () => {
+		expect(usePlayerStore.getInitialState().gapless).toBe(false);
+		usePlayerStore.setState({ gapless: false });
+		usePlayerStore.getState().toggleGapless();
+		expect(usePlayerStore.getState().gapless).toBe(true);
+		const saved = JSON.parse(localStorage.getItem("wavelet-player") ?? "{}");
+		expect(saved.state.gapless).toBe(true);
+		usePlayerStore.getState().toggleGapless();
+		expect(usePlayerStore.getState().gapless).toBe(false);
+	});
 });

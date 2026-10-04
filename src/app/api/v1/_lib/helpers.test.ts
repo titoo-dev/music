@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { inspect } from "node:util";
 import { prismaMock, resetPrismaMock } from "@/test/helpers/mockPrisma";
 import {
 	authMock,
@@ -7,6 +8,7 @@ import {
 	failSession,
 } from "@/test/helpers/mockAuth";
 import { makeNextRequest, readJson } from "@/test/helpers/nextRequest";
+import { decryptSecret, encryptSecret } from "@/lib/secret-box";
 
 // ── Mock setup ──
 
@@ -52,12 +54,15 @@ import {
 	ok,
 	fail,
 	requireUser,
+	requireAdmin,
+	adminEmails,
 	requireDeezer,
 	requireApp,
 	requireUserAndApp,
 	requireDeezerAndApp,
 	getGuestOrUserDz,
 	handleError,
+	readJsonBody,
 } from "./helpers";
 
 beforeEach(() => {
@@ -67,6 +72,10 @@ beforeEach(() => {
 	DeezerCtor.mockClear();
 	deezerInstances.length = 0;
 	deezerLoginBehavior.next = "ok";
+});
+
+afterEach(() => {
+	vi.unstubAllEnvs();
 });
 
 // ────────────────────────────────────────────────────────────
@@ -179,6 +188,57 @@ describe("requireUser()", () => {
 });
 
 // ────────────────────────────────────────────────────────────
+// adminEmails / requireAdmin
+// ────────────────────────────────────────────────────────────
+
+describe("adminEmails()", () => {
+	it("parses a comma-separated, case-insensitive list and drops blanks", () => {
+		expect(adminEmails({ WAVELET_ADMIN_EMAILS: " A@x.io, ,b@Y.io ," })).toEqual(["a@x.io", "b@y.io"]);
+	});
+
+	it("is empty when the variable is unset or blank", () => {
+		expect(adminEmails({})).toEqual([]);
+		expect(adminEmails({ WAVELET_ADMIN_EMAILS: "  " })).toEqual([]);
+	});
+});
+
+describe("requireAdmin()", () => {
+	const signIn = (email?: string) =>
+		authMock.api.getSession.mockResolvedValue({ user: { id: "u1", email } } as never);
+
+	it("passes any signed-in user when WAVELET_ADMIN_EMAILS is unset", async () => {
+		vi.stubEnv("WAVELET_ADMIN_EMAILS", "");
+		signIn("someone@example.com");
+		const result = await requireAdmin(makeNextRequest());
+		expect(result.error).toBeNull();
+		expect(result.userId).toBe("u1");
+	});
+
+	it("passes a listed admin whatever the case", async () => {
+		vi.stubEnv("WAVELET_ADMIN_EMAILS", "Admin@Example.com");
+		signIn("ADMIN@example.COM");
+		const result = await requireAdmin(makeNextRequest());
+		expect(result.error).toBeNull();
+	});
+
+	it("returns 403 FORBIDDEN for a signed-in user who is not listed (was: every signed-in user could change server-wide settings)", async () => {
+		vi.stubEnv("WAVELET_ADMIN_EMAILS", "admin@example.com");
+		signIn("someone@example.com");
+		const result = await requireAdmin(makeNextRequest());
+		expect(result.error!.status).toBe(403);
+		const body = await readJson<{ error: { code: string } }>(result.error!);
+		expect(body?.error.code).toBe("FORBIDDEN");
+	});
+
+	it("passes requireUser's 401 / 500 through unchanged", async () => {
+		vi.stubEnv("WAVELET_ADMIN_EMAILS", "admin@example.com");
+		expect((await requireAdmin(makeNextRequest())).error!.status).toBe(401);
+		failSession();
+		expect((await requireAdmin(makeNextRequest())).error!.status).toBe(500);
+	});
+});
+
+// ────────────────────────────────────────────────────────────
 // requireDeezer
 // ────────────────────────────────────────────────────────────
 
@@ -218,12 +278,134 @@ describe("requireDeezer()", () => {
 		expect(result.error).toBeNull();
 		expect(result.userId).toBe("u1");
 		expect(DeezerCtor).toHaveBeenCalledTimes(1);
-		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("stored-arl");
+		// Contract change (S14): the stored child account is passed on every restore.
+		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("stored-arl", 0);
 		expect(serverStateMock.setUserDz).toHaveBeenCalledWith(
 			"u1",
 			deezerInstances[0]
 		);
 		expect(result.dz).toBe(deezerInstances[0]);
+	});
+
+	it("restores the saved child account (was: every restore logged in as child 0)", async () => {
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({
+			userId: "u1",
+			arl: "stored-arl",
+			childAccount: 2,
+		});
+
+		const result = await requireDeezer(makeNextRequest());
+		expect(result.error).toBeNull();
+		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("stored-arl", 2);
+	});
+
+	it("logs in once for concurrent cold requests (was: N concurrent requests → N ARL logins)", async () => {
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({
+			userId: "u1",
+			arl: "stored-arl",
+		});
+
+		const results = await Promise.all([
+			requireDeezer(makeNextRequest()),
+			requireDeezer(makeNextRequest()),
+			getGuestOrUserDz(makeNextRequest()),
+		]);
+		expect(DeezerCtor).toHaveBeenCalledTimes(1);
+		expect(prismaMock.deezerCredential.findUnique).toHaveBeenCalledTimes(1);
+		for (const r of results) expect(r.dz).toBe(deezerInstances[0]);
+
+		// Once settled, a later cold request logs in again (nothing is pinned).
+		await requireDeezer(makeNextRequest());
+		expect(DeezerCtor).toHaveBeenCalledTimes(2);
+	});
+
+	it("decrypts an encrypted stored ARL before logging in", async () => {
+		vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({
+			userId: "u1",
+			arl: encryptSecret("real-arl"),
+			childAccount: 0,
+		});
+
+		const result = await requireDeezer(makeNextRequest());
+		expect(result.error).toBeNull();
+		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("real-arl", 0);
+		expect(prismaMock.deezerCredential.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("re-encrypts a legacy plaintext ARL after it logs in (was: ARL stored in plaintext)", async () => {
+		vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({
+			userId: "u1",
+			arl: "legacy-plain",
+		});
+
+		await requireDeezer(makeNextRequest());
+		expect(prismaMock.deezerCredential.updateMany).toHaveBeenCalledTimes(1);
+		const args = prismaMock.deezerCredential.updateMany.mock.calls[0][0];
+		expect(args.where).toEqual({ userId: "u1", arl: "legacy-plain" });
+		expect(args.data.arl).toMatch(/^enc:v1:/);
+		expect(decryptSecret(args.data.arl)).toBe("legacy-plain");
+	});
+
+	it("does not re-encrypt when Deezer refuses the legacy ARL", async () => {
+		vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({ userId: "u1", arl: "legacy-plain" });
+		deezerLoginBehavior.next = "fail";
+
+		await requireDeezer(makeNextRequest());
+		expect(prismaMock.deezerCredential.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("still logs in when re-encryption fails", async () => {
+		vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({ userId: "u1", arl: "legacy-plain" });
+		prismaMock.deezerCredential.updateMany.mockRejectedValue(new Error("db down"));
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+
+		const result = await requireDeezer(makeNextRequest());
+		expect(result.error).toBeNull();
+		expect(result.dz).toBe(deezerInstances[0]);
+	});
+
+	it("returns 401 DEEZER_LOGIN_FAILED, without crashing, when the stored ARL cannot be decrypted", async () => {
+		vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+		setSessionUser("u1");
+		serverStateMock.getUserDz.mockReturnValue(null);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({
+			userId: "u1",
+			arl: "enc:v1:AAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAAAAAAAA==:AAAA",
+		});
+
+		const result = await requireDeezer(makeNextRequest());
+		expect(result.error!.status).toBe(401);
+		const body = await readJson<{ error: { code: string } }>(result.error!);
+		expect(body?.error.code).toBe("DEEZER_LOGIN_FAILED");
+		expect(DeezerCtor).not.toHaveBeenCalled();
+	});
+
+	it("keeps a session that another request stored while this one was logging in", async () => {
+		setSessionUser("u1");
+		const fresh = { loggedIn: true, id: "fresh" };
+		serverStateMock.getUserDz.mockReturnValueOnce(null).mockReturnValue(fresh);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({ userId: "u1", arl: "stored-arl" });
+
+		const result = await requireDeezer(makeNextRequest());
+		expect(result.dz).toBe(fresh);
+		expect(serverStateMock.setUserDz).not.toHaveBeenCalled();
 	});
 
 	it("re-logs in when cached dz exists but loggedIn=false", async () => {
@@ -442,7 +624,8 @@ describe("getGuestOrUserDz()", () => {
 		const result = await getGuestOrUserDz(makeNextRequest());
 		expect(result.userId).toBe("u1");
 		expect(result.dz).toBe(deezerInstances[0]);
-		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("stored-arl");
+		// Contract change (S14): the stored child account is passed on every restore.
+		expect(deezerInstances[0].loginViaArl).toHaveBeenCalledWith("stored-arl", 0);
 		expect(serverStateMock.setUserDz).toHaveBeenCalledWith(
 			"u1",
 			deezerInstances[0]
@@ -512,40 +695,75 @@ describe("getGuestOrUserDz()", () => {
 // ────────────────────────────────────────────────────────────
 
 describe("handleError()", () => {
-	it("wraps Error instances with their message and INTERNAL_ERROR/500", async () => {
-		const res = handleError(new Error("kaboom"));
+	// C8: a 500 never carries the internal error text (Prisma / Deezer / R2
+	// messages can name tables, hosts or tokens); the detail is logged.
+	const GENERIC = { code: "INTERNAL_ERROR", message: "An unexpected error occurred." };
+
+	it("answers a generic INTERNAL_ERROR/500 and logs the detail server-side (was: the raw e.message was sent to the client)", async () => {
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+		const err = new Error("connect ECONNREFUSED db.internal:5432");
+		const res = handleError(err);
 		expect(res.status).toBe(500);
 		const body = await readJson<{ error: { code: string; message: string } }>(
 			res
 		);
-		expect(body?.error).toEqual({
-			code: "INTERNAL_ERROR",
-			message: "kaboom",
-		});
+		expect(body?.error).toEqual(GENERIC);
+		expect(JSON.stringify(body)).not.toContain("ECONNREFUSED");
+		expect(String(logged.mock.calls[0])).toContain("ECONNREFUSED db.internal:5432");
 	});
 
-	it("uses 'Unknown error' for non-Error values", async () => {
+	it("logs name, message and stack only — never a got error's request options or URL query", async () => {
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+		const gotError = Object.assign(
+			new Error("Request failed with status code 500: GET https://api.deezer.com/user/me?access_token=SECRET-ACCESS"),
+			{ name: "HTTPError", options: { json: { license_token: "LT-SECRET" }, cookieJar: { arl: "ARL-SECRET" } } }
+		);
+		handleError(new Error("wrapped", { cause: gotError }));
+		const printed = logged.mock.calls.map((args) => args.map((a) => inspect(a, { depth: 10 })).join(" ")).join("\n");
+		expect(printed).toContain("wrapped");
+		expect(printed).toContain("HTTPError");
+		for (const secret of ["SECRET-ACCESS", "LT-SECRET", "ARL-SECRET"]) expect(printed).not.toContain(secret);
+	});
+
+	it("uses the same generic message for non-Error values", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		const res = handleError("string oops");
 		expect(res.status).toBe(500);
 		const body = await readJson<{ error: { code: string; message: string } }>(
 			res
 		);
-		expect(body?.error).toEqual({
-			code: "INTERNAL_ERROR",
-			message: "Unknown error",
-		});
+		expect(body?.error).toEqual(GENERIC);
 	});
 
-	it("uses 'Unknown error' for null/undefined", async () => {
+	it("uses the same generic message for null/undefined", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		const res = handleError(null);
 		const body = await readJson<{ error: { message: string } }>(res);
-		expect(body?.error.message).toBe("Unknown error");
+		expect(body?.error.message).toBe(GENERIC.message);
 	});
 
-	it("preserves subclassed Error messages", async () => {
+	it("does not leak subclassed Error messages either (was: preserved them)", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		class MyErr extends Error {}
 		const res = handleError(new MyErr("subclass"));
 		const body = await readJson<{ error: { message: string } }>(res);
-		expect(body?.error.message).toBe("subclass");
+		expect(body?.error.message).toBe(GENERIC.message);
+	});
+});
+
+describe("readJsonBody", () => {
+	const req = (body: string) => new Request("http://localhost/x", { method: "POST", body, headers: { "Content-Type": "application/json" } });
+
+	it("returns the parsed object", async () => {
+		const r = await readJsonBody(req('{"arl":"a"}'));
+		expect(r.error).toBeNull();
+		expect(r.body).toEqual({ arl: "a" });
+	});
+
+	it.each([["{not json"], [""], ["[1,2]"], ["null"], ["\"text\""]])("answers 400 INVALID_BODY for %j (was: 500 from the JSON parser)", async (raw) => {
+		const r = await readJsonBody(req(raw));
+		expect(r.body).toBeNull();
+		expect(r.error?.status).toBe(400);
+		expect((await readJson<{ error: { code: string } }>(r.error!))?.error.code).toBe("INVALID_BODY");
 	});
 });

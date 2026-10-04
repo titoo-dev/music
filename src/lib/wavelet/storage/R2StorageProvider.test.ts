@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import { R2StorageProvider } from "./R2StorageProvider";
 import { StorageNotFoundError, StorageUnavailableError } from "./objects";
-import { _resetR2Client } from "./r2";
+import { _resetR2Client, listObjectsPage } from "./r2";
+import { AwsClient } from "aws4fetch";
 
 const BASE = "https://acct.r2.cloudflarestorage.com/bucket";
 const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
@@ -33,6 +34,34 @@ describe("R2StorageProvider", () => {
 	it("ensureDir is a no-op", async () => {
 		await provider.ensureDir("music/a");
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	describe("request timeouts", () => {
+		it("bounds an upload so a hung PUT cannot hold the persist lease until maxDuration (was: no timeout)", async () => {
+			const timeout = vi.spyOn(AbortSignal, "timeout");
+			await provider.writeFile("tracks/1/1.mp3", Buffer.from("x"));
+			expect(timeout).toHaveBeenCalledWith(120_000);
+			expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+		});
+
+		it("bounds HEAD calls too", async () => {
+			const timeout = vi.spyOn(AbortSignal, "timeout");
+			await provider.exists("tracks/1/1.mp3");
+			expect(timeout).toHaveBeenCalledWith(15_000);
+		});
+
+		it("leaves GET unbounded: /stream proxies the body for as long as the track plays", async () => {
+			fetchMock.mockResolvedValue(new Response(new Uint8Array([1])));
+			await provider.readFile("tracks/1/1.mp3");
+			expect(fetchMock.mock.calls[0][1]?.signal).toBeUndefined();
+		});
+
+		it("reports a timed-out call as storage unavailable", async () => {
+			fetchMock.mockRejectedValue(new DOMException("The operation timed out.", "TimeoutError"));
+			await expect(provider.writeFile("tracks/1/1.mp3", Buffer.from("x"))).rejects.toBeInstanceOf(
+				StorageUnavailableError
+			);
+		});
 	});
 
 	describe("exists", () => {
@@ -81,6 +110,29 @@ describe("R2StorageProvider", () => {
 		expect(init?.body).toBeInstanceOf(Uint8Array);
 		expect((init?.body as Uint8Array).byteLength).toBe(3);
 		expect(new Headers(init?.headers).get("authorization")).toMatch(/^AWS4-HMAC-SHA256 /);
+	});
+
+	it("uploads a view of the caller's buffer instead of a copy (was: finalizeStream read the file then copied it again into a new Uint8Array)", async () => {
+		const data = Buffer.from("tagged-audio-bytes");
+
+		await provider.writeFile("tracks/1/3.mp3", data);
+
+		const [, init] = fetchMock.mock.calls[0];
+		const body = init?.body as Uint8Array;
+		expect(body.buffer).toBe(data.buffer);
+		expect(body.byteOffset).toBe(data.byteOffset);
+		expect(body.byteLength).toBe(data.byteLength);
+	});
+
+	it("signs uploads without handing the body to the signer (was: aws4fetch wrapped the whole track in a Request copy just to sign an UNSIGNED-PAYLOAD)", async () => {
+		const sign = vi.spyOn(AwsClient.prototype, "sign");
+
+		await provider.writeFile("tracks/1/3.mp3", Buffer.from("abc"));
+
+		expect(sign).toHaveBeenCalledOnce();
+		expect((sign.mock.calls[0][1] as RequestInit | undefined)?.body).toBeUndefined();
+		const [, init] = fetchMock.mock.calls[0];
+		expect(new Headers(init?.headers).get("x-amz-content-sha256")).toBe("UNSIGNED-PAYLOAD");
 	});
 
 	describe("stream → tag → finalize pipeline", () => {
@@ -171,6 +223,36 @@ describe("R2StorageProvider", () => {
 
 			expect(calls()).toEqual(["PUT /music/new.mp3", "DELETE /music/old name.mp3"]);
 			expect(reqAt(0).headers.get("x-amz-copy-source")).toBe("/bucket/music/old%20name.mp3");
+		});
+	});
+
+	describe("listObjectsPage", () => {
+		it("parses keys, dates and sizes and follows the continuation token", async () => {
+			fetchMock.mockImplementation(async (input, init) => {
+				const url = new URL(new Request(input, init).url);
+				return url.searchParams.get("continuation-token")
+					? new Response("<ListBucketResult><Contents><Key>tracks/2/1.mp3</Key><LastModified>2026-10-02T00:00:00.000Z</LastModified><Size>5</Size></Contents><IsTruncated>false</IsTruncated></ListBucketResult>")
+					: new Response(
+							"<ListBucketResult><Contents><Key>tracks/1/1 &amp; 2.mp3</Key><LastModified>2026-10-01T00:00:00.000Z</LastModified><Size>42</Size></Contents><IsTruncated>true</IsTruncated><NextContinuationToken>n&amp;1</NextContinuationToken></ListBucketResult>"
+						);
+			});
+
+			const first = await listObjectsPage("tracks/");
+			expect(first.objects).toEqual([
+				{ key: "tracks/1/1 & 2.mp3", lastModified: new Date("2026-10-01T00:00:00.000Z"), size: 42 },
+			]);
+			expect(first.nextToken).toBe("n&1");
+			const second = await listObjectsPage("tracks/", first.nextToken);
+			expect(second.objects.map((o) => o.key)).toEqual(["tracks/2/1.mp3"]);
+			expect(second.nextToken).toBeUndefined();
+			const url = new URL(reqAt(1).url);
+			expect(url.searchParams.get("prefix")).toBe("tracks/");
+			expect(url.searchParams.get("continuation-token")).toBe("n&1");
+		});
+
+		it("maps an outage to StorageUnavailableError", async () => {
+			fetchMock.mockResolvedValue(new Response("", { status: 503 }));
+			await expect(listObjectsPage("tracks/")).rejects.toBeInstanceOf(StorageUnavailableError);
 		});
 	});
 });

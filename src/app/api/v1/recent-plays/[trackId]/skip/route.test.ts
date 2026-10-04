@@ -92,6 +92,20 @@ describe("POST /api/v1/recent-plays/[trackId]/skip", () => {
 		expect(libraryMock.maybeEvictFile).toHaveBeenCalledWith("t1");
 	});
 
+	it.each(["recent", "persisting", "anchored"])(
+		"keeps the file when eviction is refused (%s) instead of claiming it was evicted (was: a skip evicted a copy another listener had just started)",
+		async (reason) => {
+			setSessionUser("u1");
+			prismaMock.recentPlay.findUnique.mockResolvedValue(null);
+			libraryMock.getTrackRefCount.mockResolvedValue({ total: 0 } as never);
+			libraryMock.maybeEvictFile.mockResolvedValue({ evicted: 0, kept: reason } as never);
+
+			const res = await POST(makeNextRequest({ method: "POST" }), makeParams({ trackId: "t1" }));
+			const body = await readJson<{ data: { kept: boolean; reason: string } }>(res);
+			expect(body?.data).toEqual({ kept: true, reason });
+		}
+	);
+
 	it("queries with the correct composite key", async () => {
 		setSessionUser("u1");
 		prismaMock.recentPlay.findUnique.mockResolvedValue({ id: "rp1" } as any);
@@ -119,7 +133,9 @@ describe("POST /api/v1/recent-plays/[trackId]/skip", () => {
 			res
 		);
 		expect(body?.error.code).toBe("INTERNAL_ERROR");
-		expect(body?.error.message).toBe("db down");
+		// C8: 500s carry a generic message; "db down" is only logged server-side.
+		expect(body?.error.message).toBe("An unexpected error occurred.");
+		expect(JSON.stringify(body)).not.toContain("db down");
 	});
 
 	it("returns 500 INTERNAL_ERROR when getTrackRefCount throws", async () => {

@@ -190,3 +190,14 @@ export class AlbumDoesntExists extends TrackError {
 		this.name = "AlbumDoesntExists";
 	}
 }
+
+/**
+ * The track cannot be streamed for this account (local track, no URL for any
+ * allowed format). Routes answer 422 TRACK_UNAVAILABLE.
+ */
+export class TrackUnavailableError extends TrackError {
+	constructor(message?: string) {
+		super(message);
+		this.name = "TrackUnavailableError";
+	}
+}

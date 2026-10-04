@@ -96,7 +96,10 @@ model Config {
 model DeezerCredential {
   id                String   @id @default(cuid())
   userId            String   @unique
+  /// ARL cookie; "enc:v1:…" (AES-256-GCM, src/lib/secret-box.ts) or legacy plaintext.
   arl               String
+  /// Selected family / child account index, restored on every re-login.
+  childAccount      Int      @default(0)
   deezerUserId      BigInt?
   deezerUserName    String?
   deezerPicture     String?
@@ -272,20 +275,51 @@ model FollowedArtist {
 // RecentPlay[trackId]. When all refs drop, the file becomes orphan and is
 // safe to delete (handled by the eviction helper).
 
+//
+// storagePath: new copies use "tracks/{trackId}/{bitrate}{ext}" (unique per
+// row); legacy rows keep their old template path ("music/...").
+// requestedBitrate: quality the persisting play asked for, i.e.
+// min(server maxBitrate, persisting account's licence). A copy is good enough
+// for a listener whose own cap is <= this even when Deezer only had a lower
+// bitrate (see storage/cached-copy.ts). null = legacy row (use `bitrate`).
+
 model StoredTrack {
-  id          String   @id @default(cuid())
-  trackId     String
-  bitrate     Int
-  storagePath String
-  storageType String
-  fileSize    Int?
-  createdAt   DateTime @default(now())
+  id               String   @id @default(cuid())
+  trackId          String
+  bitrate          Int
+  storagePath      String
+  storageType      String
+  fileSize         Int?
+  requestedBitrate Int?
+  createdAt        DateTime @default(now())
 
   sharedTracks SharedTrack[]
 
   @@unique([trackId, bitrate])
   @@index([trackId])
+  @@index([storagePath])
   @@map("stored_track")
+}
+
+// ─── Persist lease (cross-instance dedup of progressive persists) ───
+//
+// One row per (trackId, requested bitrate) while a progressive play is
+// downloading + uploading that track. Acquired with an atomic insert (or a
+// conditional takeover once expiresAt has passed), released in a finally.
+// expiresAt outlives the route's maxDuration, so a killed holder never blocks
+// the track for long. Requests that find a live lease held elsewhere stream
+// live without persisting.
+
+model PersistLease {
+  trackId   String
+  bitrate   Int
+  holder    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@id([trackId, bitrate])
+  @@index([expiresAt])
+  @@map("persist_lease")
 }
 
 // ─── Recent Plays (Spotify-like history; counted at 30s of playback) ───

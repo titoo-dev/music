@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ok, handleError, requireApp, requireUser } from "../_lib/helpers";
+import { ok, fail, handleError, requireApp, requireUser } from "../_lib/helpers";
 
 // GET /api/v1/settings — Get settings (per-user if authenticated, defaults otherwise)
 export async function GET(request: NextRequest) {
@@ -20,10 +20,9 @@ export async function GET(request: NextRequest) {
 				return ok({
 					settings: {
 						...globalSettings.settings,
-						...(userSettings.settings as Record<string, any>),
+						...(userSettings.settings as Record<string, unknown>),
 					},
 					defaultSettings: globalSettings.defaultSettings,
-					spotifySettings: globalSettings.spotifySettings,
 				});
 			}
 		}
@@ -34,35 +33,41 @@ export async function GET(request: NextRequest) {
 	}
 }
 
-// POST /api/v1/settings — Save settings (per-user if authenticated, global otherwise)
+// POST /api/v1/settings — Save the signed-in user's settings. Body: { settings }
+// Server-wide settings are never written here (the quality has its own admin
+// route). A `spotifySettings` field is ignored: nothing reads it since the
+// Spotify plugin was removed, and the old global save dropped it anyway.
 export async function POST(request: NextRequest) {
 	try {
+		const userResult = await requireUser(request);
+		if (userResult.error) return userResult.error;
 		const { app, error: appError } = await requireApp();
 		if (appError) return appError;
 
-		const { settings, spotifySettings } = await request.json();
-
-		// Save per-user settings if authenticated
-		const userResult = await requireUser(request);
-		if (!userResult.error) {
-			await prisma.userSettings.upsert({
-				where: { userId: userResult.userId },
-				update: { settings: settings ?? {} },
-				create: { userId: userResult.userId, settings: settings ?? {} },
-			});
+		let body: { settings?: Record<string, unknown> | null };
+		try {
+			body = await request.json();
+		} catch {
+			return fail("INVALID_BODY", "Expected a JSON body.", 400);
 		}
-
-		// Always save Spotify settings globally (shared plugin config)
-		if (spotifySettings) {
-			await app.saveSettings(app.settings, spotifySettings);
+		// A body without `settings` would wipe the stored ones: refuse it.
+		// `settings: null` stays an explicit reset.
+		if (!body || typeof body !== "object" || !("settings" in body)) {
+			return fail("INVALID_BODY", "settings is required.", 400);
 		}
+		const settings = body.settings;
+
+		await prisma.userSettings.upsert({
+			where: { userId: userResult.userId },
+			update: { settings: settings ?? {} },
+			create: { userId: userResult.userId, settings: settings ?? {} },
+		});
 
 		// Return the merged settings
 		const globalSettings = app.getSettings();
 		return ok({
 			settings: settings ?? globalSettings.settings,
 			defaultSettings: globalSettings.defaultSettings,
-			spotifySettings: globalSettings.spotifySettings,
 		});
 	} catch (e) {
 		return handleError(e);

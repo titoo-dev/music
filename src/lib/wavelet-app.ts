@@ -36,9 +36,18 @@ async function ensureImports() {
  */
 export const DOWNLOAD_LOCK_TTL_MS = 330_000;
 
+/**
+ * How long a same-instance follower waits for the holder to open its stream
+ * (gw + URL + CDN headers) before streaming live itself. It never waits for
+ * the holder's persist.
+ */
+export const FOLLOW_WAIT_MS = 20_000;
+
 interface DownloadLock {
 	done: Promise<void>;
 	acquiredAt: number;
+	/** What the holder published for followers (its in-progress spool); null once released without one. */
+	shared: Promise<unknown>;
 }
 
 export class WaveletApp {
@@ -86,27 +95,34 @@ export class WaveletApp {
 		return this.settings;
 	}
 
+	/**
+	 * Whether Deezer serves this deployment's region. "yes" / "no" are cached
+	 * for the instance's lifetime; a network failure is not, so one outage
+	 * doesn't report "no-network" until the instance is recycled. The request
+	 * follows the Deezer timeout policy (S5) instead of hanging.
+	 */
 	async isDeezerAvailable(): Promise<"yes" | "no" | "no-network"> {
 		if (this.deezerAvailable) return this.deezerAvailable;
 		try {
 			const got = (await import("got")).default;
+			const { DEEZER_REQUEST_OPTIONS, DEEZER_USER_AGENT } = await import("@/lib/deezer/http");
 			const response = await got.get("https://www.deezer.com/", {
+				...DEEZER_REQUEST_OPTIONS,
 				headers: {
+					"User-Agent": DEEZER_USER_AGENT,
 					Cookie:
 						"dz_lang=en; Domain=deezer.com; Path=/; Secure; hostOnly=false;",
 				},
-				https: { rejectUnauthorized: false },
-				retry: { limit: 3 },
 			});
 			const title = (
 				response.body.match(/<title[^>]*>([^<]+)<\/title>/)?.[1] || ""
 			).trim();
 			this.deezerAvailable =
 				title !== "Deezer will soon be available in your country." ? "yes" : "no";
+			return this.deezerAvailable;
 		} catch {
-			this.deezerAvailable = "no-network";
+			return "no-network";
 		}
-		return this.deezerAvailable;
 	}
 
 	getSettings() {
@@ -128,13 +144,20 @@ export class WaveletApp {
 	}
 
 	/** Acquire a per-track download lock. Returns a release function plus
-	 *  a flag indicating whether another fetch is already in progress. */
+	 *  a flag indicating whether another fetch is already in progress.
+	 *  C4: the holder `publish`es its in-progress stream once open; a
+	 *  follower (`alreadyInProgress`) `follow`s it right away instead of
+	 *  waiting for the persist to finish. */
 	acquireDownloadLock(
 		trackId: string,
 		bitrate: number
 	): {
 		alreadyInProgress: boolean;
 		waitForExisting: () => Promise<void>;
+		/** Follower: the holder's published value, or null (released without one / not within FOLLOW_WAIT_MS). */
+		follow: <T = unknown>(timeoutMs?: number) => Promise<T | null>;
+		/** Holder: hand the in-progress stream to followers (first call wins). */
+		publish: (value: unknown) => void;
 		release: () => void;
 	} {
 		const lockKey = `${trackId}_${bitrate}`;
@@ -153,13 +176,26 @@ export class WaveletApp {
 							resolve();
 						});
 					}),
+				follow: <T,>(timeoutMs = FOLLOW_WAIT_MS) =>
+					new Promise<T | null>((resolve) => {
+						const timer = setTimeout(() => resolve(null), Math.min(timeoutMs, remaining));
+						void existing.shared.then((value) => {
+							clearTimeout(timer);
+							resolve((value ?? null) as T | null);
+						});
+					}),
+				publish: () => {},
 				release: () => {},
 			};
 		}
 		let releaseFn: () => void;
+		let shareFn: (value: unknown) => void;
 		const lock: DownloadLock = {
 			done: new Promise<void>((resolve) => {
 				releaseFn = resolve;
+			}),
+			shared: new Promise<unknown>((resolve) => {
+				shareFn = resolve;
 			}),
 			acquiredAt: now,
 		};
@@ -167,11 +203,14 @@ export class WaveletApp {
 		return {
 			alreadyInProgress: false,
 			waitForExisting: () => Promise.resolve(),
+			follow: () => Promise.resolve(null),
+			publish: (value) => shareFn(value),
 			release: () => {
 				// A stale holder may release after its lock was taken over.
 				if (this._downloadLocks.get(lockKey) === lock) {
 					this._downloadLocks.delete(lockKey);
 				}
+				shareFn(null); // no-op when already published
 				releaseFn();
 			},
 		};

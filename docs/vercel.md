@@ -13,7 +13,7 @@ Wavelet tourne entièrement dans Next.js (pages + routes `src/app/api/v1/`), san
 1. Importer le repo sur [vercel.com/new](https://vercel.com/new). Le preset Next.js est détecté et `npm run build` lance `prisma generate && next build`.
 2. **Storage → Create → Neon (Postgres)**, puis le connecter au projet. `DATABASE_URL` est injectée automatiquement.
 3. **Cloudflare R2** : voir [Stockage audio](#stockage-audio-cloudflare-r2). Ajouter `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID` et `R2_SECRET_ACCESS_KEY` aux variables du projet.
-4. **Settings → Environment Variables** : ajouter `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (l'URL de production), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, et si besoin `WAVELET_SERVICE_ARL`, `SPOTIFY_CLIENT_ID` et `SPOTIFY_CLIENT_SECRET` (voir `.env.example`).
+4. **Settings → Environment Variables** : ajouter `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (l'URL de production), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, et si besoin `WAVELET_SERVICE_ARL`, `SPOTIFY_CLIENT_ID` et `SPOTIFY_CLIENT_SECRET` (voir `.env.example`). Recommandé : `WAVELET_ENCRYPTION_KEY` (chiffrement des ARL — **la même valeur en Production et en Preview** si elles partagent la base), `WAVELET_ADMIN_EMAILS` (qui peut changer la qualité serveur) et `CRON_SECRET` (nettoyage quotidien du stockage).
 5. Dans la console Google OAuth, ajouter `https://<domaine>/api/auth/callback/google` aux redirect URIs.
 
 ## 2. Schéma de la base
@@ -34,10 +34,13 @@ npm run dev
 
 ## Fonctionnement du streaming
 
-- **Premier play** (`/api/v1/stream-progressive/[trackId]`) : déchiffrement Deezer à la volée, streamé au navigateur. En parallèle, le fichier est écrit dans `/tmp`, tagué, puis uploadé dans R2. Cette persistance tourne dans `after()` (`maxDuration = 300`), pour que Vercel ne gèle pas la fonction à la fin de la réponse.
-- **Plays suivants** : `/api/v1/stream-url/[trackId]` renvoie une URL R2 pré-signée de 15 min, lue directement par le navigateur (le transfert sortant R2 est gratuit et ne passe pas par Vercel). Si elle échoue (CORS, réseau), le lecteur bascule sur le proxy same-origin `/api/v1/stream/[trackId]`, qui gère les `Range`.
+- **Premier play** (`/api/v1/stream-progressive/[trackId]`) : déchiffrement Deezer à la volée. Les octets déchiffrés sont d'abord écrits dans un fichier `/tmp`, et la réponse HTTP lit ce fichier au rythme du client, avec `Content-Length`. Les requêtes `Range` partielles sont servies en direct depuis le CDN Deezer, ce qui permet le seek dès la première écoute. Une fois le titre complet et vérifié, il est tagué puis uploadé dans R2 sous `tracks/{trackId}/{bitrate}.ext`. Cette persistance tourne dans `after()` (`maxDuration = 300`). Une deuxième écoute sur la même instance lit le même fichier ; sur une autre instance, la ligne `PersistLease` évite une seconde persistance et le titre joue en direct.
+- **Plays suivants** : `/api/v1/stream-url/[trackId]` renvoie une URL R2 pré-signée d'une heure (avec `expiresAt`), lue directement par le navigateur (le transfert sortant R2 est gratuit et ne passe pas par Vercel). Si elle échoue (CORS, réseau), le lecteur bascule sur le proxy same-origin `/api/v1/stream/[trackId]`, qui gère les `Range`.
 - `WAVELET_DISABLE_PRESIGNED_URLS=1` force le proxy pour tout le monde.
 - **Stockage en panne ou qui refuse la lecture** (403, 5xx, config absente) : `/stream` redirige vers `/stream-progressive/[trackId]?live=1`, qui joue directement depuis Deezer sans repasser par le cache. Les lignes `StoredTrack` sont conservées.
+- **Qualité** : la copie servie est choisie par `storage/cached-copy.ts` selon la qualité serveur (`maxBitrate`) plafonnée par la licence Deezer de l'auditeur. Une copie plus basse que ce qu'il peut écouter est re-persistée à la qualité demandée.
+- **Nettoyage** : un cron Vercel quotidien (`vercel.json`) appelle `/api/v1/internal/gc` avec `CRON_SECRET`. Il supprime les copies sans référence depuis plus de 24 h et les objets orphelins sous `tracks/`. Sans `CRON_SECRET`, la route ne fait rien.
+- **Après le premier déploiement** : lancer une fois `npx tsx scripts/repair-stored-track-keys.ts` (simulation), puis `--apply`. Le script supprime les anciennes lignes qui partageaient un même objet `music/…` entre plusieurs titres ; ces titres seront re-cachés sous leur propre clé.
 
 ## Stockage audio (Cloudflare R2)
 

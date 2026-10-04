@@ -1,14 +1,17 @@
 import { NextRequest } from "next/server";
 import { setUserDz } from "@/lib/server-state";
-import { prisma } from "@/lib/prisma";
-import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
+import { saveDeezerCredential } from "@/lib/deezer-session";
+import { deezerAccountPayload } from "@/lib/deezer/public-user";
+import { ok, fail, handleError, requireUser, readJsonBody } from "../../_lib/helpers";
 
 export async function POST(request: NextRequest) {
 	try {
 		const userResult = await requireUser(request);
 		if (userResult.error) return userResult.error;
 
-		const { email, password } = await request.json();
+		const parsed = await readJsonBody<{ email?: string; password?: string }>(request);
+		if (parsed.error) return parsed.error;
+		const { email, password } = parsed.body;
 
 		if (!email || !password) {
 			return fail("MISSING_CREDENTIALS", "Email and password are required.", 400);
@@ -29,34 +32,11 @@ export async function POST(request: NextRequest) {
 			?.find((c: any) => c.key === "arl")?.value;
 
 		if (arl) {
-			await prisma.deezerCredential.upsert({
-				where: { userId: userResult.userId },
-				update: {
-					arl,
-					deezerUserId: dz.currentUser?.id ?? null,
-					deezerUserName: dz.currentUser?.name ?? null,
-					deezerPicture: dz.currentUser?.picture ?? null,
-					canStreamHq: dz.currentUser?.can_stream_hq ?? false,
-					canStreamLossless: dz.currentUser?.can_stream_lossless ?? false,
-				},
-				create: {
-					userId: userResult.userId,
-					arl,
-					deezerUserId: dz.currentUser?.id ?? null,
-					deezerUserName: dz.currentUser?.name ?? null,
-					deezerPicture: dz.currentUser?.picture ?? null,
-					canStreamHq: dz.currentUser?.can_stream_hq ?? false,
-					canStreamLossless: dz.currentUser?.can_stream_lossless ?? false,
-				},
-			});
+			await saveDeezerCredential(userResult.userId, arl, dz);
 		}
 
-		return ok({
-			user: dz.currentUser,
-			childs: dz.childs,
-			currentChild: dz.selectedAccount,
-			hasMultipleAccounts: dz.childs.length > 1,
-		});
+		// Never hand the license token to the client (it requests media as this account)
+		return ok(deezerAccountPayload(dz));
 	} catch (e) {
 		return handleError(e);
 	}

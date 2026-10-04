@@ -134,7 +134,9 @@ describe("GET /api/v1/recent-plays", () => {
 			res
 		);
 		expect(body?.error.code).toBe("INTERNAL_ERROR");
-		expect(body?.error.message).toBe("db down");
+		// C8: 500s carry a generic message; "db down" is only logged server-side.
+		expect(body?.error.message).toBe("An unexpected error occurred.");
+		expect(JSON.stringify(body)).not.toContain("db down");
 	});
 });
 

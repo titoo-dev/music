@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
-import { getWaveletApp, getUserDz, setUserDz } from "@/lib/server-state";
+import { getWaveletApp, setUserDz } from "@/lib/server-state";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { restoreUserDz } from "@/lib/deezer-session";
+import { encryptSecret } from "@/lib/secret-box";
+import { toPublicDeezerUser } from "@/lib/deezer/public-user";
 import { ok, handleError } from "../../_lib/helpers";
 
 export async function GET(request: NextRequest) {
@@ -32,45 +35,44 @@ export async function GET(request: NextRequest) {
 					image: session.user.image,
 				};
 
-				// Try to restore Deezer session from stored ARL or service ARL
-				let dz = getUserDz(session.user.id);
-				if (!dz?.loggedIn) {
-					const cred = await prisma.deezerCredential.findUnique({
-						where: { userId: session.user.id },
-					});
-					const arl = cred?.arl || process.env.WAVELET_SERVICE_ARL;
-					if (arl) {
-						const { Deezer } = await import("@/lib/deezer");
-						dz = new Deezer();
-						const loggedIn = await dz.loginViaArl(arl);
-						if (loggedIn) {
-							setUserDz(session.user.id, dz);
-							// Persist service ARL as user credential if not already stored
-							if (!cred && process.env.WAVELET_SERVICE_ARL) {
-								try {
-									await prisma.deezerCredential.create({
-										data: {
-											userId: session.user.id,
-											arl,
-											deezerUserId: String(dz.currentUser?.id || ""),
-											deezerUserName: dz.currentUser?.name || "",
-											deezerPicture: dz.currentUser?.picture || "",
-											canStreamHq: !!dz.currentUser?.can_stream_hq,
-											canStreamLossless: !!dz.currentUser?.can_stream_lossless,
-										},
-									});
-								} catch {
-									// Ignore duplicate or write errors
-								}
-							}
-						} else {
-							dz = null;
+				// Restore the Deezer session from the stored ARL (shared single-flight
+				// restore: decrypts the ARL, uses the saved child account), else
+				// fall back to the service ARL for users without a credential.
+				let dz = null;
+				const restored = await restoreUserDz(session.user.id);
+				if (restored.status === "ok") {
+					dz = restored.dz;
+				} else if (restored.status === "no-arl" && process.env.WAVELET_SERVICE_ARL) {
+					const arl = process.env.WAVELET_SERVICE_ARL;
+					const { Deezer } = await import("@/lib/deezer");
+					dz = new Deezer();
+					const loggedIn = await dz.loginViaArl(arl);
+					if (loggedIn) {
+						setUserDz(session.user.id, dz);
+						// Persist service ARL as user credential if not already stored
+						try {
+							await prisma.deezerCredential.create({
+								data: {
+									userId: session.user.id,
+									arl: encryptSecret(arl),
+									deezerUserId: String(dz.currentUser?.id || ""),
+									deezerUserName: dz.currentUser?.name || "",
+									deezerPicture: dz.currentUser?.picture || "",
+									canStreamHq: !!dz.currentUser?.can_stream_hq,
+									canStreamLossless: !!dz.currentUser?.can_stream_lossless,
+								},
+							});
+						} catch {
+							// Ignore duplicate or write errors
 						}
+					} else {
+						dz = null;
 					}
 				}
 
 				if (dz?.loggedIn) {
-					deezerUser = dz.currentUser;
+					// Never hand the license token to the client (it requests media as this account)
+					deezerUser = toPublicDeezerUser(dz.currentUser);
 					deezerLoggedIn = true;
 				}
 			}

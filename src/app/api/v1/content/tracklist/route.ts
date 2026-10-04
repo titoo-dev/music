@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { ok, fail, handleError, getGuestOrUserDz } from "../../_lib/helpers";
+import { DeezerNetworkError, GWAPIError } from "@/lib/deezer/errors";
 
 export async function GET(request: NextRequest) {
 	try {
@@ -17,6 +18,11 @@ export async function GET(request: NextRequest) {
 		const validTypes = ["album", "playlist", "artist"];
 		if (!validTypes.includes(type)) {
 			return fail("INVALID_TYPE", `Type must be one of: ${validTypes.join(", ")}`, 400);
+		}
+		// Deezer ids are numeric; anything else (e.g. a Wavelet playlist cuid)
+		// would be parsed as 0 by Deezer and fail as a 500.
+		if (!/^\d+$/.test(id)) {
+			return fail("INVALID_ID", "id must be a numeric Deezer id.", 400);
 		}
 
 		let data: any;
@@ -47,6 +53,14 @@ export async function GET(request: NextRequest) {
 
 		return ok(data);
 	} catch (e) {
+		// Deezer refusing or not knowing the id is a client error, an unreachable
+		// Deezer an upstream one — neither is our 500.
+		if (e instanceof DeezerNetworkError) {
+			return fail("UPSTREAM_ERROR", "Deezer is not reachable right now.", 502);
+		}
+		if (e instanceof GWAPIError && /DATA_ERROR|PERMISSION_ERROR|not allowed|not found/i.test(e.message)) {
+			return fail("NOT_FOUND", "Not found on Deezer.", 404);
+		}
 		return handleError(e);
 	}
 }
