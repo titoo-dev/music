@@ -304,15 +304,16 @@ export async function openGaplessDeck(
 				sb.remove(0, Infinity);
 				return;
 			}
+			for (const seg of segments) refresh(seg);
+			// The next track's download broke off before its last frame of music.
 			const next = segments[1];
-			if (next?.load.failed) abandonNext(next, next.load.failed);
+			if (next?.load.failed && next.available < next.placement.frames) abandonNext(next, next.load.failed);
 			if (removePending) {
 				const { start, end } = removePending;
 				removePending = null;
 				sb.remove(start, end);
 				return;
 			}
-			for (const seg of segments) refresh(seg);
 			// Seeks are clamped to the duration: cover the whole run from the start.
 			const runEnd = repositionFor(segments[segments.length - 1].placement, 0).windowEnd;
 			if (ms.readyState === "open" && !(ms.duration >= runEnd)) ms.duration = runEnd;

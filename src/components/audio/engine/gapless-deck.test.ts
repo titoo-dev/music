@@ -305,6 +305,19 @@ describe("GaplessDeck — the next track", () => {
 		expect(ms.endOfStreamCalls).toBe(1);
 	});
 
+	it("keeps a next track whose download errors after its last frame of music (was: abandoned, ending the run)", async () => {
+		const chunk = 32 * 1024;
+		const { deck, declined, sb } = await open({
+			"blob:a": SHORT,
+			"blob:b": () => mp3Response(NEXT, { chunk, failAfter: Math.ceil(NEXT.length / chunk) }).response,
+		});
+		deck.setNext({ trackId: "b", url: "blob:b" });
+		await settle(60);
+		expect(declined).toEqual([]);
+		expect(deck.nextTrackId()).toBe("b");
+		expect(sb.appends.filter((a) => a.firstFill === 0xb1).reduce((n, a) => n + a.frames, 0)).toBe(placeTrack(infoOf(NEXT), 0).frames);
+	});
+
 	it("abandons a next track that breaks off before any of it was appended", async () => {
 		const big = buildMp3({ frames: 3000 });
 		const { deck, declined, sb } = await open({ "blob:a": LONG, "blob:b": () => mp3Response(big, { failAfter: 1 }).response });
