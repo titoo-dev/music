@@ -3,7 +3,9 @@ import {
 	canSeekInPlace,
 	inRanges,
 	isPreviewSource,
+	isRangeCapable,
 	isRangelessSource,
+	seekLanded,
 	waitForSeekableUrl,
 	type TimeRangesLike,
 } from "./seek";
@@ -70,6 +72,46 @@ describe("canSeekInPlace", () => {
 	it("always allows range-capable sources", () => {
 		expect(canSeekInPlace({ src: PRESIGNED, target: 120, seekable: ranges(), buffered: ranges() })).toBe(true);
 	});
+
+	it("seeks in place on a live stream served with byte ranges (C2) (was: every seek past the buffer waited for the persisted file)", () => {
+		expect(
+			canSeekInPlace({
+				src: PROGRESSIVE,
+				target: 120,
+				seekable: ranges([0, 200]),
+				buffered: ranges([0, 40]),
+				duration: 200,
+			})
+		).toBe(true);
+	});
+
+	it("still refuses a live stream without ranges, whatever its duration", () => {
+		// Chrome reports [0, 0] for a stream it can't range, Firefox its buffer.
+		expect(
+			canSeekInPlace({ src: PROGRESSIVE, target: 120, seekable: ranges([0, 0]), buffered: ranges([0, 40]), duration: 200 })
+		).toBe(false);
+		expect(
+			canSeekInPlace({ src: PROGRESSIVE, target: 120, seekable: ranges([0, 40]), buffered: ranges([0, 40]), duration: 200 })
+		).toBe(false);
+	});
+});
+
+describe("isRangeCapable", () => {
+	it("needs the whole track seekable beyond the buffer and a known duration", () => {
+		expect(isRangeCapable(ranges([0, 200]), ranges([0, 40]), 200)).toBe(true);
+		expect(isRangeCapable(ranges([0, 200]), ranges([0, 200]), 200)).toBe(false);
+		expect(isRangeCapable(ranges([0, 150]), ranges([0, 40]), 200)).toBe(false);
+		expect(isRangeCapable(ranges([0, 200]), ranges(), NaN)).toBe(false);
+		expect(isRangeCapable(ranges(), ranges(), 200)).toBe(false);
+	});
+});
+
+describe("seekLanded", () => {
+	it("tells a seek that landed from one the browser snapped back to the start", () => {
+		expect(seekLanded(120, 120.2)).toBe(true);
+		expect(seekLanded(120, 118)).toBe(true);
+		expect(seekLanded(120, 0.3)).toBe(false);
+	});
 });
 
 describe("waitForSeekableUrl", () => {
@@ -102,6 +144,14 @@ describe("waitForSeekableUrl", () => {
 		const url = await waitForSeekableUrl({ resolve, isCancelled: () => false, intervalMs: 1000, timeoutMs: 3000, ...c });
 		expect(url).toBeNull();
 		expect(resolve).toHaveBeenCalledTimes(4);
+	});
+
+	it("backs off up to maxIntervalMs (was: one /stream-url call per second for the whole persist)", async () => {
+		const c = clock();
+		const resolve = vi.fn(async () => null);
+		await waitForSeekableUrl({ resolve, isCancelled: () => false, intervalMs: 1000, maxIntervalMs: 4000, timeoutMs: 20_000, ...c });
+		expect(c.sleep.mock.calls.map(([ms]) => ms)).toEqual([1000, 1500, 2250, 3375, 4000, 4000]);
+		expect(resolve).toHaveBeenCalledTimes(7);
 	});
 
 	it("treats a failing lookup as not ready yet", async () => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { waitForSeekableUrl } from "@/lib/seek";
 import {
 	EXPIRY_MARGIN_MS,
 	FALLBACK_TTL_MS,
@@ -210,5 +211,25 @@ describe("resolveCachedSource", () => {
 		const ctl = new AbortController();
 		ctl.abort();
 		expect(await resolveCachedSource("a", { urls, signal: ctl.signal })).toBeNull();
+	});
+
+	it("lets a seek waiting on the live stream resume on the proxy as soon as the file is stored, with presigned URLs disabled (was: waited 60 s, then restarted at 0)", async () => {
+		const { urls } = setup([
+			ok({ url: null, status: "presigned_disabled" }),
+			ok({ url: null, status: "presigned_disabled" }),
+		]);
+		const proxy = vi
+			.fn()
+			.mockResolvedValueOnce({ status: 404, body: null })
+			.mockResolvedValueOnce({ status: 206, body: null });
+		let t = 0;
+		const url = await waitForSeekableUrl({
+			resolve: () => resolveCachedSource("a", { urls, fetchImpl: proxy }).then((s) => s?.url ?? null),
+			isCancelled: () => false,
+			sleep: async (ms) => void (t += ms),
+			now: () => t,
+		});
+		expect(url).toBe("/api/v1/stream/a");
+		expect(t).toBe(1000);
 	});
 });

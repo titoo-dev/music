@@ -17,7 +17,8 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-failure";
-import { canSeekInPlace, waitForSeekableUrl } from "@/lib/seek";
+import { canSeekInPlace, inRanges, isRangelessSource, seekLanded, waitForSeekableUrl } from "@/lib/seek";
+import { formatTime } from "@/utils/format-time";
 import {
 	PLAY_THRESHOLD_SECONDS,
 	advanceQueue,
@@ -34,7 +35,12 @@ import {
 	type PlaybackTarget,
 	type SkipReason,
 } from "@/components/audio/engine/timers";
-import { presignedUrls, proxyUrl } from "@/components/audio/engine/presigned-urls";
+import {
+	presignedUrls,
+	progressiveUrl,
+	proxyUrl,
+	resolveCachedSource,
+} from "@/components/audio/engine/presigned-urls";
 import {
 	cacheListenedTrack,
 	createAudioElement,
@@ -60,11 +66,9 @@ if (typeof window !== "undefined") {
 	} catch {}
 }
 
-// --- Presigned URLs ---
-// One app-wide cache (engine/presigned-urls): reused until shortly before
-// each URL's own expiresAt, refused per track after a failure — never a
-// session-wide kill switch.
-const fetchPresignedUrl = (trackId: string) => presignedUrls.get(trackId);
+// Presigned URLs come from one app-wide cache (engine/presigned-urls): reused
+// until shortly before each URL's own expiresAt, refused per track after a
+// failure — never a session-wide kill switch.
 
 /**
  * Resolve audio URL for a track. Priority:
@@ -285,6 +289,12 @@ export function AudioEngine() {
 	}, []);
 
 	const pendingSeekRef = useRef<{ target: number } | null>(null);
+	// An in-place seek on the live stream is checked on the next timeupdate:
+	// a browser that snapped back to the start falls back to the stored file.
+	const seekCheckRef = useRef<{ target: number; element: HTMLAudioElement } | null>(null);
+	// The persisted file never showed up: the next resume plays on whatever
+	// the live stream allows instead of waiting again.
+	const lastResortSeekRef = useRef(false);
 
 	// Track-level activation: ends the previous track's session (skip
 	// notification) and starts a fresh one. Both paths that change the
@@ -302,6 +312,8 @@ export function AudioEngine() {
 			timers.clear();
 			autoSkip.cancel();
 			pendingSeekRef.current = null;
+			seekCheckRef.current = null;
+			lastResortSeekRef.current = false;
 			normMeasuredRef.current = false;
 			resetNormGain();
 			setError(null);
@@ -317,7 +329,7 @@ export function AudioEngine() {
 	const handoffFullStream = useCallback(
 		(headAudio: HTMLAudioElement, trackId: string, gen: number) => {
 			const fullAudio = createAudioElement();
-			fullAudio.src = `/api/v1/stream-progressive/${trackId}`;
+			fullAudio.src = progressiveUrl(trackId);
 			fullAudio.load();
 
 			let swapped = false;
@@ -510,23 +522,35 @@ export function AudioEngine() {
 
 			const cancelled = () => pendingSeekRef.current !== pending || loadGenRef.current !== gen;
 			void waitForSeekableUrl({
-				resolve: () => fetchPresignedUrl(trackId),
+				// The presigned URL, or the range-capable proxy as soon as the
+				// file is stored when presigned URLs are off or refused for this
+				// track (was: waited the full minute, then restarted at 0).
+				resolve: () => resolveCachedSource(trackId).then((source) => source?.url ?? null),
 				isCancelled: cancelled,
+				intervalMs: 1000,
+				maxIntervalMs: 4000,
 			}).then((url) => {
 				if (cancelled()) return;
 				pendingSeekRef.current = null;
 				if (url) {
 					swapSource(url, pending.target);
 				} else {
-					// Never persisted in time — restart the live stream rather
-					// than leave the player silent.
-					setCurrentTime(0);
-					swapSource(`/api/v1/stream-progressive/${trackId}`, null);
+					// Not stored in time: reopen the live stream at the target (it
+					// seeks there when served with ranges, C2); otherwise it plays
+					// from the start and says so (applyResumePosition).
+					lastResortSeekRef.current = true;
+					swapSource(progressiveUrl(trackId), pending.target);
 				}
 			});
 		},
 		[detachEvents, setBuffering, setCurrentTime, swapSource]
 	);
+
+	const seekInPlace = useCallback((audio: HTMLAudioElement, target: number) => {
+		audio.currentTime = target;
+		const buffered = inRanges(target, audio.buffered);
+		seekCheckRef.current = isRangelessSource(audio.src) && !buffered ? { target, element: audio } : null;
+	}, []);
 
 	const applyResumePosition = useCallback(
 		(audio: HTMLAudioElement) => {
@@ -536,21 +560,39 @@ export function AudioEngine() {
 			const dur = audio.duration;
 			if (!isFinite(dur) || dur <= 0 || resume >= dur - 1) return;
 			const track = usePlayerStore.getState().currentTrack;
+			const lastResort = lastResortSeekRef.current;
+			lastResortSeekRef.current = false;
 			if (
 				track &&
-				!canSeekInPlace({ src: audio.src, target: resume, seekable: audio.seekable, buffered: audio.buffered })
+				!canSeekInPlace({
+					src: audio.src,
+					target: resume,
+					seekable: audio.seekable,
+					buffered: audio.buffered,
+					duration: dur,
+				})
 			) {
-				seekViaPersistedFile(audio, track.trackId, resume);
+				if (!lastResort) {
+					seekViaPersistedFile(audio, track.trackId, resume);
+					return;
+				}
+				// The file wasn't stored within the wait and this stream can't
+				// seek: play from the start, but say so (was: silently at 0).
+				setCurrentTime(0);
+				toast(`Couldn't jump to ${formatTime(resume)} yet`, {
+					id: "seek-fallback",
+					description: "The track is still loading, so it plays from the start.",
+				});
 				return;
 			}
 			try {
-				audio.currentTime = resume;
+				seekInPlace(audio, resume);
 				setCurrentTime(resume);
 			} catch {
 				// Buffer might not cover seek target yet — browser will catch up
 			}
 		},
-		[setCurrentTime, seekViaPersistedFile]
+		[setCurrentTime, seekViaPersistedFile, seekInPlace]
 	);
 
 	// --- Initialize audio element (client-only) ---
@@ -841,12 +883,18 @@ export function AudioEngine() {
 			if (
 				track &&
 				audio.readyState >= 1 &&
-				!canSeekInPlace({ src: audio.src, target: seekTo, seekable: audio.seekable, buffered: audio.buffered })
+				!canSeekInPlace({
+					src: audio.src,
+					target: seekTo,
+					seekable: audio.seekable,
+					buffered: audio.buffered,
+					duration: audio.duration,
+				})
 			) {
 				seekViaPersistedFile(audio, track.trackId, seekTo);
 			} else if (audio.readyState >= 1 && isFinite(audio.duration) && audio.duration > 0) {
 				try {
-					audio.currentTime = seekTo;
+					seekInPlace(audio, seekTo);
 				} catch {
 					// Buffer not yet covering the seek target — fall through to
 					// queue it for after canplay/loadedmetadata.
@@ -859,7 +907,7 @@ export function AudioEngine() {
 		}
 		// Clear the signal so it doesn't re-fire
 		usePlayerStore.setState({ _seekTo: null });
-	}, [seekTo, seekViaPersistedFile]);
+	}, [seekTo, seekViaPersistedFile, seekInPlace]);
 
 	// --- Media Session position update ---
 	const onPositionUpdate = useCallback(() => {
@@ -899,6 +947,17 @@ export function AudioEngine() {
 		handlersRef.current.onTimeUpdate = () => {
 			const audio = audioRef.current;
 			if (!audio) return;
+			// An in-place seek on the live stream that snapped back to the start
+			// (the browser thought it could range it): use the stored file.
+			const check = seekCheckRef.current;
+			if (check && !audio.seeking) {
+				seekCheckRef.current = null;
+				const track = usePlayerStore.getState().currentTrack;
+				if (check.element === audio && track && !seekLanded(check.target, audio.currentTime)) {
+					seekViaPersistedFile(audio, track.trackId, check.target);
+					return;
+				}
+			}
 			// Don't write timeUpdates back to the store while a seek is pending —
 			// audio.currentTime may briefly be the pre-seek value, which would
 			// rubber-band the SeekBar visually after the user releases.
@@ -1130,8 +1189,9 @@ export function AudioEngine() {
 					const scheduled = currentTarget();
 					timers.after(recovery.delayMs, () => {
 						if (!sameTarget(scheduled, currentTarget())) return;
-						audio.src = `/api/v1/stream-progressive/${trackId}`;
-						audio.load();
+						// Re-resolve (the track may be stored by now) and resume
+						// where it broke instead of restarting the live stream at 0.
+						reloadFrom(audio, getTrackUrl(trackId, { skipBlob: true }), position);
 					});
 					return;
 				}
