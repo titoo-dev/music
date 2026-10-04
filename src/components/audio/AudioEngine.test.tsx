@@ -14,7 +14,7 @@ import { AudioEngine } from "./AudioEngine";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { getCachedBlobUrl } from "@/lib/audio-cache";
 import { presignedUrls } from "./engine/presigned-urls";
-import { resetPrefetchState } from "./engine/prefetch";
+import { resetPrefetchState, warmTrack } from "./engine/prefetch";
 import { __setAudioContextFactory, getElementVolume, initAudioCtx, isRouted } from "@/utils/audio-context";
 import { FakeMediaSource, mp3Response, settle } from "@/test/helpers/fake-mse";
 import { buildMp3, type Mp3Options } from "@/test/helpers/mp3";
@@ -548,6 +548,19 @@ describe("AudioEngine — gapless runs", () => {
 		});
 		await act(() => settle());
 	}
+
+	it("a play right after the hover preload started still runs gapless (was: the preload had no URL yet, so the first track took the plain path)", async () => {
+		render(<AudioEngine />);
+		const q = queue();
+		// Hover: the preload element exists but its URL is still resolving.
+		act(() => warmTrack("1", { audio: "full" }));
+		act(() => usePlayerStore.getState().play(q[0], q));
+		const el = await lastDeck();
+		await act(() => settle());
+		act(() => el.ready(Infinity));
+		expect(el.plays).toBe(1);
+		expect(r2Elements("1").filter((a) => !a.paused)).toEqual([]);
+	});
 
 	it("plays a run of cached MP3 tracks on one element and moves the queue at the boundary", async () => {
 		const el = await startRun();

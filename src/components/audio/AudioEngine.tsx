@@ -901,8 +901,17 @@ export function AudioEngine() {
 			const preloaded = taken?.audio;
 
 			// Gapless: cached copies only — a live preview stream plays as before.
-			if (gaplessWanted() && !taken?.head && (!preloaded || isDeckSource(preloaded.src, window.location.origin))) {
-				startTrack(currentTrack, gen, preloaded ?? null);
+			// A preload still resolving its URL (a hover just before the click)
+			// is dropped: the run resolves the URL itself (was: its empty src
+			// read as "not a cached copy" and the track took the plain path).
+			const resolving = !!preloaded && !preloaded.src;
+			if (
+				gaplessWanted() &&
+				!taken?.head &&
+				(!preloaded || resolving || isDeckSource(preloaded.src, window.location.origin))
+			) {
+				if (resolving) discardElement(preloaded);
+				startTrack(currentTrack, gen, resolving ? null : (preloaded ?? null));
 				return;
 			}
 
