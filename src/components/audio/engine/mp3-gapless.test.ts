@@ -16,6 +16,7 @@ describe("parseGaplessInfo — real Deezer headers", () => {
 		expect(info(SPEAK_TO_ME_HEAD, { totalLength: SPEAK_TO_ME_LENGTH })).toEqual({
 			audioStart: 417,
 			audioEnd: SPEAK_TO_ME_LENGTH,
+			version: 1,
 			sampleRate: 44100,
 			samplesPerFrame: 1152,
 			channels: 2,

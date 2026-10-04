@@ -28,6 +28,8 @@ export interface GaplessInfo {
 	audioStart: number;
 	/** Byte offset where the audio frames end (from the Info "bytes" field), null = end of file. */
 	audioEnd: number | null;
+	/** MPEG version (with Layer III and the sample rate: what every frame of the file shares). */
+	version: 1 | 2 | 2.5;
 	sampleRate: number;
 	samplesPerFrame: number;
 	channels: 1 | 2;
@@ -231,6 +233,7 @@ export function parseGaplessInfo(b: Uint8Array, opts: { totalLength?: number } =
 		info: {
 			audioStart: at + header.frameLength,
 			audioEnd: audioEnd !== null && opts.totalLength !== undefined && audioEnd > opts.totalLength ? null : audioEnd,
+			version: header.version,
 			sampleRate: header.sampleRate,
 			samplesPerFrame: header.samplesPerFrame,
 			channels: header.channels,
