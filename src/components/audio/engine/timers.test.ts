@@ -64,7 +64,15 @@ describe("createAutoSkip", () => {
 			current = "after";
 		});
 		const timers = createTimerBag();
-		const skip = createAutoSkip({ timers, currentTrackId: () => current, next });
+		const auto = createAutoSkip({ timers, currentTrackId: () => current });
+		const skip = {
+			arm: (id: string, ms: number) => auto.arm(id, ms, next),
+			skipNow: (id: string) => auto.skipNow(id, next),
+			cancel: auto.cancel,
+			get armed() {
+				return auto.armed;
+			},
+		};
 		return { skip, next, timers, setCurrent: (id: string | null) => (current = id) };
 	}
 

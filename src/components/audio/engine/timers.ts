@@ -56,28 +56,24 @@ export type SkipReason = "auto" | "user";
  * a manual track change, the toast's Skip or Retry, or a second failure
  * cancels the pending skip instead of letting it fire on top.
  */
-export function createAutoSkip(deps: {
-	timers: TimerBag;
-	currentTrackId: () => string | null;
-	next: (reason: SkipReason) => void;
-}) {
+export function createAutoSkip(deps: { timers: TimerBag; currentTrackId: () => string | null }) {
 	let cancelPending: (() => void) | null = null;
 	const cancel = () => {
 		cancelPending?.();
 		cancelPending = null;
 	};
 	return {
-		arm(trackId: string, delayMs: number) {
+		arm(trackId: string, delayMs: number, next: (reason: SkipReason) => void) {
 			cancel();
 			cancelPending = deps.timers.after(delayMs, () => {
 				cancelPending = null;
-				if (deps.currentTrackId() === trackId) deps.next("auto");
+				if (deps.currentTrackId() === trackId) next("auto");
 			});
 		},
 		/** The toast's "Skip": skip now, once, and only if that track is still current. */
-		skipNow(trackId: string) {
+		skipNow(trackId: string, next: (reason: SkipReason) => void) {
 			cancel();
-			if (deps.currentTrackId() === trackId) deps.next("user");
+			if (deps.currentTrackId() === trackId) next("user");
 		},
 		cancel,
 		get armed() {

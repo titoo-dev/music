@@ -14,6 +14,8 @@ export interface TrackSession {
 	logged: boolean;
 	/** Retries burnt on the live stream for this track. */
 	retryCount: number;
+	/** A fresh presigned URL was already tried after an error. */
+	resigned: boolean;
 }
 
 export function createTrackSession(trackId: string, opts: { autoAdvance?: boolean } = {}): TrackSession {
@@ -22,6 +24,7 @@ export function createTrackSession(trackId: string, opts: { autoAdvance?: boolea
 		autoAdvance: !!opts.autoAdvance,
 		logged: false,
 		retryCount: 0,
+		resigned: false,
 	};
 }
 
