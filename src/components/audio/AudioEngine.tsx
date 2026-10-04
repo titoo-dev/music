@@ -61,6 +61,8 @@ import {
 } from "@/components/audio/engine/prefetch";
 import { classifySource, needsResign, planRecovery, resolvePlaybackUrl } from "@/components/audio/engine/source";
 import { forgetSignedInState, watchSignOut } from "@/components/audio/engine/sign-out";
+import { openGaplessDeck, supportsGaplessDeck, type GaplessDeck } from "@/components/audio/engine/gapless-deck";
+import { gaplessNextDue, isDeckSource, nextInRun, wantsGapless } from "@/components/audio/engine/gapless-policy";
 
 // Restore cache limit from localStorage
 if (typeof window !== "undefined") {
@@ -238,6 +240,16 @@ export function AudioEngine() {
 	// Head → full handoff in flight (cancelled when the track changes).
 	const cancelHandoffRef = useRef<(() => void) | null>(null);
 
+	// Gapless run: the MSE deck that plays the current track and lines up the
+	// next one sample-accurately (engine/gapless-deck); null on the plain
+	// path. A deck failure keeps the rest of the run on the plain path — the
+	// next track the user starts may try again.
+	const deckRef = useRef<GaplessDeck | null>(null);
+	const gaplessBlockedRef = useRef(false);
+	// Next tracks the deck refused during this run, and the one being resolved.
+	const deckDeclinedRef = useRef(new Set<string>());
+	const deckResolvingRef = useRef<string | null>(null);
+
 	// --- Stable event handler delegation via refs ---
 	const handlersRef = useRef({
 		onCanPlay: () => {},
@@ -391,6 +403,33 @@ export function AudioEngine() {
 		[detachEvents]
 	);
 
+	/** The deck, when `audio` is its element. */
+	const deckOf = useCallback(
+		(audio: HTMLAudioElement | null) => (audio && deckRef.current?.element === audio ? deckRef.current : null),
+		[]
+	);
+	/** Track-relative position and length of what `audio` plays (the deck maps its run's timeline). */
+	const timeOf = useCallback((audio: HTMLAudioElement) => deckOf(audio)?.trackTime() ?? audio.currentTime, [deckOf]);
+	const durationOf = useCallback(
+		(audio: HTMLAudioElement) => deckOf(audio)?.trackDuration() ?? audio.duration,
+		[deckOf]
+	);
+
+	/** End the gapless run: the deck and its element go. */
+	const leaveDeck = useCallback(() => {
+		const deck = deckRef.current;
+		if (!deck) return;
+		deckRef.current = null;
+		deckResolvingRef.current = null;
+		deck.destroy();
+		dropElement(deck.element);
+	}, [dropElement]);
+
+	const gaplessWanted = useCallback(
+		() => wantsGapless(usePlayerStore.getState(), { supported: supportsGaplessDeck(), blocked: gaplessBlockedRef.current }),
+		[]
+	);
+
 	// --- Restore playback position from previous session ---
 	// Two paths:
 	//  1. HMR / fast-refresh: the Zustand store is module-level and survives
@@ -440,7 +479,7 @@ export function AudioEngine() {
 			const audio = audioRef.current;
 			const track = usePlayerStore.getState().currentTrack;
 			if (!audio || !track) return;
-			const time = audio.currentTime;
+			const time = timeOf(audio);
 			if (!isFinite(time) || time < 1) return;
 			try {
 				localStorage.setItem(
@@ -460,7 +499,7 @@ export function AudioEngine() {
 			window.removeEventListener("pagehide", save);
 			document.removeEventListener("visibilitychange", onVisibility);
 		};
-	}, []);
+	}, [timeOf]);
 
 	// --- Seeking on the live (range-less) stream ---
 	// /stream-progressive is served without byte ranges: setting currentTime
@@ -562,6 +601,13 @@ export function AudioEngine() {
 			resumePositionRef.current = null;
 			const lastResort = lastResortSeekRef.current;
 			lastResortSeekRef.current = false;
+			const deck = deckOf(audio);
+			if (deck) {
+				// The whole file is in memory: the deck seeks anywhere in it.
+				deck.seek(resume);
+				setCurrentTime(resume);
+				return;
+			}
 			const track = usePlayerStore.getState().currentTrack;
 			const plan = planResume({
 				resume,
@@ -593,7 +639,98 @@ export function AudioEngine() {
 				// Buffer might not cover seek target yet — browser will catch up
 			}
 		},
-		[setCurrentTime, seekViaPersistedFile, seekInPlace]
+		[deckOf, setCurrentTime, seekViaPersistedFile, seekInPlace]
+	);
+
+	// The deck can't go on (fetch, append, quota, decode error): play the
+	// track on the plain path from where it was, and keep the rest of the run
+	// there.
+	const leaveDeckForPlain = useCallback(
+		(deck: GaplessDeck) => {
+			if (deckRef.current !== deck) return;
+			const track = usePlayerStore.getState().currentTrack;
+			const position = deck.trackTime();
+			gaplessBlockedRef.current = true;
+			const gen = ++loadGenRef.current;
+			timers.clear();
+			leaveDeck();
+			if (!track) return;
+			pendingSeekRef.current = null;
+			resumePositionRef.current = isFinite(position) && position >= 1 ? position : null;
+			setBuffering(true);
+			const audio = createAudioElement();
+			activateElement(audio, track);
+			void getTrackUrl(track.trackId).then((url) => {
+				if (loadGenRef.current !== gen) return;
+				audio.src = url;
+				audio.load();
+			});
+		},
+		[activateElement, leaveDeck, setBuffering, timers]
+	);
+
+	// Start a track on the gapless deck when it and the queue's next track both
+	// have a cached copy and its file carries a LAME tag; otherwise on the
+	// plain path — on `fallback` (a cached queue preload) when there is one.
+	const startTrack = useCallback(
+		(track: PlayerTrack, gen: number, fallback: HTMLAudioElement | null) => {
+			// Holds the place (seek / pause land on it) until the path is known.
+			const holder = createAudioElement();
+			activateElement(holder, track);
+			const stale = () => loadGenRef.current !== gen;
+			void (async () => {
+				const nextId = nextInRun(usePlayerStore.getState(), new Set());
+				const [url, nextUrl] = await Promise.all([
+					fallback ? Promise.resolve(fallback.src) : getTrackUrl(track.trackId),
+					nextId ? getTrackUrl(nextId).catch(() => null) : Promise.resolve(null),
+				]);
+				const origin = window.location.origin;
+				let deck: GaplessDeck | null = null;
+				if (!stale() && isDeckSource(url, origin) && isDeckSource(nextUrl, origin)) {
+					const opened = await openGaplessDeck(
+						{ trackId: track.trackId, url },
+						{
+							createElement: createAudioElement,
+							onFailure: () => {
+								if (deck) leaveDeckForPlain(deck);
+							},
+							onNextDeclined: (id) => deckDeclinedRef.current.add(id),
+						}
+					);
+					if (opened.ok) deck = opened.deck;
+				}
+				if (stale()) {
+					if (deck) {
+						deck.destroy();
+						discardElement(deck.element);
+					}
+					if (fallback) discardElement(fallback);
+					return;
+				}
+				if (deck) {
+					if (fallback) discardElement(fallback);
+					dropElement(holder);
+					deckDeclinedRef.current = new Set();
+					deckResolvingRef.current = null;
+					deckRef.current = deck;
+					activateElement(deck.element, track);
+					return;
+				}
+				if (fallback) {
+					dropElement(holder);
+					activateElement(fallback, track);
+					if (fallback.readyState >= 2) {
+						setBuffering(false);
+						applyResumePosition(fallback);
+						if (usePlayerStore.getState().isPlaying) startPlayback(fallback);
+					}
+					return;
+				}
+				holder.src = url;
+				holder.load();
+			})();
+		},
+		[activateElement, applyResumePosition, dropElement, leaveDeckForPlain, setBuffering, startPlayback]
 	);
 
 	// --- Initialize audio element (client-only) ---
@@ -612,14 +749,25 @@ export function AudioEngine() {
 			cancelHandoffRef.current = null;
 			const audio = audioRef.current;
 			if (audio) dropElement(audio);
+			leaveDeck();
 			// Clean up preload pools and cancel background prefetch
 			disposePrefetchPools();
 		};
-	}, [attachEvents, dropElement]);
+	}, [attachEvents, dropElement, leaveDeck]);
 
 	// Sign-out / account switch: forget the presigned URLs, prefetch state and
-	// the IndexedDB audio the Service Worker would keep serving.
-	useEffect(() => watchSignOut(useAuthStore, () => void forgetSignedInState()), []);
+	// the IndexedDB audio the Service Worker would keep serving — and the next
+	// track a gapless run lined up with them (it is lined up again, or not,
+	// under the new session).
+	useEffect(
+		() =>
+			watchSignOut(useAuthStore, () => {
+				void forgetSignedInState();
+				deckRef.current?.setNext(null);
+				deckDeclinedRef.current = new Set();
+			}),
+		[]
+	);
 
 	// Stop preview when full player resumes
 	useEffect(() => {
@@ -660,8 +808,10 @@ export function AudioEngine() {
 
 		// Immediate preload of the adjacent tracks (in-memory Audio elements for
 		// instant swap) — cached copies only: an uncached next track is preloaded
-		// live near the end of this one (onTimeUpdate), never persisted.
-		if (queueIndex + 1 < queue.length) {
+		// live near the end of this one (onTimeUpdate), never persisted. A
+		// gapless run fetches the next track itself (and lets onTimeUpdate
+		// preload it only when the run won't take it).
+		if (queueIndex + 1 < queue.length && !gaplessWanted()) {
 			preloadTrack(queue[queueIndex + 1].trackId);
 		}
 		if (queueIndex - 1 >= 0) {
@@ -680,7 +830,7 @@ export function AudioEngine() {
 		// Background IndexedDB prefetch: PREFETCH_LIMIT tracks around the
 		// cursor, only those the server already cached.
 		smartPrefetchQueue(queue, queueIndex);
-	}, [currentTrack]);
+	}, [currentTrack, gaplessWanted]);
 
 	// --- Load new track ---
 	useEffect(() => {
@@ -709,6 +859,7 @@ export function AudioEngine() {
 			cancelHandoffRef.current = null;
 			audio.pause();
 			audio.src = "";
+			leaveDeck();
 			prevTrackIdRef.current = null;
 			return;
 		}
@@ -719,6 +870,9 @@ export function AudioEngine() {
 			if (prevTrackIdRef.current !== null) {
 				resumePositionRef.current = null;
 			}
+			// A track the user picked (not the queue's own advance) may start
+			// a gapless run again after a deck failure.
+			if (!autoAdvanceRef.current) gaplessBlockedRef.current = false;
 			// Ends the previous session (skip notification if it never
 			// reached 30 s) and resets every per-track flag.
 			beginTrack(currentTrack.trackId);
@@ -733,8 +887,10 @@ export function AudioEngine() {
 			}
 			const gen = ++loadGenRef.current;
 
-			// Immediately kill the old audio — hard stop, no fade
+			// Immediately kill the old audio — hard stop, no fade. A user's
+			// track change leaves a gapless run cleanly here too.
 			dropElement(audio);
+			leaveDeck();
 
 			// Pick the best prefetched element, in order of buffer richness:
 			//   1. queue preload (next/prev — cached copy or live preview stream)
@@ -743,6 +899,12 @@ export function AudioEngine() {
 			//                      transition to full stream when it ends)
 			const taken = takePreloaded(currentTrack.trackId);
 			const preloaded = taken?.audio;
+
+			// Gapless: cached copies only — a live preview stream plays as before.
+			if (gaplessWanted() && !taken?.head && (!preloaded || isDeckSource(preloaded.src, window.location.origin))) {
+				startTrack(currentTrack, gen, preloaded ?? null);
+				return;
+			}
 
 			if (preloaded) {
 				activateElement(preloaded, currentTrack);
@@ -776,7 +938,7 @@ export function AudioEngine() {
 				});
 			}
 		}
-	}, [currentTrack, activateElement, beginTrack, startPlayback, dropElement, applyResumePosition, timers, autoSkip, handoffFullStream, setBuffering]);
+	}, [currentTrack, activateElement, beginTrack, startPlayback, dropElement, applyResumePosition, timers, autoSkip, handoffFullStream, setBuffering, leaveDeck, gaplessWanted, startTrack]);
 
 	// --- Play / pause with fade effects ---
 	useEffect(() => {
@@ -856,7 +1018,7 @@ export function AudioEngine() {
 		// Capture position before tearing the old element down. Anything <1s
 		// is treated as "near the start" and skipped — that's the recovery
 		// case where there's nothing to preserve.
-		const liveTime = pendingSeekRef.current?.target ?? audio.currentTime;
+		const liveTime = pendingSeekRef.current?.target ?? timeOf(audio);
 		pendingSeekRef.current = null;
 		if (isFinite(liveTime) && liveTime >= 1) {
 			resumePositionRef.current = liveTime;
@@ -878,6 +1040,7 @@ export function AudioEngine() {
 		cancelHandoffRef.current?.();
 		cancelHandoffRef.current = null;
 		dropElement(audio);
+		leaveDeck();
 		const newAudio = createAudioElement();
 		activateElement(newAudio);
 		getTrackUrl(track.trackId).then((url) => {
@@ -885,7 +1048,7 @@ export function AudioEngine() {
 			newAudio.src = url;
 			newAudio.load();
 		});
-	}, [retryLoadCount, currentTrack, activateElement, dropElement, setBuffering, setError, timers, autoSkip]);
+	}, [retryLoadCount, currentTrack, activateElement, dropElement, setBuffering, setError, timers, autoSkip, timeOf, leaveDeck]);
 
 	// Seek: respond to _seekTo signal from prev() restart or seek()
 	const seekTo = usePlayerStore((s) => s._seekTo);
@@ -893,7 +1056,12 @@ export function AudioEngine() {
 		if (seekTo === null) return;
 		const audio = audioRef.current;
 		const track = usePlayerStore.getState().currentTrack;
-		if (audio && track && pendingSeekRef.current) {
+		const deck = deckOf(audio);
+		if (deck) {
+			// Within the current track of the run; anything not buffered is
+			// re-appended from the file in memory.
+			deck.seek(seekTo);
+		} else if (audio && track && pendingSeekRef.current) {
 			seekViaPersistedFile(audio, track.trackId, seekTo);
 		} else if (audio) {
 			if (
@@ -923,33 +1091,85 @@ export function AudioEngine() {
 		}
 		// Clear the signal so it doesn't re-fire
 		usePlayerStore.setState({ _seekTo: null });
-	}, [seekTo, seekViaPersistedFile, seekInPlace]);
+	}, [seekTo, seekViaPersistedFile, seekInPlace, deckOf]);
 
 	// --- Media Session position update ---
 	const onPositionUpdate = useCallback(() => {
 		if (!("mediaSession" in navigator)) return;
 		const audio = audioRef.current;
-		if (!audio || !audio.duration || !isFinite(audio.duration)) return;
+		if (!audio) return;
+		const duration = durationOf(audio);
+		if (!duration || !isFinite(duration)) return;
 		try {
 			navigator.mediaSession.setPositionState({
-				duration: audio.duration,
+				duration,
 				playbackRate: audio.playbackRate,
-				position: Math.min(audio.currentTime, audio.duration),
+				position: Math.min(timeOf(audio), duration),
 			});
 		} catch {
 			// Ignore invalid state errors
 		}
-	}, []);
+	}, [durationOf, timeOf]);
 
 	// --- Event handlers (always point to the latest closures) ---
 	// Assigned after every commit rather than during render: refs must not
 	// be written while rendering.
 	useEffect(() => {
+		// --- Gapless run ---
+		// The playhead crossed into the next track of the run: the same
+		// per-track reset as the load effect, which then has nothing to load.
+		const advanceInRun = (deck: GaplessDeck, trackId: string) => {
+			const { queue, queueIndex } = usePlayerStore.getState();
+			if (queue[queueIndex + 1]?.trackId !== trackId) {
+				// The queue moved under the run: go on like a track that ended.
+				advanceQueue(autoAdvanceRef, true, usePlayerStore);
+				return;
+			}
+			autoAdvanceRef.current = true;
+			beginTrack(trackId);
+			setDuration(deck.trackDuration());
+			usePlayerStore.getState().next();
+			// next() flags the new track as buffering; it is already playing.
+			setBuffering(false);
+		};
+
+		// Line up the track that follows (from halfway through this one), and
+		// line up another when the queue or the settings change.
+		const lineUpNext = (deck: GaplessDeck) => {
+			if (deckResolvingRef.current !== null) return;
+			const want = nextInRun(usePlayerStore.getState(), deckDeclinedRef.current);
+			if (deck.nextDecided()) {
+				if (deck.nextTrackId() === want) return;
+			} else if (!gaplessNextDue(deck.trackTime(), deck.trackDuration())) {
+				return;
+			}
+			if (!want) {
+				deck.setNext(null);
+				return;
+			}
+			deckResolvingRef.current = want;
+			void getTrackUrl(want)
+				.catch(() => null)
+				.then((url) => {
+					if (deckRef.current !== deck || deckResolvingRef.current !== want) return;
+					deckResolvingRef.current = null;
+					// The queue moved meanwhile: the next timeupdate lines up again.
+					if (nextInRun(usePlayerStore.getState(), deckDeclinedRef.current) !== want) return;
+					if (isDeckSource(url, window.location.origin)) {
+						deck.setNext({ trackId: want, url });
+					} else {
+						// Not cached (the run never plays the live stream).
+						deckDeclinedRef.current.add(want);
+						deck.setNext(null);
+					}
+				});
+		};
+
 		handlersRef.current.onCanPlay = () => {
 			const audio = audioRef.current;
 			if (!audio) return;
 			setBuffering(false);
-			setDuration(audio.duration || 0);
+			setDuration(durationOf(audio) || 0);
 			applyResumePosition(audio);
 			onPositionUpdate();
 			if (usePlayerStore.getState().isPlaying) {
@@ -963,6 +1183,12 @@ export function AudioEngine() {
 		handlersRef.current.onTimeUpdate = () => {
 			const audio = audioRef.current;
 			if (!audio) return;
+			const deck = deckOf(audio);
+			if (deck) {
+				const crossed = deck.sync();
+				if (crossed) advanceInRun(deck, crossed);
+				if (deckRef.current === deck) lineUpNext(deck);
+			}
 			// An in-place seek on the live stream that snapped back to the start
 			// (the browser thought it could range it): use the stored file.
 			const check = seekCheckRef.current;
@@ -982,7 +1208,7 @@ export function AudioEngine() {
 				return;
 			}
 			// Throttle store writes to ~4Hz to avoid excessive re-renders
-			const now = audio.currentTime;
+			const now = timeOf(audio);
 			const last = usePlayerStore.getState().currentTime;
 			if (Math.abs(now - last) >= 0.25) {
 				setCurrentTime(now);
@@ -995,7 +1221,7 @@ export function AudioEngine() {
 			// history and its stored file is locked from eviction-on-skip.
 			const track = usePlayerStore.getState().currentTrack;
 			const session = sessionRef.current;
-			if (session && !audio.paused && !audio.seeking) accumulateListened(session, audio.currentTime);
+			if (session && !audio.paused && !audio.seeking) accumulateListened(session, now);
 			if (
 				track &&
 				session &&
@@ -1020,7 +1246,7 @@ export function AudioEngine() {
 				if (claimBackgroundPersist(session, audio.src || "")) persistInBackground(track.trackId);
 				// A track really listened to is worth keeping in IndexedDB: read
 				// from its presigned R2 URL, not a second trip through the server.
-				if (classifySource(audio.src) !== "blob") void cacheListenedTrack(track.trackId);
+				if (classifySource(deck ? deck.sourceUrl() : audio.src) !== "blob") void cacheListenedTrack(track.trackId);
 			}
 
 			// Route the element through Web Audio (visualiser, normalisation,
@@ -1034,7 +1260,7 @@ export function AudioEngine() {
 			if (normalizationEnabled && isRouted(audio)) {
 				if (norm.gain === null && !audio.paused) {
 					const level = readLevel(audio);
-					if (level) norm.meter.add(level, audio.currentTime);
+					if (level) norm.meter.add(level, now);
 					norm.gain = norm.meter.gain();
 				}
 				if (norm.gain !== null && norm.appliedTo !== audio) {
@@ -1046,18 +1272,23 @@ export function AudioEngine() {
 			// Preload the next track: a cached copy from halfway through; an
 			// uncached one only through the live preview stream, and only close
 			// to the end so it neither persists nor idles on a server function.
-			if (audio.duration > 0) {
-				const left = audio.duration - audio.currentTime;
+			// A gapless run lines its next track up itself, unless it won't take it.
+			const duration = durationOf(audio);
+			const runTakesNext = !!deck && (!deck.nextDecided() || deck.nextTrackId() !== null);
+			if (duration > 0 && !runTakesNext) {
+				const left = duration - now;
 				const live = left <= Math.max(LIVE_PRELOAD_LEAD_S, crossfadeDuration + 10);
-				if (live || audio.currentTime / audio.duration > 0.5) {
+				if (live || now / duration > 0.5) {
 					const { queue, queueIndex } = usePlayerStore.getState();
 					if (queueIndex + 1 < queue.length) preloadTrack(queue[queueIndex + 1].trackId, { live });
 				}
 			}
 
-			// --- Crossfade ---
+			// --- Crossfade --- (never from a gapless run: crossfade turned on
+			// mid-run ends the run at this track's end)
 			const timeLeft = audio.duration - audio.currentTime;
 			if (
+				!deck &&
 				crossfadeDuration > 0 &&
 				!crossfadeActiveRef.current &&
 				audio.duration > crossfadeDuration * 2 && // skip very short tracks
@@ -1130,7 +1361,10 @@ export function AudioEngine() {
 			if (repeat === "one") {
 				const audio = audioRef.current;
 				if (audio) {
-					audio.currentTime = 0;
+					// A gapless run's element plays several tracks: back to this one's start.
+					const deck = deckOf(audio);
+					if (deck) deck.seek(0);
+					else audio.currentTime = 0;
 					audio.play().catch(() => {});
 				}
 			} else {
@@ -1142,6 +1376,17 @@ export function AudioEngine() {
 		handlersRef.current.onError = () => {
 			const audio = audioRef.current;
 			if (!audio || !currentTrack) return;
+			const deck = deckOf(audio);
+			if (deck) {
+				// A decode / Media Source error: this track goes on on the plain path.
+				console.warn("[AudioEngine] gapless deck error — back to the plain path", {
+					trackId: currentTrack.trackId,
+					mediaErrorCode: audio.error?.code,
+					mediaErrorMessage: audio.error?.message,
+				});
+				leaveDeckForPlain(deck);
+				return;
+			}
 			const src = audio.src;
 			const mediaErr = audio.error;
 			const session = sessionRef.current;
@@ -1326,7 +1571,7 @@ export function AudioEngine() {
 
 		handlersRef.current.onLoadedMetadata = () => {
 			const audio = audioRef.current;
-			if (audio) setDuration(audio.duration || 0);
+			if (audio) setDuration(durationOf(audio) || 0);
 		};
 
 		handlersRef.current.onWaiting = () => {
@@ -1345,6 +1590,11 @@ export function AudioEngine() {
 		handlersRef.current.onProgress = () => {
 			const audio = audioRef.current;
 			if (!audio) return;
+			const deck = deckOf(audio);
+			if (deck) {
+				setBuffered(deck.bufferedEnd());
+				return;
+			}
 			const ranges = audio.buffered;
 			if (ranges.length === 0) {
 				setBuffered(0);
@@ -1401,7 +1651,7 @@ export function AudioEngine() {
 					const audio = audioRef.current;
 					if (audio) {
 						const offset = details.seekOffset ?? 10;
-						usePlayerStore.getState().seek(Math.max(0, audio.currentTime - offset));
+						usePlayerStore.getState().seek(Math.max(0, timeOf(audio) - offset));
 					}
 				},
 			],
@@ -1411,7 +1661,7 @@ export function AudioEngine() {
 					const audio = audioRef.current;
 					if (audio) {
 						const offset = details.seekOffset ?? 10;
-						usePlayerStore.getState().seek(Math.min(audio.duration || 0, audio.currentTime + offset));
+						usePlayerStore.getState().seek(Math.min(durationOf(audio) || 0, timeOf(audio) + offset));
 					}
 				},
 			],
@@ -1432,7 +1682,7 @@ export function AudioEngine() {
 				} catch {}
 			}
 		};
-	}, [pause, resume, prev, next]);
+	}, [pause, resume, prev, next, timeOf, durationOf]);
 
 	// No JSX audio element — all managed imperatively for preload swapping
 	return null;
