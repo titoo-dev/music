@@ -340,3 +340,30 @@ describe("AudioEngine — resuming on the live stream", () => {
 		expect(usePlayerStore.getState().currentTime).toBe(95);
 	});
 });
+
+describe("AudioEngine — stop", () => {
+	it("a stop before the source resolved loads nothing (was: the late URL opened the stopped track's persisting stream)", async () => {
+		render(<AudioEngine />);
+		act(() => usePlayerStore.getState().play(track("1")));
+		act(() => usePlayerStore.getState().stop());
+		await act(async () => {
+			await new Promise((r) => setTimeout(r, 20));
+		});
+		expect(FakeAudio.all.filter((a) => /stream-progressive\/1/.test(a.src))).toEqual([]);
+	});
+
+	it("a stop cancels a seek waiting for the stored file (was: the stored file was loaded after the stop)", async () => {
+		render(<AudioEngine />);
+		act(() => usePlayerStore.getState().play(track("1")));
+		const el = await waitFor(() => elementWithSrc(/stream-progressive\/1$/));
+		act(() => el.ready(200));
+		act(() => usePlayerStore.getState().seek(150));
+		await waitFor(() => expect(el.src).not.toMatch(/stream-progressive/));
+		act(() => usePlayerStore.getState().stop());
+		stored["1"] = "https://r2.example/tracks/1/1.mp3?sig=1";
+		await act(async () => {
+			await new Promise((r) => setTimeout(r, 1200));
+		});
+		expect(FakeAudio.all.filter((a) => /r2\.example/.test(a.src))).toEqual([]);
+	});
+});

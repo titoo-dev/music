@@ -692,6 +692,14 @@ export function AudioEngine() {
 			// track wasn't counted, it's a skip.
 			if (shouldNotifySkip(sessionRef.current)) notifyTrackSkipped(sessionRef.current.trackId);
 			sessionRef.current = null;
+			// Nothing started for the stopped track may land afterwards: a URL
+			// still resolving, a seek waiting for the stored file, a resume
+			// position (was: the late URL loaded — and for an uncached track
+			// persisted — the track the user had just stopped).
+			++loadGenRef.current;
+			pendingSeekRef.current = null;
+			seekCheckRef.current = null;
+			resumePositionRef.current = null;
 			timers.clear();
 			autoSkip.cancel();
 			cancelHandoffRef.current?.();
