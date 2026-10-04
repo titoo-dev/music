@@ -4,6 +4,12 @@ import { getPresignedUrl } from "@/lib/object-stream";
 import { isStorageNotFound } from "@/lib/wavelet/storage/objects";
 import { findCachedCopy, resolveCacheQuery } from "@/lib/wavelet/storage/cached-copy";
 
+/**
+ * Lifetime of the presigned URL (C1). One hour covers a long FLAC with
+ * pauses; the response's expiresAt lets the client refresh before it lapses.
+ */
+const PRESIGN_TTL_SECONDS = 3600;
+
 // GET /api/v1/stream-url/[trackId] — return a presigned R2 URL for direct
 // browser playback. Returns { url: null } when the track isn't cached so
 // the client can fall through to /api/v1/stream-progressive without a 404
@@ -33,8 +39,11 @@ export async function GET(
 			return ok({ url: null, status: legacyOnly ? "unsupported_storage" : "not_cached" });
 		}
 
-		const { url, contentType } = await getPresignedUrl(copy.row.storagePath, 900);
-		return ok({ url, contentType });
+		// Taken before signing: the signature's own clock is a few ms later, so
+		// the URL never expires before the reported time.
+		const expiresAt = new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString();
+		const { url, contentType } = await getPresignedUrl(copy.row.storagePath, PRESIGN_TTL_SECONDS);
+		return ok({ url, contentType, expiresAt });
 	} catch (e: unknown) {
 		if (isStorageNotFound(e)) {
 			return ok({ url: null, status: "file_missing" });

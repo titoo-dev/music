@@ -92,7 +92,31 @@ describe("GET /api/v1/stream-url/[trackId]", () => {
 		const body = await readJson<{ data: { url: string; contentType: string } }>(res);
 		expect(body?.data.url).toContain("example.com");
 		expect(body?.data.contentType).toBe("audio/mpeg");
-		expect(getPresignedUrlMock).toHaveBeenCalledWith("music/foo.mp3", 900);
+		// C1: one hour (was 900 s).
+		expect(getPresignedUrlMock).toHaveBeenCalledWith("music/foo.mp3", 3600);
+	});
+
+	it("reports when the presigned URL expires, one hour ahead (was: 900 s URLs expired mid-track and the client could not tell)", async () => {
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(new Date("2026-10-04T10:00:00.000Z"));
+		try {
+			setSessionUser("u1");
+			prismaMock.storedTrack.findMany.mockResolvedValue([
+				{ id: "x", trackId: "1", bitrate: 1, storagePath: "tracks/1/1.mp3", storageType: "r2" },
+			]);
+			getPresignedUrlMock.mockResolvedValue({ url: "https://example.com/1.mp3", contentType: "audio/mpeg" } as any);
+
+			const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
+			const body = await readJson<{ data: { url: string; contentType: string; expiresAt: string } }>(res);
+			expect(body?.data).toEqual({
+				url: "https://example.com/1.mp3",
+				contentType: "audio/mpeg",
+				expiresAt: "2026-10-04T11:00:00.000Z",
+			});
+			expect(getPresignedUrlMock).toHaveBeenCalledWith("tracks/1/1.mp3", 3600);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("returns null url when signing reports the blob is missing", async () => {
