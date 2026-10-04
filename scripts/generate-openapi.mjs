@@ -763,7 +763,7 @@ const paths = {
 				401: err("NotAuthenticatedOrDeezerLoginFailed"),
 				500: err("InternalError"),
 			},
-			"x-error-codes": ["NOT_AUTHENTICATED", "MISSING_ARL", "LOGIN_FAILED", "INTERNAL_ERROR"],
+			"x-error-codes": ["NOT_AUTHENTICATED", "INVALID_BODY", "MISSING_ARL", "LOGIN_FAILED", "INTERNAL_ERROR"],
 		},
 	},
 	"/api/v1/auth/login-email": {
@@ -779,7 +779,7 @@ const paths = {
 				401: err("NotAuthenticatedOrDeezerLoginFailed"),
 				500: err("InternalError"),
 			},
-			"x-error-codes": ["NOT_AUTHENTICATED", "MISSING_CREDENTIALS", "LOGIN_FAILED", "INTERNAL_ERROR"],
+			"x-error-codes": ["NOT_AUTHENTICATED", "INVALID_BODY", "MISSING_CREDENTIALS", "LOGIN_FAILED", "INTERNAL_ERROR"],
 		},
 	},
 	"/api/v1/auth/change-account": {
@@ -794,7 +794,7 @@ const paths = {
 				obj({ child: int({ minimum: 0, description: "Index in `childs` — a non-negative integer (a digit string is accepted)" }) }, ["child"])
 			),
 			responses: { ...okRes("ChangeAccountEnvelope", ref("ChangeAccountResult")), ...E_400, ...E_DEEZER },
-			"x-error-codes": ["MISSING_CHILD_INDEX", "INVALID_CHILD_INDEX", "NOT_AUTHENTICATED", "NO_DEEZER_ARL", "DEEZER_LOGIN_FAILED"],
+			"x-error-codes": ["INVALID_BODY", "MISSING_CHILD_INDEX", "INVALID_CHILD_INDEX", "NOT_AUTHENTICATED", "NO_DEEZER_ARL", "DEEZER_LOGIN_FAILED"],
 		},
 	},
 	"/api/v1/auth/logout": {
@@ -834,11 +834,11 @@ const paths = {
 			summary: "Album / playlist / artist page with tracks",
 			security: optionalAuth,
 			parameters: [
-				query("id", str(), "Deezer id", true),
+				query("id", str({ pattern: "^\d+$" }), "Numeric Deezer id", true),
 				query("type", str({ enum: ["album", "playlist", "artist"] }), "Entity type", true),
 			],
-			responses: { ...okRes("DeezerTracklistEnvelope", ref("DeezerTracklist")), ...E_400, ...E_GUEST },
-			"x-error-codes": ["MISSING_PARAMS", "INVALID_TYPE", "NO_DEEZER"],
+			responses: { ...okRes("DeezerTracklistEnvelope", ref("DeezerTracklist")), ...E_400, ...E_404, 502: err("UpstreamError"), ...E_GUEST },
+			"x-error-codes": ["MISSING_PARAMS", "INVALID_TYPE", "INVALID_ID", "NOT_FOUND", "UPSTREAM_ERROR", "NO_DEEZER"],
 		},
 	},
 
@@ -1227,9 +1227,9 @@ const paths = {
 			operationId: "saveSettings",
 			summary: "Save the signed-in user's engine settings",
 			description:
-				"`settings` replaces the user's stored overrides (omitted or null → `{}`, i.e. back to the global settings). Server-wide settings are never written here (the streaming quality has its own route). A `spotifySettings` field is ignored. The response's `settings` is the object as sent (not merged over the global settings), or the global settings when none was sent.",
+				"`settings` replaces the user's stored overrides (null → `{}`, i.e. back to the global settings; a body without `settings` is a 400 INVALID_BODY so it never wipes them by accident). Server-wide settings are never written here (the streaming quality has its own route). A `spotifySettings` field is ignored. The response's `settings` is the object as sent (not merged over the global settings), or the global settings when none was sent.",
 			security: userAuth,
-			requestBody: body(obj({ settings: { type: "object", allOf: [ref("Settings")], nullable: true } })),
+			requestBody: body(obj({ settings: { type: "object", allOf: [ref("Settings")], nullable: true } }, ["settings"])),
 			responses: { ...okRes("SettingsBundleEnvelope", ref("SettingsBundle")), ...E_400, ...E_USER },
 			"x-error-codes": ["NOT_AUTHENTICATED", "INVALID_BODY"],
 		},

@@ -305,6 +305,7 @@
 				},
 				"x-error-codes": [
 					"NOT_AUTHENTICATED",
+					"INVALID_BODY",
 					"MISSING_ARL",
 					"LOGIN_FAILED",
 					"INTERNAL_ERROR"
@@ -373,6 +374,7 @@
 				},
 				"x-error-codes": [
 					"NOT_AUTHENTICATED",
+					"INVALID_BODY",
 					"MISSING_CREDENTIALS",
 					"LOGIN_FAILED",
 					"INTERNAL_ERROR"
@@ -440,6 +442,7 @@
 					}
 				},
 				"x-error-codes": [
+					"INVALID_BODY",
 					"MISSING_CHILD_INDEX",
 					"INVALID_CHILD_INDEX",
 					"NOT_AUTHENTICATED",
@@ -575,9 +578,10 @@
 						"name": "id",
 						"in": "query",
 						"required": true,
-						"description": "Deezer id",
+						"description": "Numeric Deezer id",
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"pattern": "^d+$"
 						}
 					},
 					{
@@ -609,8 +613,14 @@
 					"400": {
 						"$ref": "#/components/responses/BadRequest"
 					},
+					"404": {
+						"$ref": "#/components/responses/NotFound"
+					},
 					"500": {
 						"$ref": "#/components/responses/InternalError"
+					},
+					"502": {
+						"$ref": "#/components/responses/UpstreamError"
 					},
 					"503": {
 						"$ref": "#/components/responses/NoDeezer"
@@ -619,6 +629,9 @@
 				"x-error-codes": [
 					"MISSING_PARAMS",
 					"INVALID_TYPE",
+					"INVALID_ID",
+					"NOT_FOUND",
+					"UPSTREAM_ERROR",
 					"NO_DEEZER"
 				]
 			}
@@ -2405,7 +2418,7 @@
 				],
 				"operationId": "saveSettings",
 				"summary": "Save the signed-in user's engine settings",
-				"description": "`settings` replaces the user's stored overrides (omitted or null → `{}`, i.e. back to the global settings). Server-wide settings are never written here (the streaming quality has its own route). A `spotifySettings` field is ignored. The response's `settings` is the object as sent (not merged over the global settings), or the global settings when none was sent.",
+				"description": "`settings` replaces the user's stored overrides (null → `{}`, i.e. back to the global settings; a body without `settings` is a 400 INVALID_BODY so it never wipes them by accident). Server-wide settings are never written here (the streaming quality has its own route). A `spotifySettings` field is ignored. The response's `settings` is the object as sent (not merged over the global settings), or the global settings when none was sent.",
 				"security": [
 					{
 						"bearerAuth": []
@@ -2430,7 +2443,10 @@
 										],
 										"nullable": true
 									}
-								}
+								},
+								"required": [
+									"settings"
+								]
 							}
 						}
 					}
