@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { adjustVolume } from "@/utils/adjust-volume";
@@ -29,6 +29,15 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { diagnoseStreamFailure, type StreamFailureKind } from "@/lib/stream-failure";
 import { canSeekInPlace, isPreviewSource, waitForSeekableUrl } from "@/lib/seek";
+import {
+	PLAY_THRESHOLD_SECONDS,
+	advanceQueue,
+	createTrackSession,
+	shouldNotifySkip,
+	startVolume,
+	type TrackSession,
+} from "@/components/audio/engine/session";
+import { createAutoSkip, createTimerBag, sameTarget, type PlaybackTarget } from "@/components/audio/engine/timers";
 
 // Restore cache limit from localStorage
 if (typeof window !== "undefined") {
@@ -507,21 +516,34 @@ export function AudioEngine() {
 	const previewTrack = usePreviewStore((s) => s.currentTrack);
 	const previewIsPlaying = usePreviewStore((s) => s.isPlaying);
 
-	// Error retry counter
-	const retryCountRef = useRef(0);
+	// Per-track state (play logging, retries, auto-advance…) — replaced as a
+	// whole by beginTrack() whenever a track becomes current.
+	const sessionRef = useRef<TrackSession | null>(null);
 	const MAX_RETRIES = 2;
 	// Consecutive track failures across the queue. If too many tracks fail
 	// back-to-back, stop auto-skipping and show a clearer error so we don't
 	// silently burn through the whole queue.
 	const consecutiveFailuresRef = useRef(0);
 	const MAX_CONSECUTIVE_FAILURES = 3;
+	// Set right before the queue advances on its own (ended, auto-skip): the
+	// next track starts without a fade-in.
+	const autoAdvanceRef = useRef(false);
 
-	// Play tracking — Spotify-like 30s rule.
-	// playLoggedRef: did we already POST /recent-plays for the *current* track?
-	// playLoggedTrackIdRef: which trackId that flag refers to (avoids stale state).
-	const playLoggedRef = useRef(false);
-	const playLoggedTrackIdRef = useRef<string | null>(null);
-	const PLAY_THRESHOLD_SECONDS = 30;
+	// Retry / auto-skip timers of the current track: cleared on every track
+	// change and reload, and re-checked against the current target on fire.
+	const [timers] = useState(createTimerBag);
+	const [autoSkip] = useState(() =>
+		createAutoSkip({
+			timers,
+			currentTrackId: () => usePlayerStore.getState().currentTrack?.trackId ?? null,
+			next: (reason) => advanceQueue(autoAdvanceRef, reason === "auto", usePlayerStore),
+		})
+	);
+	const currentTarget = (): PlaybackTarget => ({
+		gen: loadGenRef.current,
+		element: audioRef.current,
+		trackId: sessionRef.current?.trackId ?? null,
+	});
 
 	// Crossfade state
 	const crossfadeActiveRef = useRef(false);
@@ -564,6 +586,63 @@ export function AudioEngine() {
 		audio.onprogress = null;
 	}, []);
 
+	// Element-level activation. Every element that becomes the playing one —
+	// fresh load, preload hit, crossfade, head→full handoff, retry, source
+	// swap — goes through here.
+	const activateElement = useCallback(
+		(audio: HTMLAudioElement, track: { duration: number | null } | null = null) => {
+			audioRef.current = audio;
+			attachEvents(audio);
+			// A prefetched element fired loadedmetadata before we listened:
+			// report its duration now (was: a crossfaded track kept the
+			// previous track's duration).
+			if (audio.readyState >= 1 && isFinite(audio.duration) && audio.duration > 0) {
+				setDuration(audio.duration);
+			} else if (track) {
+				setDuration(track.duration ?? 0);
+			}
+		},
+		[attachEvents, setDuration]
+	);
+
+	// First play() of an element: a user-initiated start fades in, a queue
+	// advance starts at full volume.
+	const startPlayback = useCallback((audio: HTMLAudioElement) => {
+		const session = sessionRef.current;
+		const target = usePlayerStore.getState().volume / 100;
+		const { from, fadeMs } = startVolume(!!session?.autoAdvance, target);
+		if (session) session.autoAdvance = false;
+		audio.volume = from;
+		audio.play().catch(() => {});
+		// duration 0 still cancels a fade-out left running on this element
+		adjustVolume(audio, target, { duration: fadeMs });
+	}, []);
+
+	const pendingSeekRef = useRef<{ target: number } | null>(null);
+
+	// Track-level activation: ends the previous track's session (skip
+	// notification) and starts a fresh one. Both paths that change the
+	// current track — the load effect and the crossfade — go through here.
+	const beginTrack = useCallback(
+		(trackId: string) => {
+			const prev = sessionRef.current;
+			if (prev && prev.trackId !== trackId && shouldNotifySkip(prev)) {
+				notifyTrackSkipped(prev.trackId);
+			}
+			sessionRef.current = createTrackSession(trackId, { autoAdvance: autoAdvanceRef.current });
+			autoAdvanceRef.current = false;
+			prevTrackIdRef.current = trackId;
+			// Timers of the previous track must never fire on this one.
+			timers.clear();
+			autoSkip.cancel();
+			pendingSeekRef.current = null;
+			normMeasuredRef.current = false;
+			resetNormGain();
+			setError(null);
+		},
+		[timers, autoSkip, setError]
+	);
+
 	// Hand off from a head-prefetched audio element (~3s buffered) to the
 	// full progressive stream so playback continues seamlessly past the head.
 	// We open the full stream right after the swap and ride out the head
@@ -601,8 +680,7 @@ export function AudioEngine() {
 				headAudio.pause();
 				headAudio.src = "";
 
-				audioRef.current = fullAudio;
-				attachEvents(fullAudio);
+				activateElement(fullAudio);
 				try {
 					fullAudio.currentTime = seekTo;
 				} catch {
@@ -628,7 +706,7 @@ export function AudioEngine() {
 			headAudio.addEventListener("timeupdate", onTimeUpdate);
 			headAudio.addEventListener("ended", onEnded);
 		},
-		[attachEvents, detachEvents]
+		[activateElement, detachEvents]
 	);
 
 	// --- Restore playback position from previous session ---
@@ -708,13 +786,12 @@ export function AudioEngine() {
 	// hang up the live stream (the server then drains Deezer at full speed into
 	// Blob), wait for the persisted file and reopen it — Blob URLs support
 	// Range — at the requested position. While a seek is pending, further
-	// seeks only move its target.
-	const pendingSeekRef = useRef<{ target: number } | null>(null);
-
+	// seeks only move its target (pendingSeekRef).
 	const swapSource = useCallback(
 		(url: string, position: number | null) => {
 			const old = audioRef.current;
 			++loadGenRef.current;
+			timers.clear();
 			if (old) {
 				detachEvents(old);
 				old.pause();
@@ -725,12 +802,11 @@ export function AudioEngine() {
 			const audio = new Audio();
 			audio.preload = "auto";
 			audio.crossOrigin = "anonymous";
-			audioRef.current = audio;
-			attachEvents(audio);
+			activateElement(audio);
 			audio.src = url;
 			audio.load();
 		},
-		[attachEvents, detachEvents]
+		[activateElement, detachEvents, timers]
 	);
 
 	const seekViaPersistedFile = useCallback(
@@ -905,15 +981,10 @@ export function AudioEngine() {
 		if (!currentTrack) {
 			// Stopping playback (queue cleared / explicit stop). If the last
 			// track wasn't counted, it's a skip.
-			if (
-				prevTrackIdRef.current &&
-				playLoggedTrackIdRef.current === prevTrackIdRef.current &&
-				!playLoggedRef.current
-			) {
-				notifyTrackSkipped(prevTrackIdRef.current);
-			}
-			playLoggedRef.current = false;
-			playLoggedTrackIdRef.current = null;
+			if (shouldNotifySkip(sessionRef.current)) notifyTrackSkipped(sessionRef.current.trackId);
+			sessionRef.current = null;
+			timers.clear();
+			autoSkip.cancel();
 			audio.pause();
 			audio.src = "";
 			prevTrackIdRef.current = null;
@@ -921,18 +992,14 @@ export function AudioEngine() {
 		}
 
 		if (currentTrack.trackId !== prevTrackIdRef.current) {
-			// If the *previous* track never reached the 30s threshold, treat it
-			// as a skip → ask the server to evict its file (metadata stays).
-			if (
-				prevTrackIdRef.current &&
-				playLoggedTrackIdRef.current === prevTrackIdRef.current &&
-				!playLoggedRef.current
-			) {
-				notifyTrackSkipped(prevTrackIdRef.current);
+			// Drop any pending resume position when the user navigates to a
+			// different track before the first one finishes loading.
+			if (prevTrackIdRef.current !== null) {
+				resumePositionRef.current = null;
 			}
-			// Reset play-tracking state for the incoming track
-			playLoggedRef.current = false;
-			playLoggedTrackIdRef.current = currentTrack.trackId;
+			// Ends the previous session (skip notification if it never
+			// reached 30 s) and resets every per-track flag.
+			beginTrack(currentTrack.trackId);
 
 			// Cancel any in-progress crossfade on manual track change
 			if (crossfadeActiveRef.current) {
@@ -944,27 +1011,13 @@ export function AudioEngine() {
 					outgoingAudioRef.current = null;
 				}
 			}
-			// Reset normalization for the incoming track
-			normMeasuredRef.current = false;
-			resetNormGain();
 			const gen = ++loadGenRef.current;
-			retryCountRef.current = 0;
-			setError(null);
-
-			// Drop any pending resume position when the user navigates to a
-			// different track before the first one finishes loading.
-			if (prevTrackIdRef.current !== null) {
-				resumePositionRef.current = null;
-			}
-			pendingSeekRef.current = null;
 
 			// Immediately kill the old audio — hard stop, no fade
 			detachEvents(audio);
 			audio.pause();
 			audio.src = "";
 			evictedAudio.add(audio);
-
-			prevTrackIdRef.current = currentTrack.trackId;
 
 			// Pick the best prefetched element, in order of buffer richness:
 			//   1. queue preload (next/prev — persisting full stream)
@@ -977,11 +1030,10 @@ export function AudioEngine() {
 				headPreloadCache.get(currentTrack.trackId);
 
 			if (preloaded) {
-				audioRef.current = preloaded;
 				preloadCache.delete(currentTrack.trackId);
 				hoverPreloadCache.delete(currentTrack.trackId);
 				headPreloadCache.delete(currentTrack.trackId);
-				attachEvents(preloaded);
+				activateElement(preloaded, currentTrack);
 
 				// If we swapped onto a head-prefetched element, kick off the
 				// full stream now so it can take over before the head runs
@@ -996,14 +1048,10 @@ export function AudioEngine() {
 				if (preloaded.readyState >= 2) {
 					// Already buffered — play immediately
 					setBuffering(false);
-					setDuration(preloaded.duration || 0);
 					applyResumePosition(preloaded);
 					if (usePlayerStore.getState().isPlaying) {
 						skipPlayEffectRef.current = true;
-						preloaded.volume = 0;
-						preloaded.play().catch(() => {});
-						const targetVol = usePlayerStore.getState().volume / 100;
-						adjustVolume(preloaded, targetVol, { duration: 200 });
+						startPlayback(preloaded);
 					}
 				}
 				// If not ready yet, onCanPlay will fire and handle playback
@@ -1012,8 +1060,7 @@ export function AudioEngine() {
 				const newAudio = new Audio();
 				newAudio.preload = "auto";
 				newAudio.crossOrigin = "anonymous";
-				audioRef.current = newAudio;
-				attachEvents(newAudio);
+				activateElement(newAudio, currentTrack);
 
 				getTrackUrl(currentTrack.trackId).then((url) => {
 					if (loadGenRef.current !== gen) return;
@@ -1022,7 +1069,7 @@ export function AudioEngine() {
 				});
 			}
 		}
-	}, [currentTrack, attachEvents, detachEvents, setDuration, applyResumePosition]);
+	}, [currentTrack, activateElement, beginTrack, startPlayback, detachEvents, applyResumePosition, timers, autoSkip, handoffFullStream, setBuffering]);
 
 	// --- Play / pause with fade effects ---
 	useEffect(() => {
@@ -1035,12 +1082,7 @@ export function AudioEngine() {
 				skipPlayEffectRef.current = false;
 				return;
 			}
-			if (audio.readyState >= 2) {
-				audio.volume = 0;
-				audio.play().catch(() => {});
-				const targetVolume = usePlayerStore.getState().volume / 100;
-				adjustVolume(audio, targetVolume, { duration: 200 });
-			}
+			if (audio.readyState >= 2) startPlayback(audio);
 		} else {
 			adjustVolume(audio, 0, { duration: 500 }).then(() => {
 				if (!usePlayerStore.getState().isPlaying) {
@@ -1048,7 +1090,7 @@ export function AudioEngine() {
 				}
 			});
 		}
-	}, [isPlaying, currentTrack]);
+	}, [isPlaying, currentTrack, startPlayback]);
 
 	// Volume — smooth transition
 	useEffect(() => {
@@ -1087,7 +1129,12 @@ export function AudioEngine() {
 			resumePositionRef.current = liveTime;
 		}
 
-		retryCountRef.current = 0;
+		// Same track, fresh attempt: drop its retry budget and any pending
+		// retry / auto-skip timer (was: "Retry" in the toast was followed by
+		// the auto-skip that was still armed).
+		if (sessionRef.current) sessionRef.current.retryCount = 0;
+		timers.clear();
+		autoSkip.cancel();
 		setError(null);
 		setBuffering(true);
 		// Force a clean reload — new audio element to drop any error state.
@@ -1099,14 +1146,13 @@ export function AudioEngine() {
 		const newAudio = new Audio();
 		newAudio.preload = "auto";
 		newAudio.crossOrigin = "anonymous";
-		audioRef.current = newAudio;
-		attachEvents(newAudio);
+		activateElement(newAudio);
 		getTrackUrl(track.trackId).then((url) => {
 			if (loadGenRef.current !== gen) return;
 			newAudio.src = url;
 			newAudio.load();
 		});
-	}, [retryLoadCount, currentTrack, attachEvents, detachEvents, setBuffering, setError]);
+	}, [retryLoadCount, currentTrack, activateElement, detachEvents, setBuffering, setError, timers, autoSkip]);
 
 	// Seek: respond to _seekTo signal from prev() restart or seek()
 	const seekTo = usePlayerStore((s) => s._seekTo);
@@ -1165,14 +1211,10 @@ export function AudioEngine() {
 		applyResumePosition(audio);
 		onPositionUpdate();
 		if (usePlayerStore.getState().isPlaying) {
-			const targetVolume = usePlayerStore.getState().volume / 100;
-			// Only reset volume and call play() if not already playing — prevents
-			// double-fade when canplay fires after we already started the element.
-			if (audio.paused) {
-				audio.volume = 0;
-				audio.play().catch(() => {});
-			}
-			adjustVolume(audio, targetVolume, { duration: 200 });
+			// Only start (and fade in) if not already playing — prevents a
+			// double fade when canplay fires after we already started the element.
+			if (audio.paused) startPlayback(audio);
+			else adjustVolume(audio, usePlayerStore.getState().volume / 100, { duration: 200 });
 		}
 	};
 
@@ -1198,13 +1240,15 @@ export function AudioEngine() {
 		// This is the moment the track "joins" the user's recently-played
 		// history and its Blob file is locked from eviction-on-skip.
 		const track = usePlayerStore.getState().currentTrack;
+		const session = sessionRef.current;
 		if (
 			track &&
-			!playLoggedRef.current &&
-			playLoggedTrackIdRef.current === track.trackId &&
+			session &&
+			!session.logged &&
+			session.trackId === track.trackId &&
 			audio.currentTime >= PLAY_THRESHOLD_SECONDS
 		) {
-			playLoggedRef.current = true;
+			session.logged = true;
 			void logRecentPlay({
 				trackId: track.trackId,
 				title: track.title,
@@ -1282,11 +1326,14 @@ export function AudioEngine() {
 					detachEvents(outgoing);
 					outgoingAudioRef.current = outgoing;
 
-					// Swap to incoming audio
+					// Swap to incoming audio. beginTrack runs the same per-track
+					// reset as the load effect, which next() below then skips
+					// (was: plays via crossfade were never logged, the duration,
+					// retry budget and normalisation stayed the previous track's).
 					preloadCache.delete(nextTrack.trackId);
-					attachEvents(preloaded);
-					audioRef.current = preloaded;
-					prevTrackIdRef.current = nextTrack.trackId;
+					autoAdvanceRef.current = true;
+					beginTrack(nextTrack.trackId);
+					activateElement(preloaded, nextTrack);
 					skipPlayEffectRef.current = true;
 
 					preloaded.volume = 0;
@@ -1299,6 +1346,8 @@ export function AudioEngine() {
 
 					// Advance store state to next track
 					usePlayerStore.getState().next();
+					// next() flags the new track as buffering; this one is already playing.
+					setBuffering(false);
 
 					// Clean up outgoing after fade
 					setTimeout(() => {
@@ -1321,7 +1370,8 @@ export function AudioEngine() {
 				audio.play().catch(() => {});
 			}
 		} else {
-			next();
+			// Queue advance: the next track starts without a fade-in.
+			advanceQueue(autoAdvanceRef, true, usePlayerStore);
 		}
 	};
 
@@ -1335,7 +1385,7 @@ export function AudioEngine() {
 			title: currentTrack.title,
 			src,
 			currentSrc: audio.currentSrc,
-			retryCount: retryCountRef.current,
+			retryCount: sessionRef.current?.retryCount,
 			usePresigned,
 			mediaErrorCode: mediaErr?.code,
 			mediaErrorMessage: mediaErr?.message,
@@ -1372,15 +1422,20 @@ export function AudioEngine() {
 		const { isAuthenticated, isLoading: authLoading } = useAuthStore.getState();
 		const knownGuest = !authLoading && !isAuthenticated;
 
-		// Retry up to MAX_RETRIES times
-		retryCountRef.current++;
-		if (!knownGuest && retryCountRef.current <= MAX_RETRIES) {
-			setTimeout(() => {
-				if (audioRef.current && currentTrack) {
-					audioRef.current.src = `/api/v1/stream-progressive/${currentTrack.trackId}`;
-					audioRef.current.load();
-				}
-			}, 1000 * retryCountRef.current);
+		// Retry up to MAX_RETRIES times. The timer is bound to this element
+		// and this track: a track change, a reload or a manual retry clears
+		// it, and it re-checks on fire (was: the retry loaded the old track's
+		// stream into the next track's element).
+		const session = sessionRef.current;
+		const retries = session ? ++session.retryCount : MAX_RETRIES + 1;
+		if (!knownGuest && retries <= MAX_RETRIES) {
+			const scheduled = currentTarget();
+			const retryTrackId = currentTrack.trackId;
+			timers.after(1000 * retries, () => {
+				if (!sameTarget(scheduled, currentTarget())) return;
+				audio.src = `/api/v1/stream-progressive/${retryTrackId}`;
+				audio.load();
+			});
 			return;
 		}
 
@@ -1459,23 +1514,30 @@ export function AudioEngine() {
 		const { queue, queueIndex } = usePlayerStore.getState();
 		const hasNext = queueIndex + 1 < queue.length;
 
+		// The auto-skip only ever skips the failing track, once: "Skip",
+		// "Retry" or a manual track change cancel it (was: an unconditional
+		// setTimeout(next) skipped twice after "Skip", skipped after "Retry"
+		// and skipped a track picked by hand in the meantime).
 		toast.error(`Can't play "${failingTrack.title}"`, {
 			description: failingTrack.artist,
 			duration: hasNext ? 5000 : 8000,
 			action: {
 				label: "Retry",
-				onClick: () => usePlayerStore.getState().retryTrack(),
+				onClick: () => {
+					autoSkip.cancel();
+					usePlayerStore.getState().retryTrack();
+				},
 			},
 			cancel: hasNext
 				? {
 						label: "Skip",
-						onClick: () => next(),
+						onClick: () => autoSkip.skipNow(failingTrack.trackId),
 					}
 				: undefined,
 		});
 
 		if (hasNext) {
-			setTimeout(() => next(), 1500);
+			autoSkip.arm(failingTrack.trackId, 1500);
 		} else {
 			pause();
 		}
