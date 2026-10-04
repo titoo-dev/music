@@ -64,6 +64,17 @@ export function copySource(key: string): string {
 // that a real outage reaches the live fallback in well under a second.
 const RETRY_DELAYS_MS = [50, 150];
 
+/** Per-attempt timeouts for calls that never stream a body back to a listener. */
+export const R2_TIMEOUT_MS = { PUT: 120_000, other: 15_000 } as const;
+
+// GET stays unbounded: /stream proxies an object to a listener for as long as
+// the track plays. Every other call (PUT upload, HEAD, DELETE, list, copy)
+// must not hang until maxDuration while holding the persist lock and lease.
+function defaultSignal(method: string): AbortSignal | undefined {
+	if (method === "GET") return undefined;
+	return AbortSignal.timeout(method === "PUT" ? R2_TIMEOUT_MS.PUT : R2_TIMEOUT_MS.other);
+}
+
 /**
  * Signed request; network failures become StorageUnavailableError.
  *
@@ -85,7 +96,7 @@ export async function r2Fetch(url: string, init: RequestInit = {}): Promise<Resp
 				method: signed.method,
 				headers: signed.headers,
 				body: init.body,
-				signal: init.signal,
+				signal: init.signal ?? defaultSignal(signed.method),
 			});
 			const retryable = res.status === 429 || res.status >= 500;
 			if (!retryable || attempt >= RETRY_DELAYS_MS.length) return res;

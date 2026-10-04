@@ -36,6 +36,34 @@ describe("R2StorageProvider", () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	describe("request timeouts", () => {
+		it("bounds an upload so a hung PUT cannot hold the persist lease until maxDuration (was: no timeout)", async () => {
+			const timeout = vi.spyOn(AbortSignal, "timeout");
+			await provider.writeFile("tracks/1/1.mp3", Buffer.from("x"));
+			expect(timeout).toHaveBeenCalledWith(120_000);
+			expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+		});
+
+		it("bounds HEAD calls too", async () => {
+			const timeout = vi.spyOn(AbortSignal, "timeout");
+			await provider.exists("tracks/1/1.mp3");
+			expect(timeout).toHaveBeenCalledWith(15_000);
+		});
+
+		it("leaves GET unbounded: /stream proxies the body for as long as the track plays", async () => {
+			fetchMock.mockResolvedValue(new Response(new Uint8Array([1])));
+			await provider.readFile("tracks/1/1.mp3");
+			expect(fetchMock.mock.calls[0][1]?.signal).toBeUndefined();
+		});
+
+		it("reports a timed-out call as storage unavailable", async () => {
+			fetchMock.mockRejectedValue(new DOMException("The operation timed out.", "TimeoutError"));
+			await expect(provider.writeFile("tracks/1/1.mp3", Buffer.from("x"))).rejects.toBeInstanceOf(
+				StorageUnavailableError
+			);
+		});
+	});
+
 	describe("exists", () => {
 		it("is true when HEAD succeeds", async () => {
 			await expect(provider.exists("/music//a.mp3")).resolves.toBe(true);
