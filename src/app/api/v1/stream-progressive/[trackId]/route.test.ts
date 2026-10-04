@@ -157,7 +157,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("redirects to /stream when stored row exists in Blob and headObject succeeds", async () => {
 		const { app, acquireDownloadLock } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(blobRow);
+		prismaMock.storedTrack.findMany.mockResolvedValue([blobRow]);
 		blobStreamMock.headObject.mockResolvedValue({
 			contentLength: 100,
 			contentType: "audio/mpeg",
@@ -176,10 +176,10 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		expect(startProgressiveStreamMock).not.toHaveBeenCalled();
 	});
 
-	it("on headObject StorageNotFoundError: deletes stale rows and falls through to live stream", async () => {
+	it("on headObject StorageNotFoundError: deletes the rows of the missing object and falls through to live stream", async () => {
 		const { app } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(blobRow);
+		prismaMock.storedTrack.findMany.mockResolvedValue([blobRow]);
 		blobStreamMock.headObject.mockRejectedValue(new StorageNotFoundError("music/foo.mp3"));
 		startProgressiveStreamMock.mockResolvedValue({
 			body: fakeBody(),
@@ -194,8 +194,9 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 			makeParams({ trackId: "1" })
 		);
 		expect(res.status).toBe(200);
+		// Every row pointing at the missing object; copies at other keys stay.
 		expect(prismaMock.storedTrack.deleteMany).toHaveBeenCalledWith({
-			where: { trackId: "1" },
+			where: { storagePath: "music/foo.mp3" },
 		});
 		expect(startProgressiveStreamMock).toHaveBeenCalled();
 	});
@@ -203,7 +204,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("on headObject StorageUnavailableError: falls through to live stream WITHOUT deleting the row", async () => {
 		const { app } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(blobRow);
+		prismaMock.storedTrack.findMany.mockResolvedValue([blobRow]);
 		blobStreamMock.headObject.mockRejectedValue(new StorageUnavailableError(new Error("503")));
 		startProgressiveStreamMock.mockResolvedValue({
 			body: fakeBody(),
@@ -225,7 +226,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("with live=1 streams from Deezer without touching the cache (was: /stream ↔ /stream-progressive redirect loop while storage refused reads)", async () => {
 		const { app } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(blobRow);
+		prismaMock.storedTrack.findMany.mockResolvedValue([blobRow]);
 		blobStreamMock.headObject.mockResolvedValue({ contentLength: 1, contentType: "audio/mpeg" });
 		startProgressiveStreamMock.mockResolvedValue({
 			body: fakeBody(),
@@ -250,7 +251,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		async (storageType) => {
 			const { app } = makeApp();
 			arrangeAuthOk(app);
-			prismaMock.storedTrack.findFirst.mockResolvedValue({ ...blobRow, storageType });
+			prismaMock.storedTrack.findMany.mockResolvedValue([{ ...blobRow, storageType }]);
 			startProgressiveStreamMock.mockResolvedValue({
 				body: fakeBody(),
 				contentType: "audio/mpeg",
@@ -265,8 +266,9 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 			);
 			expect(res.status).toBe(200);
 			expect(blobStreamMock.headObject).not.toHaveBeenCalled();
+			// Only the rows in older storage are dropped.
 			expect(prismaMock.storedTrack.deleteMany).toHaveBeenCalledWith({
-				where: { trackId: "1" },
+				where: { id: { in: ["x"] } },
 			});
 			expect(startProgressiveStreamMock).toHaveBeenCalled();
 		}
@@ -275,7 +277,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("hands the persist promise to after() so Vercel doesn't freeze the upload (was: fire-and-forget)", async () => {
 		const { app } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		prismaMock.storedTrack.findMany.mockResolvedValue([]);
 		const persisted = Promise.resolve();
 		startProgressiveStreamMock.mockResolvedValue({
 			body: fakeBody(),
@@ -299,7 +301,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("opens a live stream when no stored row exists", async () => {
 		const { app, acquireDownloadLock } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		prismaMock.storedTrack.findMany.mockResolvedValue([]);
 		startProgressiveStreamMock.mockResolvedValue({
 			body: fakeBody(),
 			contentType: "audio/mpeg",
@@ -325,7 +327,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("streams at the server quality saved since this instance started (was: kept the cold-start maxBitrate)", async () => {
 		const { app, acquireDownloadLock } = makeApp({ maxBitrate: 1, savedBitrate: 3 });
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		prismaMock.storedTrack.findMany.mockResolvedValue([]);
 		startProgressiveStreamMock.mockResolvedValue({ body: fakeBody(), contentType: "audio/mpeg", contentLength: 0 });
 
 		const res = await GET(makeNextRequest({ url: "http://localhost:3000/api/v1/stream-progressive/1" }), makeParams({ trackId: "1" }));
@@ -337,7 +339,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("preview mode: skips download lock and passes persist: false", async () => {
 		const { app, acquireDownloadLock } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		prismaMock.storedTrack.findMany.mockResolvedValue([]);
 		startProgressiveStreamMock.mockResolvedValue({
 			body: fakeBody(),
 			contentType: "audio/mpeg",
@@ -360,7 +362,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("head mode (preview=1&head=1): passes maxBytes: 64 * 1024", async () => {
 		const { app } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		prismaMock.storedTrack.findMany.mockResolvedValue([]);
 		startProgressiveStreamMock.mockResolvedValue({
 			body: fakeBody(),
 			contentType: "audio/mpeg",
@@ -382,7 +384,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("when lock is already in progress: awaits waitForExisting and 302s to /stream", async () => {
 		const { app, lock } = makeApp({ lockAlreadyInProgress: true });
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		prismaMock.storedTrack.findMany.mockResolvedValue([]);
 
 		const res = await GET(
 			makeNextRequest({
@@ -399,7 +401,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("STORAGE_UNAVAILABLE: releases lock and 500s when app.storageProvider is null on a non-preview request", async () => {
 		const { app, lock } = makeApp({ storageProvider: null });
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		prismaMock.storedTrack.findMany.mockResolvedValue([]);
 
 		const res = await GET(
 			makeNextRequest({
@@ -417,7 +419,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 	it("when startProgressiveStream throws: releases the lock and surfaces 500", async () => {
 		const { app, lock } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		prismaMock.storedTrack.findMany.mockResolvedValue([]);
 		startProgressiveStreamMock.mockRejectedValue(new Error("upstream broke"));
 
 		const res = await GET(
@@ -435,7 +437,7 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		// header policy on the live-stream response (recent fix surface).
 		const { app } = makeApp();
 		arrangeAuthOk(app);
-		prismaMock.storedTrack.findFirst.mockResolvedValue(null);
+		prismaMock.storedTrack.findMany.mockResolvedValue([]);
 		startProgressiveStreamMock.mockResolvedValue({
 			body: fakeBody(),
 			contentType: "audio/flac",
@@ -453,5 +455,31 @@ describe("GET /api/v1/stream-progressive/[trackId]", () => {
 		expect(res.headers.get("Cache-Control")).toBe("no-store");
 		expect(res.headers.get("Accept-Ranges")).toBe("none");
 		expect(res.headers.get("Content-Length")).toBeNull();
+	});
+	it("checks the MP3_320 copy rather than MP3_MISC (was: orderBy bitrate desc picked MP3_MISC=8 over MP3_320=3)", async () => {
+		const { app } = makeApp();
+		arrangeAuthOk(app);
+		prismaMock.storedTrack.findMany.mockResolvedValue([
+			{ ...blobRow, id: "misc", bitrate: 8, storagePath: "tracks/1/8.mp3" },
+			{ ...blobRow, id: "hq", bitrate: 3, storagePath: "tracks/1/3.mp3" },
+		]);
+		blobStreamMock.headObject.mockResolvedValue({ contentLength: 1, contentType: "audio/mpeg" });
+
+		const res = await GET(makeNextRequest({ url: "http://localhost:3000/api/v1/stream-progressive/1" }), makeParams({ trackId: "1" }));
+		expect(res.status).toBe(302);
+		expect(blobStreamMock.headObject).toHaveBeenCalledWith("tracks/1/3.mp3");
+	});
+
+	it("re-persists when the cached copy is below the listener's quality (was: the free account's 128 copy was redirected to forever)", async () => {
+		const { app } = makeApp({ maxBitrate: 3 });
+		arrangeAuthOk(app);
+		prismaMock.deezerCredential.findUnique.mockResolvedValue({ canStreamHq: true, canStreamLossless: false });
+		prismaMock.storedTrack.findMany.mockResolvedValue([{ ...blobRow, bitrate: 1, requestedBitrate: 1 }]);
+		startProgressiveStreamMock.mockResolvedValue({ body: fakeBody(), contentType: "audio/mpeg", contentLength: 0 });
+
+		const res = await GET(makeNextRequest({ url: "http://localhost:3000/api/v1/stream-progressive/1" }), makeParams({ trackId: "1" }));
+		expect(res.status).toBe(200);
+		expect(blobStreamMock.headObject).not.toHaveBeenCalled();
+		expect(startProgressiveStreamMock).toHaveBeenCalledWith(expect.objectContaining({ persist: true, bitrate: 3 }));
 	});
 });

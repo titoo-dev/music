@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireDeezerAndApp, fail, handleError } from "../../_lib/helpers";
 import { startProgressiveStream } from "@/lib/wavelet/progressive-stream";
 import { headObject } from "@/lib/object-stream";
-import { STORAGE_TYPE, isStorageNotFound } from "@/lib/wavelet/storage/objects";
+import { isStorageNotFound } from "@/lib/wavelet/storage/objects";
+import { findCachedCopy, loadStreamLicence } from "@/lib/wavelet/storage/cached-copy";
 
 // The persist pipeline (tag + R2 upload) runs in after() once the audio
 // response ends; give it room on long FLAC tracks.
@@ -37,21 +38,30 @@ export async function GET(
 		const headBytes = head ? 64 * 1024 : 0;
 		const live = request.nextUrl.searchParams.get("live") === "1";
 
-		// Already cached → fast path through /stream. Verify the object actually
-		// exists first; stale rows (file deleted, migration) would otherwise
-		// cause a redirect-then-404 loop and burn the audio element's retry budget.
-		const stored = await prisma.storedTrack.findFirst({
-			where: { trackId },
-			orderBy: { bitrate: "desc" },
-		});
-		if (stored && !live) {
+		const settings = await app.freshSettings();
+		const preferredBitrate = settings.maxBitrate;
+
+		// Already cached → fast path through /stream. The copy is chosen by the
+		// shared rank rules (storage/cached-copy.ts); a copy below this user's
+		// quality is re-persisted by this play ("upgrade"). Verify the object
+		// actually exists first; stale rows (file deleted, migration) would
+		// otherwise cause a redirect-then-404 loop and burn the audio element's
+		// retry budget.
+		if (!live) {
+			const copy = await findCachedCopy(trackId, {
+				maxBitrate: Number(preferredBitrate),
+				licence: await loadStreamLicence(userId),
+			});
 			// Rows written for older storage (Vercel Blob "blob", "s3", "local")
-			// point at files this deployment can't read — treat them as missing.
-			let missing = stored.storageType !== STORAGE_TYPE;
-			let unreachable = false;
-			if (!missing) {
+			// point at files this deployment can't read — drop them.
+			if (copy.stale.length > 0) {
+				await prisma.storedTrack.deleteMany({ where: { id: { in: copy.stale.map((r) => r.id) } } });
+			}
+			if (copy.kind === "hit") {
+				let missing = false;
+				let unreachable = false;
 				try {
-					await headObject(stored.storagePath);
+					await headObject(copy.row.storagePath);
 				} catch (e) {
 					if (isStorageNotFound(e)) {
 						missing = true;
@@ -63,23 +73,21 @@ export async function GET(
 						unreachable = true;
 					}
 				}
-			}
-			if (!missing && !unreachable) {
-				return new Response(null, {
-					status: 302,
-					headers: { Location: `/api/v1/stream/${trackId}` },
-				});
-			}
-			if (missing) {
-				// File is genuinely gone — drop every stale row so we don't
-				// keep redirecting to it on the next call.
-				await prisma.storedTrack.deleteMany({ where: { trackId } });
+				if (!missing && !unreachable) {
+					return new Response(null, {
+						status: 302,
+						headers: { Location: `/api/v1/stream/${trackId}` },
+					});
+				}
+				if (missing) {
+					// File is genuinely gone — drop every row pointing at it so we
+					// don't keep redirecting to it on the next call.
+					await prisma.storedTrack.deleteMany({ where: { storagePath: copy.row.storagePath } });
+				}
 			}
 		}
 
-		// Not cached — open a progressive stream
-		const settings = await app.freshSettings();
-		const preferredBitrate = settings.maxBitrate;
+		// Not cached (or below this user's quality) — open a progressive stream
 
 		// Dedup lock: only used for real (persisting) plays. Preview streams
 		// run lock-free so a hover never delays a click that wants the same

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse, after } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireDeezerAndApp, handleError } from "../../_lib/helpers";
 import { getPreferredBitrate } from "@/lib/wavelet/utils/getPreferredBitrate";
 import { utils, type Deezer } from "@/lib/deezer";
 import Track from "@/lib/wavelet/types/Track";
 import { gwTrackCache, gwTrackKey } from "@/lib/wavelet/cache/deezer-track-cache";
+import { findCachedCopy, loadStreamLicence } from "@/lib/wavelet/storage/cached-copy";
 
 const { mapGwTrackToDeezer } = utils;
 
@@ -24,16 +24,18 @@ export async function GET(
 	try {
 		const auth = await requireDeezerAndApp(request);
 		if (auth.error) return auth.error;
-		const { dz, app } = auth;
+		const { dz, app, userId } = auth;
 		const { trackId } = await params;
+		const { maxBitrate } = await app.freshSettings();
 
-		// Already cached on storage? Nothing to warm — playback uses the fast
-		// /stream path which doesn't touch Deezer.
-		const stored = await prisma.storedTrack.findFirst({
-			where: { trackId },
-			select: { id: true },
+		// A usable copy cached on storage (same rank rules as playback)?
+		// Nothing to warm — playback uses the fast /stream path which doesn't
+		// touch Deezer.
+		const copy = await findCachedCopy(trackId, {
+			maxBitrate: Number(maxBitrate),
+			licence: await loadStreamLicence(userId),
 		});
-		if (stored) return new NextResponse(null, { status: 204 });
+		if (copy.kind === "hit") return new NextResponse(null, { status: 204 });
 
 		// Already warm for this Deezer account? Skip the work.
 		if (gwTrackCache.get(gwTrackKey(dz.currentUser?.id, trackId))) {
@@ -43,7 +45,6 @@ export async function GET(
 		// Don't await any heavy / failure-prone work in the response path —
 		// run it in after() so a slow Deezer doesn't slow the hover handler
 		// and the function isn't frozen before the caches are filled.
-		const { maxBitrate } = await app.freshSettings();
 		after(() => warmInBackground(dz, trackId, maxBitrate));
 
 		return new NextResponse(null, { status: 204 });

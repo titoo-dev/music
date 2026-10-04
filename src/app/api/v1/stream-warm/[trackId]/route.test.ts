@@ -104,6 +104,29 @@ describe("GET /api/v1/stream-warm/[trackId]", () => {
 		expect(afterMock).not.toHaveBeenCalled();
 	});
 
+	it("skips the work when a usable copy is cached", async () => {
+		arrange(dzFor(111));
+		prismaMock.storedTrack.findMany.mockResolvedValue([
+			{ id: "a", trackId: "1", bitrate: 1, storagePath: "tracks/1/1.mp3", storageType: "r2" },
+		]);
+
+		const res = await warm();
+		expect(res.status).toBe(204);
+		expect(afterMock).not.toHaveBeenCalled();
+	});
+
+	it("warms when the only copy is above the server quality (was: any StoredTrack row, even an unusable one, skipped warming)", async () => {
+		arrange(dzFor(111));
+		prismaMock.storedTrack.findFirst.mockResolvedValue({ id: "a" });
+		prismaMock.storedTrack.findMany.mockResolvedValue([
+			{ id: "a", trackId: "1", bitrate: 9, storagePath: "tracks/1/9.flac", storageType: "r2" },
+		]);
+
+		const res = await warm();
+		expect(res.status).toBe(204);
+		expect(afterMock).toHaveBeenCalledOnce();
+	});
+
 	it("swallows warming failures", async () => {
 		const dz = dzFor(111);
 		dz.gw.get_track_with_fallback.mockRejectedValue(new Error("gw down"));
