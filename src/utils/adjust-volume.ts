@@ -1,6 +1,14 @@
+import { getElementVolume, setElementVolume } from "@/utils/audio-context";
+
 // Track one active fade timer per audio element to prevent concurrent fades fighting over volume
 const activeTimers = new WeakMap<HTMLAudioElement, ReturnType<typeof setInterval>>();
 
+/**
+ * Fade an element's volume. Goes through setElementVolume: a GainNode once
+ * the element is routed through Web Audio (element.volume is read-only on
+ * iOS — was: fades and crossfades did nothing there), element.volume
+ * otherwise.
+ */
 export function adjustVolume(
 	audio: HTMLAudioElement,
 	targetVolume: number,
@@ -13,13 +21,13 @@ export function adjustVolume(
 	const { duration = 1000 } = options;
 	const interval = 13;
 	const steps = Math.ceil(duration / interval);
-	const startVolume = audio.volume;
+	const startVolume = getElementVolume(audio);
 	const delta = targetVolume - startVolume;
 	let step = 0;
 
 	return new Promise((resolve) => {
 		if (steps === 0 || delta === 0) {
-			audio.volume = targetVolume;
+			setElementVolume(audio, targetVolume);
 			activeTimers.delete(audio);
 			resolve();
 			return;
@@ -30,12 +38,12 @@ export function adjustVolume(
 			const progress = step / steps;
 			// Ease in-out (cosine)
 			const eased = 0.5 - Math.cos(progress * Math.PI) / 2;
-			audio.volume = Math.min(1, Math.max(0, startVolume + delta * eased));
+			setElementVolume(audio, startVolume + delta * eased);
 
 			if (step >= steps) {
 				clearInterval(timer);
 				activeTimers.delete(audio);
-				audio.volume = Math.min(1, Math.max(0, targetVolume));
+				setElementVolume(audio, targetVolume);
 				resolve();
 			}
 		}, interval);

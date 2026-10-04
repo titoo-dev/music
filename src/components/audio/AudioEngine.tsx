@@ -6,12 +6,17 @@ import { usePreviewStore } from "@/stores/usePreviewStore";
 import { adjustVolume } from "@/utils/adjust-volume";
 import {
 	initAudioCtx,
-	connectAudioElement,
-	isConnectedOrFailed,
-	measureRms,
-	applyNormGain,
+	installGestureUnlock,
+	isAudioCtxRunning,
+	isRouted,
+	readLevel,
 	resetNormGain,
+	routeElement,
+	setElementVolume,
+	setNormGain,
 } from "@/utils/audio-context";
+import { createLoudnessMeter, type LoudnessMeter } from "@/components/audio/engine/loudness";
+import { startHandoff } from "@/components/audio/engine/handoff";
 import { getCachedBlobUrl, removeCached, setCacheLimit } from "@/lib/audio-cache";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -44,8 +49,8 @@ import {
 import {
 	cacheListenedTrack,
 	createAudioElement,
+	discardElement,
 	disposePrefetchPools,
-	evictedAudio,
 	persistInBackground,
 	preloadTrack,
 	queuePreloaded,
@@ -219,8 +224,17 @@ export function AudioEngine() {
 	const crossfadeActiveRef = useRef(false);
 	const outgoingAudioRef = useRef<HTMLAudioElement | null>(null);
 
-	// Normalization: measured once per track at t=3s
-	const normMeasuredRef = useRef(false);
+	// Normalisation of the current track: its level averaged over several
+	// seconds, then one gain, applied to the element(s) playing that track.
+	// Replaced on every track change (was: a 256-sample snapshot at 3 s, and
+	// a shared gain node that carried the previous track's gain over).
+	const normRef = useRef<{ meter: LoudnessMeter; gain: number | null; appliedTo: HTMLAudioElement | null }>({
+		meter: createLoudnessMeter(),
+		gain: null,
+		appliedTo: null,
+	});
+	// Head → full handoff in flight (cancelled when the track changes).
+	const cancelHandoffRef = useRef<(() => void) | null>(null);
 
 	// --- Stable event handler delegation via refs ---
 	const handlersRef = useRef({
@@ -282,7 +296,9 @@ export function AudioEngine() {
 		const target = usePlayerStore.getState().volume / 100;
 		const { from, fadeMs } = startVolume(!!session?.autoAdvance, target);
 		if (session) session.autoAdvance = false;
-		audio.volume = from;
+		// A routed element is silent while the context is suspended.
+		if (isRouted(audio) && !isAudioCtxRunning()) initAudioCtx();
+		setElementVolume(audio, from);
 		audio.play().catch(() => {});
 		// duration 0 still cancels a fade-out left running on this element
 		adjustVolume(audio, target, { duration: fadeMs });
@@ -314,8 +330,9 @@ export function AudioEngine() {
 			pendingSeekRef.current = null;
 			seekCheckRef.current = null;
 			lastResortSeekRef.current = false;
-			normMeasuredRef.current = false;
-			resetNormGain();
+			normRef.current = { meter: createLoudnessMeter(), gain: null, appliedTo: null };
+			cancelHandoffRef.current?.();
+			cancelHandoffRef.current = null;
 			setError(null);
 		},
 		[timers, autoSkip, setError]
@@ -326,63 +343,50 @@ export function AudioEngine() {
 	// We open the full stream right after the swap and ride out the head
 	// segment; once the head approaches its end we copy state, swap refs,
 	// and seek the full element to the head's position.
+	// The head is server-capped (?head=1); only its cleanup is ours: the
+	// handoff is cancelled by any track change, reload or stop (W8).
 	const handoffFullStream = useCallback(
 		(headAudio: HTMLAudioElement, trackId: string, gen: number) => {
 			const fullAudio = createAudioElement();
 			fullAudio.src = progressiveUrl(trackId);
 			fullAudio.load();
 
-			let swapped = false;
-			const cleanup = () => {
-				headAudio.removeEventListener("timeupdate", onTimeUpdate);
-				headAudio.removeEventListener("ended", onEnded);
-			};
-
-			const swap = () => {
-				if (swapped) return;
-				swapped = true;
-				cleanup();
-				if (loadGenRef.current !== gen || audioRef.current !== headAudio) {
-					evictedAudio.add(fullAudio);
-					fullAudio.src = "";
-					return;
-				}
-				const seekTo = headAudio.currentTime || 0;
-				const userVol = usePlayerStore.getState().volume / 100;
-				const wasPlaying = !headAudio.paused;
-
-				detachEvents(headAudio);
-				evictedAudio.add(headAudio);
-				headAudio.pause();
-				headAudio.src = "";
-
-				activateElement(fullAudio);
-				try {
-					fullAudio.currentTime = seekTo;
-				} catch {
-					// Seek may throw if not enough buffered; the audio element
-					// will handle it by re-buffering and seeking when ready.
-				}
-				fullAudio.volume = userVol;
-				if (wasPlaying || usePlayerStore.getState().isPlaying) {
-					fullAudio.play().catch(() => {});
-				}
-			};
-
-			// Swap 300ms before head ends for smoother transition; fall back
-			// to the ended event in case timeupdate granularity misses it.
-			const onTimeUpdate = () => {
-				if (swapped) return;
-				const dur = headAudio.duration;
-				if (!isFinite(dur) || dur <= 0) return;
-				if (headAudio.currentTime > dur - 0.3) swap();
-			};
-			const onEnded = () => swap();
-
-			headAudio.addEventListener("timeupdate", onTimeUpdate);
-			headAudio.addEventListener("ended", onEnded);
+			cancelHandoffRef.current?.();
+			cancelHandoffRef.current = startHandoff({
+				head: headAudio,
+				full: fullAudio,
+				stillCurrent: () => loadGenRef.current === gen && audioRef.current === headAudio,
+				discard: discardElement,
+				swap: (full, { position, wasPlaying }) => {
+					cancelHandoffRef.current = null;
+					detachEvents(headAudio);
+					discardElement(headAudio);
+					activateElement(full);
+					try {
+						full.currentTime = position;
+					} catch {
+						// Seek may throw if not enough buffered; the audio element
+						// will handle it by re-buffering and seeking when ready.
+					}
+					setElementVolume(full, usePlayerStore.getState().volume / 100);
+					if (wasPlaying || usePlayerStore.getState().isPlaying) {
+						full.play().catch(() => {});
+					}
+				},
+			});
 		},
 		[activateElement, detachEvents]
+	);
+
+	// Element-level teardown shared by every path that drops the current
+	// element: events first (emptying src fires an error on some browsers),
+	// then network, Web Audio nodes and any pending handoff.
+	const dropElement = useCallback(
+		(audio: HTMLAudioElement) => {
+			detachEvents(audio);
+			discardElement(audio);
+		},
+		[detachEvents]
 	);
 
 	// --- Restore playback position from previous session ---
@@ -468,19 +472,16 @@ export function AudioEngine() {
 			const old = audioRef.current;
 			++loadGenRef.current;
 			timers.clear();
-			if (old) {
-				detachEvents(old);
-				old.pause();
-				old.src = "";
-				evictedAudio.add(old);
-			}
+			cancelHandoffRef.current?.();
+			cancelHandoffRef.current = null;
+			if (old) dropElement(old);
 			resumePositionRef.current = position;
 			const audio = createAudioElement();
 			activateElement(audio);
 			audio.src = url;
 			audio.load();
 		},
-		[activateElement, detachEvents, timers]
+		[activateElement, dropElement, timers]
 	);
 
 	// Point the current element at another URL of the same track and resume
@@ -602,18 +603,19 @@ export function AudioEngine() {
 			audioRef.current = audio;
 			attachEvents(audio);
 		}
+		// The AudioContext is created / resumed inside the click, tap or key
+		// press that plays something (iOS ignores it anywhere else).
+		const removeUnlock = installGestureUnlock(() => !!usePlayerStore.getState().currentTrack);
 		return () => {
+			removeUnlock();
+			cancelHandoffRef.current?.();
+			cancelHandoffRef.current = null;
 			const audio = audioRef.current;
-			if (audio) {
-				detachEvents(audio);
-				audio.pause();
-				audio.src = "";
-				evictedAudio.add(audio);
-			}
+			if (audio) dropElement(audio);
 			// Clean up preload pools and cancel background prefetch
 			disposePrefetchPools();
 		};
-	}, [attachEvents, detachEvents]);
+	}, [attachEvents, dropElement]);
 
 	// Sign-out / account switch: forget the presigned URLs, prefetch state and
 	// the IndexedDB audio the Service Worker would keep serving.
@@ -692,6 +694,8 @@ export function AudioEngine() {
 			sessionRef.current = null;
 			timers.clear();
 			autoSkip.cancel();
+			cancelHandoffRef.current?.();
+			cancelHandoffRef.current = null;
 			audio.pause();
 			audio.src = "";
 			prevTrackIdRef.current = null;
@@ -712,19 +716,14 @@ export function AudioEngine() {
 			if (crossfadeActiveRef.current) {
 				crossfadeActiveRef.current = false;
 				if (outgoingAudioRef.current) {
-					outgoingAudioRef.current.pause();
-					outgoingAudioRef.current.src = "";
-					evictedAudio.add(outgoingAudioRef.current);
+					discardElement(outgoingAudioRef.current);
 					outgoingAudioRef.current = null;
 				}
 			}
 			const gen = ++loadGenRef.current;
 
 			// Immediately kill the old audio — hard stop, no fade
-			detachEvents(audio);
-			audio.pause();
-			audio.src = "";
-			evictedAudio.add(audio);
+			dropElement(audio);
 
 			// Pick the best prefetched element, in order of buffer richness:
 			//   1. queue preload (next/prev — cached copy or live preview stream)
@@ -766,7 +765,7 @@ export function AudioEngine() {
 				});
 			}
 		}
-	}, [currentTrack, activateElement, beginTrack, startPlayback, detachEvents, applyResumePosition, timers, autoSkip, handoffFullStream, setBuffering]);
+	}, [currentTrack, activateElement, beginTrack, startPlayback, dropElement, applyResumePosition, timers, autoSkip, handoffFullStream, setBuffering]);
 
 	// --- Play / pause with fade effects ---
 	useEffect(() => {
@@ -818,11 +817,12 @@ export function AudioEngine() {
 		adjustVolume(audio, volume / 100, { duration: 300 });
 	}, [volume, isPlaying]);
 
-	// Normalization toggle — reset gain when turned off
+	// Normalization toggle — back to unity when turned off (the measured gain
+	// is kept and re-applied by onTimeUpdate if it's turned on again).
 	useEffect(() => {
 		if (!normalizationEnabled) {
-			normMeasuredRef.current = false;
-			resetNormGain();
+			resetNormGain(audioRef.current);
+			normRef.current.appliedTo = null;
 		}
 	}, [normalizationEnabled]);
 
@@ -858,10 +858,9 @@ export function AudioEngine() {
 		setBuffering(true);
 		// Force a clean reload — new audio element to drop any error state.
 		const gen = ++loadGenRef.current;
-		detachEvents(audio);
-		audio.pause();
-		audio.src = "";
-		evictedAudio.add(audio);
+		cancelHandoffRef.current?.();
+		cancelHandoffRef.current = null;
+		dropElement(audio);
 		const newAudio = createAudioElement();
 		activateElement(newAudio);
 		getTrackUrl(track.trackId).then((url) => {
@@ -869,7 +868,7 @@ export function AudioEngine() {
 			newAudio.src = url;
 			newAudio.load();
 		});
-	}, [retryLoadCount, currentTrack, activateElement, detachEvents, setBuffering, setError, timers, autoSkip]);
+	}, [retryLoadCount, currentTrack, activateElement, dropElement, setBuffering, setError, timers, autoSkip]);
 
 	// Seek: respond to _seekTo signal from prev() restart or seek()
 	const seekTo = usePlayerStore((s) => s._seekTo);
@@ -1005,25 +1004,23 @@ export function AudioEngine() {
 				if (classifySource(audio.src) !== "blob") void cacheListenedTrack(track.trackId);
 			}
 
-			// Connect to Web Audio API on first timeUpdate after playback starts.
-			// This provides audio data for the visualizer and normalization.
-			// Idempotent — skipped once connected or if connection fails (CORS etc.).
-			if (!isConnectedOrFailed(audio)) {
-				initAudioCtx();
-				connectAudioElement(audio);
-			}
+			// Route the element through Web Audio (visualiser, normalisation,
+			// GainNode volume) once a gesture got the context running — never
+			// into a suspended context, which would play silence. Idempotent.
+			if (isAudioCtxRunning()) routeElement(audio);
 
-			// Normalization: measure RMS at t=3s (once per track, if enabled)
-			if (normalizationEnabled && !normMeasuredRef.current && audio.currentTime >= 3.0) {
-				normMeasuredRef.current = true;
-				const rms = measureRms();
-				if (rms > 0) {
-					// Target −18.4 dBFS (≈ −14 LUFS for most music)
-					const rawGain = 0.12 / rms;
-					// Cap boost so normGain × userVol ≤ 1.0 to prevent clipping
-					const userVol = usePlayerStore.getState().volume / 100;
-					const maxBoost = userVol > 0 ? 1.0 / userVol : 1.5;
-					applyNormGain(Math.min(rawGain, maxBoost));
+			// Normalisation (if enabled): average this track's level over
+			// several seconds, then apply one gain to its element(s).
+			const norm = normRef.current;
+			if (normalizationEnabled && isRouted(audio)) {
+				if (norm.gain === null && !audio.paused) {
+					const level = readLevel(audio);
+					if (level) norm.meter.add(level, audio.currentTime);
+					norm.gain = norm.meter.gain();
+				}
+				if (norm.gain !== null && norm.appliedTo !== audio) {
+					setNormGain(audio, norm.gain);
+					norm.appliedTo = audio;
 				}
 			}
 
@@ -1081,7 +1078,7 @@ export function AudioEngine() {
 						activateElement(preloaded, nextTrack);
 						skipPlayEffectRef.current = true;
 
-						preloaded.volume = 0;
+						setElementVolume(preloaded, 0);
 						preloaded.currentTime = 0;
 						preloaded.play().catch(() => {});
 
@@ -1095,10 +1092,11 @@ export function AudioEngine() {
 						setBuffering(false);
 
 						// Clean up outgoing after fade
+						// (only this crossfade's state: a track change meanwhile
+						// already dropped it, and may have started another one).
 						setTimeout(() => {
-							outgoing.pause();
-							outgoing.src = "";
-							evictedAudio.add(outgoing);
+							discardElement(outgoing);
+							if (outgoingAudioRef.current !== outgoing) return;
 							outgoingAudioRef.current = null;
 							crossfadeActiveRef.current = false;
 						}, fadeDuration + 300);

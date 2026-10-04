@@ -17,6 +17,7 @@ import {
 	shouldPrefetchAudio,
 } from "@/lib/prefetch-budget";
 import { isRangelessSource } from "@/lib/seek";
+import { releaseElement } from "@/utils/audio-context";
 import { presignedUrls, progressiveUrl, resolveCachedSource } from "./presigned-urls";
 import { resolvePlaybackUrl } from "./source";
 
@@ -30,10 +31,20 @@ export function createAudioElement(): HTMLAudioElement {
 	return audio;
 }
 
-function retire(audio: HTMLAudioElement) {
+/**
+ * Stop an element for good: no more network, its Web Audio nodes
+ * disconnected, and late async work (evictedAudio) leaves it alone.
+ */
+export function discardElement(audio: HTMLAudioElement) {
 	evictedAudio.add(audio);
+	try {
+		audio.pause();
+	} catch {}
 	audio.src = "";
+	releaseElement(audio);
 }
+
+const retire = discardElement;
 
 /** The IndexedDB / page prefetch resolver: a cached copy or nothing. */
 export const cachedSourceResolver: ResolveCachedSource = (trackId, signal) =>
