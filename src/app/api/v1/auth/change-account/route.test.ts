@@ -49,6 +49,14 @@ describe("POST /api/v1/auth/change-account", () => {
 		expect(res.status).toBe(401);
 	});
 
+	it("returns 400 INVALID_BODY on a malformed JSON body (was: 500 with the parser's message)", async () => {
+		setSessionUser("u1");
+		sessionDz();
+		const res = await post("{not json");
+		expect(res.status).toBe(400);
+		expect((await readJson<{ error: { code: string } }>(res))?.error.code).toBe("INVALID_BODY");
+	});
+
 	it("returns 400 MISSING_CHILD_INDEX without a child", async () => {
 		setSessionUser("u1");
 		sessionDz();

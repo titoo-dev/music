@@ -51,6 +51,13 @@ afterEach(() => {
 });
 
 describe("POST /api/v1/auth/login-email", () => {
+	it("returns 400 INVALID_BODY on a malformed JSON body (was: 500 with the parser's message)", async () => {
+		setSessionUser("u1");
+		const res = await POST(makeNextRequest({ method: "POST", body: "{not json", headers: { "Content-Type": "application/json" } }));
+		expect(res.status).toBe(400);
+		expect((await readJson<{ error: { code: string } }>(res))?.error.code).toBe("INVALID_BODY");
+	});
+
 	it("returns 401 when not signed in", async () => {
 		expect((await post({ email: "a", password: "b" })).status).toBe(401);
 	});

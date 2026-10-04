@@ -64,12 +64,24 @@ describe("POST /api/v1/settings", () => {
 		expect((await readJson<Body>(res))?.data).toEqual({ settings: { maxBitrate: 9 }, defaultSettings: DEFAULTS });
 	});
 
-	it("stores {} and answers the server settings when the body has no settings (unchanged)", async () => {
+	// Contract change (critical-flow review): a body without `settings` used to
+	// overwrite the user's stored settings with {}. The only client (mobile)
+	// always sends `settings`, so refusing the empty body loses nothing.
+	it("returns 400 INVALID_BODY and keeps the stored settings when the body has no settings (was: silently reset them to {})", async () => {
 		setSessionUser("u1");
 		makeApp({ maxBitrate: 1 });
 		const res = await post({});
+		expect(res.status).toBe(400);
+		expect((await readJson<Body>(res))?.error?.code).toBe("INVALID_BODY");
+		expect(prismaMock.userSettings.upsert).not.toHaveBeenCalled();
+	});
+
+	it("still accepts settings: null as an explicit reset", async () => {
+		setSessionUser("u1");
+		makeApp({ maxBitrate: 1 });
+		const res = await post({ settings: null });
+		expect(res.status).toBe(200);
 		expect(prismaMock.userSettings.upsert.mock.calls[0][0].update).toEqual({ settings: {} });
-		expect((await readJson<Body>(res))?.data).toEqual({ settings: { maxBitrate: 1 }, defaultSettings: DEFAULTS });
 	});
 
 	it("returns 400 INVALID_BODY on a non-JSON body (was: 500 with the parser's message)", async () => {

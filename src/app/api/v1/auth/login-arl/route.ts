@@ -2,14 +2,16 @@ import { NextRequest } from "next/server";
 import { setUserDz } from "@/lib/server-state";
 import { saveDeezerCredential } from "@/lib/deezer-session";
 import { deezerAccountPayload } from "@/lib/deezer/public-user";
-import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
+import { ok, fail, handleError, requireUser, readJsonBody } from "../../_lib/helpers";
 
 export async function POST(request: NextRequest) {
 	try {
 		const userResult = await requireUser(request);
 		if (userResult.error) return userResult.error;
 
-		const { arl, child } = await request.json();
+		const parsed = await readJsonBody<{ arl?: string; child?: number | string }>(request);
+		if (parsed.error) return parsed.error;
+		const { arl, child } = parsed.body;
 
 		if (!arl) {
 			return fail("MISSING_ARL", "ARL token is required.", 400);

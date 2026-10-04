@@ -62,6 +62,7 @@ import {
 	requireDeezerAndApp,
 	getGuestOrUserDz,
 	handleError,
+	readJsonBody,
 } from "./helpers";
 
 beforeEach(() => {
@@ -747,5 +748,22 @@ describe("handleError()", () => {
 		const res = handleError(new MyErr("subclass"));
 		const body = await readJson<{ error: { message: string } }>(res);
 		expect(body?.error.message).toBe(GENERIC.message);
+	});
+});
+
+describe("readJsonBody", () => {
+	const req = (body: string) => new Request("http://localhost/x", { method: "POST", body, headers: { "Content-Type": "application/json" } });
+
+	it("returns the parsed object", async () => {
+		const r = await readJsonBody(req('{"arl":"a"}'));
+		expect(r.error).toBeNull();
+		expect(r.body).toEqual({ arl: "a" });
+	});
+
+	it.each([["{not json"], [""], ["[1,2]"], ["null"], ["\"text\""]])("answers 400 INVALID_BODY for %j (was: 500 from the JSON parser)", async (raw) => {
+		const r = await readJsonBody(req(raw));
+		expect(r.body).toBeNull();
+		expect(r.error?.status).toBe(400);
+		expect((await readJson<{ error: { code: string } }>(r.error!))?.error.code).toBe("INVALID_BODY");
 	});
 });

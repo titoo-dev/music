@@ -2,14 +2,16 @@ import { NextRequest } from "next/server";
 import { setUserDz } from "@/lib/server-state";
 import { saveDeezerCredential } from "@/lib/deezer-session";
 import { deezerAccountPayload } from "@/lib/deezer/public-user";
-import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
+import { ok, fail, handleError, requireUser, readJsonBody } from "../../_lib/helpers";
 
 export async function POST(request: NextRequest) {
 	try {
 		const userResult = await requireUser(request);
 		if (userResult.error) return userResult.error;
 
-		const { email, password } = await request.json();
+		const parsed = await readJsonBody<{ email?: string; password?: string }>(request);
+		if (parsed.error) return parsed.error;
+		const { email, password } = parsed.body;
 
 		if (!email || !password) {
 			return fail("MISSING_CREDENTIALS", "Email and password are required.", 400);

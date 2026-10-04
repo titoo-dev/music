@@ -50,7 +50,12 @@ export async function POST(request: NextRequest) {
 		} catch {
 			return fail("INVALID_BODY", "Expected a JSON body.", 400);
 		}
-		const settings = body?.settings;
+		// A body without `settings` would wipe the stored ones: refuse it.
+		// `settings: null` stays an explicit reset.
+		if (!body || typeof body !== "object" || !("settings" in body)) {
+			return fail("INVALID_BODY", "settings is required.", 400);
+		}
+		const settings = body.settings;
 
 		await prisma.userSettings.upsert({
 			where: { userId: userResult.userId },

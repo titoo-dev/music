@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { ok, fail, handleError, requireDeezer } from "../../_lib/helpers";
+import { ok, fail, handleError, requireDeezer, readJsonBody } from "../../_lib/helpers";
 import { saveSelectedAccount } from "@/lib/deezer-session";
 import { toPublicDeezerUser } from "@/lib/deezer/public-user";
 import { errorSummary } from "@/lib/log-safe";
@@ -8,7 +8,9 @@ export async function POST(request: NextRequest) {
 	try {
 		const { userId, dz, error } = await requireDeezer(request);
 		if (error) return error;
-		const { child } = await request.json();
+		const parsed = await readJsonBody<{ child?: unknown }>(request);
+		if (parsed.error) return parsed.error;
+		const { child } = parsed.body;
 
 		if (child === undefined || child === null) {
 			return fail("MISSING_CHILD_INDEX", "Child account index is required.", 400);

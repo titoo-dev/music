@@ -26,6 +26,22 @@ export function fail(code: string, message: string, status = 400) {
 	);
 }
 
+/**
+ * Read a JSON object body. A missing, malformed or non-object body is the
+ * client's mistake: 400 INVALID_BODY instead of the parser's 500.
+ */
+export async function readJsonBody<T extends Record<string, unknown> = Record<string, unknown>>(
+	request: Request
+): Promise<{ body: T; error: null } | { body: null; error: NextResponse }> {
+	try {
+		const body: unknown = await request.json();
+		if (body && typeof body === "object" && !Array.isArray(body)) return { body: body as T, error: null };
+	} catch {
+		// fall through
+	}
+	return { body: null, error: fail("INVALID_BODY", "Expected a JSON object body.", 400) };
+}
+
 // ── Better-auth session guard ──
 
 export async function requireUser(request: NextRequest) {
