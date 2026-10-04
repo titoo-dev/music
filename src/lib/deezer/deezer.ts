@@ -4,6 +4,26 @@ import { GW } from "./gw";
 import got from "got";
 import { Cookie, CookieJar } from "tough-cookie";
 import type { User } from "./types";
+import {
+	DEEZER_REQUEST_OPTIONS,
+	DEEZER_USER_AGENT,
+	isTransientNetworkError,
+	toDeezerNetworkError,
+} from "./http";
+
+/** media.deezer.com/v1/get_url answer. */
+interface MediaError {
+	code?: number;
+	message?: string;
+}
+interface GetUrlEntry {
+	errors?: MediaError[];
+	media?: { sources?: { url?: string }[] }[];
+}
+interface GetUrlResponse {
+	data?: GetUrlEntry[];
+	errors?: MediaError[];
+}
 
 export class Deezer {
 	loggedIn: boolean;
@@ -17,8 +37,7 @@ export class Deezer {
 
 	constructor() {
 		this.httpHeaders = {
-			"User-Agent":
-				"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36",
+			"User-Agent": DEEZER_USER_AGENT,
 		};
 		this.cookieJar = new CookieJar();
 
@@ -51,6 +70,7 @@ export class Deezer {
 			.post("https://www.deezer.com/ajax/action.php", {
 				headers: this.httpHeaders,
 				cookieJar: this.cookieJar,
+				...DEEZER_REQUEST_OPTIONS,
 				form: {
 					type: "login",
 					mail: email,
@@ -162,7 +182,7 @@ export class Deezer {
 		return [this.currentUser, this.selectedAccount];
 	}
 
-	async get_track_url(track_token, format) {
+	async get_track_url(track_token, format): Promise<string | null> {
 		const tracks = await this.get_tracks_url([track_token], format);
 		if (tracks.length > 0) {
 			if (tracks[0] instanceof DeezerError) throw tracks[0];
@@ -171,7 +191,14 @@ export class Deezer {
 		return null;
 	}
 
-	async get_tracks_url(track_tokens, format) {
+	/**
+	 * One entry per token, in order: the CDN URL, `null` when Deezer has no
+	 * media for that format, or a DeezerError for that entry (WrongGeolocation
+	 * for code 2002, WrongLicense for 2001). Throws a DeezerNetworkError on a
+	 * transient failure (it says nothing about availability; no retry here,
+	 * the caller decides) and a plain DeezerError on a top-level error answer.
+	 */
+	async get_tracks_url(track_tokens, format): Promise<(string | DeezerError | null)[]> {
 		if (!Array.isArray(track_tokens)) track_tokens = [track_tokens];
 		if (!this.currentUser?.license_token) return [];
 		if (
@@ -181,9 +208,7 @@ export class Deezer {
 		)
 			throw new WrongLicense(format);
 
-		let response;
-		const result: (DeezerError | null)[] = [];
-
+		let response: GetUrlResponse;
 		try {
 			response = await got
 				.post("https://media.deezer.com/v1/get_url", {
@@ -199,25 +224,30 @@ export class Deezer {
 						],
 						track_tokens,
 					},
+					...DEEZER_REQUEST_OPTIONS,
 				})
-				.json();
-		} catch {
-			return [];
+				.json<GetUrlResponse>();
+		} catch (e) {
+			if (isTransientNetworkError(e)) throw toDeezerNetworkError(`get_url ${format}`, e);
+			throw new DeezerError(`get_url ${format}:: ${e?.name}: ${e?.message}`);
 		}
 
-		if (response.data.length) {
-			response.data.forEach((data) => {
-				if (data.errors) {
-					if (data.errors[0].code === 2002) {
-						result.push(new WrongGeolocation(this.currentUser?.country));
-					} else {
-						result.push(new DeezerError(JSON.stringify(response)));
-					}
-				}
-				if (data.media) result.push(data.media[0].sources[0].url);
-				else result.push(null);
-			});
+		const data = Array.isArray(response?.data) ? response.data : undefined;
+		if (!data) {
+			if (Array.isArray(response?.errors) && response.errors.length) {
+				throw new DeezerError(`get_url ${format}:: ${JSON.stringify(response.errors)}`);
+			}
+			return track_tokens.map(() => null);
 		}
-		return result;
+
+		return data.map((entry): string | DeezerError | null => {
+			const entryError = Array.isArray(entry?.errors) ? entry.errors[0] : undefined;
+			if (entryError) {
+				if (entryError.code === 2002) return new WrongGeolocation(this.currentUser?.country);
+				if (entryError.code === 2001) return new WrongLicense(format);
+				return new DeezerError(`get_url ${format}:: ${JSON.stringify(entry.errors)}`);
+			}
+			return entry?.media?.[0]?.sources?.[0]?.url ?? null;
+		});
 	}
 }
