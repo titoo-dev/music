@@ -46,7 +46,7 @@ export class TrackSpool {
 	private state: "open" | "complete" | "failed" = "open";
 	private failure: Error | null = null;
 	private waiters: Array<() => void> = [];
-	private readers = 0;
+	private readers = new Set<Readable>();
 	private disposed = false;
 	private removed = false;
 	private settle!: { resolve: (n: number) => void; reject: (e: Error) => void };
@@ -129,11 +129,12 @@ export class TrackSpool {
 	 */
 	createReader(start = 0): Readable | null {
 		if (this.removed) return null;
-		this.readers++;
-		return new SpoolReader(this, start, () => {
-			this.readers--;
+		const reader: Readable = new SpoolReader(this, start, () => {
+			this.readers.delete(reader);
 			this.maybeRemove();
 		});
+		this.readers.add(reader);
+		return reader;
 	}
 
 	/** The whole file (only meaningful once complete). */
@@ -148,7 +149,12 @@ export class TrackSpool {
 		if (this.state === "open") void this.fail(new Error("spool disposed"));
 		this.maybeRemove();
 		if (!this.removed) {
-			const timer = setTimeout(() => this.remove(), SPOOL_LINGER_MS);
+			// A client that stalls past the function's lifetime: close its reader
+			// (and fd) and delete the file anyway.
+			const timer = setTimeout(() => {
+				for (const reader of this.readers) reader.destroy();
+				this.remove();
+			}, SPOOL_LINGER_MS);
 			timer.unref?.();
 		}
 	}
@@ -171,7 +177,7 @@ export class TrackSpool {
 	}
 
 	private maybeRemove() {
-		if (this.disposed && this.readers <= 0) this.remove();
+		if (this.disposed && this.readers.size === 0) this.remove();
 	}
 
 	private remove() {

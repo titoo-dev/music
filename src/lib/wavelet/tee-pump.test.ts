@@ -11,6 +11,7 @@ import {
 	toWebStream,
 	TrackSpool,
 	SPOOL_READ_BYTES,
+	SPOOL_LINGER_MS,
 } from "./tee-pump";
 
 const CHUNK = 64 * 1024;
@@ -167,6 +168,24 @@ describe("persisting plays: disk-first spool", () => {
 		expect(fs.existsSync(spool.path)).toBe(false);
 		expect(spool.removedFromDisk).toBe(true);
 		expect(spool.createReader()).toBeNull();
+	});
+
+	it("closes a stalled reader and deletes the file once the linger time is over", async () => {
+		const spool = await newSpool();
+		await spool.write(Buffer.from("abc"));
+		await spool.finish();
+		const reader = spool.createReader()!;
+		reader.pause();
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+		try {
+			spool.dispose();
+			expect(spool.removedFromDisk).toBe(false);
+			vi.advanceTimersByTime(SPOOL_LINGER_MS);
+			expect(reader.destroyed).toBe(true);
+			expect(spool.removedFromDisk).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("disposing an open spool fails it so the writer stops", async () => {

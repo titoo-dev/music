@@ -100,6 +100,9 @@ async function readBody(body: ReadableStream<Uint8Array>): Promise<Buffer> {
 	return Buffer.from(await new Response(body).arrayBuffer());
 }
 
+/** Bodies a test never read: cancelled in afterEach so no spool reader stays open. */
+const bodies: ReadableStream<Uint8Array>[] = [];
+
 function start(over: Partial<Parameters<typeof startProgressiveStream>[0]> = {}) {
 	const storageProvider = provider();
 	const lock = { release: vi.fn(), publish: vi.fn<(s: SharedSpool | null) => void>() };
@@ -116,6 +119,9 @@ function start(over: Partial<Parameters<typeof startProgressiveStream>[0]> = {})
 		lease,
 		enrichmentWaitMs: 200,
 		...over,
+	}).then((res) => {
+		bodies.push(res.body);
+		return res;
 	});
 	return { promise, storageProvider, lock, lease, dz };
 }
@@ -145,8 +151,11 @@ beforeEach(() => {
 	for (const id of [7, 8, 9]) for (const t of ["42", "43"]) gwTrackCache.delete(gwTrackKey(id, t));
 });
 
-afterEach(() => {
+afterEach(async () => {
 	vi.restoreAllMocks();
+	for (const body of bodies.splice(0)) {
+		if (!body.locked) await body.cancel().catch(() => {});
+	}
 });
 
 describe("persisting play (disk-first)", () => {
