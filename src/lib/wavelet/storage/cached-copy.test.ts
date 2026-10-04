@@ -93,9 +93,14 @@ describe("chooseCachedCopy", () => {
 		expect(d).toMatchObject({ kind: "hit", row: { bitrate: MP3_128 } });
 	});
 
-	it("is a miss when only a copy above the cap exists", () => {
+	it("is a miss when only a copy above the cap exists, flagged aboveCap", () => {
 		const d = chooseCachedCopy([row(FLAC)], { maxBitrate: MP3_128, licence: FREE });
-		expect(d.kind).toBe("miss");
+		expect(d).toMatchObject({ kind: "miss", aboveCap: true });
+		// A copy in older storage above the cap is unreadable, not above the cap.
+		expect(chooseCachedCopy([row(FLAC, { storageType: "blob" })], { maxBitrate: MP3_128, licence: FREE })).toMatchObject({
+			kind: "miss",
+			aboveCap: false,
+		});
 	});
 
 	it("asks for an upgrade when the best copy is below what the listener may get (was: an HQ listener got the free account's 128 copy forever)", () => {
@@ -140,7 +145,7 @@ describe("chooseCachedCopy", () => {
 	});
 
 	it("is a miss without rows", () => {
-		expect(chooseCachedCopy([], { maxBitrate: MP3_128, licence: FREE })).toEqual({ kind: "miss", stale: [] });
+		expect(chooseCachedCopy([], { maxBitrate: MP3_128, licence: FREE })).toEqual({ kind: "miss", stale: [], aboveCap: false });
 	});
 });
 

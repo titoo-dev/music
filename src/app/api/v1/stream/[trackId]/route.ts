@@ -56,8 +56,12 @@ export async function GET(
 			// fallback runs. Returning 404 here would kill the <audio> element with
 			// no recovery path, even though the track is fully streamable live.
 			// An upgrade (a copy exists, the listener may get better) re-persists
-			// through a live=1 play.
-			return redirectToProgressive(trackId, { live: copy.kind === "upgrade" });
+			// through a live=1 play. So does a copy above this instance's quality:
+			// an instance still on the older setting would serve it as a hit and
+			// redirect straight back here.
+			return redirectToProgressive(trackId, {
+				live: copy.kind === "upgrade" || copy.aboveCap,
+			});
 		}
 		const stored = copy.row;
 		storagePath = stored.storagePath;

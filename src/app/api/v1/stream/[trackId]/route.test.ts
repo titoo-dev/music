@@ -193,6 +193,19 @@ describe("GET /api/v1/stream/[trackId]", () => {
 		expect(streamObjectMock).not.toHaveBeenCalled();
 	});
 
+	it("sends a track cached only above this instance's quality to a live=1 play (was: /stream <-> /stream-progressive redirect loop while instances disagreed on the quality setting)", async () => {
+		setSessionUser("u1");
+		// This instance already reads Medium; another one still caches High and
+		// sends the FLAC copy here as a hit.
+		serverStateMock.getWaveletApp.mockResolvedValue({ freshSettings: vi.fn(async () => ({ maxBitrate: 3 })) });
+		prismaMock.storedTrack.findMany.mockResolvedValue([{ ...blobRow, bitrate: 9, storagePath: "tracks/1/9.flac" }]);
+
+		const res = await GET(makeNextRequest(), makeParams({ trackId: "1" }));
+		expect(res.status).toBe(302);
+		expect(res.headers.get("Location")).toBe("/api/v1/stream-progressive/1?live=1");
+		expect(streamObjectMock).not.toHaveBeenCalled();
+	});
+
 	it("serves a 128 copy that was persisted for a 320 request (Deezer had no 320)", async () => {
 		setSessionUser("u1");
 		serverStateMock.getWaveletApp.mockResolvedValue({ freshSettings: vi.fn(async () => ({ maxBitrate: 3 })) });

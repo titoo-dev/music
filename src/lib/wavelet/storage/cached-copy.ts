@@ -87,8 +87,11 @@ export type CachedCopyDecision<T extends CachedRow> =
 	| { kind: "hit"; row: T; stale: T[] }
 	/** A copy exists but the listener may get better: re-persist (live=1). */
 	| { kind: "upgrade"; best: T; stale: T[] }
-	/** Nothing usable. */
-	| { kind: "miss"; stale: T[] };
+	/**
+	 * Nothing usable. `aboveCap`: an R2 copy exists but above this instance's
+	 * M — another instance whose quality setting is older may still serve it.
+	 */
+	| { kind: "miss"; stale: T[]; aboveCap: boolean };
 
 /** Pure C6 decision over the rows of one track. `stale` = rows in older storage. */
 export function chooseCachedCopy<T extends CachedRow>(rows: T[], q: CacheQuery): CachedCopyDecision<T> {
@@ -97,11 +100,16 @@ export function chooseCachedCopy<T extends CachedRow>(rows: T[], q: CacheQuery):
 	const capped = q.maxBitrate != null && q.maxBitrate in RANK;
 	const maxRank = capped ? qualityRank(q.maxBitrate) : Infinity;
 	let best: T | null = null;
+	let aboveCap = false;
 	for (const r of rows) {
-		if (r.storageType !== STORAGE_TYPE || qualityRank(r.bitrate) > maxRank) continue;
+		if (r.storageType !== STORAGE_TYPE) continue;
+		if (qualityRank(r.bitrate) > maxRank) {
+			aboveCap = true;
+			continue;
+		}
 		if (!best || qualityRank(r.bitrate) > qualityRank(best.bitrate)) best = r;
 	}
-	if (!best) return { kind: "miss", stale };
+	if (!best) return { kind: "miss", stale, aboveCap };
 
 	const upgrade = q.upgrade ?? q.licence != null;
 	if (!upgrade || !capped) return { kind: "hit", row: best, stale };
