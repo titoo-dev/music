@@ -25,6 +25,28 @@ interface GetUrlResponse {
 	errors?: MediaError[];
 }
 
+/**
+ * media.deezer.com's top-level "License token has no sufficient rights on
+ * requested media." (HTTP 403): the account's licence does not cover the
+ * format, whatever its can_stream_* flags said (verified live, free account
+ * asking for MP3_320 / FLAC).
+ */
+const MEDIA_NO_RIGHTS = 1002;
+
+/** The `errors` array of a get_url answer, from a parsed body or an HTTPError's raw body. */
+function mediaErrorsOf(body: unknown): MediaError[] {
+	let parsed: unknown = body;
+	if (typeof body === "string" || Buffer.isBuffer(body)) {
+		try {
+			parsed = JSON.parse(body.toString());
+		} catch {
+			return [];
+		}
+	}
+	const errors = (parsed as { errors?: unknown } | null)?.errors;
+	return Array.isArray(errors) ? (errors as MediaError[]) : [];
+}
+
 export class Deezer {
 	loggedIn: boolean;
 	httpHeaders: { "User-Agent": string };
@@ -194,9 +216,10 @@ export class Deezer {
 	/**
 	 * One entry per token, in order: the CDN URL, `null` when Deezer has no
 	 * media for that format, or a DeezerError for that entry (WrongGeolocation
-	 * for code 2002, WrongLicense for 2001). Throws a DeezerNetworkError on a
+	 * for code 2002). Throws WrongLicense when the licence does not cover the
+	 * format (top-level code 1002, HTTP 403), a DeezerNetworkError on a
 	 * transient failure (it says nothing about availability; no retry here,
-	 * the caller decides) and a plain DeezerError on a top-level error answer.
+	 * the caller decides) and a plain DeezerError on any other error answer.
 	 */
 	async get_tracks_url(track_tokens, format): Promise<(string | DeezerError | null)[]> {
 		if (!Array.isArray(track_tokens)) track_tokens = [track_tokens];
@@ -229,13 +252,18 @@ export class Deezer {
 				.json<GetUrlResponse>();
 		} catch (e) {
 			if (isTransientNetworkError(e)) throw toDeezerNetworkError(`get_url ${format}`, e);
+			if (mediaErrorsOf(e?.response?.body).some((err) => err?.code === MEDIA_NO_RIGHTS)) {
+				throw new WrongLicense(format);
+			}
 			throw new DeezerError(`get_url ${format}:: ${e?.name}: ${e?.message}`);
 		}
 
 		const data = Array.isArray(response?.data) ? response.data : undefined;
 		if (!data) {
-			if (Array.isArray(response?.errors) && response.errors.length) {
-				throw new DeezerError(`get_url ${format}:: ${JSON.stringify(response.errors)}`);
+			const errors = mediaErrorsOf(response);
+			if (errors.some((err) => err?.code === MEDIA_NO_RIGHTS)) throw new WrongLicense(format);
+			if (errors.length) {
+				throw new DeezerError(`get_url ${format}:: ${JSON.stringify(errors)}`);
 			}
 			return track_tokens.map(() => null);
 		}
@@ -243,8 +271,9 @@ export class Deezer {
 		return data.map((entry): string | DeezerError | null => {
 			const entryError = Array.isArray(entry?.errors) ? entry.errors[0] : undefined;
 			if (entryError) {
+				// 2002: the track token has no rights here (region lock). 2000 / 2001
+				// (undecodable / expired token) say nothing about the format.
 				if (entryError.code === 2002) return new WrongGeolocation(this.currentUser?.country);
-				if (entryError.code === 2001) return new WrongLicense(format);
 				return new DeezerError(`get_url ${format}:: ${JSON.stringify(entry.errors)}`);
 			}
 			return entry?.media?.[0]?.sources?.[0]?.url ?? null;

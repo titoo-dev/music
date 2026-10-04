@@ -66,10 +66,46 @@ describe("Deezer.get_tracks_url", () => {
 		expect(res[3]).toBe("u4");
 	});
 
-	it("maps the 'no sufficient rights' entry error to WrongLicense", async () => {
-		getUrlReplies({ ok: { data: [{ errors: [{ code: 2001, message: "rights" }] }] } });
+	// Live answer of media.deezer.com when the licence lacks the format (free account asking
+	// for MP3_320 / FLAC): HTTP 403 with a top-level code 1002.
+	const NO_RIGHTS_BODY =
+		'{"errors":[{"code":1002,"message":"License token has no sufficient rights on requested media."}]}';
+
+	it("maps a 403 'License token has no sufficient rights' (1002) to WrongLicense (was: plain DeezerError, so a stale licence flag errored playback instead of falling back)", async () => {
+		getUrlReplies({
+			err: Object.assign(new Error("Response code 403 (Forbidden)"), {
+				name: "HTTPError",
+				response: { statusCode: 403, body: NO_RIGHTS_BODY },
+			}),
+		});
+		const err = await makeDz().get_tracks_url(["t1"], "FLAC").catch((e) => e);
+		expect(err).toBeInstanceOf(WrongLicense);
+		expect(err.format).toBe("FLAC");
+	});
+
+	it("maps a top-level 1002 answer without an HTTP error status to WrongLicense too", async () => {
+		getUrlReplies({ ok: JSON.parse(NO_RIGHTS_BODY) });
+		await expect(makeDz().get_tracks_url(["t1"], "MP3_320")).rejects.toBeInstanceOf(WrongLicense);
+	});
+
+	it("keeps any other 4xx answer a plain DeezerError (not a licence or network failure)", async () => {
+		getUrlReplies({
+			err: Object.assign(new Error("Response code 400 (Bad Request)"), {
+				name: "HTTPError",
+				response: { statusCode: 400, body: '{"errors":[{"code":1000,"message":"An error occurred while decoding license token."}]}' },
+			}),
+		});
+		const err = await makeDz().get_tracks_url(["t1"], "FLAC").catch((e) => e);
+		expect(err).toBeInstanceOf(DeezerError);
+		expect(err).not.toBeInstanceOf(WrongLicense);
+		expect(err).not.toBeInstanceOf(DeezerNetworkError);
+	});
+
+	it("does not read an entry code 2001 as a licence refusal (was: 2001 mapped to WrongLicense; Deezer's x001 codes are token expiries, x002 the rights refusal)", async () => {
+		getUrlReplies({ ok: { data: [{ errors: [{ code: 2001, message: "Track token has expired." }] }] } });
 		const [entry] = await makeDz().get_tracks_url(["t1"], "FLAC");
-		expect(entry).toBeInstanceOf(WrongLicense);
+		expect(entry).toBeInstanceOf(DeezerError);
+		expect(entry).not.toBeInstanceOf(WrongLicense);
 	});
 
 	it("does not crash when the response has no data array (was: TypeError on response.data.length)", async () => {
