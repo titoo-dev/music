@@ -3,6 +3,7 @@ import fs from "fs";
 import { R2StorageProvider } from "./R2StorageProvider";
 import { StorageNotFoundError, StorageUnavailableError } from "./objects";
 import { _resetR2Client } from "./r2";
+import { AwsClient } from "aws4fetch";
 
 const BASE = "https://acct.r2.cloudflarestorage.com/bucket";
 const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
@@ -81,6 +82,29 @@ describe("R2StorageProvider", () => {
 		expect(init?.body).toBeInstanceOf(Uint8Array);
 		expect((init?.body as Uint8Array).byteLength).toBe(3);
 		expect(new Headers(init?.headers).get("authorization")).toMatch(/^AWS4-HMAC-SHA256 /);
+	});
+
+	it("uploads a view of the caller's buffer instead of a copy (was: finalizeStream read the file then copied it again into a new Uint8Array)", async () => {
+		const data = Buffer.from("tagged-audio-bytes");
+
+		await provider.writeFile("tracks/1/3.mp3", data);
+
+		const [, init] = fetchMock.mock.calls[0];
+		const body = init?.body as Uint8Array;
+		expect(body.buffer).toBe(data.buffer);
+		expect(body.byteOffset).toBe(data.byteOffset);
+		expect(body.byteLength).toBe(data.byteLength);
+	});
+
+	it("signs uploads without handing the body to the signer (was: aws4fetch wrapped the whole track in a Request copy just to sign an UNSIGNED-PAYLOAD)", async () => {
+		const sign = vi.spyOn(AwsClient.prototype, "sign");
+
+		await provider.writeFile("tracks/1/3.mp3", Buffer.from("abc"));
+
+		expect(sign).toHaveBeenCalledOnce();
+		expect((sign.mock.calls[0][1] as RequestInit | undefined)?.body).toBeUndefined();
+		const [, init] = fetchMock.mock.calls[0];
+		expect(new Headers(init?.headers).get("x-amz-content-sha256")).toBe("UNSIGNED-PAYLOAD");
 	});
 
 	describe("stream → tag → finalize pipeline", () => {

@@ -71,11 +71,15 @@ const RETRY_DELAYS_MS = [50, 150];
  * original bytes: handing fetch the signed `Request` makes Next's patched
  * fetch re-stream its body chunked, and R2 rejects a PUT without
  * Content-Length (411 MissingContentLength).
+ *
+ * The body is never handed to the signer: aws4fetch signs S3 requests with
+ * UNSIGNED-PAYLOAD, so the body is not part of the signature, and passing it
+ * would only make aws4fetch copy the whole track into a throwaway Request.
  */
 export async function r2Fetch(url: string, init: RequestInit = {}): Promise<Response> {
 	const { aws } = client();
 	try {
-		const signed = await aws.sign(url, init);
+		const signed = await aws.sign(url, { ...init, body: undefined });
 		for (let attempt = 0; ; attempt++) {
 			const res = await fetch(signed.url, {
 				method: signed.method,
