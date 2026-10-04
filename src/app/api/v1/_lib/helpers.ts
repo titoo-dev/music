@@ -152,7 +152,11 @@ export async function getGuestOrUserDz(request: NextRequest) {
 
 // ── Error wrapper ──
 
+/**
+ * 500 INTERNAL_ERROR with a generic message: internal error text (Prisma,
+ * Deezer, R2 — hosts, tables, sometimes tokens) is only logged server-side.
+ */
 export function handleError(e: unknown) {
-	const message = e instanceof Error ? e.message : "Unknown error";
-	return fail("INTERNAL_ERROR", message, 500);
+	console.error("[api] unhandled error:", e);
+	return fail("INTERNAL_ERROR", "An unexpected error occurred.", 500);
 }

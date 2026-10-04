@@ -693,40 +693,45 @@ describe("getGuestOrUserDz()", () => {
 // ────────────────────────────────────────────────────────────
 
 describe("handleError()", () => {
-	it("wraps Error instances with their message and INTERNAL_ERROR/500", async () => {
-		const res = handleError(new Error("kaboom"));
+	// C8: a 500 never carries the internal error text (Prisma / Deezer / R2
+	// messages can name tables, hosts or tokens); the detail is logged.
+	const GENERIC = { code: "INTERNAL_ERROR", message: "An unexpected error occurred." };
+
+	it("answers a generic INTERNAL_ERROR/500 and logs the detail server-side (was: the raw e.message was sent to the client)", async () => {
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+		const err = new Error("connect ECONNREFUSED db.internal:5432");
+		const res = handleError(err);
 		expect(res.status).toBe(500);
 		const body = await readJson<{ error: { code: string; message: string } }>(
 			res
 		);
-		expect(body?.error).toEqual({
-			code: "INTERNAL_ERROR",
-			message: "kaboom",
-		});
+		expect(body?.error).toEqual(GENERIC);
+		expect(JSON.stringify(body)).not.toContain("ECONNREFUSED");
+		expect(logged).toHaveBeenCalledWith(expect.any(String), err);
 	});
 
-	it("uses 'Unknown error' for non-Error values", async () => {
+	it("uses the same generic message for non-Error values", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		const res = handleError("string oops");
 		expect(res.status).toBe(500);
 		const body = await readJson<{ error: { code: string; message: string } }>(
 			res
 		);
-		expect(body?.error).toEqual({
-			code: "INTERNAL_ERROR",
-			message: "Unknown error",
-		});
+		expect(body?.error).toEqual(GENERIC);
 	});
 
-	it("uses 'Unknown error' for null/undefined", async () => {
+	it("uses the same generic message for null/undefined", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		const res = handleError(null);
 		const body = await readJson<{ error: { message: string } }>(res);
-		expect(body?.error.message).toBe("Unknown error");
+		expect(body?.error.message).toBe(GENERIC.message);
 	});
 
-	it("preserves subclassed Error messages", async () => {
+	it("does not leak subclassed Error messages either (was: preserved them)", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		class MyErr extends Error {}
 		const res = handleError(new MyErr("subclass"));
 		const body = await readJson<{ error: { message: string } }>(res);
-		expect(body?.error.message).toBe("subclass");
+		expect(body?.error.message).toBe(GENERIC.message);
 	});
 });

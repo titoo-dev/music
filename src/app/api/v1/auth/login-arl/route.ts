@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 		// Never hand the license token to the client (it requests media as this account)
 		return ok(deezerAccountPayload(dz));
 	} catch (e) {
-		console.error("[login-arl] Error:", e);
+		// handleError logs the detail server-side.
 		return handleError(e);
 	}
 }
