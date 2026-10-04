@@ -204,6 +204,36 @@ describe("AudioEngine — Web Audio", () => {
 		expect(isRouted(el as unknown as HTMLAudioElement)).toBe(false);
 		await waitFor(() => expect(el.volume).toBeCloseTo(0.8));
 	});
+
+	it("routes the element once the context runs, and its volume moves to its GainNode", async () => {
+		const node = () => ({ connect: vi.fn(), disconnect: vi.fn(), fftSize: 0, smoothingTimeConstant: 0 });
+		const gains: { gain: { value: number } }[] = [];
+		const ctx = {
+			state: "running",
+			destination: node(),
+			resume: vi.fn(async () => {}),
+			createAnalyser: vi.fn(node),
+			createMediaElementSource: vi.fn(node),
+			createGain: vi.fn(() => {
+				const g = { ...node(), gain: { value: 1 } };
+				gains.push(g);
+				return g;
+			}),
+		};
+		__setAudioContextFactory(() => ctx as unknown as AudioContext);
+		initAudioCtx();
+		render(<AudioEngine />);
+		act(() => usePlayerStore.getState().play(track("1")));
+		const el = await waitFor(() => elementWithSrc(/stream-progressive\/1$/));
+		act(() => el.ready(200));
+		act(() => el.tick(1));
+		const audio = el as unknown as HTMLAudioElement;
+		expect(isRouted(audio)).toBe(true);
+		await waitFor(() => expect(getElementVolume(audio)).toBeCloseTo(0.8));
+		// element.volume stays at 1 (read-only on iOS); the last GainNode is the volume.
+		expect(el.volume).toBe(1);
+		expect(gains.at(-1)?.gain.value).toBeCloseTo(0.8);
+	});
 });
 
 describe("AudioEngine — prefetch never persists", () => {
