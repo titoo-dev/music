@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { ok, fail, handleError, requireDeezer } from "../../_lib/helpers";
 import { saveSelectedAccount } from "@/lib/deezer-session";
+import { toPublicDeezerUser } from "@/lib/deezer/public-user";
 
 export async function POST(request: NextRequest) {
 	try {
@@ -21,10 +22,11 @@ export async function POST(request: NextRequest) {
 		// Persist the choice: a cold restore (other instance, after TTL) logs into the same child.
 		await saveSelectedAccount(userId, dz);
 
+		// Never hand the license token to the client (it requests media as this account)
 		return ok({
-			user,
+			user: toPublicDeezerUser(user),
 			selectedAccount,
-			childs: dz.childs,
+			childs: (dz.childs ?? []).map(toPublicDeezerUser),
 		});
 	} catch (e) {
 		return handleError(e);

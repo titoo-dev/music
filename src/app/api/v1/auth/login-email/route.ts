@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { setUserDz } from "@/lib/server-state";
 import { saveDeezerCredential } from "@/lib/deezer-session";
+import { deezerAccountPayload } from "@/lib/deezer/public-user";
 import { ok, fail, handleError, requireUser } from "../../_lib/helpers";
 
 export async function POST(request: NextRequest) {
@@ -32,12 +33,8 @@ export async function POST(request: NextRequest) {
 			await saveDeezerCredential(userResult.userId, arl, dz);
 		}
 
-		return ok({
-			user: dz.currentUser,
-			childs: dz.childs,
-			currentChild: dz.selectedAccount,
-			hasMultipleAccounts: dz.childs.length > 1,
-		});
+		// Never hand the license token to the client (it requests media as this account)
+		return ok(deezerAccountPayload(dz));
 	} catch (e) {
 		return handleError(e);
 	}

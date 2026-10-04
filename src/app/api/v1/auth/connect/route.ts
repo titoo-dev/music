@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { restoreUserDz } from "@/lib/deezer-session";
 import { encryptSecret } from "@/lib/secret-box";
+import { toPublicDeezerUser } from "@/lib/deezer/public-user";
 import { ok, handleError } from "../../_lib/helpers";
 
 export async function GET(request: NextRequest) {
@@ -70,7 +71,8 @@ export async function GET(request: NextRequest) {
 				}
 
 				if (dz?.loggedIn) {
-					deezerUser = dz.currentUser;
+					// Never hand the license token to the client (it requests media as this account)
+					deezerUser = toPublicDeezerUser(dz.currentUser);
 					deezerLoggedIn = true;
 				}
 			}
