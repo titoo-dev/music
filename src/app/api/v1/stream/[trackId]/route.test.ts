@@ -127,7 +127,7 @@ describe("GET /api/v1/stream/[trackId]", () => {
 			contentRange: "bytes */12345",
 			contentType: "audio/mpeg",
 			statusCode: 416,
-		} as any);
+		});
 
 		const res = await GET(
 			makeNextRequest({ headers: { range: "bytes=99999-" } }),
