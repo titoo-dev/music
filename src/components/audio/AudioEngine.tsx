@@ -699,7 +699,10 @@ export function AudioEngine() {
 			++loadGenRef.current;
 			pendingSeekRef.current = null;
 			seekCheckRef.current = null;
-			resumePositionRef.current = null;
+			// The hydration render also lands here (the store's initial snapshot
+			// has no track yet): keep the position restored for the page refresh
+			// unless a track had really been loaded (was: refresh restarted at 0).
+			if (prevTrackIdRef.current !== null) resumePositionRef.current = null;
 			timers.clear();
 			autoSkip.cancel();
 			cancelHandoffRef.current?.();

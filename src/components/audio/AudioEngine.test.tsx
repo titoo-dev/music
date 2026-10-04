@@ -368,6 +368,29 @@ describe("AudioEngine — stop", () => {
 	}, 20_000);
 });
 
+describe("AudioEngine — session restore", () => {
+	it("a page refresh resumes where the track was left (was: the hydration render took the stop path and dropped the restored position, so it restarted at 0)", async () => {
+		stored["1"] = "https://r2.example/tracks/1/1.mp3?sig=1";
+		usePlayerStore.setState({ currentTrack: track("1"), queue: [track("1")], queueIndex: 0 });
+		localStorage.setItem("wavelet-resume", JSON.stringify({ trackId: "1", time: 103.75, ts: Date.now() }));
+		// Like the page load: React hydrates with the store's initial snapshot
+		// (no track yet), then re-renders with the rehydrated one.
+		const container = document.createElement("div");
+		document.body.appendChild(container);
+		const { hydrateRoot } = await import("react-dom/client");
+		let root!: ReturnType<typeof hydrateRoot>;
+		await act(async () => {
+			root = hydrateRoot(container, <AudioEngine />);
+		});
+		const el = await waitFor(() => elementWithSrc(/r2\.example\/tracks\/1\//));
+		el.seekable = ranges([[0, 320]]);
+		act(() => el.ready(320));
+		expect(el.currentTime).toBeCloseTo(103.75);
+		act(() => root.unmount());
+		container.remove();
+	});
+});
+
 describe("AudioEngine — source recovery", () => {
 	it("a presigned URL failing while still valid falls back to the proxy for that track, at the same position", async () => {
 		stored["1"] = "https://r2.example/tracks/1/1.mp3?sig=1";
