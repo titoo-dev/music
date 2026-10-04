@@ -81,7 +81,10 @@ npm run test:watch   # Vitest watch mode
 npm run test:coverage # Coverage with thresholds (gate used by CI)
 npm run openapi      # Regenerate openapi.json (scripts/generate-openapi.mjs) — update it when a v1 route changes
 npm run openapi:dart # Regenerate the Dart client in clients/dart (Docker + Dart SDK)
+npm run e2e          # Browser checks of the critical flows + gapless on a production build (Docker, Chrome, Deezer, dev R2 — see e2e/README.md)
 ```
+
+Run `npm run e2e` before merging changes to playback, streaming routes, auth or storage: it is not part of CI (it plays real Deezer tracks and writes to the dev R2 bucket, then cleans up).
 
 If `tsc --noEmit` reports errors in `pathtemplates.ts` / `Track.ts`, delete `tsconfig.tsbuildinfo` first: a stale incremental file produces them, not the code.
 
