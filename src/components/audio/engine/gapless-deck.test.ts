@@ -21,7 +21,7 @@ class FakeElement extends EventTarget {
 type FileSpec = Uint8Array | (() => Response);
 
 function setup(files: Record<string, FileSpec>, extra: Partial<DeckDeps> = {}) {
-	const fetchImpl = vi.fn(async (url: string, _init?: RequestInit) => {
+	const fetchImpl = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async (url) => {
 		const f = files[url];
 		if (!f) return new Response("missing", { status: 404 });
 		return typeof f === "function" ? f() : mp3Response(f).response;

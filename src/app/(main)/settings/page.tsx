@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronRight, CloudDownload, Info, LogOut, Monitor, Moon, Sun, TriangleAlert, Volume2 } from "lucide-react";
+import { ChevronRight, CloudDownload, Info, LogOut, Monitor, Moon, Sun, TriangleAlert, Volume2, Waves } from "lucide-react";
 import { AudioCacheManager } from "@/components/audio/AudioCacheManager";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -82,6 +82,8 @@ export default function SettingsPage() {
 	const toggleNormalization = usePlayerStore((s) => s.toggleNormalization);
 	const crossfadeDuration = usePlayerStore((s) => s.crossfadeDuration);
 	const setCrossfadeDuration = usePlayerStore((s) => s.setCrossfadeDuration);
+	const gapless = usePlayerStore((s) => s.gapless);
+	const toggleGapless = usePlayerStore((s) => s.toggleGapless);
 
 	const user = useAuthStore((s) => s.user);
 	const deezerUser = useAuthStore((s) => s.deezerUser);
@@ -174,6 +176,17 @@ export default function SettingsPage() {
 										/>
 									)}
 									<CrossfadeTile seconds={crossfadeDuration} onChange={setCrossfadeDuration} />
+								<SettingsSwitchTile
+									icon={Waves}
+									title="Gapless playback"
+									subtitle={
+										gapless && crossfadeDuration > 0
+											? "Paused while crossfade is on."
+											: "No silence between the tracks of a live album or a mix (stored MP3s)."
+									}
+									checked={gapless}
+									onCheckedChange={() => toggleGapless()}
+								/>
 									<AudioCacheManager />
 								</SettingsSection>
 							</div>
