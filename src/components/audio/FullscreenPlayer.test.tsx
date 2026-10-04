@@ -119,6 +119,13 @@ describe("FullscreenPlayer", () => {
 		expect(right).toContainElement(screen.getByRole("button", { name: "Track actions" }));
 	});
 
+	it("turns gapless playback on from the audio settings, next to crossfade", async () => {
+		render(<FullscreenPlayer />);
+		await userEvent.click(screen.getByRole("button", { name: "Audio settings" }));
+		await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: /Gapless playback/ }));
+		expect(usePlayerStore.getState().gapless).toBe(true);
+	});
+
 	it("closes from the chevron", async () => {
 		render(<FullscreenPlayer />);
 		await userEvent.click(screen.getByRole("button", { name: "Close fullscreen player" }));

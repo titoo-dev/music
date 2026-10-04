@@ -25,6 +25,7 @@ import { CoverTheme, EASE, SPRING } from "@/components/expressive";
 import { SaveButton } from "@/components/tracks/SaveButton";
 import { SeekBar } from "./SeekBar";
 import { WaveSeek } from "./WaveSeek";
+import { GaplessMenuItem } from "./GaplessMenuItem";
 import { cn } from "@/lib/utils";
 import { ArtistLink } from "@/components/links/EntityLink";
 import { toast } from "sonner";
@@ -184,6 +185,8 @@ export function Player() {
 	const setCrossfadeDuration = usePlayerStore((s) => s.setCrossfadeDuration);
 	const normalizationEnabled = usePlayerStore((s) => s.normalizationEnabled);
 	const toggleNormalization = usePlayerStore((s) => s.toggleNormalization);
+	const gapless = usePlayerStore((s) => s.gapless);
+	const toggleGapless = usePlayerStore((s) => s.toggleGapless);
 	const setFullscreenOpen = usePlayerStore((s) => s.setFullscreenOpen);
 	const queuePanelOpen = usePlayerStore((s) => s.queuePanelOpen);
 	const setQueuePanelOpen = usePlayerStore((s) => s.setQueuePanelOpen);
@@ -524,6 +527,7 @@ export function Player() {
 										<DropdownMenuCheckboxItem checked={normalizationEnabled} onClick={toggleNormalization} className="rounded-xl py-2">
 											Loudness normalization
 										</DropdownMenuCheckboxItem>
+										<GaplessMenuItem on={gapless} crossfade={crossfadeDuration > 0} onToggle={toggleGapless} />
 										<DropdownMenuSeparator />
 										<DropdownMenuItem onClick={stop} variant="destructive" className="gap-2.5 rounded-xl px-2.5 py-2">
 											<X className="size-4" />

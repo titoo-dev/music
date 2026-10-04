@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
@@ -63,6 +63,18 @@ describe("Player", () => {
 		await userEvent.click(screen.getByRole("button", { name: "More player options" }));
 		await userEvent.click(await screen.findByRole("button", { name: "3s" }));
 		expect(usePlayerStore.getState().crossfadeDuration).toBe(3);
+	});
+
+	it("turns gapless playback on from the More menu, and says it waits while crossfade is on", async () => {
+		renderPlayer();
+		await userEvent.click(screen.getByRole("button", { name: "More player options" }));
+		const item = await screen.findByRole("menuitemcheckbox", { name: /Gapless playback/ });
+		expect(item).toHaveAttribute("aria-checked", "false");
+		await userEvent.click(item);
+		expect(usePlayerStore.getState().gapless).toBe(true);
+		expect(screen.queryByText("Paused while crossfade is on")).toBeNull();
+		act(() => usePlayerStore.setState({ crossfadeDuration: 3 }));
+		expect(await screen.findByText("Paused while crossfade is on")).toBeInTheDocument();
 	});
 
 	it("seeks from a horizontal bar instead of the ring around the pill", () => {

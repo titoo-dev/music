@@ -16,6 +16,9 @@ import { getCachedBlobUrl } from "@/lib/audio-cache";
 import { presignedUrls } from "./engine/presigned-urls";
 import { resetPrefetchState } from "./engine/prefetch";
 import { __setAudioContextFactory, getElementVolume, initAudioCtx, isRouted } from "@/utils/audio-context";
+import { FakeMediaSource, mp3Response, settle } from "@/test/helpers/fake-mse";
+import { buildMp3, type Mp3Options } from "@/test/helpers/mp3";
+import { parseGaplessInfo, type GaplessInfo } from "./engine/mp3-gapless";
 
 // AudioEngine drives <audio> elements imperatively (new Audio()). This fake
 // element records what the engine asks of it, and the tests play the
@@ -470,5 +473,321 @@ describe("AudioEngine — long pause on a presigned URL", () => {
 		act(() => el.ready(200));
 		expect(el.currentTime).toBe(42);
 		expect(el.paused).toBe(false);
+	});
+});
+
+// --- Gapless runs (MSE deck) ------------------------------------------------
+
+describe("AudioEngine — gapless runs", () => {
+	const SR = 44100;
+	// 2000 frames ≈ 52.2 s; 4100 frames ≈ 107 s.
+	const mp3 = (frames: number, fill: number, extra: Partial<Mp3Options> = {}) => buildMp3({ frames, fill: () => fill, ...extra });
+	const FLAC = Uint8Array.from("fLaC" + "\0".repeat(600), (c) => c.charCodeAt(0));
+	let files: Record<string, Uint8Array>;
+	let objectUrls: number;
+	const revoked: string[] = [];
+	const musicEnd = (file: Uint8Array) => (parseGaplessInfo(file) as { info: GaplessInfo }).info.totalSamples / SR;
+
+	beforeEach(() => {
+		FakeMediaSource.reset();
+		vi.stubGlobal("MediaSource", FakeMediaSource);
+		objectUrls = 0;
+		revoked.length = 0;
+		// The element attaches the source asynchronously, like a browser.
+		Object.defineProperty(URL, "createObjectURL", {
+			configurable: true,
+			value: (ms: FakeMediaSource) => {
+				setTimeout(() => ms.open(), 0);
+				return `blob:http://localhost/ms-${++objectUrls}`;
+			},
+		});
+		Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: (u: string) => revoked.push(u) });
+		files = { "1": mp3(2000, 0x11), "2": mp3(2000, 0x22), "3": mp3(2000, 0x33) };
+		for (const id of Object.keys(files)) stored[id] = `https://r2.example/tracks/${id}/1.mp3?sig=1`;
+		const base = fetchMock.getMockImplementation() as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+		fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+			const m = /^https:\/\/r2\.example\/tracks\/([^/]+)\//.exec(String(input));
+			if (m && files[m[1]]) return mp3Response(files[m[1]]).response;
+			return base(input, init);
+		});
+		usePlayerStore.setState({ gapless: true });
+	});
+
+	afterEach(() => {
+		delete (URL as unknown as Record<string, unknown>).createObjectURL;
+		delete (URL as unknown as Record<string, unknown>).revokeObjectURL;
+	});
+
+	const queue = () => ["1", "2", "3"].map(track);
+	const deckElements = () => FakeAudio.all.filter((a) => a.src.startsWith("blob:http://localhost/ms-"));
+	const r2Elements = (id: string) => FakeAudio.all.filter((a) => a.src.startsWith(`https://r2.example/tracks/${id}/`));
+	const nextAppended = () =>
+		waitFor(() => expect(FakeMediaSource.instances[0].sb.appends.some((a) => a.firstFill === 0x22)).toBe(true));
+	const lastDeck = (not?: FakeAudio) =>
+		waitFor(() => {
+			const d = deckElements().at(-1);
+			if (!d || d === not) throw new Error("no deck yet");
+			return d;
+		});
+
+	/** Start the queue at `index` and let the deck open, append and report ready. */
+	async function startRun(index = 0) {
+		render(<AudioEngine />);
+		const q = queue();
+		act(() => usePlayerStore.getState().play(q[index], q));
+		const el = await lastDeck();
+		await act(() => settle());
+		act(() => el.ready(Infinity));
+		return el;
+	}
+
+	/** Play the run from `from` to `to` (timeline seconds), a timeupdate every 0.25 s. */
+	async function playTo(el: FakeAudio, from: number, to: number) {
+		act(() => {
+			for (let x = from; x <= to; x += 0.25) el.tick(x);
+		});
+		await act(() => settle());
+	}
+
+	it("plays a run of cached MP3 tracks on one element and moves the queue at the boundary", async () => {
+		const el = await startRun();
+		expect(el.plays).toBe(1);
+		const end1 = musicEnd(files["1"]);
+		expect(usePlayerStore.getState().duration).toBeCloseTo(end1, 6);
+		// From halfway on, the run lines the next track up itself: no element for it.
+		await playTo(el, 0, 30);
+		await nextAppended();
+		expect(r2Elements("2")).toEqual([]);
+
+		act(() => el.tick(end1 - 0.1));
+		expect(usePlayerStore.getState().currentTrack?.trackId).toBe("1");
+		act(() => el.tick(end1 + 0.3));
+		const s = usePlayerStore.getState();
+		expect(s.currentTrack?.trackId).toBe("2");
+		expect(s.queueIndex).toBe(1);
+		expect(s.isBuffering).toBe(false);
+		expect(s.duration).toBeCloseTo(musicEnd(files["2"]), 6);
+		expect(s.currentTime).toBeCloseTo(0.3, 6);
+		// Still the same element, still playing at full volume: nothing reloads.
+		await act(() => settle());
+		expect(deckElements()).toEqual([el]);
+		expect(el.paused).toBe(false);
+		expect(el.volume).toBeCloseTo(0.8);
+	});
+
+	it("seeks within the current track of the run", async () => {
+		const el = await startRun();
+		const end1 = musicEnd(files["1"]);
+		await playTo(el, 0, 30);
+		await nextAppended();
+		act(() => el.tick(end1 + 0.5));
+		act(() => usePlayerStore.getState().seek(12));
+		expect(el.currentTime).toBeCloseTo(end1 + 12, 6);
+		expect(usePlayerStore.getState()._seekTo).toBeNull();
+		act(() => el.tick(end1 + 12.25));
+		expect(usePlayerStore.getState().currentTime).toBeCloseTo(12.25, 6);
+	});
+
+	it("pauses and resumes the run's element", async () => {
+		const el = await startRun();
+		act(() => usePlayerStore.getState().pause());
+		await waitFor(() => expect(el.paused).toBe(true));
+		act(() => usePlayerStore.getState().resume());
+		expect(el.paused).toBe(false);
+		expect(el.plays).toBe(2);
+	});
+
+	it("counts a play after 30 s listened in a run, and starts the next track's count at the boundary", async () => {
+		const recentPlays = () => fetchMock.mock.calls.filter(([u]) => String(u) === "/api/v1/recent-plays");
+		const el = await startRun();
+		await playTo(el, 0, 31);
+		expect(recentPlays()).toHaveLength(1);
+		expect(JSON.parse(String(recentPlays()[0][1]?.body)).trackId).toBe("1");
+		await nextAppended();
+		const end1 = musicEnd(files["1"]);
+		await playTo(el, end1 - 0.5, end1 + 31);
+		expect(recentPlays()).toHaveLength(2);
+		expect(JSON.parse(String(recentPlays()[1][1]?.body)).trackId).toBe("2");
+	});
+
+	it("updates the Media Session at the boundary, in track time", async () => {
+		const session = { metadata: null as unknown, playbackState: "", setActionHandler: vi.fn(), setPositionState: vi.fn() };
+		vi.stubGlobal(
+			"MediaMetadata",
+			class {
+				constructor(public init: { title: string }) {}
+			}
+		);
+		Object.defineProperty(navigator, "mediaSession", { configurable: true, value: session });
+		try {
+			const el = await startRun();
+			const title = () => (session.metadata as { init: { title: string } }).init.title;
+			expect(title()).toBe("Track 1");
+			await playTo(el, 0, 30);
+			await nextAppended();
+			act(() => el.tick(musicEnd(files["1"]) + 1));
+			expect(title()).toBe("Track 2");
+			expect(session.setPositionState).toHaveBeenLastCalledWith(expect.objectContaining({ position: expect.closeTo(1, 6) }));
+		} finally {
+			delete (navigator as unknown as Record<string, unknown>).mediaSession;
+		}
+	});
+
+	it("a track the user picks leaves the run cleanly (and may start its own)", async () => {
+		const el = await startRun();
+		act(() => usePlayerStore.getState().next());
+		expect(revoked).toEqual(["blob:http://localhost/ms-1"]);
+		expect(el.src).not.toMatch(/^blob:/);
+		const second = await lastDeck(el);
+		await act(() => settle());
+		expect(FakeMediaSource.instances).toHaveLength(2);
+		act(() => second.ready(Infinity));
+		expect(usePlayerStore.getState().currentTrack?.trackId).toBe("2");
+		expect(second.plays).toBe(1);
+	});
+
+	it("stop ends the run", async () => {
+		const el = await startRun();
+		act(() => usePlayerStore.getState().stop());
+		expect(revoked).toEqual(["blob:http://localhost/ms-1"]);
+		expect(el.paused).toBe(true);
+		expect(el.src).not.toMatch(/^blob:/);
+	});
+
+	it("a page refresh resumes a gapless track where it was left", async () => {
+		files["1"] = mp3(4100, 0x11);
+		usePlayerStore.setState({ currentTrack: track("1"), queue: queue(), queueIndex: 0 });
+		localStorage.setItem("wavelet-resume", JSON.stringify({ trackId: "1", time: 103.75, ts: Date.now() }));
+		render(<AudioEngine />);
+		const el = await lastDeck();
+		await act(() => settle());
+		act(() => el.ready(Infinity));
+		expect(el.currentTime).toBeCloseTo(103.75, 6);
+		expect(el.plays).toBe(0);
+		await act(() => settle());
+		// Re-appended from memory at the restored position.
+		expect(FakeMediaSource.instances[0].sb.removes).toContainEqual([0, Infinity]);
+	});
+
+	it("a next track that can't join ends the run; the queue goes on on the plain path", async () => {
+		files["2"] = FLAC;
+		const el = await startRun();
+		await playTo(el, 0, 30);
+		const ms = FakeMediaSource.instances[0];
+		await waitFor(() => expect(ms.endOfStreamCalls).toBe(1));
+		// The plain path preloads it instead.
+		act(() => el.tick(31));
+		await waitFor(() => expect(r2Elements("2")).toHaveLength(1));
+		act(() => el.fire("ended"));
+		expect(usePlayerStore.getState().currentTrack?.trackId).toBe("2");
+		expect(revoked).toEqual(["blob:http://localhost/ms-1"]);
+	});
+
+	it("sign-out drops the next track the run lined up", async () => {
+		const { useAuthStore } = await import("@/stores/useAuthStore");
+		useAuthStore.setState({ user: { id: "u1" } as never });
+		const el = await startRun();
+		await playTo(el, 0, 30);
+		await nextAppended();
+		act(() => useAuthStore.setState({ user: null }));
+		await act(() => settle());
+		expect(FakeMediaSource.instances[0].sb.removes).toContainEqual([musicEnd(files["1"]), Infinity]);
+	});
+
+	describe("falls back to the plain path", () => {
+		const plainStart = async (id = "1") => {
+			render(<AudioEngine />);
+			const q = queue();
+			act(() => usePlayerStore.getState().play(q[Number(id) - 1], q));
+			return waitFor(() => {
+				const el = r2Elements(id).at(-1);
+				if (!el) throw new Error("no plain element");
+				return el;
+			});
+		};
+
+		it("with the setting off: today's path exactly, no Media Source", async () => {
+			usePlayerStore.setState({ gapless: false });
+			const el = await plainStart();
+			act(() => el.ready(200));
+			expect(el.plays).toBe(1);
+			expect(FakeMediaSource.instances).toEqual([]);
+		});
+
+		it("with crossfade on", async () => {
+			usePlayerStore.setState({ crossfadeDuration: 3 });
+			await plainStart();
+			expect(FakeMediaSource.instances).toEqual([]);
+		});
+
+		it("without MSE for MP3", async () => {
+			FakeMediaSource.supported = false;
+			await plainStart();
+			expect(FakeMediaSource.instances).toEqual([]);
+		});
+
+		it("for a track the server never stored (live stream)", async () => {
+			delete stored["1"];
+			render(<AudioEngine />);
+			act(() => usePlayerStore.getState().play(track("1"), queue()));
+			await waitFor(() => elementWithSrc(/stream-progressive\/1$/));
+			expect(FakeMediaSource.instances).toEqual([]);
+		});
+
+		it("when the next track isn't stored", async () => {
+			delete stored["2"];
+			await plainStart();
+			expect(FakeMediaSource.instances).toEqual([]);
+		});
+
+		it("for a FLAC file", async () => {
+			files["1"] = FLAC;
+			const el = await plainStart();
+			act(() => el.ready(200));
+			expect(el.plays).toBe(1);
+			expect(FakeMediaSource.instances).toEqual([]);
+		});
+
+		it("for an MP3 without a LAME tag", async () => {
+			files["1"] = mp3(500, 0x11, { lame: false });
+			await plainStart();
+			expect(FakeMediaSource.instances).toEqual([]);
+		});
+
+		it("when the SourceBuffer runs out of quota mid-run: same position, and the rest of the run stays plain", async () => {
+			files["1"] = mp3(4100, 0x11);
+			const el = await startRun();
+			await playTo(el, 0, 20);
+			const sb = FakeMediaSource.instances[0].sb;
+			sb.throwOnAppend = { name: "QuotaExceededError", times: 99 };
+			// A jump ahead needs more appended than the browser will take.
+			act(() => el.tick(50));
+			await act(() => settle());
+			const plain = await waitFor(() => {
+				const p = r2Elements("1").at(-1);
+				if (!p) throw new Error("no plain element");
+				return p;
+			});
+			expect(revoked).toEqual(["blob:http://localhost/ms-1"]);
+			act(() => plain.ready(200));
+			expect(plain.currentTime).toBeCloseTo(50, 6);
+			expect(plain.plays).toBe(1);
+			act(() => plain.fire("ended"));
+			await waitFor(() => expect(r2Elements("2").length).toBeGreaterThan(0));
+			expect(FakeMediaSource.instances).toHaveLength(1);
+		});
+
+		it("when the run's element errors", async () => {
+			const el = await startRun();
+			await playTo(el, 0, 8);
+			act(() => el.fail(3));
+			const plain = await waitFor(() => {
+				const p = r2Elements("1").at(-1);
+				if (!p) throw new Error("no plain element");
+				return p;
+			});
+			act(() => plain.ready(200));
+			expect(plain.currentTime).toBeCloseTo(8, 6);
+		});
 	});
 });
