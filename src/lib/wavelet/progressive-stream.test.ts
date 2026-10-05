@@ -49,7 +49,7 @@ function gwTrack(id: number) {
 	return { SNG_ID: id, SNG_TITLE: "T", TRACK_TOKEN: `tok-${id}`, EXPLICIT_TRACK_CONTENT: {}, MEDIA: [] };
 }
 
-function fakeDz(user: { id?: number; can_stream_hq?: boolean; can_stream_lossless?: boolean } = { id: 7 }) {
+function fakeDz(user: { id?: number; can_stream_hq?: boolean; can_stream_lossless?: boolean } = { id: 7, can_stream_hq: true }) {
 	return {
 		currentUser: user,
 		gw: { get_track_with_fallback: vi.fn(async (id: string) => gwTrack(Number(id))) },
@@ -182,11 +182,11 @@ describe("persisting play (disk-first)", () => {
 		);
 	});
 
-	it("records requestedBitrate = min(server quality, persisting account's licence)", async () => {
+	it("records requestedBitrate = min(server quality, persisting account's licence), and a free account persists 128", async () => {
 		openMock.mockResolvedValue(fakeStream(AUDIO));
 		const free = start({ bitrate: 9, dz: fakeDz({ id: 7, can_stream_hq: false, can_stream_lossless: false }) });
 		await (await free.promise).persisted;
-		expect(prismaMock.storedTrack.upsert.mock.calls[0][0].create).toMatchObject({ bitrate: 3, requestedBitrate: 1 });
+		expect(prismaMock.storedTrack.upsert.mock.calls[0][0].create).toMatchObject({ bitrate: 1, requestedBitrate: 1 });
 
 		openMock.mockResolvedValue(fakeStream(AUDIO));
 		const hq = start({ bitrate: 9, dz: fakeDz({ id: 8, can_stream_hq: true, can_stream_lossless: false }) });
@@ -413,6 +413,16 @@ describe("resolveStreamTrack", () => {
 		expect(a.gw.get_track_with_fallback).toHaveBeenCalledTimes(1);
 		expect(b.gw.get_track_with_fallback).toHaveBeenCalledTimes(1);
 		expect(gwTrackCache.get(gwTrackKey(8, "43"))).toMatchObject({ TRACK_TOKEN: "tok-43" });
+	});
+
+	it("asks Deezer for the licence-capped format (was: free account + server 320 → WrongLicense on every play)", async () => {
+		const free = fakeDz({ id: 7, can_stream_hq: false, can_stream_lossless: false });
+		await resolveStreamTrack(free, "42", 3, settings);
+		expect(preferredMock.mock.calls.at(-1)?.[2]).toBe(1);
+
+		const hq = fakeDz({ id: 8, can_stream_hq: true, can_stream_lossless: false });
+		await resolveStreamTrack(hq, "42", 9, settings);
+		expect(preferredMock.mock.calls.at(-1)?.[2]).toBe(3);
 	});
 
 	it("rejects local tracks and tracks without a URL as unavailable", async () => {
