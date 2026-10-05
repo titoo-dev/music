@@ -119,10 +119,12 @@ export async function resolveStreamTrack(dz: Deezer, trackId: string, bitrate: n
 		throw new TrackUnavailableError("Local tracks are not supported in progressive streaming");
 	}
 
+	// Ask for what this account may stream: with fallbackBitrate off, a server
+	// quality above the licence (e.g. 320 on a free account) is a WrongLicense.
 	const resolvedBitrate = await getPreferredBitrate(
 		dz,
 		track,
-		bitrate,
+		capByLicence(bitrate, licenceFromDeezerUser(dz.currentUser)),
 		settings.fallbackBitrate,
 		settings.feelingLucky,
 		"",
