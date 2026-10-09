@@ -465,6 +465,7 @@ export function TrackActionSheet() {
 					duration={track.duration}
 					title={track.title}
 					artist={track.artist}
+					album={track.albumTitle ?? null}
 					cover={track.cover ?? null}
 					onShared={closeSheet}
 				/>

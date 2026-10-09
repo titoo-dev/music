@@ -511,6 +511,7 @@ function ActionPill({ lyrics, onToggleLyrics }: { lyrics: boolean; onToggleLyric
 						duration={currentTrack.duration}
 						title={currentTrack.title}
 						artist={currentTrack.artist}
+						album={currentTrack.album ?? null}
 						cover={currentTrack.cover}
 					/>
 				</>

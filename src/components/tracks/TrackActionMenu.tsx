@@ -504,6 +504,7 @@ export function TrackActionMenu({
 				duration={track.duration}
 				title={track.title}
 				artist={track.artist}
+				album={track.albumTitle ?? null}
 				cover={track.cover ?? null}
 			/>
 		</>

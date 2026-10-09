@@ -18,11 +18,27 @@ export async function POST(request: NextRequest) {
 			return fail("MISSING_TRACK_ID", "trackId is required.", 400);
 		}
 
-		// Reuse an existing share by this user for the same track if any
+		const title = typeof body?.title === "string" ? body.title.trim() : "";
+		const artist = typeof body?.artist === "string" ? body.artist.trim() : "";
+		if (!title || !artist) {
+			return fail("MISSING_METADATA", "title and artist are required.", 400);
+		}
+
+		// Reuse this user's live share for the same track; expired ones are
+		// dropped (they would otherwise come back as a dead link forever and
+		// keep anchoring the cached file).
+		const now = new Date();
 		const existing = await prisma.sharedTrack.findFirst({
-			where: { userId: userResult.userId, trackId },
+			where: {
+				userId: userResult.userId,
+				trackId,
+				OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+			},
 		});
 		if (existing) return ok(existing);
+		await prisma.sharedTrack.deleteMany({
+			where: { userId: userResult.userId, trackId, expiresAt: { lte: now } },
+		});
 
 		const expiresAt = body?.expiresIn
 			? new Date(Date.now() + Number(body.expiresIn) * 60 * 60 * 1000)
@@ -32,8 +48,8 @@ export async function POST(request: NextRequest) {
 			userResult.userId,
 			{
 				trackId,
-				title: String(body?.title || ""),
-				artist: String(body?.artist || ""),
+				title,
+				artist,
 				album: body?.album ?? null,
 				coverUrl: body?.coverUrl ?? null,
 				duration: body?.duration ?? null,

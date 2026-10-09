@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/prisma";
 import { logoSvg } from "@/lib/logo";
+import { loadOgFont } from "./og-font";
 
 export const runtime = "nodejs";
 export const alt = "Shared track on wavelet";
@@ -52,10 +53,7 @@ export default async function OgImage({
 
 	const coverHiRes = shared.coverUrl?.replace(/\/\d+x\d+-/, "/500x500-");
 
-	// Fetch the font
-	const fontData = await fetch(
-		"https://fonts.gstatic.com/s/spacegrotest/v16/V8mDoQDjQSkFtoMM3T6r8E7mPbF4Cw.ttf"
-	).then((res) => res.arrayBuffer());
+	const fontData = await loadOgFont();
 
 	return new ImageResponse(
 		(
@@ -281,14 +279,16 @@ export default async function OgImage({
 		),
 		{
 			...size,
-			fonts: [
-				{
-					name: "Space Grotesk",
-					data: fontData,
-					style: "normal",
-					weight: 700,
-				},
-			],
+			fonts: fontData
+				? [
+						{
+							name: "Space Grotesk",
+							data: fontData,
+							style: "normal",
+							weight: 700,
+						},
+					]
+				: undefined,
 		}
 	);
 }

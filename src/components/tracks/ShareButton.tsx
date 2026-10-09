@@ -17,11 +17,12 @@ interface ShareButtonProps {
 	duration?: number | null;
 	title?: string | null;
 	artist?: string | null;
+	album?: string | null;
 	cover?: string | null;
 	className?: string;
 }
 
-export function ShareButton({ trackId, duration, title, artist, cover, className }: ShareButtonProps) {
+export function ShareButton({ trackId, duration, title, artist, album, cover, className }: ShareButtonProps) {
 	const isShared = useShareStore((s) => s.shared.has(trackId));
 	const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -55,6 +56,7 @@ export function ShareButton({ trackId, duration, title, artist, cover, className
 				duration={duration}
 				title={title}
 				artist={artist}
+				album={album}
 				cover={cover}
 			/>
 		</>

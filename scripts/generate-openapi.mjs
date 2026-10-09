@@ -539,7 +539,7 @@ const schemas = {
 			duration: nint(),
 			expiresIn: { type: "number", description: "Hours until expiry. Omit for a permanent link." },
 		},
-		["trackId"]
+		["trackId", "title", "artist"]
 	),
 	SharedTrack: obj(
 		{
@@ -1327,7 +1327,7 @@ const paths = {
 			tags: ["Shares"],
 			operationId: "createShare",
 			summary: "Create (or reuse) a public share link for a track",
-			description: "Returns 200 with the existing share if one already exists for this track, 201 otherwise. Public page: `https://wavelet.titosy.dev/share/t/{shareId}`.",
+			description: "Returns 200 with your live (unexpired) share if one already exists for this track, 201 otherwise; your expired links for the track are deleted. `title` and `artist` are required (non-blank). Public page: `https://wavelet.titosy.dev/share/t/{shareId}`.",
 			security: userAuth,
 			requestBody: body(ref("CreateShareInput")),
 			responses: {
@@ -1336,7 +1336,7 @@ const paths = {
 				...E_400,
 				...E_USER,
 			},
-			"x-error-codes": ["MISSING_TRACK_ID"],
+			"x-error-codes": ["MISSING_TRACK_ID", "MISSING_METADATA"],
 		},
 	},
 	"/api/v1/shares/{shareId}": {

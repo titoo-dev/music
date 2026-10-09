@@ -55,7 +55,9 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 	const [currentTime, setCurrentTime] = useState(0);
 	const [buffered, setBuffered] = useState(0);
 	const [duration, setDuration] = useState(initialDuration ?? 0);
-	const [loaded, setLoaded] = useState(false);
+	// Play was asked for and no audio is coming out yet.
+	const [buffering, setBuffering] = useState(false);
+	const [failed, setFailed] = useState(false);
 	const [linkCopied, setLinkCopied] = useState(false);
 
 	useEffect(() => {
@@ -69,18 +71,33 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 			if (audio.duration && isFinite(audio.duration)) {
 				setDuration(audio.duration);
 			}
-			setLoaded(true);
 		};
 		audio.ontimeupdate = () => setCurrentTime(audio.currentTime);
 		audio.onprogress = () => {
 			const b = audio.buffered;
 			if (b.length) setBuffered(b.end(b.length - 1));
 		};
+		// The element is the source of truth: OS media keys, a headset
+		// unplugged or another tab can pause it without this page asking.
+		audio.onplay = () => setIsPlaying(true);
+		audio.onpause = () => {
+			setIsPlaying(false);
+			setBuffering(false);
+		};
+		audio.onwaiting = () => setBuffering(true);
+		audio.onplaying = () => setBuffering(false);
 		audio.onended = () => {
 			setIsPlaying(false);
+			setBuffering(false);
 			setCurrentTime(0);
 		};
-		audio.oncanplay = () => setLoaded(true);
+		// The stream answers 404 / 410 / 429 / 500 with JSON: the element
+		// can't decode it and fires `error`.
+		audio.onerror = () => {
+			setFailed(true);
+			setIsPlaying(false);
+			setBuffering(false);
+		};
 
 		return () => {
 			audio.pause();
@@ -112,17 +129,28 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 		navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
 	}, [isPlaying]);
 
-	const handleToggle = useCallback(() => {
+	const play = useCallback(() => {
 		const audio = audioRef.current;
 		if (!audio) return;
-		if (isPlaying) {
-			audio.pause();
-			setIsPlaying(false);
-		} else {
-			audio.play().catch(() => {});
-			setIsPlaying(true);
-		}
-	}, [isPlaying]);
+		setFailed(false);
+		setBuffering(true);
+		// iOS loads nothing before a tap, so play() is what starts the load.
+		Promise.resolve(audio.play()).catch(() => setBuffering(false));
+	}, []);
+
+	const pause = useCallback(() => {
+		audioRef.current?.pause();
+	}, []);
+
+	const handleToggle = useCallback(() => {
+		if (isPlaying) pause();
+		else play();
+	}, [isPlaying, play, pause]);
+
+	const handleRetry = useCallback(() => {
+		audioRef.current?.load();
+		play();
+	}, [play]);
 
 	const handleSeek = (time: number) => {
 		const audio = audioRef.current;
@@ -144,8 +172,8 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 	useEffect(() => {
 		if (!("mediaSession" in navigator)) return;
 		const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
-			["play", () => handleToggle()],
-			["pause", () => handleToggle()],
+			["play", () => play()],
+			["pause", () => pause()],
 			[
 				"seekto",
 				(details) => {
@@ -169,7 +197,7 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 				} catch {}
 			}
 		};
-	}, [handleToggle]);
+	}, [play, pause]);
 
 	const sharedByLabel = `@${sharedBy.toLowerCase().replace(/\s+/g, "")}`;
 	const longTitle = title.length > 22;
@@ -252,7 +280,6 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 								<motion.button
 									type="button"
 									onClick={handleToggle}
-									disabled={!loaded}
 									aria-label={isPlaying ? "Pause" : "Play"}
 									whileTap={{ scale: 0.9 }}
 									animate={{ scale: isPlaying ? 1.06 : 1, borderRadius: isPlaying ? 999 : 26 }}
@@ -263,8 +290,8 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 									)}
 								>
 									<AnimatePresence mode="popLayout" initial={false}>
-										<motion.span key={loaded ? "ready" : "wait"} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }} className="flex">
-											{loaded ? <PlayPauseIcon playing={isPlaying} className="size-8" /> : <Spinner size={24} />}
+										<motion.span key={buffering ? "wait" : "ready"} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }} className="flex">
+											{buffering ? <Spinner size={24} /> : <PlayPauseIcon playing={isPlaying} className="size-8" />}
 										</motion.span>
 									</AnimatePresence>
 								</motion.button>
@@ -272,6 +299,19 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 									<WaveSeek currentTime={currentTime} duration={duration} buffered={buffered} playing={isPlaying} onSeek={handleSeek} />
 								</div>
 							</div>
+
+							{failed && (
+								<div role="alert" className="mt-4 flex flex-wrap items-center gap-3 rounded-[20px] bg-destructive/10 px-4 py-3 text-sm">
+									<p className="min-w-0 flex-1 font-semibold text-destructive">This track can’t be played right now. The link may have expired, or the server is busy.</p>
+									<button
+										type="button"
+										onClick={handleRetry}
+										className="inline-flex h-9 items-center rounded-full bg-surface-high px-4 font-semibold text-foreground transition-colors hover:bg-surface-highest"
+									>
+										Retry
+									</button>
+								</div>
+							)}
 
 							<div className="mt-5 flex flex-wrap items-center gap-2">
 								<motion.button
