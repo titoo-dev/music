@@ -44,6 +44,7 @@ import { applyThemePreference } from "@/lib/theme";
 import type { DownloadableTrack } from "@/lib/download";
 import type { SuggestAlbum, SuggestArtist, SuggestTrack } from "@/lib/deezer/suggest";
 import { CoverImage } from "@/components/ui/cover-image";
+import { isComposing } from "@/lib/hotkeys";
 import {
 	DownloadGlyph,
 	DrawCheck,
@@ -474,6 +475,8 @@ function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 	}, [active]);
 
 	const onKeyDown = (e: React.KeyboardEvent) => {
+		// Keys confirming or cancelling an IME composition belong to the input method.
+		if (isComposing(e.nativeEvent)) return;
 		if (e.key === "Escape") {
 			e.preventDefault();
 			close();

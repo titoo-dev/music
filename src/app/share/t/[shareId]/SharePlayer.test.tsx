@@ -98,4 +98,49 @@ describe("SharePlayer", () => {
 		act(() => FakeAudio.last.pause());
 		expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
 	});
+
+	describe("keyboard (HK-12)", () => {
+		function press(key: string, init: KeyboardEventInit = {}, target: EventTarget = document.body) {
+			const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+			act(() => {
+				target.dispatchEvent(e);
+			});
+			return e;
+		}
+
+		it("Space plays and pauses (was: Space scrolled the page, no shortcut at all)", () => {
+			render(<SharePlayer {...props} />);
+			expect(press(" ").defaultPrevented).toBe(true);
+			expect(FakeAudio.last.play).toHaveBeenCalledOnce();
+			press(" ");
+			expect(FakeAudio.last.pause).toHaveBeenCalledOnce();
+		});
+
+		it("seeks 10 s with L / J and Shift+→ / Shift+←, inside the track", () => {
+			render(<SharePlayer {...props} />);
+			FakeAudio.last.currentTime = 100;
+			press("l");
+			expect(FakeAudio.last.currentTime).toBe(110);
+			press("ArrowLeft", { shiftKey: true });
+			press("j");
+			expect(FakeAudio.last.currentTime).toBe(90);
+			FakeAudio.last.currentTime = 290;
+			press("ArrowRight", { shiftKey: true });
+			expect(FakeAudio.last.currentTime).toBe(295);
+			FakeAudio.last.currentTime = 3;
+			press("j");
+			expect(FakeAudio.last.currentTime).toBe(0);
+		});
+
+		it("leaves Space to a focused button and keys to dialogs, fields and held keys", () => {
+			render(<SharePlayer {...props} />);
+			const copy = screen.getByRole("button", { name: /copy link/i });
+			expect(press(" ", {}, copy).defaultPrevented).toBe(false);
+			const input = document.body.appendChild(document.createElement("input"));
+			press(" ", {}, input);
+			press(" ", { repeat: true });
+			expect(FakeAudio.last.play).not.toHaveBeenCalled();
+			input.remove();
+		});
+	});
 });

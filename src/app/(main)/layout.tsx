@@ -6,6 +6,7 @@ import { useInitApp } from "@/hooks/useInitApp";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useOverlayHistory } from "@/hooks/useOverlayHistory";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { BehindOverlays } from "@/components/layout/BehindOverlays";
 import { NavProgress } from "@/components/layout/NavProgress";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import { AudioPreview } from "@/components/audio/AudioPreview";
@@ -33,20 +34,25 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 				<Suspense fallback={null}>
 					<NavProgress />
 				</Suspense>
-				<AppHeader />
+				{/* Inert under Now Playing / immersive lyrics, so the focus stays in them. */}
+				<BehindOverlays>
+					<AppHeader />
 
-				<main className="mx-auto w-full min-w-0 max-w-6xl px-4 pt-6 pb-app-chrome sm:px-6 sm:pt-8 lg:px-8">{children}</main>
+					<main className="mx-auto w-full min-w-0 max-w-6xl px-4 pt-6 pb-app-chrome sm:px-6 sm:pt-8 lg:px-8">{children}</main>
+				</BehindOverlays>
 
 				{/* ─── Search + downloads ─── */}
 				<CommandPalette />
 
 				{/* ─── Audio ─── */}
 				<AudioPreview />
-				<MiniPlayer />
 				<AudioEngineErrorBoundary>
 					<AudioEngine />
 				</AudioEngineErrorBoundary>
-				<Player />
+				<BehindOverlays>
+					<MiniPlayer />
+					<Player />
+				</BehindOverlays>
 				<LyricsPanel />
 				<LyricsImmersive />
 				<FullscreenPlayer />

@@ -204,8 +204,17 @@ function AddToPlaylistSubmenu({
 						handleCreate();
 					}}
 					onClick={(e) => e.stopPropagation()}
-					onKeyDown={(e) => e.stopPropagation()}
-					onKeyDownCapture={(e) => e.stopPropagation()}
+					// Keys stop here (capture) so the menu's typeahead / dismiss never see them — which
+					// also means the field's own handlers never run: Escape is handled right here
+					// (was: an onKeyDown on the Input that the capture stop made dead code).
+					onKeyDownCapture={(e) => {
+						e.stopPropagation();
+						if (e.key === "Escape") {
+							e.preventDefault();
+							setCreating(false);
+							setNewName("");
+						}
+					}}
 					className="-mx-1 mt-1 flex items-center gap-2 border-t border-border px-2 pt-2 pb-1"
 				>
 					<Input
@@ -213,14 +222,6 @@ function AddToPlaylistSubmenu({
 						placeholder="Playlist name"
 						value={newName}
 						onChange={(e) => setNewName(e.target.value)}
-						onKeyDown={(e) => {
-							e.stopPropagation();
-							if (e.key === "Escape") {
-								e.preventDefault();
-								setCreating(false);
-								setNewName("");
-							}
-						}}
 						className="flex-1 h-8 text-[13px]"
 					/>
 					<Button
