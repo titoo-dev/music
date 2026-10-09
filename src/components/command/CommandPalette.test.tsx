@@ -347,6 +347,8 @@ describe("CommandPalette — track links (NAV-16)", () => {
 
 describe("CommandPalette — keyboard after a click (NAV-18)", () => {
 	it("keeps the focus in the input when a row is clicked (was: Escape stopped working)", async () => {
+		// "Toggle theme" reads the OS scheme; jsdom has no matchMedia.
+		vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
 		render(<CommandPalette />);
 		openWith();
 		const input = await screen.findByLabelText("Search");
