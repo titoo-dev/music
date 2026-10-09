@@ -1328,7 +1328,7 @@ const paths = {
 			tags: ["Shares"],
 			operationId: "createShare",
 			summary: "Create (or reuse) a public share link for a track",
-			description: "Returns 200 with your live (unexpired) share if one already exists for this track, 201 otherwise; your expired links for the track are deleted. `title` and `artist` are required (non-blank). Public page: `https://wavelet.titosy.dev/share/t/{shareId}`.",
+			description: "Returns 200 with your live (unexpired) share if one already exists for this track, 201 otherwise; your expired links for the track are deleted. The public metadata (title, artist, album, cover, duration) comes from Deezer when your Deezer session knows the track; otherwise the sent values are used (`title` and `artist` then required, non-blank). Public page: `https://wavelet.titosy.dev/share/t/{shareId}`.",
 			security: userAuth,
 			requestBody: body(ref("CreateShareInput")),
 			responses: {

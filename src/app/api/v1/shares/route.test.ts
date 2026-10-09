@@ -6,11 +6,21 @@ import { makeNextRequest, readJson } from "@/test/helpers/nextRequest";
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/library", () => ({ shareTrack: vi.fn() }));
+vi.mock("@/lib/deezer-session", () => ({ restoreUserDz: vi.fn() }));
 
 import { GET, POST } from "./route";
 import { shareTrack } from "@/lib/library";
+import { restoreUserDz } from "@/lib/deezer-session";
 
 const shareTrackMock = vi.mocked(shareTrack);
+const restoreMock = vi.mocked(restoreUserDz);
+const getTrack = vi.fn();
+const deezerTrack = {
+	title: "Nofy",
+	duration: 295,
+	artist: { name: "Hosea Marlyn" },
+	album: { title: "Fitiavana", cover_medium: "https://cdn-images.dzcdn.net/images/cover/md5/250x250-000000-80-0-0.jpg" },
+};
 
 type Body = { data: { shareId: string }; error: { code: string } };
 
@@ -26,6 +36,44 @@ beforeEach(() => {
 	shareTrackMock.mockReset();
 	shareTrackMock.mockImplementation(async (_u, t, o) => ({ shareId: "new", ...t, expiresAt: o?.expiresAt ?? null }) as never);
 	prismaMock.sharedTrack.deleteMany.mockResolvedValue({ count: 0 });
+	// No Deezer session by default: the client's metadata is used.
+	getTrack.mockReset();
+	restoreMock.mockReset();
+	restoreMock.mockResolvedValue({ status: "no-arl" });
+});
+
+describe("POST /api/v1/shares — metadata from Deezer", () => {
+	beforeEach(() => {
+		setSessionUser("u1");
+		prismaMock.sharedTrack.findFirst.mockResolvedValue(null);
+		restoreMock.mockResolvedValue({ status: "ok", dz: { api: { getTrack } } });
+	});
+
+	it("publishes Deezer's title, artist, album and cover, not the client's (was: any title could be published for a track)", async () => {
+		getTrack.mockResolvedValue(deezerTrack);
+		const res = await post({ ...meta, title: "Fake", artist: "Someone else", coverUrl: null });
+		expect(res.status).toBe(201);
+		expect(getTrack).toHaveBeenCalledWith("42");
+		expect(shareTrackMock).toHaveBeenCalledWith(
+			"u1",
+			{ trackId: "42", title: "Nofy", artist: "Hosea Marlyn", album: "Fitiavana", coverUrl: deezerTrack.album.cover_medium, duration: 295 },
+			{ expiresAt: null }
+		);
+	});
+
+	it("needs no client metadata when Deezer knows the track", async () => {
+		getTrack.mockResolvedValue(deezerTrack);
+		const res = await post({ trackId: "42" });
+		expect(res.status).toBe(201);
+		expect(shareTrackMock.mock.calls[0][1].title).toBe("Nofy");
+	});
+
+	it("falls back to the client's metadata when Deezer can't answer", async () => {
+		getTrack.mockRejectedValue(new Error("DataException: no data"));
+		const res = await post(meta);
+		expect(res.status).toBe(201);
+		expect(shareTrackMock.mock.calls[0][1].title).toBe("Song");
+	});
 });
 
 describe("POST /api/v1/shares", () => {

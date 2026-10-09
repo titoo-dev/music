@@ -2,7 +2,31 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, ok, fail, handleError } from "../_lib/helpers";
 import { shareTrack } from "@/lib/library";
-import { sanitizeShareMeta } from "@/lib/share-meta";
+import { sanitizeShareMeta, type ShareMeta } from "@/lib/share-meta";
+import { restoreUserDz } from "@/lib/deezer-session";
+
+/**
+ * The track's metadata as Deezer has it, read with the sharer's session.
+ * Null without a session or when Deezer doesn't know the id (uploads,
+ * API down): the client's metadata is used then.
+ */
+async function deezerShareMeta(userId: string, trackId: string): Promise<ShareMeta | null> {
+	try {
+		const restored = await restoreUserDz(userId);
+		if (restored.status !== "ok") return null;
+		const t = await restored.dz.api.getTrack(trackId);
+		const meta = sanitizeShareMeta({
+			title: t?.title,
+			artist: t?.artist?.name,
+			album: t?.album?.title,
+			coverUrl: t?.album?.cover_medium,
+			duration: t?.duration,
+		});
+		return meta.title && meta.artist ? meta : null;
+	} catch {
+		return null;
+	}
+}
 
 // POST /api/v1/shares — create a public share link for a track.
 // No download requirement: the share creates with storedTrackId=null when
@@ -19,9 +43,10 @@ export async function POST(request: NextRequest) {
 			return fail("MISSING_TRACK_ID", "trackId is required.", 400);
 		}
 
-		// Shown on a public page and fetched by the OG renderer: trimmed,
-		// capped, cover limited to Deezer artwork.
-		const meta = sanitizeShareMeta(body);
+		// Shown on a public page and fetched by the OG renderer: taken from
+		// Deezer when it knows the track, else the client's, trimmed, capped
+		// and with the cover limited to Deezer artwork.
+		const meta = (await deezerShareMeta(userResult.userId, trackId)) ?? sanitizeShareMeta(body);
 		if (!meta.title || !meta.artist) {
 			return fail("MISSING_METADATA", "title and artist are required.", 400);
 		}
