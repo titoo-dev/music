@@ -75,6 +75,7 @@ export default defineConfig({
 				"src/lib/nav-progress.ts",
 				"src/components/layout/NavProgress.tsx",
 				"src/components/layout/HistoryNav.tsx",
+				"src/lib/playlist-summaries.ts",
 				"src/components/links/EntityLink.tsx",
 				"src/components/audio/leave-player.ts",
 				"src/lib/spotify/import.ts",

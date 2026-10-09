@@ -13,6 +13,9 @@ interface CommandState {
 	toggle: () => void;
 	setQuery: (q: string) => void;
 	setView: (v: CommandView) => void;
+	/** "See all results" from the palette — /search shows it even when its URL already matches (`seq` bumps each time). */
+	searchRequest: { term: string; seq: number } | null;
+	submitSearch: (term: string) => void;
 }
 
 export const useCommandStore = create<CommandState>((set, get) => ({
@@ -31,4 +34,6 @@ export const useCommandStore = create<CommandState>((set, get) => ({
 	toggle: () => (get().isOpen ? set({ isOpen: false }) : get().open()),
 	setQuery: (query) => set({ query }),
 	setView: (view) => set({ view }),
+	searchRequest: null,
+	submitSearch: (term) => set((s) => ({ searchRequest: { term, seq: (s.searchRequest?.seq ?? 0) + 1 } })),
 }));

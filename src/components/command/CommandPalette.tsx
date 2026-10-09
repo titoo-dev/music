@@ -433,7 +433,10 @@ function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 				title: `See all results for “${trimmed}”`,
 				icon: ArrowRight,
 				href: `/search?term=${encodeURIComponent(trimmed)}`,
-				onSelect: () => go(`/search?term=${encodeURIComponent(trimmed)}`),
+				onSelect: () => {
+					useCommandStore.getState().submitSearch(trimmed);
+					go(`/search?term=${encodeURIComponent(trimmed)}`);
+				},
 			});
 		}
 

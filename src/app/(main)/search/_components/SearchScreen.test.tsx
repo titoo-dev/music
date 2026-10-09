@@ -17,6 +17,8 @@ vi.mock("./Results", () => ({ AllResults: () => <div>all results</div>, TypedRes
 
 import { SearchScreen } from "./SearchScreen";
 import { recentSearches } from "../_lib/useRecentSearches";
+import { useCommandStore } from "@/stores/useCommandStore";
+import { act } from "@testing-library/react";
 
 beforeEach(() => {
 	push.mockReset();
@@ -53,5 +55,20 @@ describe("SearchScreen — Deezer links (NAV-19)", () => {
 	it("still searches plain text", async () => {
 		await submit("daft punk");
 		expect(push).toHaveBeenCalledWith("/search?term=daft%20punk", { scroll: true });
+	});
+});
+
+describe("SearchScreen — palette 'See all results' (NAV-22)", () => {
+	it("shows the palette's results over an unsubmitted draft, even on the same URL (was: the draft's suggestions stayed)", async () => {
+		search = "term=daft";
+		render(<SearchScreen />);
+		const input = screen.getByLabelText("Search Deezer");
+		await userEvent.click(input);
+		await userEvent.clear(input);
+		await userEvent.type(input, "daft punk");
+		expect(await screen.findByText(/suggestions for daft punk/)).toBeInTheDocument();
+		act(() => useCommandStore.getState().submitSearch("daft"));
+		expect(await screen.findByText("all results")).toBeInTheDocument();
+		expect(input).toHaveValue("daft");
 	});
 });

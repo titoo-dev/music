@@ -7,6 +7,7 @@ import { ArrowLeft, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseDeezerLink } from "@/lib/collection-tracks";
 import { startNavProgress } from "@/lib/nav-progress";
+import { useCommandStore } from "@/stores/useCommandStore";
 import { SearchGlyph } from "@/components/motion/icons";
 import { DUR, EASE, FilterPills } from "@/components/expressive";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
@@ -53,6 +54,13 @@ export function SearchScreen() {
 	if (shownTerm !== term) {
 		setShownTerm(term);
 		setTyped(term);
+	}
+	// ⌘K "See all results" for the term already in the URL: the URL doesn't change, so drop the draft here.
+	const searchRequest = useCommandStore((s) => s.searchRequest);
+	const [seenRequest, setSeenRequest] = useState(searchRequest?.seq ?? 0);
+	if (searchRequest && searchRequest.seq !== seenRequest) {
+		setSeenRequest(searchRequest.seq);
+		setTyped(searchRequest.term);
 	}
 
 	useEffect(() => {
