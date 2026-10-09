@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useShareStore } from "./useShareStore";
+import { useAuthStore } from "./useAuthStore";
 
 const fetchMock = vi.fn();
 
@@ -35,6 +36,17 @@ describe("useShareStore", () => {
 		await useShareStore.getState().load();
 		await useShareStore.getState().load();
 		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("forgets the links on sign-out (was: the next account in the tab saw the previous one's links)", async () => {
+		answer([{ shareId: "mine", trackId: "1", expiresAt: null }]);
+		await useShareStore.getState().load();
+		useAuthStore.getState().logout();
+		expect(useShareStore.getState().shared.size).toBe(0);
+		// The next account loads its own links.
+		answer([{ shareId: "theirs", trackId: "2", expiresAt: null }]);
+		await useShareStore.getState().load();
+		expect(useShareStore.getState().get("2")).toBe("theirs");
 	});
 
 	it("adds and removes a track's link", () => {

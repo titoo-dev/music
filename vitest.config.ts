@@ -83,6 +83,10 @@ export default defineConfig({
 				"src/lib/wavelet/storage/{cached-copy,persist-lease,gc,key-repair}.ts",
 				"src/lib/wavelet/cache/{metadata-cache,rate-limit}.ts",
 				"src/app/api/v1/shares/[shareId]/stream/**",
+				"src/app/api/v1/shares/route.ts",
+				"src/app/api/v1/shares/[shareId]/route.ts",
+				"src/lib/share-meta.ts",
+				"src/stores/useShareStore.ts",
 				"src/app/api/v1/internal/**",
 				"src/app/api/v1/stream-warm/**",
 				// Engine audit: Deezer client hardening + auth/settings security

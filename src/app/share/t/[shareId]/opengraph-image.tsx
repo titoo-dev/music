@@ -25,11 +25,14 @@ export default async function OgImage({
 			artist: true,
 			album: true,
 			coverUrl: true,
+			expiresAt: true,
 			user: { select: { name: true } },
 		},
 	});
 
-	if (!shared) {
+	// A dead link previews as such, not as the track it used to share.
+	const expired = !!shared?.expiresAt && shared.expiresAt < new Date();
+	if (!shared || expired) {
 		return new ImageResponse(
 			(
 				<div
@@ -44,7 +47,7 @@ export default async function OgImage({
 					}}
 				>
 					<span style={{ fontSize: 48, fontWeight: 900, color: "#0D0D0D" }}>
-						Track not found
+						{expired ? "This link has expired" : "Track not found"}
 					</span>
 				</div>
 			),

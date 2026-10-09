@@ -124,6 +124,7 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Cached-copy selection (quality rank, licence cap, `requestedBitrate`) | `src/lib/wavelet/storage/cached-copy.ts` | `cached-copy.test.ts` |
 | Storage GC + eviction guards (grace period, lease, shared-object guard) | `src/lib/wavelet/storage/{gc,key-repair}.ts`, `src/app/api/v1/internal/gc/route.ts`, `library.ts` `maybeEvictFile` / `forceEvictFile` | `gc.test.ts`, `key-repair.test.ts`, `internal/gc/route.test.ts`, `library.test.ts` |
 | Public share stream (cached copy by trackId, lease/follower fallback, per-IP limit, honest play count) | `src/app/api/v1/shares/[shareId]/stream/route.ts`, `src/lib/wavelet/cache/rate-limit.ts` | `route.test.ts`, `rate-limit.test.ts` |
+| Share links (metadata from Deezer else sanitized client values, Deezer-only covers, one live link per user + track, expired links never reused / never anchor files / purged after 30 days, `INVALID_EXPIRY`, public GET without avatar, `private, no-cache` stream, store drops expired links and resets on sign-out, OG font bundled, public player errors / no preload) | `src/app/api/v1/shares/{route,[shareId]/route}.ts`, `src/lib/share-meta.ts`, `src/stores/useShareStore.ts`, `src/app/share/t/[shareId]/{page,SharePlayer,opengraph-image,og-font}.tsx?`, `src/components/tracks/ShareDialog.tsx` | `route.test.ts` ×2, `share-meta.test.ts`, `useShareStore.test.ts`, `SharePlayer.test.tsx`, `opengraph-image.test.tsx`, `expired.test.tsx`, `og-font.test.ts`, `ShareDialog.test.tsx` |
 | Deezer client hardening (timeouts, bounded retries, typed network errors, licence refusal → `WrongLicense`, secret-free logs) | `src/lib/deezer/{http,gw,api,deezer,errors,public-user}.ts`, `src/lib/log-safe.ts` | `http.test.ts`, `gw.test.ts`, `api.test.ts`, `deezer.test.ts`, `public-user.test.ts`, `log-safe.test.ts` |
 | Bitrate selection (falls back only when a format is really unavailable) | `src/lib/wavelet/utils/getPreferredBitrate.ts` | `getPreferredBitrate.test.ts` |
 | Deezer sessions + encrypted ARL (single-flight login, persisted child account) | `src/lib/deezer-session.ts`, `src/lib/secret-box.ts`, `src/lib/server-state.ts` | `helpers.test.ts`, `secret-box.test.ts`, `server-state.test.ts` |
@@ -167,9 +168,9 @@ Examples already in the suite (search for `TODO` in `*.test.ts`):
 ### Out of scope (still to be locked)
 
 - `AudioEngine.tsx` React wiring end-to-end in a real browser (the pure helpers live in `components/audio/engine/` and are tested; `AudioEngine.test.tsx` drives a fake `<audio>`). Plan: Playwright for the full flow, incl. iOS Safari background playback.
-- Routes: `playlists/**`, `shares/route.ts` + `shares/[shareId]/route.ts`, `search/**`, `content/**`, `auth/logout`.
+- Routes: `playlists/**`, `search/**`, `content/**`, `auth/logout`.
 - Deezer client remainder: `gw.ts` / `api.ts` / `utils.ts` page parsers (retry/timeout policy is locked; the mappers are not), `wavelet-app.ts` settings code.
-- Stores: `useAuthStore`, `useAppStore`, `useShareStore`, `useLoginStore`, `useErrorStore`.
+- Stores: `useAuthStore`, `useAppStore`, `useLoginStore`, `useErrorStore`.
 
 When you finish locking in any of the above, append it to the table above and to `vitest.config.ts` `coverage.include`.
 
@@ -185,7 +186,7 @@ StoredTrack     ── global file cache (trackId + bitrate unique), shared acro
                    for new copies; requestedBitrate = the licence-capped quality asked for when it was persisted
                 ── 1:many ── SharedTrack
 PersistLease    ── (trackId, bitrate) lease of an in-flight progressive persist, expiresAt-based takeover
-SharedTrack     ── public share links (shareId unique), optional expiresAt, play counter
+SharedTrack     ── public share links (shareId unique; one per userId + trackId), optional expiresAt (expired links purged after 30 days), play counter
 Album / AlbumTrack, SavedTrack, RecentPlay ── per-user library; they ref-count StoredTrack files (see library.ts)
 TrackMatch      ── Spotify → Deezer match cache
 Verification    ── better-auth verification tokens

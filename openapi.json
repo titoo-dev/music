@@ -2909,6 +2909,7 @@
 				},
 				"x-error-codes": [
 					"MISSING_TRACK_ID",
+					"INVALID_EXPIRY",
 					"MISSING_METADATA"
 				]
 			}
@@ -3017,7 +3018,7 @@
 				],
 				"operationId": "streamShare",
 				"summary": "Public audio stream of a shared track (no auth)",
-				"description": "- **Cached copy** (the best R2 copy of the track, found by trackId — a copy persisted after the share was created is used and re-linked): proxied from R2, Range passed through (206 + `Content-Range`), `Accept-Ranges: bytes`, `Cache-Control: public, max-age=3600`.\n- **Fallback** (no cached copy, or the R2 read failed): streamed live through the share owner's Deezer account with the same Range rules as `/stream-progressive` — no Range, `bytes=0-` or `bytes=0-b` → persisting play (200, or 206 `Content-Range: bytes 0-b/n` when the Deezer CDN honours ranges; `Accept-Ranges: none` when it does not); a single range starting above 0 → 206 live-only; past the end → 416 `Content-Range: bytes */n`. Limited to 30 fallback requests per client address per 10 min (per server instance): over it → 429 `RATE_LIMITED` + `Retry-After`. Errors before the first byte: 422 `TRACK_UNAVAILABLE` / 502 `UPSTREAM_ERROR`.\n- **Play counter**: +1 per successful (status < 400) request with no Range, `bytes=0-` or `bytes=0-n` with n > 1 (Safari / AVPlayer after their `bytes=0-1` probe) — not per seek, nor for a refused or failed request.",
+				"description": "- **Cached copy** (the best R2 copy of the track, found by trackId — a copy persisted after the share was created is used and re-linked): proxied from R2, Range passed through (206 + `Content-Range`), `Accept-Ranges: bytes`, `Cache-Control: private, no-cache` (a revoked or expired link stops playing at once).\n- **Fallback** (no cached copy, or the R2 read failed): streamed live through the share owner's Deezer account with the same Range rules as `/stream-progressive` — no Range, `bytes=0-` or `bytes=0-b` → persisting play (200, or 206 `Content-Range: bytes 0-b/n` when the Deezer CDN honours ranges; `Accept-Ranges: none` when it does not); a single range starting above 0 → 206 live-only; past the end → 416 `Content-Range: bytes */n`. Limited to 30 fallback requests per client address per 10 min (per server instance): over it → 429 `RATE_LIMITED` + `Retry-After`. Errors before the first byte: 422 `TRACK_UNAVAILABLE` / 502 `UPSTREAM_ERROR`.\n- **Play counter**: +1 per successful (status < 400) request with no Range, `bytes=0-` or `bytes=0-n` with n > 1 (Safari / AVPlayer after their `bytes=0-1` probe) — not per seek, nor for a refused or failed request.",
 				"security": [],
 				"parameters": [
 					{
@@ -5312,7 +5313,8 @@
 					},
 					"expiresIn": {
 						"type": "number",
-						"description": "Hours until expiry. Omit for a permanent link."
+						"nullable": true,
+						"description": "Hours until expiry, more than 0 and at most 8760 (a year). Null or omitted for a permanent link."
 					}
 				},
 				"required": [
@@ -5429,15 +5431,10 @@
 						"properties": {
 							"name": {
 								"type": "string"
-							},
-							"image": {
-								"type": "string",
-								"nullable": true
 							}
 						},
 						"required": [
-							"name",
-							"image"
+							"name"
 						]
 					}
 				},

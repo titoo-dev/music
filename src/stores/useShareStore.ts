@@ -19,6 +19,8 @@ interface ShareState {
 	remove: (trackId: string) => void;
 	/** Check if a track is shared, returns shareId or null */
 	get: (trackId: string) => string | null;
+	/** Forget every link (sign-out): the next account loads its own. */
+	reset: () => void;
 }
 
 export const useShareStore = create<ShareState>((set, get) => ({
@@ -64,4 +66,6 @@ export const useShareStore = create<ShareState>((set, get) => ({
 	get: (trackId) => {
 		return get().shared.get(trackId) ?? null;
 	},
+
+	reset: () => set({ shared: new Map(), loaded: false }),
 }));

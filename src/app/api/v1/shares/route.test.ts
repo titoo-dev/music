@@ -123,6 +123,36 @@ describe("POST /api/v1/shares", () => {
 		);
 	});
 
+	it("refuses an invalid expiresIn with 400 (was: NaN → 500 from Prisma, negative → a link born expired)", async () => {
+		setSessionUser("u1");
+		prismaMock.sharedTrack.findFirst.mockResolvedValue(null);
+		for (const expiresIn of ["abc", -5, 0, 24 * 366, "24", true]) {
+			const res = await post({ ...meta, expiresIn });
+			expect(res.status, String(expiresIn)).toBe(400);
+			expect((await readJson<Body>(res))?.error.code).toBe("INVALID_EXPIRY");
+		}
+		expect(shareTrackMock).not.toHaveBeenCalled();
+	});
+
+	it("treats a missing or null expiresIn as a permanent link", async () => {
+		setSessionUser("u1");
+		prismaMock.sharedTrack.findFirst.mockResolvedValue(null);
+		for (const body of [meta, { ...meta, expiresIn: null }]) {
+			expect((await post(body)).status).toBe(201);
+		}
+		for (const call of shareTrackMock.mock.calls) expect(call[2]).toEqual({ expiresAt: null });
+	});
+
+	it("answers the winner's link when two creates race (was: a double tap made two links)", async () => {
+		setSessionUser("u1");
+		const winner = { shareId: "first", trackId: "42", userId: "u1", expiresAt: null };
+		prismaMock.sharedTrack.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(winner as never);
+		shareTrackMock.mockRejectedValue(Object.assign(new Error("Unique constraint failed"), { code: "P2002" }));
+		const res = await post(meta);
+		expect(res.status).toBe(200);
+		expect((await readJson<Body>(res))?.data.shareId).toBe("first");
+	});
+
 	it("reuses the user's live share for the same track", async () => {
 		setSessionUser("u1");
 		const live = { shareId: "old", trackId: "42", userId: "u1", expiresAt: null };

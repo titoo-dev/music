@@ -391,6 +391,7 @@ model SharedTrack {
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   storedTrack StoredTrack? @relation(fields: [storedTrackId], references: [id])
 
+  @@unique([userId, trackId]) // one link per user and track (POST /shares reuses it)
   @@index([userId])
   @@index([trackId])
   @@map("shared_track")
