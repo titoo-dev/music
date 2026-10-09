@@ -27,6 +27,7 @@ void main() {
       // TODO
     });
 
+    // https Deezer artwork (*.dzcdn.net, api.deezer.com); any other URL is dropped
     // String coverUrl
     test('to test the property `coverUrl`', () async {
       // TODO

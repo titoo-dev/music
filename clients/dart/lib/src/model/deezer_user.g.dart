@@ -14,8 +14,6 @@ class _$DeezerUser extends DeezerUser {
   @override
   final String? picture;
   @override
-  final String? licenseToken;
-  @override
   final bool? canStreamHq;
   @override
   final bool? canStreamLossless;
@@ -33,7 +31,6 @@ class _$DeezerUser extends DeezerUser {
       {this.id,
       this.name,
       this.picture,
-      this.licenseToken,
       this.canStreamHq,
       this.canStreamLossless,
       this.country,
@@ -54,7 +51,6 @@ class _$DeezerUser extends DeezerUser {
         id == other.id &&
         name == other.name &&
         picture == other.picture &&
-        licenseToken == other.licenseToken &&
         canStreamHq == other.canStreamHq &&
         canStreamLossless == other.canStreamLossless &&
         country == other.country &&
@@ -68,7 +64,6 @@ class _$DeezerUser extends DeezerUser {
     _$hash = $jc(_$hash, id.hashCode);
     _$hash = $jc(_$hash, name.hashCode);
     _$hash = $jc(_$hash, picture.hashCode);
-    _$hash = $jc(_$hash, licenseToken.hashCode);
     _$hash = $jc(_$hash, canStreamHq.hashCode);
     _$hash = $jc(_$hash, canStreamLossless.hashCode);
     _$hash = $jc(_$hash, country.hashCode);
@@ -84,7 +79,6 @@ class _$DeezerUser extends DeezerUser {
           ..add('id', id)
           ..add('name', name)
           ..add('picture', picture)
-          ..add('licenseToken', licenseToken)
           ..add('canStreamHq', canStreamHq)
           ..add('canStreamLossless', canStreamLossless)
           ..add('country', country)
@@ -108,10 +102,6 @@ class DeezerUserBuilder implements Builder<DeezerUser, DeezerUserBuilder> {
   String? _picture;
   String? get picture => _$this._picture;
   set picture(String? picture) => _$this._picture = picture;
-
-  String? _licenseToken;
-  String? get licenseToken => _$this._licenseToken;
-  set licenseToken(String? licenseToken) => _$this._licenseToken = licenseToken;
 
   bool? _canStreamHq;
   bool? get canStreamHq => _$this._canStreamHq;
@@ -146,7 +136,6 @@ class DeezerUserBuilder implements Builder<DeezerUser, DeezerUserBuilder> {
       _id = $v.id?.toBuilder();
       _name = $v.name;
       _picture = $v.picture;
-      _licenseToken = $v.licenseToken;
       _canStreamHq = $v.canStreamHq;
       _canStreamLossless = $v.canStreamLossless;
       _country = $v.country;
@@ -178,7 +167,6 @@ class DeezerUserBuilder implements Builder<DeezerUser, DeezerUserBuilder> {
             id: _id?.build(),
             name: name,
             picture: picture,
-            licenseToken: licenseToken,
             canStreamHq: canStreamHq,
             canStreamLossless: canStreamLossless,
             country: country,

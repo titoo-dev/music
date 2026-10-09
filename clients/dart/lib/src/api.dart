@@ -12,6 +12,7 @@ import 'package:wavelet_api/src/auth/oauth.dart';
 import 'package:wavelet_api/src/api/auth_session_api.dart';
 import 'package:wavelet_api/src/api/browse_api.dart';
 import 'package:wavelet_api/src/api/deezer_account_api.dart';
+import 'package:wavelet_api/src/api/internal_api.dart';
 import 'package:wavelet_api/src/api/library_api.dart';
 import 'package:wavelet_api/src/api/lyrics_api.dart';
 import 'package:wavelet_api/src/api/playlists_api.dart';
@@ -131,6 +132,12 @@ class WaveletApi {
   /// by doing that all interceptors will not be executed
   DeezerAccountApi getDeezerAccountApi() {
     return DeezerAccountApi(dio, serializers);
+  }
+
+  /// Get InternalApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  InternalApi getInternalApi() {
+    return InternalApi(dio, serializers);
   }
 
   /// Get LibraryApi instance, base route and serializer can be overridden by a given but be careful,

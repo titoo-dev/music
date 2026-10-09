@@ -11,16 +11,11 @@ class _$SettingsBundle extends SettingsBundle {
   final BuiltMap<String, JsonObject?> settings;
   @override
   final BuiltMap<String, JsonObject?> defaultSettings;
-  @override
-  final BuiltMap<String, JsonObject?>? spotifySettings;
 
   factory _$SettingsBundle([void Function(SettingsBundleBuilder)? updates]) =>
       (SettingsBundleBuilder()..update(updates))._build();
 
-  _$SettingsBundle._(
-      {required this.settings,
-      required this.defaultSettings,
-      this.spotifySettings})
+  _$SettingsBundle._({required this.settings, required this.defaultSettings})
       : super._();
   @override
   SettingsBundle rebuild(void Function(SettingsBundleBuilder) updates) =>
@@ -34,8 +29,7 @@ class _$SettingsBundle extends SettingsBundle {
     if (identical(other, this)) return true;
     return other is SettingsBundle &&
         settings == other.settings &&
-        defaultSettings == other.defaultSettings &&
-        spotifySettings == other.spotifySettings;
+        defaultSettings == other.defaultSettings;
   }
 
   @override
@@ -43,7 +37,6 @@ class _$SettingsBundle extends SettingsBundle {
     var _$hash = 0;
     _$hash = $jc(_$hash, settings.hashCode);
     _$hash = $jc(_$hash, defaultSettings.hashCode);
-    _$hash = $jc(_$hash, spotifySettings.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -52,8 +45,7 @@ class _$SettingsBundle extends SettingsBundle {
   String toString() {
     return (newBuiltValueToStringHelper(r'SettingsBundle')
           ..add('settings', settings)
-          ..add('defaultSettings', defaultSettings)
-          ..add('spotifySettings', spotifySettings))
+          ..add('defaultSettings', defaultSettings))
         .toString();
   }
 }
@@ -74,12 +66,6 @@ class SettingsBundleBuilder
   set defaultSettings(MapBuilder<String, JsonObject?>? defaultSettings) =>
       _$this._defaultSettings = defaultSettings;
 
-  MapBuilder<String, JsonObject?>? _spotifySettings;
-  MapBuilder<String, JsonObject?> get spotifySettings =>
-      _$this._spotifySettings ??= MapBuilder<String, JsonObject?>();
-  set spotifySettings(MapBuilder<String, JsonObject?>? spotifySettings) =>
-      _$this._spotifySettings = spotifySettings;
-
   SettingsBundleBuilder() {
     SettingsBundle._defaults(this);
   }
@@ -89,7 +75,6 @@ class SettingsBundleBuilder
     if ($v != null) {
       _settings = $v.settings.toBuilder();
       _defaultSettings = $v.defaultSettings.toBuilder();
-      _spotifySettings = $v.spotifySettings?.toBuilder();
       _$v = null;
     }
     return this;
@@ -115,7 +100,6 @@ class SettingsBundleBuilder
           _$SettingsBundle._(
             settings: settings.build(),
             defaultSettings: defaultSettings.build(),
-            spotifySettings: _spotifySettings?.build(),
           );
     } catch (_) {
       late String _$failedField;
@@ -124,8 +108,6 @@ class SettingsBundleBuilder
         settings.build();
         _$failedField = 'defaultSettings';
         defaultSettings.build();
-        _$failedField = 'spotifySettings';
-        _spotifySettings?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
             r'SettingsBundle', _$failedField, e.toString());

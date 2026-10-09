@@ -15,7 +15,7 @@ part 'create_share_input.g.dart';
 /// * [title] 
 /// * [artist] 
 /// * [album] 
-/// * [coverUrl] 
+/// * [coverUrl] - https Deezer artwork (*.dzcdn.net, api.deezer.com); any other URL is dropped
 /// * [duration] 
 /// * [expiresIn] - Hours until expiry. Omit for a permanent link.
 @BuiltValue()
@@ -24,14 +24,15 @@ abstract class CreateShareInput implements Built<CreateShareInput, CreateShareIn
   String get trackId;
 
   @BuiltValueField(wireName: r'title')
-  String? get title;
+  String get title;
 
   @BuiltValueField(wireName: r'artist')
-  String? get artist;
+  String get artist;
 
   @BuiltValueField(wireName: r'album')
   String? get album;
 
+  /// https Deezer artwork (*.dzcdn.net, api.deezer.com); any other URL is dropped
   @BuiltValueField(wireName: r'coverUrl')
   String? get coverUrl;
 
@@ -70,20 +71,16 @@ class _$CreateShareInputSerializer implements PrimitiveSerializer<CreateShareInp
       object.trackId,
       specifiedType: const FullType(String),
     );
-    if (object.title != null) {
-      yield r'title';
-      yield serializers.serialize(
-        object.title,
-        specifiedType: const FullType(String),
-      );
-    }
-    if (object.artist != null) {
-      yield r'artist';
-      yield serializers.serialize(
-        object.artist,
-        specifiedType: const FullType(String),
-      );
-    }
+    yield r'title';
+    yield serializers.serialize(
+      object.title,
+      specifiedType: const FullType(String),
+    );
+    yield r'artist';
+    yield serializers.serialize(
+      object.artist,
+      specifiedType: const FullType(String),
+    );
     if (object.album != null) {
       yield r'album';
       yield serializers.serialize(
@@ -145,17 +142,15 @@ class _$CreateShareInputSerializer implements PrimitiveSerializer<CreateShareInp
         case r'title':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType.nullable(String),
-          ) as String?;
-          if (valueDes == null) continue;
+            specifiedType: const FullType(String),
+          ) as String;
           result.title = valueDes;
           break;
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType.nullable(String),
-          ) as String?;
-          if (valueDes == null) continue;
+            specifiedType: const FullType(String),
+          ) as String;
           result.artist = valueDes;
           break;
         case r'album':

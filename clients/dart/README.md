@@ -4,6 +4,7 @@ Music streaming / library API behind wavelet (Next.js on Vercel).
 ## Response envelope
 Every `/api/v1/_*` JSON route returns `{ \"success\": true, \"data\": … }` or `{ \"success\": false, \"error\": { \"code\", \"message\" } }`.
 Branch on `error.code`, not on the message. `/api/auth/_*` (better-auth) does NOT use this envelope.
+A 500 `INTERNAL_ERROR` always carries the generic message \"An unexpected error occurred.\" (details are only logged server-side).
 
 ## Authentication
 better-auth session (Google only), accepted two ways:
@@ -88,6 +89,7 @@ Class | Method | HTTP request | Description
 [*DeezerAccountApi*](doc/DeezerAccountApi.md) | [**loginDeezerArl**](doc/DeezerAccountApi.md#logindeezerarl) | **POST** /api/v1/auth/login-arl | Connect a Deezer account with an ARL cookie
 [*DeezerAccountApi*](doc/DeezerAccountApi.md) | [**loginDeezerEmail**](doc/DeezerAccountApi.md#logindeezeremail) | **POST** /api/v1/auth/login-email | Connect a Deezer account with email/password
 [*DeezerAccountApi*](doc/DeezerAccountApi.md) | [**logoutDeezer**](doc/DeezerAccountApi.md#logoutdeezer) | **POST** /api/v1/auth/logout | Clear the in-memory Deezer session
+[*InternalApi*](doc/InternalApi.md) | [**runStorageGc**](doc/InternalApi.md#runstoragegc) | **GET** /api/v1/internal/gc | Daily storage garbage collection (Vercel Cron — not for app clients)
 [*LibraryApi*](doc/LibraryApi.md) | [**followArtist**](doc/LibraryApi.md#followartist) | **POST** /api/v1/library/artists | Follow an artist (upsert)
 [*LibraryApi*](doc/LibraryApi.md) | [**getLibraryStatus**](doc/LibraryApi.md#getlibrarystatus) | **POST** /api/v1/library/status | Batch: which of these tracks/albums are saved?
 [*LibraryApi*](doc/LibraryApi.md) | [**getSavedAlbum**](doc/LibraryApi.md#getsavedalbum) | **GET** /api/v1/library/albums/{albumId} | Saved album with tracklist
@@ -100,15 +102,19 @@ Class | Method | HTTP request | Description
 [*LibraryApi*](doc/LibraryApi.md) | [**unfollowArtist**](doc/LibraryApi.md#unfollowartist) | **DELETE** /api/v1/library/artists/{deezerArtistId} | Unfollow an artist (idempotent)
 [*LibraryApi*](doc/LibraryApi.md) | [**unsaveAlbum**](doc/LibraryApi.md#unsavealbum) | **DELETE** /api/v1/library/albums/{albumId} | Remove a saved album
 [*LibraryApi*](doc/LibraryApi.md) | [**unsaveTrack**](doc/LibraryApi.md#unsavetrack) | **DELETE** /api/v1/library/tracks/{trackId} | Unlike a track (idempotent)
-[*LyricsApi*](doc/LyricsApi.md) | [**getLyrics**](doc/LyricsApi.md#getlyrics) | **GET** /api/v1/lyrics/{trackId} | Lyrics (LRCLIB first, Deezer fallback)
+[*LyricsApi*](doc/LyricsApi.md) | [**getLyrics**](doc/LyricsApi.md#getlyrics) | **GET** /api/v1/lyrics/{trackId} | Lyrics (LRCLIB exact → Deezer → LRCLIB fuzzy search)
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**addPlaylistTracks**](doc/PlaylistsApi.md#addplaylisttracks) | **POST** /api/v1/playlists/{id}/tracks | Append track(s) (duplicates skipped)
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**createPlaylist**](doc/PlaylistsApi.md#createplaylist) | **POST** /api/v1/playlists | Create a playlist
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**deletePlaylist**](doc/PlaylistsApi.md#deleteplaylist) | **DELETE** /api/v1/playlists/{id} | Delete a playlist
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**getPlaylist**](doc/PlaylistsApi.md#getplaylist) | **GET** /api/v1/playlists/{id} | Playlist with tracks (ordered by position)
-[*PlaylistsApi*](doc/PlaylistsApi.md) | [**importSpotifyPlaylist**](doc/PlaylistsApi.md#importspotifyplaylist) | **POST** /api/v1/playlists/import/spotify | Import a Spotify playlist (matched to Deezer, max 500 tracks)
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**importSpotifyPlaylist**](doc/PlaylistsApi.md#importspotifyplaylist) | **POST** /api/v1/playlists/import/spotify | Import a Spotify playlist (matched to Deezer, max 1000 tracks)
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**listPlaylists**](doc/PlaylistsApi.md#listplaylists) | **GET** /api/v1/playlists | User playlists (most recently updated first)
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**matchSpotifyTracks**](doc/PlaylistsApi.md#matchspotifytracks) | **POST** /api/v1/playlists/import/spotify/match | Match up to 50 Spotify tracks on Deezer
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**readSpotifyPlaylist**](doc/PlaylistsApi.md#readspotifyplaylist) | **POST** /api/v1/playlists/import/spotify/playlist | Read a public Spotify playlist (no matching)
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**readSpotifyTracks**](doc/PlaylistsApi.md#readspotifytracks) | **POST** /api/v1/playlists/import/spotify/tracks | Read up to 50 Spotify tracks from their public pages
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**removePlaylistTracks**](doc/PlaylistsApi.md#removeplaylisttracks) | **DELETE** /api/v1/playlists/{id}/tracks | Remove track(s)
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**reorderPlaylistTracks**](doc/PlaylistsApi.md#reorderplaylisttracks) | **PATCH** /api/v1/playlists/{id}/tracks | Reorder tracks
+[*PlaylistsApi*](doc/PlaylistsApi.md) | [**saveSpotifyImport**](doc/PlaylistsApi.md#savespotifyimport) | **POST** /api/v1/playlists/import/spotify/save | Create the imported playlist from matched tracks
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**updatePlaylist**](doc/PlaylistsApi.md#updateplaylist) | **PATCH** /api/v1/playlists/{id} | Rename / edit description
 [*RecentPlaysApi*](doc/RecentPlaysApi.md) | [**listRecentPlays**](doc/RecentPlaysApi.md#listrecentplays) | **GET** /api/v1/recent-plays | Listening history (most recent first, cap 100)
 [*RecentPlaysApi*](doc/RecentPlaysApi.md) | [**logRecentPlay**](doc/RecentPlaysApi.md#logrecentplay) | **POST** /api/v1/recent-plays | Log a play — call after 30 s of continuous playback
@@ -119,7 +125,9 @@ Class | Method | HTTP request | Description
 [*SearchApi*](doc/SearchApi.md) | [**searchSuggest**](doc/SearchApi.md#searchsuggest) | **GET** /api/v1/search/suggest | Autocomplete suggestions (normalized)
 [*SettingsApi*](doc/SettingsApi.md) | [**getPreferences**](doc/SettingsApi.md#getpreferences) | **GET** /api/v1/preferences | UI preferences
 [*SettingsApi*](doc/SettingsApi.md) | [**getSettings**](doc/SettingsApi.md#getsettings) | **GET** /api/v1/settings | Engine settings (per-user overrides merged over global)
-[*SettingsApi*](doc/SettingsApi.md) | [**saveSettings**](doc/SettingsApi.md#savesettings) | **POST** /api/v1/settings | Save engine settings
+[*SettingsApi*](doc/SettingsApi.md) | [**getStreamingQuality**](doc/SettingsApi.md#getstreamingquality) | **GET** /api/v1/settings/quality | Server-wide streaming quality (maxBitrate)
+[*SettingsApi*](doc/SettingsApi.md) | [**saveSettings**](doc/SettingsApi.md#savesettings) | **POST** /api/v1/settings | Save the signed-in user&#39;s engine settings
+[*SettingsApi*](doc/SettingsApi.md) | [**setStreamingQuality**](doc/SettingsApi.md#setstreamingquality) | **POST** /api/v1/settings/quality | Change the server-wide streaming quality
 [*SettingsApi*](doc/SettingsApi.md) | [**updatePreferences**](doc/SettingsApi.md#updatepreferences) | **PATCH** /api/v1/preferences | Merge UI preferences (unknown keys → 400)
 [*SharesApi*](doc/SharesApi.md) | [**createShare**](doc/SharesApi.md#createshare) | **POST** /api/v1/shares | Create (or reuse) a public share link for a track
 [*SharesApi*](doc/SharesApi.md) | [**deleteShare**](doc/SharesApi.md#deleteshare) | **DELETE** /api/v1/shares/{shareId} | Revoke a share link (owner only)
@@ -176,7 +184,12 @@ Class | Method | HTTP request | Description
  - [FollowedArtistEnvelopeData](doc/FollowedArtistEnvelopeData.md)
  - [FollowedArtistListEnvelope](doc/FollowedArtistListEnvelope.md)
  - [FollowedArtistListEnvelopeData](doc/FollowedArtistListEnvelopeData.md)
+ - [GcEnvelope](doc/GcEnvelope.md)
+ - [GcResult](doc/GcResult.md)
  - [ImportSpotifyPlaylistRequest](doc/ImportSpotifyPlaylistRequest.md)
+ - [ImportSpotifyPlaylistRequestOneOf](doc/ImportSpotifyPlaylistRequestOneOf.md)
+ - [ImportSpotifyPlaylistRequestOneOf1](doc/ImportSpotifyPlaylistRequestOneOf1.md)
+ - [ImportedTrack](doc/ImportedTrack.md)
  - [LibraryStatus](doc/LibraryStatus.md)
  - [LibraryStatusEnvelope](doc/LibraryStatusEnvelope.md)
  - [LibraryStatusInput](doc/LibraryStatusInput.md)
@@ -186,6 +199,7 @@ Class | Method | HTTP request | Description
  - [LoginDeezerEmailRequest](doc/LoginDeezerEmailRequest.md)
  - [Lyrics](doc/Lyrics.md)
  - [LyricsEnvelope](doc/LyricsEnvelope.md)
+ - [MatchSpotifyTracksRequest](doc/MatchSpotifyTracksRequest.md)
  - [MessageEnvelope](doc/MessageEnvelope.md)
  - [MessageResult](doc/MessageResult.md)
  - [Playlist](doc/Playlist.md)
@@ -200,6 +214,8 @@ Class | Method | HTTP request | Description
  - [PublicShare](doc/PublicShare.md)
  - [PublicShareEnvelope](doc/PublicShareEnvelope.md)
  - [PublicShareUser](doc/PublicShareUser.md)
+ - [ReadSpotifyPlaylistRequest](doc/ReadSpotifyPlaylistRequest.md)
+ - [ReadSpotifyTracksRequest](doc/ReadSpotifyTracksRequest.md)
  - [RecentPlay](doc/RecentPlay.md)
  - [RecentPlayInput](doc/RecentPlayInput.md)
  - [RecentPlayListEnvelope](doc/RecentPlayListEnvelope.md)
@@ -212,6 +228,7 @@ Class | Method | HTTP request | Description
  - [ReorderedEnvelopeData](doc/ReorderedEnvelopeData.md)
  - [SaveAlbumInput](doc/SaveAlbumInput.md)
  - [SaveSettingsRequest](doc/SaveSettingsRequest.md)
+ - [SaveSpotifyImportRequest](doc/SaveSpotifyImportRequest.md)
  - [SavedAlbumEnvelope](doc/SavedAlbumEnvelope.md)
  - [SavedAlbumEnvelopeData](doc/SavedAlbumEnvelopeData.md)
  - [SavedFlagEnvelope](doc/SavedFlagEnvelope.md)
@@ -221,6 +238,7 @@ Class | Method | HTTP request | Description
  - [SavedTrackEnvelopeData](doc/SavedTrackEnvelopeData.md)
  - [SavedTrackListEnvelope](doc/SavedTrackListEnvelope.md)
  - [SavedTrackListEnvelopeData](doc/SavedTrackListEnvelopeData.md)
+ - [SetStreamingQualityRequest](doc/SetStreamingQualityRequest.md)
  - [SettingsBundle](doc/SettingsBundle.md)
  - [SettingsBundleEnvelope](doc/SettingsBundleEnvelope.md)
  - [SharedTrack](doc/SharedTrack.md)
@@ -236,8 +254,21 @@ Class | Method | HTTP request | Description
  - [SpotifyImportReport](doc/SpotifyImportReport.md)
  - [SpotifyImportReportNotFoundInner](doc/SpotifyImportReportNotFoundInner.md)
  - [SpotifyImportResult](doc/SpotifyImportResult.md)
+ - [SpotifyMatchEnvelope](doc/SpotifyMatchEnvelope.md)
+ - [SpotifyMatchEnvelopeData](doc/SpotifyMatchEnvelopeData.md)
+ - [SpotifyMatchResult](doc/SpotifyMatchResult.md)
+ - [SpotifyPlaylist](doc/SpotifyPlaylist.md)
+ - [SpotifyPlaylistEnvelope](doc/SpotifyPlaylistEnvelope.md)
+ - [SpotifySaveEnvelope](doc/SpotifySaveEnvelope.md)
+ - [SpotifySaveEnvelopeData](doc/SpotifySaveEnvelopeData.md)
+ - [SpotifyTrack](doc/SpotifyTrack.md)
+ - [SpotifyTrackBatch](doc/SpotifyTrackBatch.md)
+ - [SpotifyTrackBatchEnvelope](doc/SpotifyTrackBatchEnvelope.md)
+ - [StreamProbe](doc/StreamProbe.md)
+ - [StreamProbeEnvelope](doc/StreamProbeEnvelope.md)
  - [StreamUrl](doc/StreamUrl.md)
  - [StreamUrlEnvelope](doc/StreamUrlEnvelope.md)
+ - [StreamingQualityEnvelope](doc/StreamingQualityEnvelope.md)
  - [SuggestAlbum](doc/SuggestAlbum.md)
  - [SuggestArtist](doc/SuggestArtist.md)
  - [SuggestTrack](doc/SuggestTrack.md)
@@ -266,6 +297,10 @@ Authentication schemes defined for the API:
 - **Type**: API key
 - **API key parameter name**: __Secure-better-auth.session_token
 - **Location**: 
+
+### cronSecret
+
+- **Type**: HTTP Bearer Token authentication
 
 
 ## Author

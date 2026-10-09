@@ -55,7 +55,12 @@ import 'package:wavelet_api/src/model/followed_artist_envelope.dart';
 import 'package:wavelet_api/src/model/followed_artist_envelope_data.dart';
 import 'package:wavelet_api/src/model/followed_artist_list_envelope.dart';
 import 'package:wavelet_api/src/model/followed_artist_list_envelope_data.dart';
+import 'package:wavelet_api/src/model/gc_envelope.dart';
+import 'package:wavelet_api/src/model/gc_result.dart';
 import 'package:wavelet_api/src/model/import_spotify_playlist_request.dart';
+import 'package:wavelet_api/src/model/import_spotify_playlist_request_one_of.dart';
+import 'package:wavelet_api/src/model/import_spotify_playlist_request_one_of1.dart';
+import 'package:wavelet_api/src/model/imported_track.dart';
 import 'package:wavelet_api/src/model/library_status.dart';
 import 'package:wavelet_api/src/model/library_status_envelope.dart';
 import 'package:wavelet_api/src/model/library_status_input.dart';
@@ -65,6 +70,7 @@ import 'package:wavelet_api/src/model/login_deezer_arl_request.dart';
 import 'package:wavelet_api/src/model/login_deezer_email_request.dart';
 import 'package:wavelet_api/src/model/lyrics.dart';
 import 'package:wavelet_api/src/model/lyrics_envelope.dart';
+import 'package:wavelet_api/src/model/match_spotify_tracks_request.dart';
 import 'package:wavelet_api/src/model/message_envelope.dart';
 import 'package:wavelet_api/src/model/message_result.dart';
 import 'package:wavelet_api/src/model/playlist.dart';
@@ -79,6 +85,8 @@ import 'package:wavelet_api/src/model/playlist_with_tracks_envelope.dart';
 import 'package:wavelet_api/src/model/public_share.dart';
 import 'package:wavelet_api/src/model/public_share_envelope.dart';
 import 'package:wavelet_api/src/model/public_share_user.dart';
+import 'package:wavelet_api/src/model/read_spotify_playlist_request.dart';
+import 'package:wavelet_api/src/model/read_spotify_tracks_request.dart';
 import 'package:wavelet_api/src/model/recent_play.dart';
 import 'package:wavelet_api/src/model/recent_play_input.dart';
 import 'package:wavelet_api/src/model/recent_play_list_envelope.dart';
@@ -91,6 +99,7 @@ import 'package:wavelet_api/src/model/reordered_envelope.dart';
 import 'package:wavelet_api/src/model/reordered_envelope_data.dart';
 import 'package:wavelet_api/src/model/save_album_input.dart';
 import 'package:wavelet_api/src/model/save_settings_request.dart';
+import 'package:wavelet_api/src/model/save_spotify_import_request.dart';
 import 'package:wavelet_api/src/model/saved_album_envelope.dart';
 import 'package:wavelet_api/src/model/saved_album_envelope_data.dart';
 import 'package:wavelet_api/src/model/saved_flag_envelope.dart';
@@ -100,6 +109,7 @@ import 'package:wavelet_api/src/model/saved_track_envelope.dart';
 import 'package:wavelet_api/src/model/saved_track_envelope_data.dart';
 import 'package:wavelet_api/src/model/saved_track_list_envelope.dart';
 import 'package:wavelet_api/src/model/saved_track_list_envelope_data.dart';
+import 'package:wavelet_api/src/model/set_streaming_quality_request.dart';
 import 'package:wavelet_api/src/model/settings_bundle.dart';
 import 'package:wavelet_api/src/model/settings_bundle_envelope.dart';
 import 'package:wavelet_api/src/model/shared_track.dart';
@@ -115,8 +125,21 @@ import 'package:wavelet_api/src/model/spotify_import_envelope.dart';
 import 'package:wavelet_api/src/model/spotify_import_report.dart';
 import 'package:wavelet_api/src/model/spotify_import_report_not_found_inner.dart';
 import 'package:wavelet_api/src/model/spotify_import_result.dart';
+import 'package:wavelet_api/src/model/spotify_match_envelope.dart';
+import 'package:wavelet_api/src/model/spotify_match_envelope_data.dart';
+import 'package:wavelet_api/src/model/spotify_match_result.dart';
+import 'package:wavelet_api/src/model/spotify_playlist.dart';
+import 'package:wavelet_api/src/model/spotify_playlist_envelope.dart';
+import 'package:wavelet_api/src/model/spotify_save_envelope.dart';
+import 'package:wavelet_api/src/model/spotify_save_envelope_data.dart';
+import 'package:wavelet_api/src/model/spotify_track.dart';
+import 'package:wavelet_api/src/model/spotify_track_batch.dart';
+import 'package:wavelet_api/src/model/spotify_track_batch_envelope.dart';
+import 'package:wavelet_api/src/model/stream_probe.dart';
+import 'package:wavelet_api/src/model/stream_probe_envelope.dart';
 import 'package:wavelet_api/src/model/stream_url.dart';
 import 'package:wavelet_api/src/model/stream_url_envelope.dart';
+import 'package:wavelet_api/src/model/streaming_quality_envelope.dart';
 import 'package:wavelet_api/src/model/suggest_album.dart';
 import 'package:wavelet_api/src/model/suggest_artist.dart';
 import 'package:wavelet_api/src/model/suggest_track.dart';
@@ -175,7 +198,12 @@ part 'serializers.g.dart';
   FollowedArtistEnvelopeData,
   FollowedArtistListEnvelope,
   FollowedArtistListEnvelopeData,
+  GcEnvelope,
+  GcResult,
   ImportSpotifyPlaylistRequest,
+  ImportSpotifyPlaylistRequestOneOf,
+  ImportSpotifyPlaylistRequestOneOf1,
+  ImportedTrack,
   LibraryStatus,
   LibraryStatusEnvelope,
   LibraryStatusInput,
@@ -185,6 +213,7 @@ part 'serializers.g.dart';
   LoginDeezerEmailRequest,
   Lyrics,
   LyricsEnvelope,
+  MatchSpotifyTracksRequest,
   MessageEnvelope,
   MessageResult,
   Playlist,$Playlist,
@@ -199,6 +228,8 @@ part 'serializers.g.dart';
   PublicShare,
   PublicShareEnvelope,
   PublicShareUser,
+  ReadSpotifyPlaylistRequest,
+  ReadSpotifyTracksRequest,
   RecentPlay,
   RecentPlayInput,
   RecentPlayListEnvelope,
@@ -211,6 +242,7 @@ part 'serializers.g.dart';
   ReorderedEnvelopeData,
   SaveAlbumInput,
   SaveSettingsRequest,
+  SaveSpotifyImportRequest,
   SavedAlbumEnvelope,
   SavedAlbumEnvelopeData,
   SavedFlagEnvelope,
@@ -220,6 +252,7 @@ part 'serializers.g.dart';
   SavedTrackEnvelopeData,
   SavedTrackListEnvelope,
   SavedTrackListEnvelopeData,
+  SetStreamingQualityRequest,
   SettingsBundle,
   SettingsBundleEnvelope,
   SharedTrack,
@@ -235,8 +268,21 @@ part 'serializers.g.dart';
   SpotifyImportReport,
   SpotifyImportReportNotFoundInner,
   SpotifyImportResult,
+  SpotifyMatchEnvelope,
+  SpotifyMatchEnvelopeData,
+  SpotifyMatchResult,
+  SpotifyPlaylist,
+  SpotifyPlaylistEnvelope,
+  SpotifySaveEnvelope,
+  SpotifySaveEnvelopeData,
+  SpotifyTrack,
+  SpotifyTrackBatch,
+  SpotifyTrackBatchEnvelope,
+  StreamProbe,
+  StreamProbeEnvelope,
   StreamUrl,
   StreamUrlEnvelope,
+  StreamingQualityEnvelope,
   SuggestAlbum,
   SuggestArtist,
   SuggestTrack,
@@ -281,6 +327,10 @@ Serializers serializers = (_$serializers.toBuilder()
         () => ListBuilder<Album>(),
       )
       ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(SpotifyTrack)]),
+        () => ListBuilder<SpotifyTrack>(),
+      )
+      ..addBuilderFactory(
         const FullType(BuiltList, [FullType(PlaylistSummary)]),
         () => ListBuilder<PlaylistSummary>(),
       )
@@ -293,12 +343,20 @@ Serializers serializers = (_$serializers.toBuilder()
         () => ListBuilder<BuiltMap<String, JsonObject>>(),
       )
       ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ImportedTrack)]),
+        () => ListBuilder<ImportedTrack>(),
+      )
+      ..addBuilderFactory(
         const FullType(BuiltList, [FullType(AlbumTrack)]),
         () => ListBuilder<AlbumTrack>(),
       )
       ..addBuilderFactory(
         const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
         () => MapBuilder<String, JsonObject?>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(SpotifyMatchResult)]),
+        () => ListBuilder<SpotifyMatchResult>(),
       )
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(SuggestTrack)]),

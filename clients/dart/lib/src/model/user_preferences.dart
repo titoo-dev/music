@@ -14,7 +14,7 @@ part 'user_preferences.g.dart';
 /// Properties:
 /// * [playlistSortOrder] 
 /// * [albumSortOrder] 
-/// * [preCacheSaved] - Warm the Blob cache when saving a track/album
+/// * [preCacheSaved] - Warm the R2 cache when saving a track/album
 @BuiltValue()
 abstract class UserPreferences implements Built<UserPreferences, UserPreferencesBuilder> {
   @BuiltValueField(wireName: r'playlistSortOrder')
@@ -25,7 +25,7 @@ abstract class UserPreferences implements Built<UserPreferences, UserPreferences
   UserPreferencesAlbumSortOrderEnum? get albumSortOrder;
   // enum albumSortOrderEnum {  asc,  desc,  };
 
-  /// Warm the Blob cache when saving a track/album
+  /// Warm the R2 cache when saving a track/album
   @BuiltValueField(wireName: r'preCacheSaved')
   bool? get preCacheSaved;
 

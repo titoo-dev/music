@@ -20,15 +20,15 @@ class LyricsApi {
 
   const LyricsApi(this._dio, this._serializers);
 
-  /// Lyrics (LRCLIB first, Deezer fallback)
-  /// Pass title/artist when the track is not in the library nor recent plays. No lyrics → 200 with &#x60;source: null&#x60;.
+  /// Lyrics (LRCLIB exact → Deezer → LRCLIB fuzzy search)
+  /// Send title/artist/album/duration of the playing track for the best match; otherwise they come from the library, recent plays or the Deezer track API. Synced lyrics are only returned when the matched recording&#39;s length is within 3 s. No lyrics → 200 with &#x60;source: null&#x60;. 400 MISSING_METADATA only when there is no metadata and no Deezer session.
   ///
   /// Parameters:
   /// * [trackId] - Deezer track id
   /// * [title] - Track title
   /// * [artist] - Artist name
   /// * [album] - Album title
-  /// * [duration] - Duration in seconds (improves matching)
+  /// * [duration] - Duration in seconds (aligns synced lyrics; strongly recommended)
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request

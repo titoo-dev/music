@@ -10,6 +10,10 @@ const SkipResultReasonEnum _$skipResultReasonEnum_alreadyPlayed =
     const SkipResultReasonEnum._('alreadyPlayed');
 const SkipResultReasonEnum _$skipResultReasonEnum_anchored =
     const SkipResultReasonEnum._('anchored');
+const SkipResultReasonEnum _$skipResultReasonEnum_persisting =
+    const SkipResultReasonEnum._('persisting');
+const SkipResultReasonEnum _$skipResultReasonEnum_recent =
+    const SkipResultReasonEnum._('recent');
 
 SkipResultReasonEnum _$skipResultReasonEnumValueOf(String name) {
   switch (name) {
@@ -17,6 +21,10 @@ SkipResultReasonEnum _$skipResultReasonEnumValueOf(String name) {
       return _$skipResultReasonEnum_alreadyPlayed;
     case 'anchored':
       return _$skipResultReasonEnum_anchored;
+    case 'persisting':
+      return _$skipResultReasonEnum_persisting;
+    case 'recent':
+      return _$skipResultReasonEnum_recent;
     default:
       throw ArgumentError(name);
   }
@@ -26,6 +34,8 @@ final BuiltSet<SkipResultReasonEnum> _$skipResultReasonEnumValues =
     BuiltSet<SkipResultReasonEnum>(const <SkipResultReasonEnum>[
   _$skipResultReasonEnum_alreadyPlayed,
   _$skipResultReasonEnum_anchored,
+  _$skipResultReasonEnum_persisting,
+  _$skipResultReasonEnum_recent,
 ]);
 
 Serializer<SkipResultReasonEnum> _$skipResultReasonEnumSerializer =
@@ -36,10 +46,14 @@ class _$SkipResultReasonEnumSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'alreadyPlayed': 'already_played',
     'anchored': 'anchored',
+    'persisting': 'persisting',
+    'recent': 'recent',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
     'already_played': 'alreadyPlayed',
     'anchored': 'anchored',
+    'persisting': 'persisting',
+    'recent': 'recent',
   };
 
   @override

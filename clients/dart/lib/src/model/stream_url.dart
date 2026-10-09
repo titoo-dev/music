@@ -12,19 +12,25 @@ part 'stream_url.g.dart';
 /// StreamUrl
 ///
 /// Properties:
-/// * [url] - Presigned Vercel Blob URL, valid ~15 min. null → use /stream-progressive.
-/// * [contentType] 
-/// * [status] - Present only when `url` is null
+/// * [url] - Presigned Cloudflare R2 URL, valid 1 h (3600 s, see `expiresAt`). null → see `status`.
+/// * [contentType] - Present only when `url` is set
+/// * [expiresAt] - Present only when `url` is set. ISO-8601 instant the presigned URL lapses (signing time + 3600 s, never later than the real expiry). Refresh it with this endpoint before then.
+/// * [status] - Present only when `url` is null. `not_cached`: no usable cached copy (including a copy below this listener's quality, which the progressive play upgrades) → play /stream-progressive. `unsupported_storage`: only copies in older storage → /stream-progressive. `file_missing`: the object is gone from R2 → /stream-progressive. `presigned_disabled`: presigned URLs are turned off server-side (`WAVELET_DISABLE_PRESIGNED_URLS=1`) → play the same-origin /stream.
 @BuiltValue()
 abstract class StreamUrl implements Built<StreamUrl, StreamUrlBuilder> {
-  /// Presigned Vercel Blob URL, valid ~15 min. null → use /stream-progressive.
+  /// Presigned Cloudflare R2 URL, valid 1 h (3600 s, see `expiresAt`). null → see `status`.
   @BuiltValueField(wireName: r'url')
   String? get url;
 
+  /// Present only when `url` is set
   @BuiltValueField(wireName: r'contentType')
   String? get contentType;
 
-  /// Present only when `url` is null
+  /// Present only when `url` is set. ISO-8601 instant the presigned URL lapses (signing time + 3600 s, never later than the real expiry). Refresh it with this endpoint before then.
+  @BuiltValueField(wireName: r'expiresAt')
+  DateTime? get expiresAt;
+
+  /// Present only when `url` is null. `not_cached`: no usable cached copy (including a copy below this listener's quality, which the progressive play upgrades) → play /stream-progressive. `unsupported_storage`: only copies in older storage → /stream-progressive. `file_missing`: the object is gone from R2 → /stream-progressive. `presigned_disabled`: presigned URLs are turned off server-side (`WAVELET_DISABLE_PRESIGNED_URLS=1`) → play the same-origin /stream.
   @BuiltValueField(wireName: r'status')
   StreamUrlStatusEnum? get status;
   // enum statusEnum {  not_cached,  unsupported_storage,  file_missing,  presigned_disabled,  };
@@ -62,6 +68,13 @@ class _$StreamUrlSerializer implements PrimitiveSerializer<StreamUrl> {
       yield serializers.serialize(
         object.contentType,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.expiresAt != null) {
+      yield r'expiresAt';
+      yield serializers.serialize(
+        object.expiresAt,
+        specifiedType: const FullType(DateTime),
       );
     }
     if (object.status != null) {
@@ -110,6 +123,14 @@ class _$StreamUrlSerializer implements PrimitiveSerializer<StreamUrl> {
           if (valueDes == null) continue;
           result.contentType = valueDes;
           break;
+        case r'expiresAt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
+          result.expiresAt = valueDes;
+          break;
         case r'status':
           final valueDes = serializers.deserialize(
             value,
@@ -148,7 +169,7 @@ class _$StreamUrlSerializer implements PrimitiveSerializer<StreamUrl> {
 }
 
 
-/// Present only when `url` is null
+/// Present only when `url` is null. `not_cached`: no usable cached copy (including a copy below this listener's quality, which the progressive play upgrades) → play /stream-progressive. `unsupported_storage`: only copies in older storage → /stream-progressive. `file_missing`: the object is gone from R2 → /stream-progressive. `presigned_disabled`: presigned URLs are turned off server-side (`WAVELET_DISABLE_PRESIGNED_URLS=1`) → play the same-origin /stream.
 class StreamUrlStatusEnum extends EnumClass {
 
   @BuiltValueEnumConst(wireName: r'not_cached')

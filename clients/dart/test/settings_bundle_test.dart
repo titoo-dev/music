@@ -19,11 +19,5 @@ void main() {
       // TODO
     });
 
-    // Spotify plugin settings (may be absent).
-    // BuiltMap<String, JsonObject> spotifySettings
-    test('to test the property `spotifySettings`', () async {
-      // TODO
-    });
-
   });
 }

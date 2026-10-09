@@ -10,7 +10,7 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **playlistSortOrder** | **String** |  | [optional] 
 **albumSortOrder** | **String** |  | [optional] 
-**preCacheSaved** | **bool** | Warm the Blob cache when saving a track/album | [optional] 
+**preCacheSaved** | **bool** | Warm the R2 cache when saving a track/album | [optional] 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

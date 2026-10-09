@@ -12,7 +12,8 @@ Name | Type | Description | Notes
 **processed** | **int** |  | 
 **matched** | **int** |  | 
 **notFound** | [**BuiltList&lt;SpotifyImportReportNotFoundInner&gt;**](SpotifyImportReportNotFoundInner.md) |  | 
-**truncated** | **bool** | true when the playlist had more than 500 tracks | 
+**truncated** | **bool** | true when the playlist had more than 1000 tracks | 
+**limited** | **bool** | true when Spotify only exposed the first 100 tracks of a playlist link (paste track links for the full list) | [optional] 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

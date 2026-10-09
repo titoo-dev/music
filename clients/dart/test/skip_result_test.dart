@@ -12,6 +12,7 @@ void main() {
       // TODO
     });
 
+    // Why the file was kept: `already_played` (this user logged a real play), `anchored` (saved, in a saved album, shared or recent-played by anyone), `persisting` (a persist of the track is in flight), `recent` (its cached copy is younger than 10 min — another listener may be playing it).
     // String reason
     test('to test the property `reason`', () async {
       // TODO

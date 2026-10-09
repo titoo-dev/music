@@ -26,7 +26,7 @@ class DeezerAccountApi {
   const DeezerAccountApi(this._dio, this._serializers);
 
   /// Switch to another Deezer family/child account
-  /// 
+  /// The session is checked before the body is read (401 / 403 come first). The choice is saved, so a later session restore logs into the same child; if that save fails, the switch is still answered as done.
   ///
   /// Parameters:
   /// * [changeDeezerAccountRequest] 

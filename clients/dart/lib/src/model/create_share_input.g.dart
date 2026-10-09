@@ -10,9 +10,9 @@ class _$CreateShareInput extends CreateShareInput {
   @override
   final String trackId;
   @override
-  final String? title;
+  final String title;
   @override
-  final String? artist;
+  final String artist;
   @override
   final String? album;
   @override
@@ -28,8 +28,8 @@ class _$CreateShareInput extends CreateShareInput {
 
   _$CreateShareInput._(
       {required this.trackId,
-      this.title,
-      this.artist,
+      required this.title,
+      required this.artist,
       this.album,
       this.coverUrl,
       this.duration,
@@ -153,8 +153,10 @@ class CreateShareInputBuilder
         _$CreateShareInput._(
           trackId: BuiltValueNullFieldError.checkNotNull(
               trackId, r'CreateShareInput', 'trackId'),
-          title: title,
-          artist: artist,
+          title: BuiltValueNullFieldError.checkNotNull(
+              title, r'CreateShareInput', 'title'),
+          artist: BuiltValueNullFieldError.checkNotNull(
+              artist, r'CreateShareInput', 'artist'),
           album: album,
           coverUrl: coverUrl,
           duration: duration,
