@@ -110,7 +110,7 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Download queue | `src/stores/useDownloadStore.ts`, `src/lib/download.ts` | `useDownloadStore.test.ts`, `download.test.ts` |
 | ⌘K palette | `src/components/command/CommandPalette.tsx`, `src/stores/useCommandStore.ts` | `CommandPalette.test.tsx`, `useCommandStore.test.ts` |
 | Theme | `src/lib/theme.ts` | `theme.test.ts` |
-| Keyboard shortcuts | `src/hooks/useKeyboardShortcuts.ts` | `useKeyboardShortcuts.test.ts` |
+| Keyboard shortcuts (Space / arrows left to the browser with nothing loaded; volume on Shift+↑/↓) | `src/hooks/useKeyboardShortcuts.ts` | `useKeyboardShortcuts.test.ts` |
 | Player seek bar | `src/components/audio/SeekBar.tsx` | `SeekBar.test.tsx` (+ `Player.test.tsx`) |
 | Seeking on the live stream | `src/lib/seek.ts` (used by `AudioEngine.tsx` seek / resume paths) | `seek.test.ts` |
 | DB connection string | `src/lib/db-url.ts` (used by `prisma.ts`) | `db-url.test.ts` |
@@ -140,6 +140,7 @@ CI runs on every PR (`.github/workflows/ci.yml`): tests + coverage gate + `tsc -
 | Lyrics lookup (LRCLIB get → Deezer → scored search) | `src/lib/lyrics/{match,lrc,deezer-sync,resolve,cache}.ts`, `src/app/api/v1/lyrics/[trackId]/route.ts`, `src/stores/useLyricsStore.ts` | `match.test.ts`, `lrc.test.ts`, `resolve.test.ts`, `cache.test.ts`, `route.test.ts`, `useLyricsStore.test.ts` |
 | Spotify import (≤ 1000 tracks: read → match in batches of 50 → save; runs on after the dialog closes) | `src/lib/spotify/{import,import-run,link-input}.ts`, `src/stores/useSpotifyImportStore.ts`, `src/app/api/v1/playlists/import/spotify/{playlist,match,save}/route.ts`, `src/components/motion/WavyProgress.tsx`, `components/playlists/SpotifyLinksField.tsx` (one item per pasted link) (UI: `components/playlists/ImportSpotifyDialog.tsx` + `ImportStage.tsx`, mounted in `(main)/layout.tsx`) | `import.test.ts`, `import-run.test.ts`, `useSpotifyImportStore.test.ts`, `route.test.ts` ×3, `WavyProgress.test.tsx`, `ImportStage.test.tsx`, `link-input.test.ts`, `SpotifyLinksField.test.tsx` |
 | Artist / album links (id, else name / title fallback) | `src/lib/entity-links.ts`, `src/components/links/EntityLink.tsx`, `src/components/audio/leave-player.ts` (resolved by `artist/page.tsx` `?name=`, `album/page.tsx` `?title=`) | `entity-links.test.ts`, `EntityLink.test.tsx`, `leave-player.test.ts` |
+| Overlay history (Now Playing, immersive lyrics, phone queue and ⌘K own a history entry: Back closes the top-most one; links out replace it; route change closes them) | `src/lib/overlay-history.ts`, `src/hooks/useOverlayHistory.ts` (mounted in `(main)/layout.tsx`), `EntityLink.tsx` `useOverlayLink` | `overlay-history.test.ts`, `useOverlayHistory.test.ts`, `EntityLink.test.tsx` |
 
 ### Fix-bug-once strategy (read this before fixing anything)
 

@@ -27,6 +27,7 @@ import { fetchData } from "@/utils/api";
 import { cn } from "@/lib/utils";
 import { AlbumLink, ArtistLink, ArtistLinks } from "@/components/links/EntityLink";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { leaveOverlays, useOverlayStack } from "@/lib/overlay-history";
 import { useCommandStore, type CommandView } from "@/stores/useCommandStore";
 import {
 	useDownloadStore,
@@ -230,13 +231,25 @@ function PaletteBody() {
 		return { link, info: loaded.info, error: loaded.error };
 	}, [link, isCollectionLink, loaded, linkKey]);
 
+	// The palette owns a history entry while open (Back closes it): a navigation replaces that entry and
+	// closes the palette without going Back, which would race the navigation.
+	const go = useCallback(
+		(href: string) => {
+			const replace = useOverlayStack.getState().ids.length > 0;
+			leaveOverlays(close);
+			if (replace) router.replace(href);
+			else router.push(href);
+		},
+		[close, router]
+	);
+
 	const requireAuth = useCallback(() => {
 		if (isAuthenticated) return true;
 		toast("Sign in to download", {
-			action: { label: "Sign in", onClick: () => router.push("/login") },
+			action: { label: "Sign in", onClick: () => go("/login") },
 		});
 		return false;
-	}, [isAuthenticated, router]);
+	}, [isAuthenticated, go]);
 
 	const download = useCallback(
 		(tracks: DownloadableTrack[], group: string | null = null) => {
@@ -251,14 +264,6 @@ function PaletteBody() {
 			});
 		},
 		[enqueue, requireAuth]
-	);
-
-	const go = useCallback(
-		(href: string) => {
-			close();
-			router.push(href);
-		},
-		[close, router]
 	);
 
 	const downloadCollection = useCallback(

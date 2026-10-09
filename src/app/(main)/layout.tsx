@@ -3,6 +3,7 @@
 import { MotionConfig } from "motion/react";
 import { useInitApp } from "@/hooks/useInitApp";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useOverlayHistory } from "@/hooks/useOverlayHistory";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import { AudioPreview } from "@/components/audio/AudioPreview";
@@ -22,6 +23,7 @@ import { ImportSpotifyDialog } from "@/components/playlists/ImportSpotifyDialog"
 export default function MainLayout({ children }: { children: React.ReactNode }) {
 	useInitApp();
 	useKeyboardShortcuts();
+	useOverlayHistory();
 
 	return (
 		<MotionConfig reducedMotion="user">

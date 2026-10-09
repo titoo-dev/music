@@ -66,6 +66,8 @@ export default defineConfig({
 				"src/app/api/v1/lyrics/**",
 				"src/stores/useLyricsStore.ts",
 				"src/lib/entity-links.ts",
+				"src/lib/overlay-history.ts",
+				"src/hooks/useOverlayHistory.ts",
 				"src/components/links/EntityLink.tsx",
 				"src/components/audio/leave-player.ts",
 				"src/lib/spotify/import.ts",

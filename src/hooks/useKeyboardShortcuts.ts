@@ -14,9 +14,11 @@ import { useCommandStore } from "@/stores/useCommandStore";
  * - ArrowLeft: previous track
  * - Shift+ArrowRight / L: seek forward 10s
  * - Shift+ArrowLeft / J: seek backward 10s
- * - ArrowUp: volume up
- * - ArrowDown: volume down
+ * - Shift+ArrowUp: volume up
+ * - Shift+ArrowDown: volume down
  * - M: mute/unmute
+ * With nothing loaded, Space and the arrows stay with the browser (page
+ * scrolling); plain ArrowUp / ArrowDown always do.
  */
 export function useKeyboardShortcuts() {
 	useEffect(() => {
@@ -69,14 +71,14 @@ export function useKeyboardShortcuts() {
 					break;
 				}
 				case " ": {
-					e.preventDefault();
 					if (!state.currentTrack) return;
+					e.preventDefault();
 					state.toggle();
 					break;
 				}
 				case "ArrowRight": {
-					e.preventDefault();
 					if (!state.currentTrack) return;
+					e.preventDefault();
 					if (e.shiftKey) {
 						// Shift+ArrowRight: seek forward 10s
 						state.seek(Math.min(state.duration, state.currentTime + 10));
@@ -86,8 +88,8 @@ export function useKeyboardShortcuts() {
 					break;
 				}
 				case "ArrowLeft": {
-					e.preventDefault();
 					if (!state.currentTrack) return;
+					e.preventDefault();
 					if (e.shiftKey) {
 						// Shift+ArrowLeft: seek backward 10s
 						state.seek(Math.max(0, state.currentTime - 10));
@@ -97,11 +99,14 @@ export function useKeyboardShortcuts() {
 					break;
 				}
 				case "ArrowUp": {
+					// Plain ArrowUp / ArrowDown scroll the page.
+					if (!e.shiftKey) return;
 					e.preventDefault();
 					state.setVolume(Math.min(100, state.volume + 5));
 					break;
 				}
 				case "ArrowDown": {
+					if (!e.shiftKey) return;
 					e.preventDefault();
 					state.setVolume(Math.max(0, state.volume - 5));
 					break;

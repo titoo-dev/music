@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { closeOverlay, openOverlay, resetOverlayHistory, useOverlayStack } from "@/lib/overlay-history";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AlbumLink, ArtistLink, ArtistLinks } from "./EntityLink";
@@ -66,5 +67,32 @@ describe("ArtistLinks", () => {
 		expect(screen.getByRole("link", { name: "Dua Lipa" })).toHaveAttribute("href", "/artist?id=1");
 		expect(screen.getByRole("link", { name: "DaBaby" })).toHaveAttribute("href", "/artist?name=DaBaby");
 		expect(container).toHaveTextContent("Dua Lipa, DaBaby");
+	});
+});
+
+describe("EntityLink inside an overlay (NAV-04 / NAV-21)", () => {
+	afterEach(() => {
+		resetOverlayHistory();
+		vi.restoreAllMocks();
+	});
+
+	it("leaving an overlay through a link never goes Back (was: Back raced the link and undid it)", async () => {
+		const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+		openOverlay("fullscreen", vi.fn());
+		render(<ArtistLink id="27" name="Daft Punk" onClick={(e) => (e.preventDefault(), closeOverlay("fullscreen"))} />);
+		await userEvent.click(screen.getByRole("link"));
+		expect(back).not.toHaveBeenCalled();
+		expect(useOverlayStack.getState().ids).toEqual([]);
+	});
+
+	it("a Ctrl / ⌘ click opens a new tab and leaves the overlay alone (was: the palette closed)", () => {
+		const own = vi.fn();
+		render(<ArtistLink id="27" name="Daft Punk" onClick={own} />);
+		const link = screen.getByRole("link");
+		link.addEventListener("click", (e) => e.preventDefault());
+		fireEvent.click(link, { ctrlKey: true });
+		fireEvent.click(link, { metaKey: true });
+		fireEvent.click(link, { button: 1 });
+		expect(own).not.toHaveBeenCalled();
 	});
 });

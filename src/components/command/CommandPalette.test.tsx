@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { openOverlay, resetOverlayHistory, useOverlayStack } from "@/lib/overlay-history";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace }) }));
 
 vi.mock("sonner", () => {
 	const toast = Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), loading: vi.fn(() => "t"), dismiss: vi.fn() });
@@ -59,6 +61,8 @@ const PLAYER_INITIAL = usePlayerStore.getState();
 
 beforeEach(() => {
 	push.mockReset();
+	replace.mockReset();
+	resetOverlayHistory();
 	fetchData.mockReset();
 	useCommandStore.setState(CMD_INITIAL, true);
 	usePlayerStore.setState(PLAYER_INITIAL, true);
@@ -272,5 +276,34 @@ describe("CommandTrigger", () => {
 		});
 		await userEvent.click(await screen.findByLabelText("1 downloads in progress"));
 		expect(useCommandStore.getState()).toMatchObject({ isOpen: true, view: "downloads" });
+	});
+});
+
+describe("CommandPalette — leaving (NAV-17)", () => {
+	it("replaces its own history entry when it navigates, without going Back (was: Back raced the navigation)", async () => {
+		const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+		render(<CommandPalette />);
+		openWith();
+		openOverlay("palette", () => useCommandStore.getState().close());
+		expect(await screen.findByText("All music")).toBeInTheDocument();
+		await userEvent.keyboard("{Enter}");
+		expect(replace).toHaveBeenCalledWith("/");
+		expect(push).not.toHaveBeenCalled();
+		expect(back).not.toHaveBeenCalled();
+		expect(useOverlayStack.getState().ids).toEqual([]);
+		back.mockRestore();
+	});
+
+	it("closes before the Sign in toast opens /login (was: the palette was open again on the way back)", async () => {
+		useAuthStore.setState({ isAuthenticated: false });
+		fetchData.mockResolvedValue(SUGGEST);
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		await userEvent.keyboard("{Shift>}{Enter}{/Shift}");
+		const call = vi.mocked(toast).mock.calls.filter((c) => c[0] === "Sign in to download").at(-1) as unknown as [string, { action: { onClick: () => void } }];
+		act(() => call[1].action.onClick());
+		expect(useCommandStore.getState().isOpen).toBe(false);
+		expect(push).toHaveBeenCalledWith("/login");
 	});
 });
