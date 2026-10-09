@@ -377,11 +377,16 @@ describe("getTrackRefCount", () => {
 		expect(prismaMock.albumTrack.count).toHaveBeenCalledWith({
 			where: { trackId: "t1" },
 		});
-		expect(prismaMock.sharedTrack.count).toHaveBeenCalledWith({
-			where: { trackId: "t1" },
-		});
 		expect(prismaMock.recentPlay.count).toHaveBeenCalledWith({
 			where: { trackId: "t1" },
+		});
+	});
+
+	it("counts only live share links (was: an expired link anchored the file forever)", async () => {
+		const now = Date.parse("2026-10-09T12:00:00.000Z");
+		await getTrackRefCount("t1", now);
+		expect(prismaMock.sharedTrack.count).toHaveBeenCalledWith({
+			where: { trackId: "t1", OR: [{ expiresAt: null }, { expiresAt: { gt: new Date(now) } }] },
 		});
 	});
 });

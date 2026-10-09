@@ -5303,7 +5303,8 @@
 					},
 					"coverUrl": {
 						"type": "string",
-						"nullable": true
+						"nullable": true,
+						"description": "https Deezer artwork (*.dzcdn.net, api.deezer.com); any other URL is dropped"
 					},
 					"duration": {
 						"type": "integer",
@@ -5533,12 +5534,16 @@
 					"orphanObjectsDeleted": {
 						"type": "integer",
 						"description": "Objects under `tracks/` without any row deleted (only when `ran` is true)"
+					},
+					"expiredSharesDeleted": {
+						"type": "integer",
+						"description": "Share links expired for more than 30 days deleted (only when `ran` is true)"
 					}
 				},
 				"required": [
 					"ran"
 				],
-				"description": "`{ ran: false, reason }` or `{ ran: true, rowsDeleted, objectsDeleted, objectsScanned, orphanObjectsDeleted }`."
+				"description": "`{ ran: false, reason }` or `{ ran: true, rowsDeleted, objectsDeleted, objectsScanned, orphanObjectsDeleted, expiredSharesDeleted }`."
 			},
 			"SocialSignInInput": {
 				"type": "object",

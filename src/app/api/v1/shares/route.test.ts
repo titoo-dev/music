@@ -63,6 +63,18 @@ describe("POST /api/v1/shares", () => {
 		);
 	});
 
+	it("drops a foreign cover and caps the text it stores (was: any title and any coverUrl went to the public page and the OG renderer)", async () => {
+		setSessionUser("u1");
+		prismaMock.sharedTrack.findFirst.mockResolvedValue(null);
+		const res = await post({ ...meta, title: "x".repeat(500), coverUrl: "https://169.254.169.254/latest", duration: "200" });
+		expect(res.status).toBe(201);
+		expect(shareTrackMock).toHaveBeenCalledWith(
+			"u1",
+			{ trackId: "42", title: "x".repeat(200), artist: "Band", album: "LP", coverUrl: null, duration: null },
+			{ expiresAt: null }
+		);
+	});
+
 	it("reuses the user's live share for the same track", async () => {
 		setSessionUser("u1");
 		const live = { shareId: "old", trackId: "42", userId: "u1", expiresAt: null };

@@ -1,7 +1,8 @@
 // Conservative storage garbage collection (daily cron, /api/v1/internal/gc).
 //
+//  0. SharedTrack links expired for more than 30 days.
 //  1. StoredTrack rows older than 24 h whose track has no reference at all
-//     (SavedTrack, AlbumTrack, SharedTrack, RecentPlay) and no persist in
+//     (SavedTrack, AlbumTrack, live SharedTrack, RecentPlay) and no persist in
 //     flight: the row goes, and its object too unless another row still
 //     points at it. Catches orphans left by a skip during a persist.
 //  2. Objects under tracks/ older than 24 h that no row points at (an upload
@@ -16,6 +17,8 @@ import { TRACKS_PREFIX } from "./objects";
 import { listObjectsPage } from "./r2";
 
 export const GC_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+/** Expired share links stay listed (as "Expired") this long, then go. */
+export const EXPIRED_SHARE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface GcOptions {
 	/** Deletes one object; should swallow "already gone". */
@@ -34,6 +37,7 @@ export interface GcReport {
 	objectsDeleted: number;
 	objectsScanned: number;
 	orphanObjectsDeleted: number;
+	expiredSharesDeleted: number;
 }
 
 interface CandidateRow {
@@ -48,7 +52,20 @@ export async function collectStorageGarbage(opts: GcOptions): Promise<GcReport> 
 	const maxRows = opts.maxRows ?? 500;
 	const maxListPages = opts.maxListPages ?? 10;
 	const listPage = opts.listPage ?? listObjectsPage;
-	const report: GcReport = { rowsDeleted: 0, objectsDeleted: 0, objectsScanned: 0, orphanObjectsDeleted: 0 };
+	const report: GcReport = {
+		rowsDeleted: 0,
+		objectsDeleted: 0,
+		objectsScanned: 0,
+		orphanObjectsDeleted: 0,
+		expiredSharesDeleted: 0,
+	};
+
+	// 0. Share links expired long enough ago that their owner no longer
+	// needs to see them in their list.
+	const purged = await prisma.sharedTrack.deleteMany({
+		where: { expiresAt: { lt: new Date(now - EXPIRED_SHARE_RETENTION_MS) } },
+	});
+	report.expiredSharesDeleted = purged.count;
 
 	// 1. Unreferenced rows. The SQL pre-filter keeps the batch useful (old but
 	// referenced rows would otherwise fill it forever); every track is
@@ -59,7 +76,8 @@ export async function collectStorageGarbage(opts: GcOptions): Promise<GcReport> 
 		WHERE st."createdAt" < ${cutoff}
 			AND NOT EXISTS (SELECT 1 FROM "saved_track" x WHERE x."trackId" = st."trackId")
 			AND NOT EXISTS (SELECT 1 FROM "album_track" x WHERE x."trackId" = st."trackId")
-			AND NOT EXISTS (SELECT 1 FROM "shared_track" x WHERE x."trackId" = st."trackId")
+			AND NOT EXISTS (SELECT 1 FROM "shared_track" x WHERE x."trackId" = st."trackId"
+				AND (x."expiresAt" IS NULL OR x."expiresAt" > ${new Date(now)}))
 			AND NOT EXISTS (SELECT 1 FROM "recent_play" x WHERE x."trackId" = st."trackId")
 		ORDER BY st."createdAt" ASC
 		LIMIT ${maxRows}`;
@@ -71,7 +89,7 @@ export async function collectStorageGarbage(opts: GcOptions): Promise<GcReport> 
 		byTrack.set(row.trackId, rows);
 	}
 	for (const [trackId, rows] of byTrack) {
-		const refs = await getTrackRefCount(trackId);
+		const refs = await getTrackRefCount(trackId, now);
 		if (refs.total > 0 || (await hasActivePersistLease(trackId, now))) continue;
 		const { count } = await prisma.storedTrack.deleteMany({
 			where: { id: { in: rows.map((r) => r.id) }, createdAt: { lt: cutoff } },

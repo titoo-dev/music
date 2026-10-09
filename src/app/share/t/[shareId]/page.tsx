@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { SharePlayer } from "./SharePlayer";
+import { safeCoverUrl } from "@/lib/share-meta";
 
 interface Props {
 	params: Promise<{ shareId: string }>;
@@ -72,7 +73,7 @@ export default async function SharePage({ params }: Props) {
 			title={shared.title}
 			artist={shared.artist}
 			album={shared.album}
-			coverUrl={shared.coverUrl}
+			coverUrl={safeCoverUrl(shared.coverUrl)}
 			duration={shared.duration}
 			sharedBy={shared.user.name}
 		/>

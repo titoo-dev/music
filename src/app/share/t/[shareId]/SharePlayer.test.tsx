@@ -54,6 +54,14 @@ beforeEach(() => {
 });
 
 describe("SharePlayer", () => {
+	it("loads nothing before Play (was: preload=auto counted a play and opened Deezer with the owner's account on every page view)", () => {
+		render(<SharePlayer {...props} />);
+		expect(FakeAudio.last.preload).toBe("none");
+		expect(FakeAudio.last.play).not.toHaveBeenCalled();
+		// The stored duration fills the seek bar until the stream's metadata arrives.
+		expect(screen.getAllByText("4:55").length).toBeGreaterThan(0);
+	});
+
 	it("lets the listener press play before any metadata loaded (was: button disabled until loadedmetadata, which iOS Safari never fires before a tap)", async () => {
 		render(<SharePlayer {...props} />);
 		const play = screen.getByRole("button", { name: "Play" });

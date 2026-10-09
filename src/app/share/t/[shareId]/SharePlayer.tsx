@@ -62,7 +62,9 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 
 	useEffect(() => {
 		const audio = new Audio();
-		audio.preload = "auto";
+		// Nothing loads before Play: the stream counts a listen on its first
+		// request and may open Deezer with the share owner's account.
+		audio.preload = "none";
 		audio.crossOrigin = "anonymous";
 		audio.src = `/api/v1/shares/${shareId}/stream`;
 		audioRef.current = audio;

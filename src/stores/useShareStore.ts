@@ -3,6 +3,7 @@ import { create } from "zustand";
 interface ShareInfo {
 	shareId: string;
 	trackId: string;
+	expiresAt: string | null;
 }
 
 interface ShareState {
@@ -31,7 +32,10 @@ export const useShareStore = create<ShareState>((set, get) => ({
 			const json = await res.json();
 			if (json.success && Array.isArray(json.data)) {
 				const map = new Map<string, string>();
+				const now = Date.now();
 				for (const item of json.data as ShareInfo[]) {
+					// An expired link is dead: the track can be shared again.
+					if (item.expiresAt && Date.parse(item.expiresAt) <= now) continue;
 					map.set(item.trackId, item.shareId);
 				}
 				set({ shared: map, loaded: true });

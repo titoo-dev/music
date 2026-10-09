@@ -535,7 +535,7 @@ const schemas = {
 			title: str(),
 			artist: str(),
 			album: nstr(),
-			coverUrl: nstr(),
+			coverUrl: nstr({ description: "https Deezer artwork (*.dzcdn.net, api.deezer.com); any other URL is dropped" }),
 			duration: nint(),
 			expiresIn: { type: "number", description: "Hours until expiry. Omit for a permanent link." },
 		},
@@ -610,9 +610,10 @@ const schemas = {
 			objectsDeleted: int({ description: "R2 objects of those rows deleted (only when `ran` is true)" }),
 			objectsScanned: int({ description: "Objects listed under `tracks/` (only when `ran` is true)" }),
 			orphanObjectsDeleted: int({ description: "Objects under `tracks/` without any row deleted (only when `ran` is true)" }),
+			expiredSharesDeleted: int({ description: "Share links expired for more than 30 days deleted (only when `ran` is true)" }),
 		},
 		["ran"],
-		{ description: "`{ ran: false, reason }` or `{ ran: true, rowsDeleted, objectsDeleted, objectsScanned, orphanObjectsDeleted }`." }
+		{ description: "`{ ran: false, reason }` or `{ ran: true, rowsDeleted, objectsDeleted, objectsScanned, orphanObjectsDeleted, expiredSharesDeleted }`." }
 	),
 
 	// better-auth

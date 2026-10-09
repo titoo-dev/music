@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/prisma";
 import { logoSvg } from "@/lib/logo";
 import { loadOgFont } from "./og-font";
+import { safeCoverUrl } from "@/lib/share-meta";
 
 export const runtime = "nodejs";
 export const alt = "Shared track on wavelet";
@@ -51,7 +52,8 @@ export default async function OgImage({
 		);
 	}
 
-	const coverHiRes = shared.coverUrl?.replace(/\/\d+x\d+-/, "/500x500-");
+	// Rows from before the share-meta checks may carry any URL: Deezer artwork only.
+	const coverHiRes = safeCoverUrl(shared.coverUrl)?.replace(/\/\d+x\d+-/, "/500x500-");
 
 	const fontData = await loadOgFont();
 

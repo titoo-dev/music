@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, ok, fail, handleError } from "../_lib/helpers";
 import { shareTrack } from "@/lib/library";
+import { sanitizeShareMeta } from "@/lib/share-meta";
 
 // POST /api/v1/shares — create a public share link for a track.
 // No download requirement: the share creates with storedTrackId=null when
@@ -18,9 +19,10 @@ export async function POST(request: NextRequest) {
 			return fail("MISSING_TRACK_ID", "trackId is required.", 400);
 		}
 
-		const title = typeof body?.title === "string" ? body.title.trim() : "";
-		const artist = typeof body?.artist === "string" ? body.artist.trim() : "";
-		if (!title || !artist) {
+		// Shown on a public page and fetched by the OG renderer: trimmed,
+		// capped, cover limited to Deezer artwork.
+		const meta = sanitizeShareMeta(body);
+		if (!meta.title || !meta.artist) {
 			return fail("MISSING_METADATA", "title and artist are required.", 400);
 		}
 
@@ -46,14 +48,7 @@ export async function POST(request: NextRequest) {
 
 		const shared = await shareTrack(
 			userResult.userId,
-			{
-				trackId,
-				title,
-				artist,
-				album: body?.album ?? null,
-				coverUrl: body?.coverUrl ?? null,
-				duration: body?.duration ?? null,
-			},
+			{ trackId, ...meta },
 			{ expiresAt }
 		);
 
