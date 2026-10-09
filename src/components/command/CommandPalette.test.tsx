@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { openOverlay, resetOverlayHistory, useOverlayStack } from "@/lib/overlay-history";
 
@@ -374,5 +374,37 @@ describe("CommandPalette — focus return (NAV-20)", () => {
 		await waitFor(() => expect(input).toHaveFocus());
 		await userEvent.keyboard("{Escape}");
 		await waitFor(() => expect(opener).toHaveFocus());
+	});
+});
+
+describe("CommandPalette — new tabs (NAV-21)", () => {
+	const albumRow = () => screen.getByText("Discovery", { selector: "span.block.truncate.text-sm" }).closest("[role=option]") as HTMLElement;
+
+	it("Ctrl / ⌘ click and middle click open a page row in a new tab and keep the palette (was: navigated here / did nothing)", async () => {
+		const open = vi.spyOn(window, "open").mockReturnValue(null);
+		fetchData.mockResolvedValue(SUGGEST);
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		fireEvent.click(albumRow(), { ctrlKey: true });
+		fireEvent.click(albumRow(), { metaKey: true });
+		fireEvent(albumRow(), new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }));
+		expect(open).toHaveBeenCalledTimes(3);
+		expect(open).toHaveBeenCalledWith("/album?id=302127", "_blank", "noopener");
+		expect(push).not.toHaveBeenCalled();
+		expect(useCommandStore.getState().isOpen).toBe(true);
+		open.mockRestore();
+	});
+
+	it("⌘+Enter on a page row opens it in a new tab (was: navigated in this tab)", async () => {
+		const open = vi.spyOn(window, "open").mockReturnValue(null);
+		fetchData.mockResolvedValue(SUGGEST);
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		await userEvent.keyboard("{ArrowDown}{Meta>}{Enter}{/Meta}");
+		expect(open).toHaveBeenCalledWith("/album?id=302127", "_blank", "noopener");
+		expect(push).not.toHaveBeenCalled();
+		open.mockRestore();
 	});
 });

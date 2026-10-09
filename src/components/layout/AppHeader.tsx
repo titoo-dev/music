@@ -80,6 +80,7 @@ export function AppHeader() {
 	const pathname = usePathname();
 	const user = useAuthStore((s) => s.user);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const authLoading = useAuthStore((s) => s.isLoading);
 	const deezerUser = useAuthStore((s) => s.deezerUser);
 	const router = useRouter();
 	const loginHref = useLoginHref();
@@ -100,7 +101,9 @@ export function AppHeader() {
 		? `https://e-cdns-images.dzcdn.net/images/user/${deezerUser.picture}/56x56-000000-80-0-0.jpg`
 		: user?.image || null;
 	const displayName = user?.name || deezerUser?.name || "User";
-	const nav = NAV.filter((n) => !n.auth || isAuthenticated);
+	// While the session loads, the signed-in tabs hold their place (invisible) so nothing shifts once it resolves.
+	const nav = NAV.filter((n) => !n.auth || isAuthenticated || authLoading);
+	const placeholder = (item: (typeof NAV)[number]) => item.auth && !isAuthenticated;
 
 	return (
 		// Clear at the top of the page; the frosted glass and hairline only come in once content slides under it.
@@ -122,6 +125,12 @@ export function AppHeader() {
 				<LayoutGroup id="main-nav">
 					<nav aria-label="Primary" className="hidden items-center md:flex">
 						{nav.map((item) => {
+							if (placeholder(item))
+								return (
+									<span key={item.href} data-nav-placeholder aria-hidden="true" className="invisible px-3 py-1.5 text-sm">
+										{item.label}
+									</span>
+								);
 							const active = isActive(pathname, item.href);
 							return (
 								<Link
@@ -153,7 +162,9 @@ export function AppHeader() {
 						<Search />
 					</Button>
 
-					{isAuthenticated && user ? (
+					{authLoading ? (
+						<span data-testid="account-placeholder" aria-hidden="true" className="size-8 shrink-0 animate-pulse rounded-full bg-muted" />
+					) : isAuthenticated && user ? (
 						<DropdownMenu>
 							<DropdownMenuTrigger
 								aria-label="Account"
@@ -207,6 +218,12 @@ export function AppHeader() {
 			<LayoutGroup id="mobile-nav">
 				<nav aria-label="Primary mobile" className="scrollbar-hide flex h-11 items-center gap-1 overflow-x-auto px-3 md:hidden">
 					{nav.map((item) => {
+						if (placeholder(item))
+							return (
+								<span key={item.href} data-nav-placeholder aria-hidden="true" className="invisible shrink-0 px-3 py-1.5 text-[13px]">
+									{item.label}
+								</span>
+							);
 						const active = isActive(pathname, item.href);
 						return (
 							<Link

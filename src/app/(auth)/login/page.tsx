@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { AlertCircle, ArrowLeft, AudioLines, Headphones, MicVocal, RefreshCw, X, type LucideIcon } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
-import { safeNext } from "@/lib/login-redirect";
+import { loginHref, safeNext } from "@/lib/login-redirect";
 import { useDiscover } from "@/hooks/useDiscover";
 import { LogoMark, Spinner } from "@/components/motion/icons";
 import { ArtworkWall, Aurora, DUR, EASE, entrance } from "@/components/expressive";
@@ -57,19 +58,56 @@ function GoogleMark() {
 	);
 }
 
+const noop = () => () => {};
+const param = (name: string) => new URLSearchParams(window.location.search).get(name);
+/** The page that sent the user here (`/login?next=…`), in-app paths only. */
+const readNext = () => safeNext(param("next"));
+
+/** `?error=` set by Better Auth when the Google round trip fails. */
+function oauthErrorMessage(code: string | null) {
+	if (!code) return "";
+	if (code === "access_denied") return "Google sign-in was cancelled. Try again when you're ready.";
+	return "Google sign-in didn't finish. Please try again.";
+}
+
 export default function LoginPage() {
+	const router = useRouter();
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
+	const [oauthErrorDismissed, setOauthErrorDismissed] = useState(false);
 	const { showcase } = useDiscover();
+	const next = useSyncExternalStore(noop, readNext, () => "/");
+	const oauthError = useSyncExternalStore(noop, () => oauthErrorMessage(param("error")), () => "");
+	const shownError = error || (oauthErrorDismissed ? "" : oauthError);
+
+	// Already signed in (Back into /login, a stale tab): go on to where the user was headed.
+	useEffect(() => {
+		let live = true;
+		authClient
+			.getSession()
+			.then((res) => {
+				if (live && res?.data?.user) router.replace(readNext());
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, [router]);
+
+	const dismissError = () => {
+		setError("");
+		setOauthErrorDismissed(true);
+	};
 
 	const handleGoogleSignIn = async () => {
 		setLoading(true);
-		setError("");
+		dismissError();
 		try {
 			const result = await authClient.signIn.social({
 				provider: "google",
-				// Back to the page that sent the user here (`/login?next=…`), in-app paths only.
-				callbackURL: safeNext(new URLSearchParams(window.location.search).get("next")),
+				callbackURL: readNext(),
+				// A cancelled or failed Google round trip comes back here (with `?error=`), not to Better Auth's error page.
+				errorCallbackURL: loginHref(readNext()),
 			});
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const data = result as any;
@@ -80,9 +118,10 @@ export default function LoginPage() {
 			}
 			const url = data?.url || data?.data?.url;
 			if (url) {
-				// OAuth leaves the app for the provider: a full navigation is the point.
+				// OAuth leaves the app for the provider: a full navigation is the point. `replace` keeps
+				// /login out of the history, so Back after signing in doesn't land on the form again.
 				// eslint-disable-next-line no-restricted-syntax
-				window.location.href = url;
+				window.location.replace(url);
 			} else {
 				setError("No redirect URL received. Check your Google OAuth configuration.");
 				setLoading(false);
@@ -98,7 +137,7 @@ export default function LoginPage() {
 			<Backdrop covers={showcase} />
 
 			<Link
-				href="/"
+				href={next}
 				aria-label="Back"
 				className="absolute left-3 top-[max(12px,env(safe-area-inset-top))] z-10 flex size-11 items-center justify-center rounded-full bg-white/[0.14] text-white backdrop-blur-md transition-[transform,background-color] hover:bg-white/25 active:scale-90 sm:left-6 sm:top-6"
 			>
@@ -155,12 +194,12 @@ export default function LoginPage() {
 					</motion.button>
 
 					<AnimatePresence initial={false}>
-						{error && (
+						{shownError && (
 							<motion.div key="error" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: DUR.medium, ease: EASE.emphasized }} className="overflow-hidden">
 								<div role="alert" className="mt-3 flex items-start gap-3 rounded-2xl bg-destructive/15 py-3 pl-4 pr-2 text-sm text-destructive">
 									<AlertCircle className="mt-px size-5 shrink-0" />
-									<span className="min-w-0 flex-1 leading-snug">{error}</span>
-									<button type="button" aria-label="Dismiss" onClick={() => setError("")} className="-my-1 flex size-7 shrink-0 items-center justify-center rounded-full hover:bg-destructive/10">
+									<span className="min-w-0 flex-1 leading-snug">{shownError}</span>
+									<button type="button" aria-label="Dismiss" onClick={dismissError} className="-my-1 flex size-7 shrink-0 items-center justify-center rounded-full hover:bg-destructive/10">
 										<X className="size-4" />
 									</button>
 								</div>

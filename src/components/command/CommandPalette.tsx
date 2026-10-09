@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { fetchData } from "@/utils/api";
 import { cn } from "@/lib/utils";
-import { AlbumLink, ArtistLink, ArtistLinks } from "@/components/links/EntityLink";
+import { AlbumLink, ArtistLink, ArtistLinks, isPlainClick } from "@/components/links/EntityLink";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { leaveOverlays, useOverlayStack } from "@/lib/overlay-history";
 import { useCommandStore, type CommandView } from "@/stores/useCommandStore";
@@ -76,6 +76,8 @@ interface Row {
 	round?: boolean;
 	/** Enter */
 	onSelect: () => void;
+	/** The page a navigation row opens: Ctrl / ⌘ / middle click and ⌘+Enter open it in a new tab. */
+	href?: string;
 	/** Shift+Enter — only for downloadable rows. */
 	onDownload?: () => void;
 	onQueue?: () => void;
@@ -356,6 +358,7 @@ function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 				title: `Open ${l.type}`,
 				subtitle: collection.error ?? `deezer.com/${l.type}/${l.id}`,
 				icon: l.type === "artist" ? UserIcon : Disc3,
+				href: `/${l.type}?id=${l.id}`,
 				onSelect: () => go(`/${l.type}?id=${l.id}`),
 			});
 			return out;
@@ -401,6 +404,7 @@ function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 					title: a.title,
 					subtitle: <ArtistLinks artists={a.artists.map((name) => ({ name }))} onClick={close} />,
 					cover: a.coverUrl,
+					href: `/album?id=${a.deezerAlbumId}`,
 					onSelect: () => go(`/album?id=${a.deezerAlbumId}`),
 					onDownload: () => void downloadCollection("album", a.deezerAlbumId, a.title),
 					hint: "Open",
@@ -413,6 +417,7 @@ function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 					title: a.name,
 					cover: a.imageUrl,
 					round: true,
+					href: `/artist?id=${a.deezerArtistId}`,
 					onSelect: () => go(`/artist?id=${a.deezerArtistId}`),
 					hint: "Open",
 				});
@@ -425,6 +430,7 @@ function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 				group: "Search",
 				title: `See all results for “${trimmed}”`,
 				icon: ArrowRight,
+				href: `/search?term=${encodeURIComponent(trimmed)}`,
 				onSelect: () => go(`/search?term=${encodeURIComponent(trimmed)}`),
 			});
 		}
@@ -432,7 +438,7 @@ function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 		const q = trimmed.toLowerCase();
 		const pages = PAGES.filter((p) => (!p.auth || isAuthenticated) && (!q || p.label.toLowerCase().includes(q) || p.keywords.includes(q)));
 		for (const p of pages) {
-			out.push({ key: `p-${p.href}`, group: "Go to", title: p.label, icon: p.icon, onSelect: () => go(p.href) });
+			out.push({ key: `p-${p.href}`, group: "Go to", title: p.label, icon: p.icon, href: p.href, onSelect: () => go(p.href) });
 		}
 		if (!q || "theme dark light mode".includes(q)) {
 			out.push({
@@ -490,6 +496,7 @@ function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 			}
 			if (e.shiftKey && row.onDownload) row.onDownload();
 			else if ((e.metaKey || e.ctrlKey) && row.onQueue) row.onQueue();
+			else if ((e.metaKey || e.ctrlKey) && row.href) openInNewTab(row.href);
 			else row.onSelect();
 		}
 	};
@@ -671,6 +678,11 @@ function SearchRows({
 	);
 }
 
+/** Rows are listbox options, not links (they hold artist links): open a new tab the way a link would. */
+function openInNewTab(href: string) {
+	window.open(href, "_blank", "noopener");
+}
+
 function PaletteRow({ row, index, active, onHover }: { row: Row; index: number; active: boolean; onHover: () => void }) {
 	const Icon = row.icon;
 	return (
@@ -679,7 +691,15 @@ function PaletteRow({ row, index, active, onHover }: { row: Row; index: number; 
 			role="option"
 			aria-selected={active}
 			onMouseMove={onHover}
-			onClick={row.onSelect}
+			onClick={(e) => {
+				if (row.href && !isPlainClick(e)) openInNewTab(row.href);
+				else row.onSelect();
+			}}
+			onAuxClick={(e) => {
+				if (e.button !== 1 || !row.href) return;
+				e.preventDefault();
+				openInNewTab(row.href);
+			}}
 			className="relative flex cursor-pointer items-center gap-3 rounded-2xl px-2.5 py-2"
 		>
 			{active && (

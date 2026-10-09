@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -46,5 +47,19 @@ describe("my-playlists/[id] — signed out", () => {
 		render(<PlaylistDetailPage />);
 		expect(screen.queryByText("Playlist not found")).toBeNull();
 		expect(screen.getByRole("link", { name: /Sign in/ })).toHaveAttribute("href", expect.stringMatching(/^\/login/));
+	});
+});
+
+describe("my-playlists/[id] — delete (NAV-14)", () => {
+	it("replaces the deleted playlist in the history (was: Back opened 'Playlist not found')", async () => {
+		useAuthStore.setState({ isAuthenticated: true, isLoading: false });
+		render(<PlaylistDetailPage />);
+		await screen.findByText("Late night private mix");
+		vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
+		await userEvent.click(screen.getByRole("button", { name: "More options" }));
+		await userEvent.click(await screen.findByRole("menuitem", { name: /Delete playlist/ }));
+		await userEvent.click(await screen.findByRole("button", { name: /^Delete$/ }));
+		await waitFor(() => expect(replace).toHaveBeenCalledWith("/my-playlists"));
+		expect(push).not.toHaveBeenCalledWith("/my-playlists");
 	});
 });

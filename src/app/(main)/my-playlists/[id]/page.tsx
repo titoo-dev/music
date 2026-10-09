@@ -205,7 +205,8 @@ export default function PlaylistDetailPage() {
 			return;
 		}
 		toast(`Deleted “${playlist.title}”`);
-		router.push("/my-playlists");
+		// Replace: Back must not reopen the playlist that no longer exists.
+		router.replace("/my-playlists");
 	};
 
 	if (loading) return <PlaylistDetailSkeleton />;

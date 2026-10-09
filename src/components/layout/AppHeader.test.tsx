@@ -50,3 +50,21 @@ describe("AppHeader — Sign in (NAV-10)", () => {
 		expect(screen.getByText("Sign in").closest("a")).toHaveAttribute("href", "/login?next=%2Flibrary%3Ftab%3Dalbums");
 	});
 });
+
+describe("AppHeader — while the session loads (NAV-13)", () => {
+	it("shows neither Sign in nor the account until auth is known (was: Sign in flashed for signed-in users)", () => {
+		useAuthStore.setState({ isAuthenticated: false, isLoading: true, user: null });
+		render(<AppHeader />);
+		expect(screen.queryByText("Sign in")).toBeNull();
+		expect(screen.getByTestId("account-placeholder")).toBeInTheDocument();
+	});
+
+	it("keeps the place of Library / Playlists so the nav doesn't shift (was: tabs popped in after hydration)", () => {
+		useAuthStore.setState({ isAuthenticated: false, isLoading: true, user: null });
+		render(<AppHeader />);
+		const primary = screen.getByRole("navigation", { name: "Primary" });
+		const placeholders = primary.querySelectorAll("[data-nav-placeholder]");
+		expect(placeholders).toHaveLength(2);
+		placeholders.forEach((p) => expect(p).toHaveAttribute("aria-hidden", "true"));
+	});
+});
