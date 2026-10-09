@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { listPlaylistSummaries } from "@/lib/playlist-summaries";
 import { ok, fail, handleError, requireUser } from "../_lib/helpers";
 
 // GET /api/v1/playlists — List all playlists for current user.
@@ -12,18 +13,7 @@ export async function GET(request: NextRequest) {
 
 		const trackId = request.nextUrl.searchParams.get("trackId");
 
-		const playlists = await prisma.playlist.findMany({
-			where: { userId },
-			orderBy: { updatedAt: "desc" },
-			include: {
-				_count: { select: { tracks: true } },
-				tracks: {
-					take: 4,
-					orderBy: { position: "asc" },
-					select: { coverUrl: true },
-				},
-			},
-		});
+		const playlists = await listPlaylistSummaries(userId);
 
 		let containsSet: Set<string> | null = null;
 		if (trackId && playlists.length > 0) {
@@ -37,15 +27,7 @@ export async function GET(request: NextRequest) {
 			containsSet = new Set(matches.map((m) => m.playlistId));
 		}
 
-		// Flatten covers for the frontend
-		const result = playlists.map((pl) => ({
-			...pl,
-			covers: pl.tracks
-				.map((t) => t.coverUrl)
-				.filter(Boolean) as string[],
-			tracks: undefined,
-			...(containsSet ? { containsTrack: containsSet.has(pl.id) } : {}),
-		}));
+		const result = containsSet ? playlists.map((pl) => ({ ...pl, containsTrack: containsSet.has(pl.id) })) : playlists;
 
 		return ok(result);
 	} catch (e) {

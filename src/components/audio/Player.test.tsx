@@ -145,3 +145,14 @@ describe("Player", () => {
 		expect(usePlayerStore.getState().fullscreenOpen).toBe(true);
 	});
 });
+
+describe("Player — artist link (NAV-05)", () => {
+	it("closes the queue when following the artist link (was: the queue stayed over the artist page)", async () => {
+		usePlayerStore.setState({ queuePanelOpen: true });
+		renderPlayer();
+		const link = screen.getByRole("link", { name: "Rex Orange County" });
+		link.addEventListener("click", (e) => e.preventDefault());
+		await userEvent.click(link);
+		expect(usePlayerStore.getState().queuePanelOpen).toBe(false);
+	});
+});

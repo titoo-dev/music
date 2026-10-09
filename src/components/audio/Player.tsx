@@ -28,6 +28,7 @@ import { WaveSeek } from "./WaveSeek";
 import { GaplessMenuItem } from "./GaplessMenuItem";
 import { cn } from "@/lib/utils";
 import { ArtistLink } from "@/components/links/EntityLink";
+import { leavePlayer } from "./leave-player";
 import { toast } from "sonner";
 
 function Tip({ label, trigger, children }: { label: string; trigger: ReactElement; children: React.ReactNode }) {
@@ -334,7 +335,7 @@ export function Player() {
 														</motion.span>
 													)}
 												</AnimatePresence>
-												<ArtistLink id={currentTrack.artistId} name={currentTrack.artist} className="truncate transition-colors hover:text-foreground" />
+												<ArtistLink id={currentTrack.artistId} name={currentTrack.artist} onClick={leavePlayer} className="truncate transition-colors hover:text-foreground" />
 											</p>
 										</motion.div>
 									</AnimatePresence>

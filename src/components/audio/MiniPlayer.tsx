@@ -11,6 +11,7 @@ import { Equalizer, PlayPauseIcon, ProgressRing } from "@/components/motion/icon
 import { CoverTheme, EASE, SPRING } from "@/components/expressive";
 import { cn } from "@/lib/utils";
 import { ArtistLink } from "@/components/links/EntityLink";
+import { leavePlayer } from "./leave-player";
 
 /**
  * 30-second preview pill. Floats bottom-center like the main player; when the
@@ -81,7 +82,7 @@ export function MiniPlayer() {
 										{isPlaying && <Equalizer playing className="h-2" />}
 										Preview
 									</span>
-									<ArtistLink id={currentTrack.artistId} name={currentTrack.artist} className="truncate hover:text-on-primary-container" />
+									<ArtistLink id={currentTrack.artistId} name={currentTrack.artist} onClick={leavePlayer} className="truncate hover:text-on-primary-container" />
 								</p>
 							</div>
 

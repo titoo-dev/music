@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { motion, LayoutGroup } from "motion/react";
 import { Info, ListMusic, LogOut, Monitor, Moon, Search, Settings, Sun } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useCommandStore } from "@/stores/useCommandStore";
 import { useScrolled } from "@/hooks/useScrolled";
-import { authClient } from "@/lib/auth-client";
+import { signOutEverywhere } from "@/lib/sign-out";
+import { useLoginHref } from "@/hooks/useLoginHref";
 import { applyThemePreference, readThemePreference, type ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -25,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogoMark } from "@/components/motion/icons";
 import { CommandTrigger } from "@/components/command/CommandPalette";
+import { HistoryNav } from "./HistoryNav";
 
 const NAV = [
 	{ href: "/", label: "All music", auth: false },
@@ -78,38 +81,43 @@ export function AppHeader() {
 	const pathname = usePathname();
 	const user = useAuthStore((s) => s.user);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+	const authLoading = useAuthStore((s) => s.isLoading);
 	const deezerUser = useAuthStore((s) => s.deezerUser);
-	const logout = useAuthStore((s) => s.logout);
+	const router = useRouter();
+	const loginHref = useLoginHref();
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
 	const openPalette = useCommandStore((s) => s.open);
 	const scrolled = useScrolled();
 
 	const handleLogout = async () => {
-		await authClient.signOut();
-		try {
-			await fetch("/api/v1/auth/logout", { method: "POST" });
-		} catch {
-			// Ignore errors
+		if (!(await signOutEverywhere())) {
+			toast.error("Couldn't sign out", { description: "Check your connection and try again." });
+			return;
 		}
-		logout();
+		// Off whatever private page this was.
+		router.replace("/");
 	};
 
 	const avatarUrl = deezerUser?.picture
 		? `https://e-cdns-images.dzcdn.net/images/user/${deezerUser.picture}/56x56-000000-80-0-0.jpg`
 		: user?.image || null;
 	const displayName = user?.name || deezerUser?.name || "User";
-	const nav = NAV.filter((n) => !n.auth || isAuthenticated);
+	// While the session loads, the signed-in tabs hold their place (invisible) so nothing shifts once it resolves.
+	const nav = NAV.filter((n) => !n.auth || isAuthenticated || authLoading);
+	const placeholder = (item: (typeof NAV)[number]) => item.auth && !isAuthenticated;
 
 	return (
 		// Clear at the top of the page; the frosted glass and hairline only come in once content slides under it.
 		<header
 			data-scrolled={scrolled || undefined}
 			className={cn(
-				"app-titlebar sticky top-0 z-40 border-b transition-[background-color,border-color,backdrop-filter] duration-300 ease-out",
+				// The status bar / notch inset keeps the bar clear of the clock in the installed app (viewport-fit=cover).
+				"app-titlebar sticky top-0 z-40 border-b pt-[env(safe-area-inset-top)] transition-[background-color,border-color,backdrop-filter] duration-300 ease-out",
 				scrolled ? "glass border-border" : "border-transparent bg-transparent"
 			)}
 		>
 			<div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-4 px-4 sm:px-6 lg:px-8">
+				<HistoryNav />
 				<Link href="/" className="flex shrink-0 items-center gap-2 no-underline" aria-label="wavelet home">
 					<LogoMark animated={isPlaying} className="size-6" />
 					<span className="hidden text-[15px] font-semibold tracking-tight text-foreground sm:inline">wavelet</span>
@@ -120,6 +128,12 @@ export function AppHeader() {
 				<LayoutGroup id="main-nav">
 					<nav aria-label="Primary" className="hidden items-center md:flex">
 						{nav.map((item) => {
+							if (placeholder(item))
+								return (
+									<span key={item.href} data-nav-placeholder aria-hidden="true" className="invisible px-3 py-1.5 text-sm">
+										{item.label}
+									</span>
+								);
 							const active = isActive(pathname, item.href);
 							return (
 								<Link
@@ -151,7 +165,9 @@ export function AppHeader() {
 						<Search />
 					</Button>
 
-					{isAuthenticated && user ? (
+					{authLoading ? (
+						<span data-testid="account-placeholder" aria-hidden="true" className="size-8 shrink-0 animate-pulse rounded-full bg-muted" />
+					) : isAuthenticated && user ? (
 						<DropdownMenu>
 							<DropdownMenuTrigger
 								aria-label="Account"
@@ -194,7 +210,7 @@ export function AppHeader() {
 							</DropdownMenuContent>
 						</DropdownMenu>
 					) : (
-						<Button size="sm" render={<Link href="/login" />} nativeButton={false}>
+						<Button size="sm" render={<Link href={loginHref} />} nativeButton={false}>
 							Sign in
 						</Button>
 					)}
@@ -205,6 +221,12 @@ export function AppHeader() {
 			<LayoutGroup id="mobile-nav">
 				<nav aria-label="Primary mobile" className="scrollbar-hide flex h-11 items-center gap-1 overflow-x-auto px-3 md:hidden">
 					{nav.map((item) => {
+						if (placeholder(item))
+							return (
+								<span key={item.href} data-nav-placeholder aria-hidden="true" className="invisible shrink-0 px-3 py-1.5 text-[13px]">
+									{item.label}
+								</span>
+							);
 						const active = isActive(pathname, item.href);
 						return (
 							<Link

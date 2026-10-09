@@ -68,3 +68,55 @@ describe("useKeyboardShortcuts — command palette", () => {
 		expect(usePlayerStore.getState().volume).toBe(50);
 	});
 });
+
+describe("useKeyboardShortcuts — page scrolling (NAV-01)", () => {
+	it("leaves Space to the browser when nothing is loaded (was: Space never scrolled the page)", () => {
+		renderHook(() => useKeyboardShortcuts());
+		const e = press(" ");
+		expect(e.defaultPrevented).toBe(false);
+	});
+
+	it("leaves ArrowUp / ArrowDown to the browser (was: arrows changed the volume instead of scrolling)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, volume: 50 });
+		renderHook(() => useKeyboardShortcuts());
+		const up = press("ArrowUp");
+		const down = press("ArrowDown");
+		expect(up.defaultPrevented).toBe(false);
+		expect(down.defaultPrevented).toBe(false);
+		expect(usePlayerStore.getState().volume).toBe(50);
+	});
+
+	it("Shift+ArrowUp / Shift+ArrowDown change the volume", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, volume: 50 });
+		renderHook(() => useKeyboardShortcuts());
+		const up = press("ArrowUp", { shiftKey: true });
+		expect(up.defaultPrevented).toBe(true);
+		expect(usePlayerStore.getState().volume).toBe(55);
+		press("ArrowDown", { shiftKey: true });
+		expect(usePlayerStore.getState().volume).toBe(50);
+	});
+
+	it("leaves ArrowLeft / ArrowRight to the browser when nothing is loaded (was: horizontal scroll blocked)", () => {
+		renderHook(() => useKeyboardShortcuts());
+		expect(press("ArrowLeft").defaultPrevented).toBe(false);
+		expect(press("ArrowRight").defaultPrevented).toBe(false);
+	});
+});
+
+describe("useKeyboardShortcuts — palette Escape fallback (NAV-18)", () => {
+	it("Escape closes the palette even when the focus left it (was: the palette ignored the keyboard)", () => {
+		useCommandStore.setState({ isOpen: true });
+		renderHook(() => useKeyboardShortcuts());
+		press("Escape");
+		expect(useCommandStore.getState().isOpen).toBe(false);
+	});
+
+	it("leaves an Escape the palette already handled alone", () => {
+		useCommandStore.setState({ isOpen: true });
+		renderHook(() => useKeyboardShortcuts());
+		const e = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+		e.preventDefault();
+		document.body.dispatchEvent(e);
+		expect(useCommandStore.getState().isOpen).toBe(true);
+	});
+});

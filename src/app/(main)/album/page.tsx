@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { useSavedAlbums } from "@/hooks/useLibrary";
 import { TrackRow, trackFromDeezerRaw, type TrackRowTrack } from "@/components/tracks/TrackRow";
 import { MediaCard } from "@/components/cards/MediaCard";
 import { useTracklist } from "@/components/collection/useTracklist";
+import { LoadFailed } from "@/components/collection/LoadFailed";
 import { AlbumDetailSkeleton } from "@/components/skeletons";
 import { AddTracksToPlaylist, DownloadCollectionButton, useCollectionPlayback } from "@/components/collection/CollectionActions";
 import { CardCarousel, CollectionScaffold, Medallion, SPRING, SavedBadge, SectionTitle, TonalIconButton, swap } from "@/components/expressive";
@@ -31,30 +32,34 @@ const rowReveal = {
 /**
  * `/album?title=…&artist=…` (shares and imports that never kept the album id):
  * find the Deezer album through search and swap the URL for its `?id=`. Stays
- * "loading" until the replace lands, "missing" when search has nothing.
+ * "loading" until the replace lands, "missing" when search has no such album,
+ * "error" when the search failed (offer `retry`).
  */
 function useAlbumFromTitle(title: string | null, artist: string | null) {
 	const router = useRouter();
-	const [missing, setMissing] = useState<string | null>(null);
-	const key = title ? `${title}\u0000${artist ?? ""}` : null;
+	const [attempt, setAttempt] = useState(0);
+	const [outcome, setOutcome] = useState<{ key: string; status: "missing" | "error" } | null>(null);
+	const key = title ? `${title}\u0000${artist ?? ""}\u0000${attempt}` : null;
 
 	useEffect(() => {
 		if (!title) return;
 		let cancelled = false;
+		const k = `${title}\u0000${artist ?? ""}\u0000${attempt}`;
 		fetchData("search", { term: [artist, title].filter(Boolean).join(" "), type: "album", start: "0", nb: "10" })
 			.then((res) => {
 				if (cancelled) return;
 				const id = pickAlbumId(title, artist, Array.isArray(res?.data) ? res.data : []);
 				if (id) router.replace(`/album?id=${encodeURIComponent(id)}`);
-				else setMissing(`${title}\u0000${artist ?? ""}`);
+				else setOutcome({ key: k, status: "missing" });
 			})
-			.catch(() => !cancelled && setMissing(`${title}\u0000${artist ?? ""}`));
+			.catch(() => !cancelled && setOutcome({ key: k, status: "error" }));
 		return () => {
 			cancelled = true;
 		};
-	}, [title, artist, router]);
+	}, [title, artist, attempt, router]);
 
-	return key && missing === key ? "missing" : "loading";
+	const retry = useCallback(() => setAttempt((a) => a + 1), []);
+	return { status: key && outcome?.key === key ? outcome.status : ("loading" as const), retry };
 }
 
 function AlbumContent() {
@@ -64,7 +69,8 @@ function AlbumContent() {
 	const byTitle = useAlbumFromTitle(id ? null : title, params.get("artist"));
 	const tracklist = useTracklist("album", id, parseAlbumPage);
 	const page = tracklist.page;
-	const status = id ? tracklist.status : title ? byTitle : "missing";
+	const status = id ? tracklist.status : title ? byTitle.status : "missing";
+	const retry = id ? tracklist.retry : byTitle.retry;
 
 	return (
 		<AnimatePresence mode="wait" initial={false}>
@@ -73,6 +79,8 @@ function AlbumContent() {
 					<AlbumDetailSkeleton />
 				) : status === "ready" && page ? (
 					<AlbumView page={page} />
+				) : status === "error" ? (
+					<LoadFailed what="album" onRetry={retry} />
 				) : (
 					<Medallion icon={Disc3} title="Album not found" message="The album you're looking for doesn't exist or is unavailable." className="mt-10" />
 				)}

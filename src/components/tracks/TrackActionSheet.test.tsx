@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { useLyricsStore } from "@/stores/useLyricsStore";
+import { openOverlay, resetOverlayHistory } from "@/lib/overlay-history";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -81,5 +83,30 @@ describe("TrackActionSheet", () => {
 		render(<TrackActionSheet />);
 		await userEvent.click(screen.getByRole("button", { name: "Add to playlist" }));
 		expect(await screen.findByText("New playlist")).toBeInTheDocument();
+	});
+});
+
+describe("TrackActionSheet — Go to artist (NAV-28)", () => {
+	afterEach(() => resetOverlayHistory());
+
+	const follow = async (name: RegExp) => {
+		render(<TrackActionSheet />);
+		const link = screen.getByRole("link", { name });
+		link.addEventListener("click", (e) => e.preventDefault());
+		await userEvent.click(link);
+	};
+
+	it("keeps the lyrics panel open when the sheet came from a page (was: Go to artist closed lyrics and queue)", async () => {
+		useLyricsStore.setState({ visible: true });
+		await follow(/Go to artist/);
+		expect(useLyricsStore.getState().visible).toBe(true);
+		expect(useTrackActionStore.getState().open).toBe(false);
+	});
+
+	it("closes Now Playing when the sheet came from it", async () => {
+		usePlayerStore.setState({ fullscreenOpen: true });
+		openOverlay("fullscreen", () => usePlayerStore.getState().setFullscreenOpen(false));
+		await follow(/Go to album/);
+		expect(usePlayerStore.getState().fullscreenOpen).toBe(false);
 	});
 });

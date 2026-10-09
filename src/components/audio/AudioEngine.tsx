@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
+import { currentLoginHref } from "@/lib/login-redirect";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { usePreviewStore } from "@/stores/usePreviewStore";
 import { adjustVolume } from "@/utils/adjust-volume";
@@ -1516,7 +1517,7 @@ export function AudioEngine() {
 					action: {
 						label: signIn ? "Sign in" : "Settings",
 						// Client-side navigation: a full load would stop playback and reset the app.
-						onClick: () => router.push(signIn ? "/login" : "/settings"),
+						onClick: () => router.push(signIn ? currentLoginHref() : "/settings"),
 					},
 				});
 				return;

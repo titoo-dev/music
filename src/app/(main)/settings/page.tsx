@@ -9,7 +9,8 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { useErrorStore } from "@/stores/useErrorStore";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useDiscover } from "@/hooks/useDiscover";
-import { authClient } from "@/lib/auth-client";
+import { signOutEverywhere } from "@/lib/sign-out";
+import { toast } from "sonner";
 import { applyThemePreference, readThemePreference, type ThemePreference } from "@/lib/theme";
 import { fetchData } from "@/utils/api";
 import { SlidingSegments, entrance, swap } from "@/components/expressive";
@@ -89,7 +90,6 @@ export default function SettingsPage() {
 	const deezerUser = useAuthStore((s) => s.deezerUser);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const isLoading = useAuthStore((s) => s.isLoading);
-	const logout = useAuthStore((s) => s.logout);
 	const errorCount = useErrorStore((s) => s.errors.length);
 	const { prefs, updatePrefs } = useUserPreferences();
 	const preCacheSaved = !!prefs.preCacheSaved;
@@ -102,13 +102,7 @@ export default function SettingsPage() {
 	const heroCovers = useMemo(() => (library.covers.length >= 8 ? library.covers : [...library.covers, ...showcase].slice(0, 30)), [library.covers, showcase]);
 
 	const signOut = async () => {
-		await authClient.signOut();
-		try {
-			await fetch("/api/v1/auth/logout", { method: "POST" });
-		} catch {
-			// Ignore errors
-		}
-		logout();
+		if (!(await signOutEverywhere())) toast.error("Couldn't sign out", { description: "Check your connection and try again." });
 	};
 
 	let section = 1;

@@ -57,3 +57,10 @@ describe("auth bearer plugin", () => {
 		expect(session).toBeNull();
 	});
 });
+
+describe("auth error page (NAV-11)", () => {
+	it("sends browser errors to /login (was: Better Auth's raw error page, outside the app)", async () => {
+		const ctx = await auth.$context;
+		expect(ctx.options.onAPIError?.errorURL).toBe("/login");
+	});
+});

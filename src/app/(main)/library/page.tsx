@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { SignInLink } from "@/components/links/SignInLink";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -486,10 +487,10 @@ function GuestLibrary() {
 			title="Your library"
 			message="Sign in to keep liked tracks, saved albums and the artists you follow."
 			action={
-				<Link href="/login" className={filledButton}>
+				<SignInLink className={filledButton}>
 					<LogIn />
 					Sign in
-				</Link>
+				</SignInLink>
 			}
 		/>
 	);
@@ -501,7 +502,8 @@ function LibraryContent() {
 	const authLoading = useAuthStore((s) => s.isLoading);
 	const searchParams = useSearchParams();
 	const [data, setData] = useState<LibraryData | null>(null);
-	const [tab, setTabState] = useState<Tab>(() => parseTab(searchParams.get("tab")));
+	// The URL is the source of truth: the header's Library link, Back / Forward and a reload all land on its tab.
+	const tab = parseTab(searchParams.get("tab"));
 	const [creating, setCreating] = useState(false);
 	const tabsRef = useRef<HTMLDivElement>(null);
 
@@ -546,10 +548,11 @@ function LibraryContent() {
 			if (window.scrollY > top + 1 || next === tab) window.scrollTo({ top: next === tab ? 0 : top, behavior: "smooth" });
 		}
 		if (next === tab) return;
-		setTabState(next);
+		// Next.js syncs `useSearchParams` with replaceState, without a server round trip.
 		const url = new URL(window.location.href);
-		url.searchParams.set("tab", next);
-		window.history.replaceState(null, "", url);
+		if (next === "recent") url.searchParams.delete("tab");
+		else url.searchParams.set("tab", next);
+		window.history.replaceState(window.history.state, "", url);
 	};
 
 	const createPlaylist = async ({ title, description }: { title: string; description: string | null }) => {

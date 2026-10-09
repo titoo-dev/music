@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { openOverlay, resetOverlayHistory, useOverlayStack } from "@/lib/overlay-history";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace }) }));
 
 vi.mock("sonner", () => {
 	const toast = Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), loading: vi.fn(() => "t"), dismiss: vi.fn() });
@@ -59,6 +61,8 @@ const PLAYER_INITIAL = usePlayerStore.getState();
 
 beforeEach(() => {
 	push.mockReset();
+	replace.mockReset();
+	resetOverlayHistory();
 	fetchData.mockReset();
 	useCommandStore.setState(CMD_INITIAL, true);
 	usePlayerStore.setState(PLAYER_INITIAL, true);
@@ -272,5 +276,137 @@ describe("CommandTrigger", () => {
 		});
 		await userEvent.click(await screen.findByLabelText("1 downloads in progress"));
 		expect(useCommandStore.getState()).toMatchObject({ isOpen: true, view: "downloads" });
+	});
+});
+
+describe("CommandPalette — leaving (NAV-17)", () => {
+	it("replaces its own history entry when it navigates, without going Back (was: Back raced the navigation)", async () => {
+		const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+		render(<CommandPalette />);
+		openWith();
+		openOverlay("palette", () => useCommandStore.getState().close());
+		expect(await screen.findByText("All music")).toBeInTheDocument();
+		await userEvent.keyboard("{Enter}");
+		expect(replace).toHaveBeenCalledWith("/");
+		expect(push).not.toHaveBeenCalled();
+		expect(back).not.toHaveBeenCalled();
+		expect(useOverlayStack.getState().ids).toEqual([]);
+		back.mockRestore();
+	});
+
+	it("closes before the Sign in toast opens /login (was: the palette was open again on the way back)", async () => {
+		useAuthStore.setState({ isAuthenticated: false });
+		fetchData.mockResolvedValue(SUGGEST);
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		await userEvent.keyboard("{Shift>}{Enter}{/Shift}");
+		const call = vi.mocked(toast).mock.calls.filter((c) => c[0] === "Sign in to download").at(-1) as unknown as [string, { action: { onClick: () => void } }];
+		act(() => call[1].action.onClick());
+		expect(useCommandStore.getState().isOpen).toBe(false);
+		expect(push).toHaveBeenCalledWith("/login");
+	});
+});
+
+describe("CommandPalette — stale suggestions (NAV-15)", () => {
+	it("Enter on results of the previous query searches what is typed (was: played a track of the old query)", async () => {
+		fetchData.mockResolvedValueOnce(SUGGEST).mockReturnValue(new Promise(() => {}));
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		act(() => useCommandStore.getState().setQuery("daft punk live"));
+		await userEvent.keyboard("{Enter}");
+		expect(usePlayerStore.getState().currentTrack).toBeNull();
+		expect(push).toHaveBeenCalledWith("/search?term=daft%20punk%20live");
+	});
+
+	it("goes back to the first row when new results arrive (was: the selection jumped to another album)", async () => {
+		let resolve!: (v: unknown) => void;
+		fetchData.mockResolvedValueOnce(SUGGEST).mockReturnValueOnce(new Promise((r) => (resolve = r)));
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		act(() => useCommandStore.getState().setQuery("daft punk"));
+		await userEvent.keyboard("{ArrowDown}");
+		await act(async () => resolve({ ...SUGGEST, tracks: [{ ...SUGGEST.tracks[0], sourceId: "9", title: "Around the World" }] }));
+		await screen.findByText("Around the World");
+		expect(screen.getByText("Around the World").closest("[role=option]")).toHaveAttribute("aria-selected", "true");
+	});
+});
+
+describe("CommandPalette — track links (NAV-16)", () => {
+	it("says track links aren't supported instead of searching the URL (was: Open track → No results)", async () => {
+		render(<CommandPalette />);
+		openWith("https://www.deezer.com/track/3135556");
+		expect(await screen.findByText("Track links aren’t supported")).toBeInTheDocument();
+		expect(screen.queryByText("Open track")).toBeNull();
+		await userEvent.keyboard("{Enter}");
+		expect(push).not.toHaveBeenCalled();
+	});
+});
+
+describe("CommandPalette — keyboard after a click (NAV-18)", () => {
+	it("keeps the focus in the input when a row is clicked (was: Escape stopped working)", async () => {
+		// "Toggle theme" reads the OS scheme; jsdom has no matchMedia.
+		vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+		render(<CommandPalette />);
+		openWith();
+		const input = await screen.findByLabelText("Search");
+		await waitFor(() => expect(input).toHaveFocus());
+		await userEvent.click(await screen.findByText("Toggle theme"));
+		expect(input).toHaveFocus();
+		await userEvent.keyboard("{Escape}");
+		expect(useCommandStore.getState().isOpen).toBe(false);
+	});
+});
+
+describe("CommandPalette — focus return (NAV-20)", () => {
+	it("gives the focus back to the control that opened it (was: focus fell to <body>)", async () => {
+		render(
+			<>
+				<button type="button" onClick={() => useCommandStore.getState().open()}>
+					opener
+				</button>
+				<CommandPalette />
+			</>
+		);
+		const opener = screen.getByRole("button", { name: "opener" });
+		await userEvent.click(opener);
+		const input = await screen.findByLabelText("Search");
+		await waitFor(() => expect(input).toHaveFocus());
+		await userEvent.keyboard("{Escape}");
+		await waitFor(() => expect(opener).toHaveFocus());
+	});
+});
+
+describe("CommandPalette — new tabs (NAV-21)", () => {
+	const albumRow = () => screen.getByText("Discovery", { selector: "span.block.truncate.text-sm" }).closest("[role=option]") as HTMLElement;
+
+	it("Ctrl / ⌘ click and middle click open a page row in a new tab and keep the palette (was: navigated here / did nothing)", async () => {
+		const open = vi.spyOn(window, "open").mockReturnValue(null);
+		fetchData.mockResolvedValue(SUGGEST);
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		fireEvent.click(albumRow(), { ctrlKey: true });
+		fireEvent.click(albumRow(), { metaKey: true });
+		fireEvent(albumRow(), new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }));
+		expect(open).toHaveBeenCalledTimes(3);
+		expect(open).toHaveBeenCalledWith("/album?id=302127", "_blank", "noopener");
+		expect(push).not.toHaveBeenCalled();
+		expect(useCommandStore.getState().isOpen).toBe(true);
+		open.mockRestore();
+	});
+
+	it("⌘+Enter on a page row opens it in a new tab (was: navigated in this tab)", async () => {
+		const open = vi.spyOn(window, "open").mockReturnValue(null);
+		fetchData.mockResolvedValue(SUGGEST);
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		await userEvent.keyboard("{ArrowDown}{Meta>}{Enter}{/Meta}");
+		expect(open).toHaveBeenCalledWith("/album?id=302127", "_blank", "noopener");
+		expect(push).not.toHaveBeenCalled();
+		open.mockRestore();
 	});
 });

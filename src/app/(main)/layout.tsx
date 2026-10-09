@@ -1,9 +1,12 @@
 "use client";
 
+import { Suspense } from "react";
 import { MotionConfig } from "motion/react";
 import { useInitApp } from "@/hooks/useInitApp";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useOverlayHistory } from "@/hooks/useOverlayHistory";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { NavProgress } from "@/components/layout/NavProgress";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import { AudioPreview } from "@/components/audio/AudioPreview";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
@@ -22,10 +25,14 @@ import { ImportSpotifyDialog } from "@/components/playlists/ImportSpotifyDialog"
 export default function MainLayout({ children }: { children: React.ReactNode }) {
 	useInitApp();
 	useKeyboardShortcuts();
+	useOverlayHistory();
 
 	return (
 		<MotionConfig reducedMotion="user">
 			<div className="relative min-h-dvh bg-background">
+				<Suspense fallback={null}>
+					<NavProgress />
+				</Suspense>
 				<AppHeader />
 
 				<main className="mx-auto w-full min-w-0 max-w-6xl px-4 pt-6 pb-app-chrome sm:px-6 sm:pt-8 lg:px-8">{children}</main>

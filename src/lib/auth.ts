@@ -9,6 +9,9 @@ export const auth = betterAuth({
 	database: prismaAdapter(prisma, {
 		provider: "postgresql",
 	}),
+	// Errors raised before the OAuth state is read (state mismatch, expired flow) land on the sign-in
+	// page with `?error=` rather than Better Auth's bare error page, outside the app.
+	onAPIError: { errorURL: "/login" },
 	socialProviders: {
 		google: {
 			clientId: process.env.GOOGLE_CLIENT_ID!,

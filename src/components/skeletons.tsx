@@ -237,3 +237,18 @@ export function SearchResultsSkeleton() {
 export function PlaylistGridSkeleton({ count = 6 }: { count?: number }) {
 	return <HomeGridSkeleton count={count} />;
 }
+
+/** Neutral page skeleton (eyebrow, title, rows) for pages without a shaped one: Library, Settings, About, Errors. */
+export function PageSkeleton({ rows = 6 }: { rows?: number }) {
+	return (
+		<div data-testid="page-skeleton" className="pt-2">
+			<Skeleton className="h-3 w-24 rounded-full" />
+			<Skeleton className="mt-3 h-10 w-[min(60%,320px)] rounded-2xl" />
+			<div className="mt-8 space-y-3">
+				{Array.from({ length: rows }, (_, i) => (
+					<Skeleton key={i} className="h-16 rounded-m3-lg" />
+				))}
+			</div>
+		</div>
+	);
+}

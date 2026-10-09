@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { parseDeezerLink } from "@/lib/collection-tracks";
+import { startNavProgress } from "@/lib/nav-progress";
+import { useCommandStore } from "@/stores/useCommandStore";
 import { SearchGlyph } from "@/components/motion/icons";
 import { DUR, EASE, FilterPills } from "@/components/expressive";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
@@ -52,6 +55,13 @@ export function SearchScreen() {
 		setShownTerm(term);
 		setTyped(term);
 	}
+	// ⌘K "See all results" for the term already in the URL: the URL doesn't change, so drop the draft here.
+	const searchRequest = useCommandStore((s) => s.searchRequest);
+	const [seenRequest, setSeenRequest] = useState(searchRequest?.seq ?? 0);
+	if (searchRequest && searchRequest.seq !== seenRequest) {
+		setSeenRequest(searchRequest.seq);
+		setTyped(searchRequest.term);
+	}
 
 	useEffect(() => {
 		if (term) recentSearches.add(term);
@@ -64,10 +74,20 @@ export function SearchScreen() {
 		(value: string) => {
 			const t = value.trim();
 			if (!t) return;
+			// A pasted Deezer link opens its page; a track link stays on its card (no track page to open).
+			const link = parseDeezerLink(t);
+			if (link) {
+				if (link.type !== "track") {
+					startNavProgress(`/${link.type}?id=${link.id}`);
+					router.push(`/${link.type}?id=${link.id}`);
+				}
+				return;
+			}
 			setTyped(t);
 			inputRef.current?.blur();
 			recentSearches.add(t);
 			if (t === term && tab === "all") return;
+			startNavProgress(`/search?term=${encodeURIComponent(t)}`);
 			router.push(`/search?term=${encodeURIComponent(t)}`, { scroll: true });
 		},
 		[router, term, tab]

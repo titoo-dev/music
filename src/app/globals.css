@@ -95,7 +95,7 @@
 	/* ─── CHROME TOKENS ───
 	 * `--header-h` is the full sticky header: the bar plus, on phones, the nav
 	 * row under it — sticky sub-bars sit right below it. */
-	--header-h: 100px;
+	--header-h: calc(100px + env(safe-area-inset-top, 0px));
 	--player-h: 64px;
 	--player-offset: calc(16px + env(safe-area-inset-bottom));
 	/* Kept for components that still reference them (no bottom nav / rail). */
@@ -108,7 +108,7 @@
 /* Desktop: single-row header; the player pill stacks transport over the seek bar. */
 @media (min-width: 48rem) {
 	:root {
-		--header-h: 56px;
+		--header-h: calc(56px + env(safe-area-inset-top, 0px));
 		--player-h: 76px;
 	}
 }
@@ -407,6 +407,12 @@ html.dark {
 	.pb-app-chrome {
 		padding-bottom: calc(var(--player-h) + var(--player-offset) + 32px);
 	}
+}
+
+/* <NavProgress> top loader: creeps towards 80% while the next page loads. */
+@keyframes nav-progress {
+	from { width: 0; }
+	to { width: 80%; }
 }
 
 /* <Equalizer> bars. CSS, not Motion: an ancestor AnimatePresence initial={false} froze them. */

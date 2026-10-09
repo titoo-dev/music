@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { AnimatePresence, motion, Reorder, useDragControls } from "motion/react";
 import { toast } from "sonner";
-import { ArrowLeft, Clock3, GripVertical, History, ListPlus, MoreHorizontal, Music, Pencil, Search, Trash2, ArrowDownUp } from "lucide-react";
+import { ArrowLeft, Clock3, GripVertical, History, ListPlus, MoreHorizontal, Music, Pencil, Search, Trash2, ArrowDownUp, LogIn } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
@@ -15,7 +15,9 @@ import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { usePrefetch } from "@/hooks/usePrefetch";
 import { useWindowRows } from "@/hooks/useVirtualRows";
-import { DeletePlaylistDialog, PlaylistEditDialog, tonalButton } from "@/components/playlists/PlaylistDialogs";
+import { useLoginHref } from "@/hooks/useLoginHref";
+import { trailingSend } from "@/lib/trailing-send";
+import { DeletePlaylistDialog, PlaylistEditDialog, filledButton, tonalButton } from "@/components/playlists/PlaylistDialogs";
 import { PlaylistDetailSkeleton } from "@/components/playlists/PlaylistTiles";
 import { formatRelative, formatTotal, plural, uniqueCovers } from "@/components/playlists/format";
 
@@ -50,6 +52,7 @@ export default function PlaylistDetailPage() {
 	const [deleting, setDeleting] = useState(false);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const authLoading = useAuthStore((s) => s.isLoading);
+	const loginHref = useLoginHref();
 	const { prefs, updatePrefs } = useUserPreferences();
 	const sortOrder: SortOrder = prefs.playlistSortOrder ?? "asc";
 	const setSortOrder = (order: SortOrder) => updatePrefs({ playlistSortOrder: order });
@@ -138,18 +141,23 @@ export default function PlaylistDetailPage() {
 	// Drag-reorder persistence: optimistic local update on every onReorder
 	// (fires continuously during drag), but POST the final order to the API
 	// debounced so we don't spam the endpoint mid-drag.
-	const reorderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const playlistIdRef = useRef<string | null>(null);
-	useEffect(() => {
-		playlistIdRef.current = playlist?.id ?? null;
-	}, [playlist?.id]);
-
-	useEffect(
-		() => () => {
-			if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
-		},
-		[]
+	const playlistId = playlist?.id ?? null;
+	const [reorderSender] = useState(() =>
+		trailingSend<{ pid: string; trackIds: string[] }>(({ pid, trackIds }, { leaving }) => {
+			void fetch(`/api/v1/playlists/${pid}/tracks`, {
+				method: "PATCH",
+				// Leaving the page mid-wait: let the request outlive it.
+				keepalive: leaving,
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ trackIds }),
+			}).catch(() => {
+				// Persist failed — leave the optimistic state in place. A future
+				// fetch on mount will re-sync from the server.
+			});
+		}, 250)
 	);
+	// Leaving within the debounce (a link, Back) sends the last order instead of dropping it.
+	useEffect(() => () => reorderSender.flush(), [reorderSender]);
 
 	const handleReorder = useCallback((newOrderIds: string[]) => {
 		// Optimistic local update — also rewrites .position so re-renders
@@ -167,20 +175,8 @@ export default function PlaylistDetailPage() {
 		});
 
 		// Debounce the API call until the drag settles (~250ms idle).
-		if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
-		reorderTimerRef.current = setTimeout(() => {
-			const pid = playlistIdRef.current;
-			if (!pid) return;
-			void fetch(`/api/v1/playlists/${pid}/tracks`, {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ trackIds: newOrderIds }),
-			}).catch(() => {
-				// Persist failed — leave the optimistic state in place. A future
-				// fetch on mount will re-sync from the server.
-			});
-		}, 250);
-	}, []);
+		if (playlistId) reorderSender.schedule({ pid: playlistId, trackIds: newOrderIds });
+	}, [reorderSender, playlistId]);
 
 	const saveDetails = async ({ title, description }: { title: string; description: string | null }) => {
 		if (!playlist) return;
@@ -203,10 +199,29 @@ export default function PlaylistDetailPage() {
 			return;
 		}
 		toast(`Deleted “${playlist.title}”`);
-		router.push("/my-playlists");
+		// Replace: Back must not reopen the playlist that no longer exists.
+		router.replace("/my-playlists");
 	};
 
 	if (loading) return <PlaylistDetailSkeleton />;
+
+	// Signed out (or signed out here): never leave a private playlist on screen.
+	if (!isAuthenticated) {
+		return (
+			<Medallion
+				className="pt-[10vh]"
+				icon={ListPlus}
+				title="Sign in to open this playlist"
+				message="Playlists are private to the account that made them."
+				action={
+					<Link href={loginHref} className={filledButton}>
+						<LogIn />
+						Sign in
+					</Link>
+				}
+			/>
+		);
+	}
 
 	if (!playlist) {
 		return (
