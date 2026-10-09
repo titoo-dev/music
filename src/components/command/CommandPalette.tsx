@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { currentLoginHref } from "@/lib/login-redirect";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, LayoutGroup } from "motion/react";
@@ -272,7 +273,7 @@ function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 	const requireAuth = useCallback(() => {
 		if (isAuthenticated) return true;
 		toast("Sign in to download", {
-			action: { label: "Sign in", onClick: () => go("/login") },
+			action: { label: "Sign in", onClick: () => go(currentLoginHref()) },
 		});
 		return false;
 	}, [isAuthenticated, go]);

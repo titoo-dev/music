@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { AlertCircle, ArrowLeft, AudioLines, Headphones, MicVocal, RefreshCw, X, type LucideIcon } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import { safeNext } from "@/lib/login-redirect";
 import { useDiscover } from "@/hooks/useDiscover";
 import { LogoMark, Spinner } from "@/components/motion/icons";
 import { ArtworkWall, Aurora, DUR, EASE, entrance } from "@/components/expressive";
@@ -67,7 +68,8 @@ export default function LoginPage() {
 		try {
 			const result = await authClient.signIn.social({
 				provider: "google",
-				callbackURL: "/",
+				// Back to the page that sent the user here (`/login?next=…`), in-app paths only.
+				callbackURL: safeNext(new URLSearchParams(window.location.search).get("next")),
 			});
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const data = result as any;

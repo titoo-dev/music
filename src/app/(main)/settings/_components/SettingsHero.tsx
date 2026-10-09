@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { SignInLink } from "@/components/links/SignInLink";
 import { motion } from "motion/react";
 import { Album, AudioLines, Heart, LogIn, LogOut, Unlink } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -94,10 +94,10 @@ export function GuestHero({ covers }: { covers: string[] }) {
 				Sign in to stream full tracks and keep a library in sync.
 			</motion.p>
 			<motion.div {...entrance(3, 8)} className="mt-5">
-				<Link href="/login" className={cn(heroPrimaryButton, "no-underline")}>
+				<SignInLink className={cn(heroPrimaryButton, "no-underline")}>
 					<LogIn />
 					Sign in
-				</Link>
+				</SignInLink>
 			</motion.div>
 		</HeroBanner>
 	);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { SignInLink } from "@/components/links/SignInLink";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Download, ListMusic, LogIn, Music, Plus, Trash2 } from "lucide-react";
@@ -196,10 +196,10 @@ export default function MyPlaylistsPage() {
 				title="Your playlists"
 				message="Sign in to create playlists and import them from Spotify."
 				action={
-					<Link href="/login" className={filledButton}>
+					<SignInLink className={filledButton}>
 						<LogIn />
 						Sign in
-					</Link>
+					</SignInLink>
 				}
 			/>
 		);

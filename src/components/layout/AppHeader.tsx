@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { motion, LayoutGroup } from "motion/react";
 import { Info, ListMusic, LogOut, Monitor, Moon, Search, Settings, Sun } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useCommandStore } from "@/stores/useCommandStore";
 import { useScrolled } from "@/hooks/useScrolled";
-import { authClient } from "@/lib/auth-client";
+import { signOutEverywhere } from "@/lib/sign-out";
+import { useLoginHref } from "@/hooks/useLoginHref";
 import { applyThemePreference, readThemePreference, type ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -79,19 +81,19 @@ export function AppHeader() {
 	const user = useAuthStore((s) => s.user);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const deezerUser = useAuthStore((s) => s.deezerUser);
-	const logout = useAuthStore((s) => s.logout);
+	const router = useRouter();
+	const loginHref = useLoginHref();
 	const isPlaying = usePlayerStore((s) => s.isPlaying);
 	const openPalette = useCommandStore((s) => s.open);
 	const scrolled = useScrolled();
 
 	const handleLogout = async () => {
-		await authClient.signOut();
-		try {
-			await fetch("/api/v1/auth/logout", { method: "POST" });
-		} catch {
-			// Ignore errors
+		if (!(await signOutEverywhere())) {
+			toast.error("Couldn't sign out", { description: "Check your connection and try again." });
+			return;
 		}
-		logout();
+		// Off whatever private page this was.
+		router.replace("/");
 	};
 
 	const avatarUrl = deezerUser?.picture
@@ -194,7 +196,7 @@ export function AppHeader() {
 							</DropdownMenuContent>
 						</DropdownMenu>
 					) : (
-						<Button size="sm" render={<Link href="/login" />} nativeButton={false}>
+						<Button size="sm" render={<Link href={loginHref} />} nativeButton={false}>
 							Sign in
 						</Button>
 					)}

@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { SignInLink } from "@/components/links/SignInLink";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -486,10 +487,10 @@ function GuestLibrary() {
 			title="Your library"
 			message="Sign in to keep liked tracks, saved albums and the artists you follow."
 			action={
-				<Link href="/login" className={filledButton}>
+				<SignInLink className={filledButton}>
 					<LogIn />
 					Sign in
-				</Link>
+				</SignInLink>
 			}
 		/>
 	);

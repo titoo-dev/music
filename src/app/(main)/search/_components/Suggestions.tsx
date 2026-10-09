@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { currentLoginHref } from "@/lib/login-redirect";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -287,7 +288,7 @@ function CollectionLinkCard({ type, id }: { type: "album" | "playlist"; id: stri
 									<DownloadCollectionButton
 										onDownload={() => {
 											if (!isAuthenticated) {
-												toast("Sign in to download", { action: { label: "Sign in", onClick: () => router.push("/login") } });
+												toast("Sign in to download", { action: { label: "Sign in", onClick: () => router.push(currentLoginHref()) } });
 												return;
 											}
 											const n = enqueue(state.info!.tracks, `${isAlbum ? "Album" : "Playlist"} · ${state.info!.title}`);

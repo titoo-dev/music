@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { SignInLink } from "@/components/links/SignInLink";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
@@ -196,10 +197,10 @@ function GuestHero({ covers }: { covers: string[] }) {
 				Search Deezer, stream in lossless and build your library.
 			</motion.p>
 			<motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-6 flex flex-wrap gap-2">
-				<Link href="/login" className={cn(heroPrimaryButton, "no-underline")}>
+				<SignInLink className={cn(heroPrimaryButton, "no-underline")}>
 					<LogIn />
 					Sign in
-				</Link>
+				</SignInLink>
 				<Link href="/search" className={cn(heroGlassButton, "no-underline")}>
 					<Search />
 					Search

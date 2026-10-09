@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { AnimatePresence, motion, Reorder, useDragControls } from "motion/react";
 import { toast } from "sonner";
-import { ArrowLeft, Clock3, GripVertical, History, ListPlus, MoreHorizontal, Music, Pencil, Search, Trash2, ArrowDownUp } from "lucide-react";
+import { ArrowLeft, Clock3, GripVertical, History, ListPlus, MoreHorizontal, Music, Pencil, Search, Trash2, ArrowDownUp, LogIn } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { usePlayerStore, type PlayerTrack } from "@/stores/usePlayerStore";
 import { TrackRow, type TrackRowTrack } from "@/components/tracks/TrackRow";
@@ -15,7 +15,8 @@ import { preloadTrack } from "@/components/audio/AudioEngine";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { usePrefetch } from "@/hooks/usePrefetch";
 import { useWindowRows } from "@/hooks/useVirtualRows";
-import { DeletePlaylistDialog, PlaylistEditDialog, tonalButton } from "@/components/playlists/PlaylistDialogs";
+import { useLoginHref } from "@/hooks/useLoginHref";
+import { DeletePlaylistDialog, PlaylistEditDialog, filledButton, tonalButton } from "@/components/playlists/PlaylistDialogs";
 import { PlaylistDetailSkeleton } from "@/components/playlists/PlaylistTiles";
 import { formatRelative, formatTotal, plural, uniqueCovers } from "@/components/playlists/format";
 
@@ -50,6 +51,7 @@ export default function PlaylistDetailPage() {
 	const [deleting, setDeleting] = useState(false);
 	const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 	const authLoading = useAuthStore((s) => s.isLoading);
+	const loginHref = useLoginHref();
 	const { prefs, updatePrefs } = useUserPreferences();
 	const sortOrder: SortOrder = prefs.playlistSortOrder ?? "asc";
 	const setSortOrder = (order: SortOrder) => updatePrefs({ playlistSortOrder: order });
@@ -207,6 +209,24 @@ export default function PlaylistDetailPage() {
 	};
 
 	if (loading) return <PlaylistDetailSkeleton />;
+
+	// Signed out (or signed out here): never leave a private playlist on screen.
+	if (!isAuthenticated) {
+		return (
+			<Medallion
+				className="pt-[10vh]"
+				icon={ListPlus}
+				title="Sign in to open this playlist"
+				message="Playlists are private to the account that made them."
+				action={
+					<Link href={loginHref} className={filledButton}>
+						<LogIn />
+						Sign in
+					</Link>
+				}
+			/>
+		);
+	}
 
 	if (!playlist) {
 		return (
