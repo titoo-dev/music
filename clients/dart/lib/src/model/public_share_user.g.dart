@@ -9,13 +9,11 @@ part of 'public_share_user.dart';
 class _$PublicShareUser extends PublicShareUser {
   @override
   final String name;
-  @override
-  final String? image;
 
   factory _$PublicShareUser([void Function(PublicShareUserBuilder)? updates]) =>
       (PublicShareUserBuilder()..update(updates))._build();
 
-  _$PublicShareUser._({required this.name, this.image}) : super._();
+  _$PublicShareUser._({required this.name}) : super._();
   @override
   PublicShareUser rebuild(void Function(PublicShareUserBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -26,25 +24,20 @@ class _$PublicShareUser extends PublicShareUser {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is PublicShareUser &&
-        name == other.name &&
-        image == other.image;
+    return other is PublicShareUser && name == other.name;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, name.hashCode);
-    _$hash = $jc(_$hash, image.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(r'PublicShareUser')
-          ..add('name', name)
-          ..add('image', image))
+    return (newBuiltValueToStringHelper(r'PublicShareUser')..add('name', name))
         .toString();
   }
 }
@@ -57,10 +50,6 @@ class PublicShareUserBuilder
   String? get name => _$this._name;
   set name(String? name) => _$this._name = name;
 
-  String? _image;
-  String? get image => _$this._image;
-  set image(String? image) => _$this._image = image;
-
   PublicShareUserBuilder() {
     PublicShareUser._defaults(this);
   }
@@ -69,7 +58,6 @@ class PublicShareUserBuilder
     final $v = _$v;
     if ($v != null) {
       _name = $v.name;
-      _image = $v.image;
       _$v = null;
     }
     return this;
@@ -93,7 +81,6 @@ class PublicShareUserBuilder
         _$PublicShareUser._(
           name: BuiltValueNullFieldError.checkNotNull(
               name, r'PublicShareUser', 'name'),
-          image: image,
         );
     replace(_$result);
     return _$result;

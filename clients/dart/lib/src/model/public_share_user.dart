@@ -12,14 +12,10 @@ part 'public_share_user.g.dart';
 ///
 /// Properties:
 /// * [name] 
-/// * [image] 
 @BuiltValue()
 abstract class PublicShareUser implements Built<PublicShareUser, PublicShareUserBuilder> {
   @BuiltValueField(wireName: r'name')
   String get name;
-
-  @BuiltValueField(wireName: r'image')
-  String? get image;
 
   PublicShareUser._();
 
@@ -48,11 +44,6 @@ class _$PublicShareUserSerializer implements PrimitiveSerializer<PublicShareUser
     yield serializers.serialize(
       object.name,
       specifiedType: const FullType(String),
-    );
-    yield r'image';
-    yield object.image == null ? null : serializers.serialize(
-      object.image,
-      specifiedType: const FullType.nullable(String),
     );
   }
 
@@ -83,14 +74,6 @@ class _$PublicShareUserSerializer implements PrimitiveSerializer<PublicShareUser
             specifiedType: const FullType(String),
           ) as String;
           result.name = valueDes;
-          break;
-        case r'image':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType.nullable(String),
-          ) as String?;
-          if (valueDes == null) continue;
-          result.image = valueDes;
           break;
         default:
           unhandled.add(key);

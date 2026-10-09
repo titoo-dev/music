@@ -12,10 +12,5 @@ void main() {
       // TODO
     });
 
-    // String image
-    test('to test the property `image`', () async {
-      // TODO
-    });
-
   });
 }

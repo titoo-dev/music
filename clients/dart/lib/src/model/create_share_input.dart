@@ -17,7 +17,7 @@ part 'create_share_input.g.dart';
 /// * [album] 
 /// * [coverUrl] - https Deezer artwork (*.dzcdn.net, api.deezer.com); any other URL is dropped
 /// * [duration] 
-/// * [expiresIn] - Hours until expiry. Omit for a permanent link.
+/// * [expiresIn] - Hours until expiry, more than 0 and at most 8760 (a year). Null or omitted for a permanent link.
 @BuiltValue()
 abstract class CreateShareInput implements Built<CreateShareInput, CreateShareInputBuilder> {
   @BuiltValueField(wireName: r'trackId')
@@ -39,7 +39,7 @@ abstract class CreateShareInput implements Built<CreateShareInput, CreateShareIn
   @BuiltValueField(wireName: r'duration')
   int? get duration;
 
-  /// Hours until expiry. Omit for a permanent link.
+  /// Hours until expiry, more than 0 and at most 8760 (a year). Null or omitted for a permanent link.
   @BuiltValueField(wireName: r'expiresIn')
   num? get expiresIn;
 
@@ -106,7 +106,7 @@ class _$CreateShareInputSerializer implements PrimitiveSerializer<CreateShareInp
       yield r'expiresIn';
       yield serializers.serialize(
         object.expiresIn,
-        specifiedType: const FullType(num),
+        specifiedType: const FullType.nullable(num),
       );
     }
   }
