@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { AlbumLink, ArtistLink, ArtistLinks, isPlainClick } from "@/components/links/EntityLink";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { leaveOverlays, useOverlayStack } from "@/lib/overlay-history";
+import { startNavProgress } from "@/lib/nav-progress";
 import { useCommandStore, type CommandView } from "@/stores/useCommandStore";
 import {
 	useDownloadStore,
@@ -265,6 +266,7 @@ function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 		(href: string) => {
 			const replace = useOverlayStack.getState().ids.length > 0;
 			onNavigate();
+			startNavProgress(href);
 			leaveOverlays(close);
 			if (replace) router.replace(href);
 			else router.push(href);

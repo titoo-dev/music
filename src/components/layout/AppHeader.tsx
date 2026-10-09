@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogoMark } from "@/components/motion/icons";
 import { CommandTrigger } from "@/components/command/CommandPalette";
+import { HistoryNav } from "./HistoryNav";
 
 const NAV = [
 	{ href: "/", label: "All music", auth: false },
@@ -110,11 +111,13 @@ export function AppHeader() {
 		<header
 			data-scrolled={scrolled || undefined}
 			className={cn(
-				"app-titlebar sticky top-0 z-40 border-b transition-[background-color,border-color,backdrop-filter] duration-300 ease-out",
+				// The status bar / notch inset keeps the bar clear of the clock in the installed app (viewport-fit=cover).
+				"app-titlebar sticky top-0 z-40 border-b pt-[env(safe-area-inset-top)] transition-[background-color,border-color,backdrop-filter] duration-300 ease-out",
 				scrolled ? "glass border-border" : "border-transparent bg-transparent"
 			)}
 		>
 			<div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-4 px-4 sm:px-6 lg:px-8">
+				<HistoryNav />
 				<Link href="/" className="flex shrink-0 items-center gap-2 no-underline" aria-label="wavelet home">
 					<LogoMark animated={isPlaying} className="size-6" />
 					<span className="hidden text-[15px] font-semibold tracking-tight text-foreground sm:inline">wavelet</span>

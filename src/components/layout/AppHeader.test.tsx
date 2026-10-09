@@ -68,3 +68,16 @@ describe("AppHeader — while the session loads (NAV-13)", () => {
 		placeholders.forEach((p) => expect(p).toHaveAttribute("aria-hidden", "true"));
 	});
 });
+
+describe("AppHeader — installed app chrome", () => {
+	it("puts Back / Forward next to the logo in the installed app (NAV-29)", () => {
+		window.matchMedia = vi.fn().mockImplementation((q: string) => ({ matches: /standalone/.test(q), addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+		render(<AppHeader />);
+		expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+	});
+
+	it("clears the status bar / notch (NAV-03, was: header under the clock in the PWA)", () => {
+		render(<AppHeader />);
+		expect(screen.getByRole("banner").className).toContain("pt-[env(safe-area-inset-top)]");
+	});
+});
