@@ -9,6 +9,7 @@ import { WaveSeek } from "@/components/audio/WaveSeek";
 import { CoverTheme, DUR, EASE, EyebrowPill, StatBadge, entrance } from "@/components/expressive";
 import { sizedCover } from "@/lib/cover-palette";
 import { cn } from "@/lib/utils";
+import { insideForeignLayer, isActivatable, isComposing, letterOf, ownsKeys } from "@/lib/hotkeys";
 import { AlbumLink, ArtistLink } from "@/components/links/EntityLink";
 
 function formatTime(seconds: number) {
@@ -160,6 +161,35 @@ export function SharePlayer({ shareId, title, artist, album, coverUrl, duration:
 		audio.currentTime = time;
 		setCurrentTime(time);
 	};
+
+	// Same keys as the app's player: Space plays / pauses, L / J and Shift+→ / Shift+← seek 10 s.
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (isComposing(e) || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+			if (ownsKeys(e.target) || insideForeignLayer(e.target)) return;
+			const audio = audioRef.current;
+			if (!audio) return;
+			const seekBy = (delta: number) => {
+				const to = Math.max(0, audio.currentTime + delta);
+				audio.currentTime = duration > 0 ? Math.min(duration, to) : to;
+				setCurrentTime(audio.currentTime);
+			};
+			if (e.key === " ") {
+				if (isActivatable(e.target)) return;
+				e.preventDefault();
+				if (!e.repeat) handleToggle();
+			} else if (e.shiftKey && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+				e.preventDefault();
+				seekBy(e.key === "ArrowRight" ? 10 : -10);
+			} else {
+				const letter = letterOf(e);
+				if (letter === "l") seekBy(10);
+				else if (letter === "j") seekBy(-10);
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [handleToggle, duration]);
 
 	const handleCopyLink = async () => {
 		try {

@@ -540,6 +540,23 @@ export function FullscreenPlayer() {
 
 	const hasQueue = queue.length > 1;
 
+	// Modal focus: land on Close when it opens, hand the focus back to the opener when it closes
+	// (the page behind is made inert by the main layout; Escape is handled by useKeyboardShortcuts).
+	const closeRef = useRef<HTMLButtonElement>(null);
+	const opener = useRef<HTMLElement | null>(null);
+	const open = fullscreenOpen && !!currentTrack;
+	useEffect(() => {
+		if (!open) return;
+		const active = document.activeElement;
+		opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+		closeRef.current?.focus({ preventScroll: true });
+		return () => {
+			const el = opener.current;
+			opener.current = null;
+			if (el?.isConnected) el.focus({ preventScroll: true });
+		};
+	}, [open]);
+
 	useEffect(() => {
 		if (fullscreenOpen) {
 			document.body.style.overflow = "hidden";
@@ -607,7 +624,9 @@ export function FullscreenPlayer() {
 					dragElastic={{ top: 0, bottom: 0.4 }}
 					onDragEnd={handleDragEnd}
 					role="dialog"
+					aria-modal="true"
 					aria-label="Now playing"
+					data-hotkeys="player"
 					// z-58: above the app chrome (nav 40, player 45), below sheets, menus,
 					// dialogs and the queue (60) so they can open on top of Now Playing.
 					className="cover-theme fixed inset-0 z-[58] isolate flex flex-col overflow-hidden text-foreground"
@@ -630,6 +649,7 @@ export function FullscreenPlayer() {
 					<div data-testid="np-topbar" className="mx-auto grid w-full max-w-6xl shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 py-1 min-[840px]:px-8">
 						<div className="flex justify-start">
 							<button
+								ref={closeRef}
 								type="button"
 								aria-label="Close fullscreen player"
 								title="Close"

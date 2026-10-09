@@ -6,6 +6,7 @@ import { AlertCircle, AudioLines, Blend, Check, Eye, EyeOff, Gauge, Gem, Info, K
 import { useAuthStore } from "@/stores/useAuthStore";
 import { postToServer, fetchData } from "@/utils/api";
 import { cn } from "@/lib/utils";
+import { onRadioGroupKeyDown } from "@/lib/hotkeys";
 import { DUR, SlidingSegments } from "@/components/expressive";
 import { toast } from "sonner";
 import { Notice, OptionCard, SettingsTile, StatusPill, TilePanel } from "./SettingsTiles";
@@ -221,7 +222,7 @@ export function QualityTile() {
 			onClick={() => setOpen((o) => !o)}
 		>
 			<TilePanel open={open} className="space-y-2">
-				<div role="radiogroup" aria-label="Streaming quality" className="space-y-2">
+				<div role="radiogroup" aria-label="Streaming quality" className="space-y-2" onKeyDown={onRadioGroupKeyDown}>
 					{BITRATE_OPTIONS.map((o, i) => (
 						<OptionCard
 							key={o.value}

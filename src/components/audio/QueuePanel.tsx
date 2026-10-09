@@ -58,15 +58,7 @@ export function QueuePanel() {
 		}
 	};
 
-	// Close on Escape — match LyricsPanel ergonomics
-	useEffect(() => {
-		if (!open) return;
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") setOpen(false);
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [open, setOpen]);
+	// Escape: useKeyboardShortcuts closes the top-most player layer only (was: one Escape closed the palette and this panel).
 
 	if (!currentTrack) return null;
 

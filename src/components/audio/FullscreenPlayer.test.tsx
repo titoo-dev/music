@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Canvas isn't implemented in jsdom; the visualizer is pure decoration.
@@ -157,5 +157,24 @@ describe("FullscreenPlayer", () => {
 		render(<FullscreenPlayer />);
 		expect(screen.getByText("Now playing")).toBeInTheDocument();
 		expect(screen.getByText("1 of 2 in queue")).toBeInTheDocument();
+	});
+
+	it("is a modal player surface that takes the focus and gives it back (was: Tab wandered into the hidden page)", () => {
+		usePlayerStore.setState({ fullscreenOpen: false });
+		const opener = document.createElement("button");
+		document.body.appendChild(opener);
+		opener.focus();
+		const { rerender } = render(<FullscreenPlayer />);
+		act(() => usePlayerStore.setState({ fullscreenOpen: true }));
+		rerender(<FullscreenPlayer />);
+		const dialog = screen.getByRole("dialog", { name: "Now playing" });
+		expect(dialog).toHaveAttribute("aria-modal", "true");
+		// The global shortcuts (Space, arrows, M, Escape) keep working inside it.
+		expect(dialog).toHaveAttribute("data-hotkeys", "player");
+		expect(screen.getByRole("button", { name: "Close fullscreen player" })).toHaveFocus();
+		act(() => usePlayerStore.setState({ fullscreenOpen: false }));
+		rerender(<FullscreenPlayer />);
+		expect(opener).toHaveFocus();
+		opener.remove();
 	});
 });

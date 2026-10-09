@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
 import { useCommandStore } from "@/stores/useCommandStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { useLyricsStore } from "@/stores/useLyricsStore";
 
 const CMD = useCommandStore.getState();
 const PLAYER = usePlayerStore.getState();
@@ -118,5 +119,238 @@ describe("useKeyboardShortcuts — palette Escape fallback (NAV-18)", () => {
 		e.preventDefault();
 		document.body.dispatchEvent(e);
 		expect(useCommandStore.getState().isOpen).toBe(true);
+	});
+});
+
+function mount<T extends HTMLElement>(el: T): T {
+	document.body.appendChild(el);
+	return el;
+}
+
+const queue3 = [track, { ...track, trackId: "2" }, { ...track, trackId: "3" }];
+
+afterEach(() => {
+	document.body.innerHTML = "";
+	useLyricsStore.setState({ immersiveOpen: false });
+});
+
+describe("useKeyboardShortcuts — keys a focused control owns (HK-01, HK-02, HK-07)", () => {
+	it("leaves Space to a focused button (was: Space paused the track instead of clicking the button)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true });
+		renderHook(() => useKeyboardShortcuts());
+		const button = mount(document.createElement("button"));
+		const e = press(" ", {}, button);
+		expect(e.defaultPrevented).toBe(false);
+		expect(usePlayerStore.getState().isPlaying).toBe(true);
+	});
+
+	it("leaves Space to a link and to a role=button element", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true });
+		renderHook(() => useKeyboardShortcuts());
+		const link = mount(document.createElement("a"));
+		link.href = "/album?id=1";
+		const row = mount(document.createElement("div"));
+		row.setAttribute("role", "button");
+		expect(press(" ", {}, link).defaultPrevented).toBe(false);
+		expect(press(" ", {}, row).defaultPrevented).toBe(false);
+		expect(usePlayerStore.getState().isPlaying).toBe(true);
+	});
+
+	it("still skips tracks with the arrows while a button has the focus", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, queue: queue3, queueIndex: 0 });
+		renderHook(() => useKeyboardShortcuts());
+		const button = mount(document.createElement("button"));
+		press("ArrowRight", {}, button);
+		expect(usePlayerStore.getState().queueIndex).toBe(1);
+	});
+
+	it("ignores a key a component already handled (was: Space on a queue row jumped to the track, then paused it)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true });
+		renderHook(() => useKeyboardShortcuts());
+		const e = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+		e.preventDefault();
+		document.body.dispatchEvent(e);
+		expect(usePlayerStore.getState().isPlaying).toBe(true);
+	});
+
+	it("leaves the arrows to a radio option (was: Settings › Quality arrows skipped tracks)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, queue: queue3, queueIndex: 0 });
+		renderHook(() => useKeyboardShortcuts());
+		const radio = mount(document.createElement("button"));
+		radio.setAttribute("role", "radio");
+		expect(press("ArrowRight", {}, radio).defaultPrevented).toBe(false);
+		expect(usePlayerStore.getState().queueIndex).toBe(0);
+	});
+
+	it("leaves every key to a native <select>", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, volume: 50 });
+		renderHook(() => useKeyboardShortcuts());
+		const select = mount(document.createElement("select"));
+		press("m", {}, select);
+		expect(usePlayerStore.getState().volume).toBe(50);
+	});
+});
+
+describe("useKeyboardShortcuts — dialogs and menus (HK-05)", () => {
+	function layer(role: string, attrs: Record<string, string> = {}) {
+		const host = mount(document.createElement("div"));
+		host.setAttribute("role", role);
+		for (const [k, v] of Object.entries(attrs)) host.setAttribute(k, v);
+		const inner = document.createElement("button");
+		host.appendChild(inner);
+		return { host, inner };
+	}
+
+	it("stays quiet inside a dialog (was: M muted the player behind the Share dialog)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, volume: 50, queue: queue3, queueIndex: 0 });
+		renderHook(() => useKeyboardShortcuts());
+		const { inner } = layer("dialog");
+		press("m", {}, inner);
+		press("ArrowRight", {}, inner);
+		expect(usePlayerStore.getState().volume).toBe(50);
+		expect(usePlayerStore.getState().queueIndex).toBe(0);
+	});
+
+	it("stays quiet on an open menu's container (was: ArrowRight on a just-opened menu skipped the track)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, queue: queue3, queueIndex: 0 });
+		renderHook(() => useKeyboardShortcuts());
+		const { host } = layer("menu");
+		expect(press("ArrowRight", {}, host).defaultPrevented).toBe(false);
+		expect(usePlayerStore.getState().queueIndex).toBe(0);
+	});
+
+	it("doesn't open the palette over a dialog (was: '/' and Ctrl+K opened a palette the dialog's focus trap made unusable)", () => {
+		renderHook(() => useKeyboardShortcuts());
+		const { inner } = layer("alertdialog");
+		press("/", {}, inner);
+		expect(useCommandStore.getState().isOpen).toBe(false);
+		press("k", { ctrlKey: true }, inner);
+		expect(useCommandStore.getState().isOpen).toBe(false);
+	});
+
+	it("keeps the player shortcuts in Now Playing (data-hotkeys=player)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, volume: 50 });
+		renderHook(() => useKeyboardShortcuts());
+		const { inner } = layer("dialog", { "data-hotkeys": "player", "aria-modal": "true" });
+		press("m", {}, inner);
+		expect(usePlayerStore.getState().volume).toBe(0);
+	});
+});
+
+describe("useKeyboardShortcuts — held keys (HK-04)", () => {
+	it("ignores auto-repeat for track skips, play/pause, mute and Ctrl+K (was: holding → skipped through the queue)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, volume: 50, queue: queue3, queueIndex: 0 });
+		renderHook(() => useKeyboardShortcuts());
+		press("ArrowRight");
+		press("ArrowRight", { repeat: true });
+		press("ArrowRight", { repeat: true });
+		expect(usePlayerStore.getState().queueIndex).toBe(1);
+		press(" ", { repeat: true });
+		expect(usePlayerStore.getState().isPlaying).toBe(true);
+		press("m", { repeat: true });
+		expect(usePlayerStore.getState().volume).toBe(50);
+		press("k", { ctrlKey: true, repeat: true });
+		expect(useCommandStore.getState().isOpen).toBe(false);
+	});
+
+	it("keeps auto-repeat for seeking and volume", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, volume: 50, currentTime: 20, duration: 100 });
+		renderHook(() => useKeyboardShortcuts());
+		press("l", { repeat: true });
+		press("ArrowRight", { shiftKey: true, repeat: true });
+		expect(usePlayerStore.getState().currentTime).toBe(40);
+		press("ArrowUp", { shiftKey: true, repeat: true });
+		expect(usePlayerStore.getState().volume).toBe(55);
+	});
+});
+
+describe("useKeyboardShortcuts — seeking (HK-09)", () => {
+	it("seeks forward when the duration isn't known yet (was: L / Shift+→ jumped back to 0:00)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, currentTime: 30, duration: 0 });
+		renderHook(() => useKeyboardShortcuts());
+		press("l");
+		expect(usePlayerStore.getState().currentTime).toBe(40);
+		press("ArrowRight", { shiftKey: true });
+		expect(usePlayerStore.getState().currentTime).toBe(50);
+	});
+
+	it("still stops at the end and at the start", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, currentTime: 95, duration: 100 });
+		renderHook(() => useKeyboardShortcuts());
+		press("l");
+		expect(usePlayerStore.getState().currentTime).toBe(100);
+		usePlayerStore.setState({ currentTime: 4 });
+		press("j");
+		expect(usePlayerStore.getState().currentTime).toBe(0);
+	});
+});
+
+describe("useKeyboardShortcuts — keyboard layouts and IME (HK-10)", () => {
+	it("reads the physical key on non-Latin layouts (was: Ctrl+K and M did nothing on a Russian keyboard)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, volume: 50 });
+		renderHook(() => useKeyboardShortcuts());
+		press("ь", { code: "KeyM" });
+		expect(usePlayerStore.getState().volume).toBe(0);
+		press("л", { code: "KeyK", ctrlKey: true });
+		expect(useCommandStore.getState().isOpen).toBe(true);
+	});
+
+	it("keeps the typed letter on AZERTY (the M key, not the physical ; key)", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true, volume: 50 });
+		renderHook(() => useKeyboardShortcuts());
+		press("m", { code: "Semicolon" });
+		expect(usePlayerStore.getState().volume).toBe(0);
+	});
+
+	it("leaves keys to an IME composition", () => {
+		usePlayerStore.setState({ currentTrack: track, isPlaying: true });
+		renderHook(() => useKeyboardShortcuts());
+		press(" ", { isComposing: true });
+		expect(usePlayerStore.getState().isPlaying).toBe(true);
+	});
+});
+
+describe("useKeyboardShortcuts — Escape closes the top-most player layer only (HK-03, HK-06)", () => {
+	it("closes Now Playing (was: Escape did nothing in the fullscreen player)", () => {
+		usePlayerStore.setState({ currentTrack: track, fullscreenOpen: true });
+		renderHook(() => useKeyboardShortcuts());
+		const e = press("Escape");
+		expect(e.defaultPrevented).toBe(true);
+		expect(usePlayerStore.getState().fullscreenOpen).toBe(false);
+	});
+
+	it("closes the immersive lyrics, then the queue, then Now Playing", () => {
+		usePlayerStore.setState({ currentTrack: track, fullscreenOpen: true, queuePanelOpen: true });
+		useLyricsStore.setState({ immersiveOpen: true });
+		renderHook(() => useKeyboardShortcuts());
+		press("Escape");
+		expect(useLyricsStore.getState().immersiveOpen).toBe(false);
+		expect(usePlayerStore.getState().queuePanelOpen).toBe(true);
+		press("Escape");
+		expect(usePlayerStore.getState().queuePanelOpen).toBe(false);
+		expect(usePlayerStore.getState().fullscreenOpen).toBe(true);
+		press("Escape");
+		expect(usePlayerStore.getState().fullscreenOpen).toBe(false);
+	});
+
+	it("leaves the queue open when Escape closes the palette (was: one Escape closed both)", () => {
+		usePlayerStore.setState({ currentTrack: track, queuePanelOpen: true });
+		useCommandStore.setState({ isOpen: true });
+		renderHook(() => useKeyboardShortcuts());
+		press("Escape");
+		expect(useCommandStore.getState().isOpen).toBe(false);
+		expect(usePlayerStore.getState().queuePanelOpen).toBe(true);
+	});
+
+	it("leaves the queue open when a field or a dialog handled Escape (was: leaving the search field closed the queue)", () => {
+		usePlayerStore.setState({ currentTrack: track, queuePanelOpen: true });
+		renderHook(() => useKeyboardShortcuts());
+		const handled = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+		handled.preventDefault();
+		document.body.dispatchEvent(handled);
+		const dialog = mount(document.createElement("div"));
+		dialog.setAttribute("role", "dialog");
+		press("Escape", {}, dialog);
+		expect(usePlayerStore.getState().queuePanelOpen).toBe(true);
 	});
 });

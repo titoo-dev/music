@@ -122,14 +122,7 @@ export function LyricsImmersive() {
 		}
 	}, [open]);
 
-	useEffect(() => {
-		if (!open) return;
-		const handler = (e: KeyboardEvent) => {
-			if (e.key === "Escape") setOpen(false);
-		};
-		window.addEventListener("keydown", handler);
-		return () => window.removeEventListener("keydown", handler);
-	}, [open, setOpen]);
+	// Escape: useKeyboardShortcuts closes the top-most player layer only (was: one Escape closed every layer).
 
 	const totalDuration = duration || currentTrack?.duration || 0;
 
@@ -144,6 +137,7 @@ export function LyricsImmersive() {
 					transition={{ duration: 0.25 }}
 					role="dialog"
 					aria-label="Lyrics fullscreen"
+					data-hotkeys="player"
 					className="cover-theme fixed inset-0 z-[71] isolate overflow-clip bg-background text-foreground"
 					style={coverThemeStyle(seed)}
 				>

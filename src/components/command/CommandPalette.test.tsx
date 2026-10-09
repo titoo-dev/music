@@ -409,4 +409,16 @@ describe("CommandPalette — new tabs (NAV-21)", () => {
 		expect(push).not.toHaveBeenCalled();
 		open.mockRestore();
 	});
+
+	it("leaves Enter and Escape to an IME composition (HK-11, was: confirming a Japanese character opened the first result)", async () => {
+		render(<CommandPalette />);
+		openWith();
+		const input = await screen.findByLabelText("Search");
+		await screen.findByText("All music");
+		fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+		fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+		fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+		expect(push).not.toHaveBeenCalled();
+		expect(useCommandStore.getState().isOpen).toBe(true);
+	});
 });
