@@ -102,3 +102,21 @@ describe("useKeyboardShortcuts — page scrolling (NAV-01)", () => {
 		expect(press("ArrowRight").defaultPrevented).toBe(false);
 	});
 });
+
+describe("useKeyboardShortcuts — palette Escape fallback (NAV-18)", () => {
+	it("Escape closes the palette even when the focus left it (was: the palette ignored the keyboard)", () => {
+		useCommandStore.setState({ isOpen: true });
+		renderHook(() => useKeyboardShortcuts());
+		press("Escape");
+		expect(useCommandStore.getState().isOpen).toBe(false);
+	});
+
+	it("leaves an Escape the palette already handled alone", () => {
+		useCommandStore.setState({ isOpen: true });
+		renderHook(() => useKeyboardShortcuts());
+		const e = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+		e.preventDefault();
+		document.body.dispatchEvent(e);
+		expect(useCommandStore.getState().isOpen).toBe(true);
+	});
+});

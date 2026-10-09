@@ -129,6 +129,29 @@ export function CommandPalette() {
 		};
 	}, [isOpen]);
 
+	// Give the focus back to whatever opened the palette, unless it navigated away.
+	const opener = useRef<HTMLElement | null>(null);
+	const navigated = useRef(false);
+	const markNavigated = useCallback(() => {
+		navigated.current = true;
+	}, []);
+	useEffect(
+		// Read at open() time, before the input takes the focus.
+		() =>
+			useCommandStore.subscribe((s, p) => {
+				if (!s.isOpen || p.isOpen) return;
+				opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+				navigated.current = false;
+			}),
+		[]
+	);
+	useEffect(() => {
+		if (isOpen) return;
+		const el = opener.current;
+		opener.current = null;
+		if (el && !navigated.current && el.isConnected && el !== document.body) el.focus();
+	}, [isOpen]);
+
 	if (!mounted) return null;
 	return createPortal(
 		<AnimatePresence>
@@ -154,7 +177,7 @@ export function CommandPalette() {
 						transition={{ type: "spring", stiffness: 420, damping: 32 }}
 						className="relative flex max-h-[72vh] w-full max-w-[680px] origin-top flex-col overflow-hidden rounded-[28px] bg-surface-container text-foreground shadow-popover ring-1 ring-outline-variant/40"
 					>
-						<PaletteBody />
+						<PaletteBody onNavigate={markNavigated} />
 					</motion.div>
 				</div>
 			)}
@@ -163,7 +186,7 @@ export function CommandPalette() {
 	);
 }
 
-function PaletteBody() {
+function PaletteBody({ onNavigate }: { onNavigate: () => void }) {
 	const router = useRouter();
 	const query = useCommandStore((s) => s.query);
 	const setQuery = useCommandStore((s) => s.setQuery);
@@ -209,6 +232,8 @@ function PaletteBody() {
 	}, [debounced, suggesting]);
 	const data = suggesting ? (suggest?.data ?? null) : null;
 	const loading = suggesting && suggest?.term !== debounced;
+	// The rows on screen still belong to an earlier query (debounce / request in flight): Enter must not act on them.
+	const stale = suggesting && suggest?.term !== trimmed;
 
 	// Pasted Deezer link → preview the collection
 	const linkKey = link ? `${link.type}:${link.id}` : null;
@@ -236,11 +261,12 @@ function PaletteBody() {
 	const go = useCallback(
 		(href: string) => {
 			const replace = useOverlayStack.getState().ids.length > 0;
+			onNavigate();
 			leaveOverlays(close);
 			if (replace) router.replace(href);
 			else router.push(href);
 		},
-		[close, router]
+		[close, router, onNavigate]
 	);
 
 	const requireAuth = useCallback(() => {
@@ -311,13 +337,25 @@ function PaletteBody() {
 					},
 				});
 			}
+			// There is no track page to open: say so rather than searching the URL.
+			if (l.type === "track") {
+				out.push({
+					key: "link-track",
+					group: "Deezer link",
+					title: "Track links aren’t supported",
+					subtitle: "Paste an album, playlist or artist link instead.",
+					icon: Info,
+					onSelect: () => {},
+				});
+				return out;
+			}
 			out.push({
 				key: "link-open",
 				group: "Deezer link",
 				title: `Open ${l.type}`,
 				subtitle: collection.error ?? `deezer.com/${l.type}/${l.id}`,
 				icon: l.type === "artist" ? UserIcon : Disc3,
-				onSelect: () => go(l.type === "track" ? `/search?term=${encodeURIComponent(trimmed)}` : `/${l.type}?id=${l.id}`),
+				onSelect: () => go(`/${l.type}?id=${l.id}`),
 			});
 			return out;
 		}
@@ -411,7 +449,7 @@ function PaletteBody() {
 	}, [view, collection, trimmed, data, isAuthenticated, download, downloadCollection, go, play, playQueue, addToQueue, addNext, close]);
 
 	// Back to the first row whenever the list changes (adjusted during render).
-	const resetKey = `${rows.length}\u0000${trimmed}\u0000${view}`;
+	const resetKey = `${rows.length}\u0000${trimmed}\u0000${view}\u0000${suggest?.term ?? ""}`;
 	const [seenKey, setSeenKey] = useState(resetKey);
 	if (seenKey !== resetKey) {
 		setSeenKey(resetKey);
@@ -445,6 +483,10 @@ function PaletteBody() {
 			e.preventDefault();
 			const row = rows[active];
 			if (!row) return;
+			if (stale && /^[tar]-/.test(row.key)) {
+				rows.find((r) => r.key === "all-results")?.onSelect();
+				return;
+			}
 			if (e.shiftKey && row.onDownload) row.onDownload();
 			else if ((e.metaKey || e.ctrlKey) && row.onQueue) row.onQueue();
 			else row.onSelect();
@@ -454,7 +496,12 @@ function PaletteBody() {
 	const busy = loading || (!!collection && !collection.info && !collection.error && (collection.link.type === "album" || collection.link.type === "playlist"));
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
+		<div
+			className="flex min-h-0 flex-1 flex-col"
+			onKeyDown={onKeyDown}
+			// Clicks keep the focus in the input, so Escape / arrows / Enter keep working.
+			onMouseDown={(e) => e.target !== inputRef.current && e.preventDefault()}
+		>
 			{/* Input */}
 			<div className="p-3 pb-2">
 			<div className="flex h-14 items-center gap-3 rounded-full bg-surface-high pl-5 pr-2 shadow-[inset_0_0_0_2px_color-mix(in_srgb,var(--primary)_30%,transparent)]">
@@ -525,7 +572,7 @@ function PaletteBody() {
 				</div>
 			</LayoutGroup>
 
-			<div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+			<div ref={listRef} aria-busy={stale || undefined} className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain transition-opacity", stale && "opacity-60")}>
 				<AnimatePresence mode="wait" initial={false}>
 					{view === "search" ? (
 						<motion.div key="search" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.12 }}>

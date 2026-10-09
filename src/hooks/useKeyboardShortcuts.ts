@@ -29,8 +29,11 @@ export function useKeyboardShortcuts() {
 				useCommandStore.getState().toggle();
 				return;
 			}
-			// Palette owns the keyboard while it's open.
-			if (useCommandStore.getState().isOpen) return;
+			// Palette owns the keyboard while it's open — Escape still closes it if the focus left it.
+			if (useCommandStore.getState().isOpen) {
+				if (e.key === "Escape" && !e.defaultPrevented) useCommandStore.getState().close();
+				return;
+			}
 
 			const target = e.target as HTMLElement | null;
 			// Skip if user is typing in an input/textarea/contenteditable

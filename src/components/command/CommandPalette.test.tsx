@@ -307,3 +307,72 @@ describe("CommandPalette — leaving (NAV-17)", () => {
 		expect(push).toHaveBeenCalledWith("/login");
 	});
 });
+
+describe("CommandPalette — stale suggestions (NAV-15)", () => {
+	it("Enter on results of the previous query searches what is typed (was: played a track of the old query)", async () => {
+		fetchData.mockResolvedValueOnce(SUGGEST).mockReturnValue(new Promise(() => {}));
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		act(() => useCommandStore.getState().setQuery("daft punk live"));
+		await userEvent.keyboard("{Enter}");
+		expect(usePlayerStore.getState().currentTrack).toBeNull();
+		expect(push).toHaveBeenCalledWith("/search?term=daft%20punk%20live");
+	});
+
+	it("goes back to the first row when new results arrive (was: the selection jumped to another album)", async () => {
+		let resolve!: (v: unknown) => void;
+		fetchData.mockResolvedValueOnce(SUGGEST).mockReturnValueOnce(new Promise((r) => (resolve = r)));
+		render(<CommandPalette />);
+		openWith("daft");
+		await screen.findByText("One More Time");
+		act(() => useCommandStore.getState().setQuery("daft punk"));
+		await userEvent.keyboard("{ArrowDown}");
+		await act(async () => resolve({ ...SUGGEST, tracks: [{ ...SUGGEST.tracks[0], sourceId: "9", title: "Around the World" }] }));
+		await screen.findByText("Around the World");
+		expect(screen.getByText("Around the World").closest("[role=option]")).toHaveAttribute("aria-selected", "true");
+	});
+});
+
+describe("CommandPalette — track links (NAV-16)", () => {
+	it("says track links aren't supported instead of searching the URL (was: Open track → No results)", async () => {
+		render(<CommandPalette />);
+		openWith("https://www.deezer.com/track/3135556");
+		expect(await screen.findByText("Track links aren’t supported")).toBeInTheDocument();
+		expect(screen.queryByText("Open track")).toBeNull();
+		await userEvent.keyboard("{Enter}");
+		expect(push).not.toHaveBeenCalled();
+	});
+});
+
+describe("CommandPalette — keyboard after a click (NAV-18)", () => {
+	it("keeps the focus in the input when a row is clicked (was: Escape stopped working)", async () => {
+		render(<CommandPalette />);
+		openWith();
+		const input = await screen.findByLabelText("Search");
+		await waitFor(() => expect(input).toHaveFocus());
+		await userEvent.click(await screen.findByText("Toggle theme"));
+		expect(input).toHaveFocus();
+		await userEvent.keyboard("{Escape}");
+		expect(useCommandStore.getState().isOpen).toBe(false);
+	});
+});
+
+describe("CommandPalette — focus return (NAV-20)", () => {
+	it("gives the focus back to the control that opened it (was: focus fell to <body>)", async () => {
+		render(
+			<>
+				<button type="button" onClick={() => useCommandStore.getState().open()}>
+					opener
+				</button>
+				<CommandPalette />
+			</>
+		);
+		const opener = screen.getByRole("button", { name: "opener" });
+		await userEvent.click(opener);
+		const input = await screen.findByLabelText("Search");
+		await waitFor(() => expect(input).toHaveFocus());
+		await userEvent.keyboard("{Escape}");
+		await waitFor(() => expect(opener).toHaveFocus());
+	});
+});

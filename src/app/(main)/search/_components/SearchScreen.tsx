@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { parseDeezerLink } from "@/lib/collection-tracks";
 import { SearchGlyph } from "@/components/motion/icons";
 import { DUR, EASE, FilterPills } from "@/components/expressive";
 import { useDownloadedAlbums } from "@/hooks/useDownloadedAlbums";
@@ -64,6 +65,12 @@ export function SearchScreen() {
 		(value: string) => {
 			const t = value.trim();
 			if (!t) return;
+			// A pasted Deezer link opens its page; a track link stays on its card (no track page to open).
+			const link = parseDeezerLink(t);
+			if (link) {
+				if (link.type !== "track") router.push(`/${link.type}?id=${link.id}`);
+				return;
+			}
 			setTyped(t);
 			inputRef.current?.blur();
 			recentSearches.add(t);
