@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { TrackRow, trackFromDeezerRaw, type TrackRowTrack } from "@/components/tracks/TrackRow";
 import { MediaCard } from "@/components/cards/MediaCard";
 import { useTracklist } from "@/components/collection/useTracklist";
+import { LoadFailed } from "@/components/collection/LoadFailed";
 import { ArtistDetailSkeleton } from "@/components/skeletons";
 import { useCollectionPlayback } from "@/components/collection/CollectionActions";
 import { CardCarousel, CollectionScaffold, DUR, EASE, FilterPills, Medallion, SPRING, SavedBadge, SectionTitle, TonalIconButton, swap } from "@/components/expressive";
@@ -31,29 +32,34 @@ const rowReveal = {
 /**
  * `/artist?name=…` (library rows only keep the artist name): find the Deezer
  * artist through search and swap the URL for its `?id=`. Stays "loading" until
- * the replace lands, "missing" when search has nothing.
+ * the replace lands, "missing" when search has no such artist, "error" when
+ * the search failed (offer `retry`).
  */
 function useArtistFromName(name: string | null) {
 	const router = useRouter();
-	const [missing, setMissing] = useState<string | null>(null);
+	const [attempt, setAttempt] = useState(0);
+	const [outcome, setOutcome] = useState<{ key: string; status: "missing" | "error" } | null>(null);
+	const key = name ? `${name}\u0000${attempt}` : null;
 
 	useEffect(() => {
 		if (!name) return;
 		let cancelled = false;
+		const k = `${name}\u0000${attempt}`;
 		fetchData("search", { term: primaryArtistName(name), type: "artist", start: "0", nb: "10" })
 			.then((res) => {
 				if (cancelled) return;
 				const id = pickArtistId(name, Array.isArray(res?.data) ? res.data : []);
 				if (id) router.replace(`/artist?id=${encodeURIComponent(id)}`);
-				else setMissing(name);
+				else setOutcome({ key: k, status: "missing" });
 			})
-			.catch(() => !cancelled && setMissing(name));
+			.catch(() => !cancelled && setOutcome({ key: k, status: "error" }));
 		return () => {
 			cancelled = true;
 		};
-	}, [name, router]);
+	}, [name, attempt, router]);
 
-	return name && missing === name ? "missing" : "loading";
+	const retry = useCallback(() => setAttempt((a) => a + 1), []);
+	return { status: key && outcome?.key === key ? outcome.status : ("loading" as const), retry };
 }
 
 function ArtistContent() {
@@ -63,7 +69,8 @@ function ArtistContent() {
 	const byName = useArtistFromName(id ? null : name);
 	const tracklist = useTracklist("artist", id, parseArtistPage);
 	const page = tracklist.page;
-	const status = id ? tracklist.status : name ? byName : "missing";
+	const status = id ? tracklist.status : name ? byName.status : "missing";
+	const retry = id ? tracklist.retry : byName.retry;
 
 	return (
 		<AnimatePresence mode="wait" initial={false}>
@@ -72,6 +79,8 @@ function ArtistContent() {
 					<ArtistDetailSkeleton />
 				) : status === "ready" && page ? (
 					<ArtistView page={page} />
+				) : status === "error" ? (
+					<LoadFailed what="artist" onRetry={retry} />
 				) : (
 					<Medallion icon={UserRound} title="Artist not found" message="The artist you're looking for doesn't exist or is unavailable." className="mt-10" />
 				)}
@@ -87,10 +96,7 @@ function useFollow(page: ArtistPageData) {
 	const [busy, setBusy] = useState(false);
 
 	useEffect(() => {
-		if (!isAuthenticated) {
-			setFollowing(false);
-			return;
-		}
+		if (!isAuthenticated) return;
 		let cancelled = false;
 		(async () => {
 			try {
@@ -111,7 +117,7 @@ function useFollow(page: ArtistPageData) {
 
 	const toggle = async () => {
 		if (!isAuthenticated || busy) return;
-		const was = following;
+		const was = isAuthenticated && following;
 		setFollowing(!was);
 		setBusy(true);
 		try {
@@ -132,7 +138,8 @@ function useFollow(page: ArtistPageData) {
 		setBusy(false);
 	};
 
-	return { isAuthenticated, following, busy, toggle };
+	// Signed out: never "following" (the last answer may belong to the previous account).
+	return { isAuthenticated, following: isAuthenticated && following, busy, toggle };
 }
 
 function ArtistView({ page }: { page: ArtistPageData }) {

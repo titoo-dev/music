@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Clock3, ListMusic, Music2 } from "lucide-react";
 import { TrackRow, trackFromDeezerRaw, type TrackRowTrack } from "@/components/tracks/TrackRow";
 import { useTracklist } from "@/components/collection/useTracklist";
+import { LoadFailed } from "@/components/collection/LoadFailed";
 import { PlaylistDetailSkeleton } from "@/components/skeletons";
 import { AddTracksToPlaylist, DownloadCollectionButton, useCollectionPlayback } from "@/components/collection/CollectionActions";
 import { CollectionScaffold, Medallion, swap } from "@/components/expressive";
@@ -21,7 +22,7 @@ const rowReveal = {
 
 function PlaylistContent() {
 	const id = useSearchParams().get("id");
-	const { page, status } = useTracklist("playlist", id, parsePlaylistPage);
+	const { page, status, retry } = useTracklist("playlist", id, parsePlaylistPage);
 
 	return (
 		<AnimatePresence mode="wait" initial={false}>
@@ -30,6 +31,8 @@ function PlaylistContent() {
 					<PlaylistDetailSkeleton />
 				) : status === "ready" && page ? (
 					<PlaylistView page={page} />
+				) : status === "error" ? (
+					<LoadFailed what="playlist" onRetry={retry} />
 				) : (
 					<Medallion icon={ListMusic} title="Playlist not found" message="The playlist you're looking for doesn't exist or is unavailable." className="mt-10" />
 				)}

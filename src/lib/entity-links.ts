@@ -41,32 +41,38 @@ const norm = (s: string) =>
 		.replace(/\s+/g, " ")
 		.trim();
 
+/** Drops a trailing "(…)" / "[…]" Deezer adds: "Nirvana (UK)", "Discovery (Remastered)". */
+const base = (s: string) => norm(s).replace(/\s*[([].*$/, "") || norm(s);
+
 /**
  * Picks the Deezer artist a printed name refers to: an exact (accent / case
- * insensitive) match on the full name, then on the primary artist, then
- * Deezer's top-ranked result.
+ * insensitive) match on the full name, then on the primary artist, then the
+ * same names without a "(…)" suffix. No match → null (the page says "not
+ * found"); never Deezer's top result for another artist.
  */
 export function pickArtistId(name: string, results: Array<{ id?: Id; name?: string | null }>): string | null {
 	const candidates = results.filter((r) => present(r.id));
-	if (!candidates.length) return null;
 	const full = norm(name);
 	const primary = norm(primaryArtistName(name));
-	const hit = candidates.find((r) => norm(r.name ?? "") === full) ?? candidates.find((r) => norm(r.name ?? "") === primary) ?? candidates[0];
-	return String(hit.id);
+	const hit =
+		candidates.find((r) => norm(r.name ?? "") === full) ??
+		candidates.find((r) => norm(r.name ?? "") === primary) ??
+		candidates.find((r) => [full, primary].includes(base(r.name ?? "")));
+	return hit ? String(hit.id) : null;
 }
 
 /**
  * Picks the Deezer album a printed title refers to: same title (accent / case
- * insensitive) by the same artist, then same title, then the first result by
- * that artist, then Deezer's top-ranked result.
+ * insensitive, then without an edition suffix) by the same artist. Without an
+ * artist, the same title. No match → null; never another artist's album.
  */
 export function pickAlbumId(title: string, artist: string | null | undefined, results: Array<{ id?: Id; title?: string | null; artist?: { name?: string | null } | null }>): string | null {
 	const candidates = results.filter((r) => present(r.id));
-	if (!candidates.length) return null;
 	const t = norm(title);
 	const a = artist ? norm(primaryArtistName(artist)) : null;
-	const byArtist = (r: (typeof candidates)[number]) => a != null && norm(r.artist?.name ?? "") === a;
+	const byArtist = (r: (typeof candidates)[number]) => a == null || norm(r.artist?.name ?? "") === a;
 	const sameTitle = (r: (typeof candidates)[number]) => norm(r.title ?? "") === t;
-	const hit = candidates.find((r) => sameTitle(r) && byArtist(r)) ?? candidates.find(sameTitle) ?? candidates.find(byArtist) ?? candidates[0];
-	return String(hit.id);
+	const sameBase = (r: (typeof candidates)[number]) => base(r.title ?? "") === base(title);
+	const hit = candidates.find((r) => sameTitle(r) && byArtist(r)) ?? candidates.find((r) => sameBase(r) && byArtist(r));
+	return hit ? String(hit.id) : null;
 }

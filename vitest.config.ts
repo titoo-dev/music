@@ -70,6 +70,8 @@ export default defineConfig({
 				"src/hooks/useOverlayHistory.ts",
 				"src/lib/login-redirect.ts",
 				"src/lib/sign-out.ts",
+				"src/lib/trailing-send.ts",
+				"src/components/collection/useTracklist.ts",
 				"src/components/links/EntityLink.tsx",
 				"src/components/audio/leave-player.ts",
 				"src/lib/spotify/import.ts",

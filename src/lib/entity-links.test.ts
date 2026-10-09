@@ -62,8 +62,12 @@ describe("pickArtistId", () => {
 		expect(pickArtistId("Dua Lipa, DaBaby", results)).toBe("3");
 	});
 
-	it("falls back to Deezer's top result", () => {
+	it("matches a name Deezer disambiguates with a suffix", () => {
 		expect(pickArtistId("Nirvana", results)).toBe("1");
+	});
+
+	it("finds nothing rather than an unrelated artist (NAV-23, was: opened Deezer's top result)", () => {
+		expect(pickArtistId("Lumière", results)).toBeNull();
 	});
 
 	it("returns null with no usable result", () => {
@@ -84,10 +88,18 @@ describe("pickAlbumId", () => {
 		expect(pickAlbumId("discovery", "Daft Punk", results)).toBe("3");
 	});
 
-	it("then the same title, then the artist, then the top result", () => {
+	it("takes the same title when no artist is known", () => {
 		expect(pickAlbumId("Discovery", null, results)).toBe("2");
-		expect(pickAlbumId("Alive 2007", "Daft Punk", results)).toBe("1");
-		expect(pickAlbumId("Alive 2007", "Nobody", results)).toBe("1");
+	});
+
+	it("finds nothing rather than another album (NAV-23, was: another artist's album or the top result)", () => {
+		expect(pickAlbumId("Alive 2007", "Daft Punk", results)).toBeNull();
+		expect(pickAlbumId("Alive 2007", "Nobody", results)).toBeNull();
+		expect(pickAlbumId("Discovery", "Nobody", results)).toBeNull();
+	});
+
+	it("accepts an edition suffix on the title by the same artist", () => {
+		expect(pickAlbumId("Random Access Memories", "Daft Punk", [{ id: 9, title: "Random Access Memories (10th Anniversary Edition)", artist: { name: "Daft Punk" } }])).toBe("9");
 	});
 
 	it("returns null with no usable result", () => {

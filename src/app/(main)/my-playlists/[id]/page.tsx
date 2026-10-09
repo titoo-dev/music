@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { AnimatePresence, motion, Reorder, useDragControls } from "motion/react";
@@ -16,6 +16,7 @@ import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { usePrefetch } from "@/hooks/usePrefetch";
 import { useWindowRows } from "@/hooks/useVirtualRows";
 import { useLoginHref } from "@/hooks/useLoginHref";
+import { trailingSend } from "@/lib/trailing-send";
 import { DeletePlaylistDialog, PlaylistEditDialog, filledButton, tonalButton } from "@/components/playlists/PlaylistDialogs";
 import { PlaylistDetailSkeleton } from "@/components/playlists/PlaylistTiles";
 import { formatRelative, formatTotal, plural, uniqueCovers } from "@/components/playlists/format";
@@ -140,18 +141,23 @@ export default function PlaylistDetailPage() {
 	// Drag-reorder persistence: optimistic local update on every onReorder
 	// (fires continuously during drag), but POST the final order to the API
 	// debounced so we don't spam the endpoint mid-drag.
-	const reorderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const playlistIdRef = useRef<string | null>(null);
-	useEffect(() => {
-		playlistIdRef.current = playlist?.id ?? null;
-	}, [playlist?.id]);
-
-	useEffect(
-		() => () => {
-			if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
-		},
-		[]
+	const playlistId = playlist?.id ?? null;
+	const [reorderSender] = useState(() =>
+		trailingSend<{ pid: string; trackIds: string[] }>(({ pid, trackIds }, { leaving }) => {
+			void fetch(`/api/v1/playlists/${pid}/tracks`, {
+				method: "PATCH",
+				// Leaving the page mid-wait: let the request outlive it.
+				keepalive: leaving,
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ trackIds }),
+			}).catch(() => {
+				// Persist failed — leave the optimistic state in place. A future
+				// fetch on mount will re-sync from the server.
+			});
+		}, 250)
 	);
+	// Leaving within the debounce (a link, Back) sends the last order instead of dropping it.
+	useEffect(() => () => reorderSender.flush(), [reorderSender]);
 
 	const handleReorder = useCallback((newOrderIds: string[]) => {
 		// Optimistic local update — also rewrites .position so re-renders
@@ -169,20 +175,8 @@ export default function PlaylistDetailPage() {
 		});
 
 		// Debounce the API call until the drag settles (~250ms idle).
-		if (reorderTimerRef.current) clearTimeout(reorderTimerRef.current);
-		reorderTimerRef.current = setTimeout(() => {
-			const pid = playlistIdRef.current;
-			if (!pid) return;
-			void fetch(`/api/v1/playlists/${pid}/tracks`, {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ trackIds: newOrderIds }),
-			}).catch(() => {
-				// Persist failed — leave the optimistic state in place. A future
-				// fetch on mount will re-sync from the server.
-			});
-		}, 250);
-	}, []);
+		if (playlistId) reorderSender.schedule({ pid: playlistId, trackIds: newOrderIds });
+	}, [reorderSender, playlistId]);
 
 	const saveDetails = async ({ title, description }: { title: string; description: string | null }) => {
 		if (!playlist) return;
