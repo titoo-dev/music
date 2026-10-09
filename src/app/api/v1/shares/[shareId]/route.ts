@@ -22,7 +22,8 @@ export async function GET(
 				plays: true,
 				createdAt: true,
 				expiresAt: true,
-				user: { select: { name: true, image: true } },
+				// The name only: the page is public, the profile picture is not.
+				user: { select: { name: true } },
 			},
 		});
 

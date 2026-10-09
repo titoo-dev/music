@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { useShareStore } from "./useShareStore";
 
 export interface BetterAuthUser {
 	id: string;
@@ -67,7 +68,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
 	setSpotifyUser: (spotifyUser) => set({ spotifyUser }),
 	setLoading: (isLoading) => set({ isLoading }),
 
-	logout: () =>
+	logout: () => {
+		// Per-account state that would otherwise leak to the next sign-in in this tab.
+		useShareStore.getState().reset();
 		set({
 			user: null,
 			isAuthenticated: false,
@@ -75,5 +78,6 @@ export const useAuthStore = create<AuthState>()((set) => ({
 			isDeezerConnected: false,
 			childs: [],
 			currentChild: 0,
-		}),
+		});
+	},
 }));

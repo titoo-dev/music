@@ -535,11 +535,11 @@ const schemas = {
 			title: str(),
 			artist: str(),
 			album: nstr(),
-			coverUrl: nstr(),
+			coverUrl: nstr({ description: "https Deezer artwork (*.dzcdn.net, api.deezer.com); any other URL is dropped" }),
 			duration: nint(),
-			expiresIn: { type: "number", description: "Hours until expiry. Omit for a permanent link." },
+			expiresIn: { type: "number", nullable: true, description: "Hours until expiry, more than 0 and at most 8760 (a year). Null or omitted for a permanent link." },
 		},
-		["trackId"]
+		["trackId", "title", "artist"]
 	),
 	SharedTrack: obj(
 		{
@@ -570,7 +570,7 @@ const schemas = {
 			plays: int(),
 			createdAt: dt(),
 			expiresAt: ndt(),
-			user: obj({ name: str(), image: nstr() }, ["name", "image"]),
+			user: obj({ name: str() }, ["name"]),
 		},
 		["shareId", "title", "artist", "album", "coverUrl", "duration", "plays", "createdAt", "expiresAt", "user"]
 	),
@@ -610,9 +610,10 @@ const schemas = {
 			objectsDeleted: int({ description: "R2 objects of those rows deleted (only when `ran` is true)" }),
 			objectsScanned: int({ description: "Objects listed under `tracks/` (only when `ran` is true)" }),
 			orphanObjectsDeleted: int({ description: "Objects under `tracks/` without any row deleted (only when `ran` is true)" }),
+			expiredSharesDeleted: int({ description: "Share links expired for more than 30 days deleted (only when `ran` is true)" }),
 		},
 		["ran"],
-		{ description: "`{ ran: false, reason }` or `{ ran: true, rowsDeleted, objectsDeleted, objectsScanned, orphanObjectsDeleted }`." }
+		{ description: "`{ ran: false, reason }` or `{ ran: true, rowsDeleted, objectsDeleted, objectsScanned, orphanObjectsDeleted, expiredSharesDeleted }`." }
 	),
 
 	// better-auth
@@ -1327,7 +1328,7 @@ const paths = {
 			tags: ["Shares"],
 			operationId: "createShare",
 			summary: "Create (or reuse) a public share link for a track",
-			description: "Returns 200 with the existing share if one already exists for this track, 201 otherwise. Public page: `https://wavelet.titosy.dev/share/t/{shareId}`.",
+			description: "Returns 200 with your live (unexpired) share if one already exists for this track, 201 otherwise; your expired links for the track are deleted. The public metadata (title, artist, album, cover, duration) comes from Deezer when your Deezer session knows the track; otherwise the sent values are used (`title` and `artist` then required, non-blank). Public page: `https://wavelet.titosy.dev/share/t/{shareId}`.",
 			security: userAuth,
 			requestBody: body(ref("CreateShareInput")),
 			responses: {
@@ -1336,7 +1337,7 @@ const paths = {
 				...E_400,
 				...E_USER,
 			},
-			"x-error-codes": ["MISSING_TRACK_ID"],
+			"x-error-codes": ["MISSING_TRACK_ID", "INVALID_EXPIRY", "MISSING_METADATA"],
 		},
 	},
 	"/api/v1/shares/{shareId}": {
@@ -1364,7 +1365,7 @@ const paths = {
 			operationId: "streamShare",
 			summary: "Public audio stream of a shared track (no auth)",
 			description: [
-				"- **Cached copy** (the best R2 copy of the track, found by trackId — a copy persisted after the share was created is used and re-linked): proxied from R2, Range passed through (206 + `Content-Range`), `Accept-Ranges: bytes`, `Cache-Control: public, max-age=3600`.",
+				"- **Cached copy** (the best R2 copy of the track, found by trackId — a copy persisted after the share was created is used and re-linked): proxied from R2, Range passed through (206 + `Content-Range`), `Accept-Ranges: bytes`, `Cache-Control: private, no-cache` (a revoked or expired link stops playing at once).",
 				"- **Fallback** (no cached copy, or the R2 read failed): streamed live through the share owner's Deezer account with the same Range rules as `/stream-progressive` — no Range, `bytes=0-` or `bytes=0-b` → persisting play (200, or 206 `Content-Range: bytes 0-b/n` when the Deezer CDN honours ranges; `Accept-Ranges: none` when it does not); a single range starting above 0 → 206 live-only; past the end → 416 `Content-Range: bytes */n`. Limited to 30 fallback requests per client address per 10 min (per server instance): over it → 429 `RATE_LIMITED` + `Retry-After`. Errors before the first byte: 422 `TRACK_UNAVAILABLE` / 502 `UPSTREAM_ERROR`.",
 				"- **Play counter**: +1 per successful (status < 400) request with no Range, `bytes=0-` or `bytes=0-n` with n > 1 (Safari / AVPlayer after their `bytes=0-1` probe) — not per seek, nor for a refused or failed request.",
 			].join("\n"),

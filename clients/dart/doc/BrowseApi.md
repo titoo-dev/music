@@ -110,7 +110,7 @@ import 'package:wavelet_api/api.dart';
 //defaultApiClient.getAuthentication<ApiKeyAuth>('sessionCookie').apiKeyPrefix = 'Bearer';
 
 final api = WaveletApi().getBrowseApi();
-final String id = id_example; // String | Deezer id
+final String id = id_example; // String | Numeric Deezer id
 final String type = type_example; // String | Entity type
 
 try {
@@ -125,7 +125,7 @@ try {
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **id** | **String**| Deezer id | 
+ **id** | **String**| Numeric Deezer id | 
  **type** | **String**| Entity type | 
 
 ### Return type

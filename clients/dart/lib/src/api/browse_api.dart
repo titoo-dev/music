@@ -194,7 +194,7 @@ class BrowseApi {
   /// 
   ///
   /// Parameters:
-  /// * [id] - Deezer id
+  /// * [id] - Numeric Deezer id
   /// * [type] - Entity type
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request

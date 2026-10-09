@@ -8,13 +8,13 @@ part of 'import_spotify_playlist_request.dart';
 
 class _$ImportSpotifyPlaylistRequest extends ImportSpotifyPlaylistRequest {
   @override
-  final String url;
+  final OneOf oneOf;
 
   factory _$ImportSpotifyPlaylistRequest(
           [void Function(ImportSpotifyPlaylistRequestBuilder)? updates]) =>
       (ImportSpotifyPlaylistRequestBuilder()..update(updates))._build();
 
-  _$ImportSpotifyPlaylistRequest._({required this.url}) : super._();
+  _$ImportSpotifyPlaylistRequest._({required this.oneOf}) : super._();
   @override
   ImportSpotifyPlaylistRequest rebuild(
           void Function(ImportSpotifyPlaylistRequestBuilder) updates) =>
@@ -27,13 +27,13 @@ class _$ImportSpotifyPlaylistRequest extends ImportSpotifyPlaylistRequest {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is ImportSpotifyPlaylistRequest && url == other.url;
+    return other is ImportSpotifyPlaylistRequest && oneOf == other.oneOf;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
-    _$hash = $jc(_$hash, url.hashCode);
+    _$hash = $jc(_$hash, oneOf.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -41,7 +41,7 @@ class _$ImportSpotifyPlaylistRequest extends ImportSpotifyPlaylistRequest {
   @override
   String toString() {
     return (newBuiltValueToStringHelper(r'ImportSpotifyPlaylistRequest')
-          ..add('url', url))
+          ..add('oneOf', oneOf))
         .toString();
   }
 }
@@ -52,9 +52,9 @@ class ImportSpotifyPlaylistRequestBuilder
             ImportSpotifyPlaylistRequestBuilder> {
   _$ImportSpotifyPlaylistRequest? _$v;
 
-  String? _url;
-  String? get url => _$this._url;
-  set url(String? url) => _$this._url = url;
+  OneOf? _oneOf;
+  OneOf? get oneOf => _$this._oneOf;
+  set oneOf(OneOf? oneOf) => _$this._oneOf = oneOf;
 
   ImportSpotifyPlaylistRequestBuilder() {
     ImportSpotifyPlaylistRequest._defaults(this);
@@ -63,7 +63,7 @@ class ImportSpotifyPlaylistRequestBuilder
   ImportSpotifyPlaylistRequestBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
-      _url = $v.url;
+      _oneOf = $v.oneOf;
       _$v = null;
     }
     return this;
@@ -85,8 +85,8 @@ class ImportSpotifyPlaylistRequestBuilder
   _$ImportSpotifyPlaylistRequest _build() {
     final _$result = _$v ??
         _$ImportSpotifyPlaylistRequest._(
-          url: BuiltValueNullFieldError.checkNotNull(
-              url, r'ImportSpotifyPlaylistRequest', 'url'),
+          oneOf: BuiltValueNullFieldError.checkNotNull(
+              oneOf, r'ImportSpotifyPlaylistRequest', 'oneOf'),
         );
     replace(_$result);
     return _$result;

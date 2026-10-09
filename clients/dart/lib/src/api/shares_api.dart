@@ -26,7 +26,7 @@ class SharesApi {
   const SharesApi(this._dio, this._serializers);
 
   /// Create (or reuse) a public share link for a track
-  /// Returns 200 with the existing share if one already exists for this track, 201 otherwise. Public page: &#x60;https://wavelet.titosy.dev/share/t/{shareId}&#x60;.
+  /// Returns 200 with your live (unexpired) share if one already exists for this track, 201 otherwise; your expired links for the track are deleted. The public metadata (title, artist, album, cover, duration) comes from Deezer when your Deezer session knows the track; otherwise the sent values are used (&#x60;title&#x60; and &#x60;artist&#x60; then required, non-blank). Public page: &#x60;https://wavelet.titosy.dev/share/t/{shareId}&#x60;.
   ///
   /// Parameters:
   /// * [createShareInput] 
@@ -377,7 +377,7 @@ class SharesApi {
   }
 
   /// Public audio stream of a shared track (no auth)
-  /// Range supported when served from cache (206); live fallback has &#x60;Accept-Ranges: none&#x60;. Each call increments the play counter.
+  /// - **Cached copy** (the best R2 copy of the track, found by trackId — a copy persisted after the share was created is used and re-linked): proxied from R2, Range passed through (206 + &#x60;Content-Range&#x60;), &#x60;Accept-Ranges: bytes&#x60;, &#x60;Cache-Control: private, no-cache&#x60; (a revoked or expired link stops playing at once). - **Fallback** (no cached copy, or the R2 read failed): streamed live through the share owner&#39;s Deezer account with the same Range rules as &#x60;/stream-progressive&#x60; — no Range, &#x60;bytes&#x3D;0-&#x60; or &#x60;bytes&#x3D;0-b&#x60; → persisting play (200, or 206 &#x60;Content-Range: bytes 0-b/n&#x60; when the Deezer CDN honours ranges; &#x60;Accept-Ranges: none&#x60; when it does not); a single range starting above 0 → 206 live-only; past the end → 416 &#x60;Content-Range: bytes *_/n&#x60;. Limited to 30 fallback requests per client address per 10 min (per server instance): over it → 429 &#x60;RATE_LIMITED&#x60; + &#x60;Retry-After&#x60;. Errors before the first byte: 422 &#x60;TRACK_UNAVAILABLE&#x60; / 502 &#x60;UPSTREAM_ERROR&#x60;. - **Play counter**: +1 per successful (status &lt; 400) request with no Range, &#x60;bytes&#x3D;0-&#x60; or &#x60;bytes&#x3D;0-n&#x60; with n &gt; 1 (Safari / AVPlayer after their &#x60;bytes&#x3D;0-1&#x60; probe) — not per seek, nor for a refused or failed request.
   ///
   /// Parameters:
   /// * [shareId] - Public share id

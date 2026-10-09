@@ -13,16 +13,17 @@ part 'skip_result.g.dart';
 ///
 /// Properties:
 /// * [kept] 
-/// * [reason] 
+/// * [reason] - Why the file was kept: `already_played` (this user logged a real play), `anchored` (saved, in a saved album, shared or recent-played by anyone), `persisting` (a persist of the track is in flight), `recent` (its cached copy is younger than 10 min — another listener may be playing it).
 /// * [evicted] 
 @BuiltValue()
 abstract class SkipResult implements Built<SkipResult, SkipResultBuilder> {
   @BuiltValueField(wireName: r'kept')
   bool? get kept;
 
+  /// Why the file was kept: `already_played` (this user logged a real play), `anchored` (saved, in a saved album, shared or recent-played by anyone), `persisting` (a persist of the track is in flight), `recent` (its cached copy is younger than 10 min — another listener may be playing it).
   @BuiltValueField(wireName: r'reason')
   SkipResultReasonEnum? get reason;
-  // enum reasonEnum {  already_played,  anchored,  };
+  // enum reasonEnum {  already_played,  anchored,  persisting,  recent,  };
 
   @BuiltValueField(wireName: r'evicted')
   bool? get evicted;
@@ -148,12 +149,17 @@ class _$SkipResultSerializer implements PrimitiveSerializer<SkipResult> {
 }
 
 
+/// Why the file was kept: `already_played` (this user logged a real play), `anchored` (saved, in a saved album, shared or recent-played by anyone), `persisting` (a persist of the track is in flight), `recent` (its cached copy is younger than 10 min — another listener may be playing it).
 class SkipResultReasonEnum extends EnumClass {
 
   @BuiltValueEnumConst(wireName: r'already_played')
   static const SkipResultReasonEnum alreadyPlayed = _$skipResultReasonEnum_alreadyPlayed;
   @BuiltValueEnumConst(wireName: r'anchored')
   static const SkipResultReasonEnum anchored = _$skipResultReasonEnum_anchored;
+  @BuiltValueEnumConst(wireName: r'persisting')
+  static const SkipResultReasonEnum persisting = _$skipResultReasonEnum_persisting;
+  @BuiltValueEnumConst(wireName: r'recent')
+  static const SkipResultReasonEnum recent = _$skipResultReasonEnum_recent;
 
   static Serializer<SkipResultReasonEnum> get serializer => _$skipResultReasonEnumSerializer;
 

@@ -3,6 +3,7 @@ import { create } from "zustand";
 interface ShareInfo {
 	shareId: string;
 	trackId: string;
+	expiresAt: string | null;
 }
 
 interface ShareState {
@@ -18,6 +19,8 @@ interface ShareState {
 	remove: (trackId: string) => void;
 	/** Check if a track is shared, returns shareId or null */
 	get: (trackId: string) => string | null;
+	/** Forget every link (sign-out): the next account loads its own. */
+	reset: () => void;
 }
 
 export const useShareStore = create<ShareState>((set, get) => ({
@@ -31,7 +34,10 @@ export const useShareStore = create<ShareState>((set, get) => ({
 			const json = await res.json();
 			if (json.success && Array.isArray(json.data)) {
 				const map = new Map<string, string>();
+				const now = Date.now();
 				for (const item of json.data as ShareInfo[]) {
+					// An expired link is dead: the track can be shared again.
+					if (item.expiresAt && Date.parse(item.expiresAt) <= now) continue;
 					map.set(item.trackId, item.shareId);
 				}
 				set({ shared: map, loaded: true });
@@ -60,4 +66,6 @@ export const useShareStore = create<ShareState>((set, get) => ({
 	get: (trackId) => {
 		return get().shared.get(trackId) ?? null;
 	},
+
+	reset: () => set({ shared: new Map(), loaded: false }),
 }));

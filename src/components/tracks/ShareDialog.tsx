@@ -32,6 +32,7 @@ interface ShareDialogProps {
 	/** Shown in the heading (`Share “title”`) and the header row. */
 	title?: string | null;
 	artist?: string | null;
+	album?: string | null;
 	cover?: string | null;
 	onShared?: () => void;
 }
@@ -43,7 +44,7 @@ const btn =
  * Share sheet (the Flutter `showShareSheet`): pick how long the link lives,
  * create it, then copy / share / revoke it from a tonal link card.
  */
-export function ShareDialog({ open, onOpenChange, trackId, duration, title, artist, cover, onShared }: ShareDialogProps) {
+export function ShareDialog({ open, onOpenChange, trackId, duration, title, artist, album, cover, onShared }: ShareDialogProps) {
 	const existingShareId = useShareStore((s) => s.shared.get(trackId) ?? null);
 	const addShare = useShareStore((s) => s.add);
 	const removeShare = useShareStore((s) => s.remove);
@@ -71,7 +72,16 @@ export function ShareDialog({ open, onOpenChange, trackId, duration, title, arti
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				credentials: "include",
-				body: JSON.stringify({ trackId, duration: duration ?? null, expiresIn: hours }),
+				// The public page and its link preview show this metadata.
+				body: JSON.stringify({
+					trackId,
+					title: title ?? "",
+					artist: artist ?? "",
+					album: album ?? null,
+					coverUrl: cover ?? null,
+					duration: duration ?? null,
+					expiresIn: hours,
+				}),
 			});
 			const json = await res.json();
 			if (json.success && json.data?.shareId) {
@@ -82,14 +92,14 @@ export function ShareDialog({ open, onOpenChange, trackId, duration, title, arti
 				flashCopied();
 				onShared?.();
 			} else {
-				setErrorMsg(json.error?.code === "NOT_DOWNLOADED" ? "Download this track first" : "Failed to create link");
+				setErrorMsg(json.error?.code === "MISSING_METADATA" ? "This track has no title or artist to share" : "Failed to create link");
 				setState("error");
 			}
 		} catch {
 			setErrorMsg("Network error");
 			setState("error");
 		}
-	}, [expiry, trackId, duration, addShare, flashCopied, onShared]);
+	}, [expiry, trackId, title, artist, album, cover, duration, addShare, flashCopied, onShared]);
 
 	const handleCopy = useCallback(async () => {
 		if (!shareUrl) return;

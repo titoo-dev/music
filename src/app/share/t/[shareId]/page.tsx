@@ -2,7 +2,10 @@ import { cache } from "react";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { Clock3 } from "lucide-react";
 import { SharePlayer } from "./SharePlayer";
+import { safeCoverUrl } from "@/lib/share-meta";
 
 interface Props {
 	params: Promise<{ shareId: string }>;
@@ -54,6 +57,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 	};
 }
 
+/** A link past its expiry: say so, rather than a bare 404. */
+function ExpiredShare() {
+	return (
+		<main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-4 text-center">
+			<span className="flex size-14 items-center justify-center rounded-full bg-surface-high text-muted-foreground">
+				<Clock3 className="size-6" aria-hidden />
+			</span>
+			<h1 className="type-display text-3xl text-foreground">This link has expired</h1>
+			<p className="max-w-[44ch] text-sm text-muted-foreground">
+				The person who shared this track set it to stop working after a while. Ask them for a new link.
+			</p>
+			<Link
+				href="/"
+				className="mt-2 inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground no-underline transition-[transform,background-color] hover:bg-primary/90 active:scale-95"
+			>
+				Open wavelet
+			</Link>
+		</main>
+	);
+}
+
 export default async function SharePage({ params }: Props) {
 	const { shareId } = await params;
 	const shared = await getSharedTrack(shareId);
@@ -63,7 +87,7 @@ export default async function SharePage({ params }: Props) {
 	}
 
 	if (shared.expiresAt && shared.expiresAt < new Date()) {
-		notFound();
+		return <ExpiredShare />;
 	}
 
 	return (
@@ -72,7 +96,7 @@ export default async function SharePage({ params }: Props) {
 			title={shared.title}
 			artist={shared.artist}
 			album={shared.album}
-			coverUrl={shared.coverUrl}
+			coverUrl={safeCoverUrl(shared.coverUrl)}
 			duration={shared.duration}
 			sharedBy={shared.user.name}
 		/>

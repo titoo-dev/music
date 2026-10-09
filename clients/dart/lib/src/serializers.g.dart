@@ -50,7 +50,12 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..add(FollowedArtistEnvelopeData.serializer)
       ..add(FollowedArtistListEnvelope.serializer)
       ..add(FollowedArtistListEnvelopeData.serializer)
+      ..add(GcEnvelope.serializer)
+      ..add(GcResult.serializer)
       ..add(ImportSpotifyPlaylistRequest.serializer)
+      ..add(ImportSpotifyPlaylistRequestOneOf.serializer)
+      ..add(ImportSpotifyPlaylistRequestOneOf1.serializer)
+      ..add(ImportedTrack.serializer)
       ..add(LibraryStatus.serializer)
       ..add(LibraryStatusEnvelope.serializer)
       ..add(LibraryStatusInput.serializer)
@@ -61,6 +66,7 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..add(Lyrics.serializer)
       ..add(LyricsEnvelope.serializer)
       ..add(LyricsSource_Enum.serializer)
+      ..add(MatchSpotifyTracksRequest.serializer)
       ..add(MessageEnvelope.serializer)
       ..add(MessageResult.serializer)
       ..add(PlaylistEnvelope.serializer)
@@ -74,6 +80,8 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..add(PublicShare.serializer)
       ..add(PublicShareEnvelope.serializer)
       ..add(PublicShareUser.serializer)
+      ..add(ReadSpotifyPlaylistRequest.serializer)
+      ..add(ReadSpotifyTracksRequest.serializer)
       ..add(RecentPlay.serializer)
       ..add(RecentPlayInput.serializer)
       ..add(RecentPlayListEnvelope.serializer)
@@ -86,6 +94,7 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..add(ReorderedEnvelopeData.serializer)
       ..add(SaveAlbumInput.serializer)
       ..add(SaveSettingsRequest.serializer)
+      ..add(SaveSpotifyImportRequest.serializer)
       ..add(SavedAlbumEnvelope.serializer)
       ..add(SavedAlbumEnvelopeData.serializer)
       ..add(SavedFlagEnvelope.serializer)
@@ -95,6 +104,8 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..add(SavedTrackEnvelopeData.serializer)
       ..add(SavedTrackListEnvelope.serializer)
       ..add(SavedTrackListEnvelopeData.serializer)
+      ..add(SetStreamingQualityRequest.serializer)
+      ..add(SetStreamingQualityRequestMaxBitrateEnum.serializer)
       ..add(SettingsBundle.serializer)
       ..add(SettingsBundleEnvelope.serializer)
       ..add(SharedTrack.serializer)
@@ -112,9 +123,25 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..add(SpotifyImportReport.serializer)
       ..add(SpotifyImportReportNotFoundInner.serializer)
       ..add(SpotifyImportResult.serializer)
+      ..add(SpotifyMatchEnvelope.serializer)
+      ..add(SpotifyMatchEnvelopeData.serializer)
+      ..add(SpotifyMatchResult.serializer)
+      ..add(SpotifyMatchResultStatusEnum.serializer)
+      ..add(SpotifyMatchResultStrategyEnum.serializer)
+      ..add(SpotifyPlaylist.serializer)
+      ..add(SpotifyPlaylistEnvelope.serializer)
+      ..add(SpotifyPlaylistSource_Enum.serializer)
+      ..add(SpotifySaveEnvelope.serializer)
+      ..add(SpotifySaveEnvelopeData.serializer)
+      ..add(SpotifyTrack.serializer)
+      ..add(SpotifyTrackBatch.serializer)
+      ..add(SpotifyTrackBatchEnvelope.serializer)
+      ..add(StreamProbe.serializer)
+      ..add(StreamProbeEnvelope.serializer)
       ..add(StreamUrl.serializer)
       ..add(StreamUrlEnvelope.serializer)
       ..add(StreamUrlStatusEnum.serializer)
+      ..add(StreamingQualityEnvelope.serializer)
       ..add(SuggestAlbum.serializer)
       ..add(SuggestAlbumSource_Enum.serializer)
       ..add(SuggestArtist.serializer)
@@ -161,6 +188,9 @@ Serializers _$serializers = (Serializers().toBuilder()
           const FullType(BuiltList, const [const FullType(FollowedArtist)]),
           () => ListBuilder<FollowedArtist>())
       ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(ImportedTrack)]),
+          () => ListBuilder<ImportedTrack>())
+      ..addBuilderFactory(
           const FullType(BuiltList, const [const FullType(PlaylistSummary)]),
           () => ListBuilder<PlaylistSummary>())
       ..addBuilderFactory(
@@ -182,6 +212,36 @@ Serializers _$serializers = (Serializers().toBuilder()
           const FullType(BuiltList,
               const [const FullType(SpotifyImportReportNotFoundInner)]),
           () => ListBuilder<SpotifyImportReportNotFoundInner>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(SpotifyMatchResult)]),
+          () => ListBuilder<SpotifyMatchResult>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(SpotifyTrack)]),
+          () => ListBuilder<SpotifyTrack>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(SpotifyTrack)]),
+          () => ListBuilder<SpotifyTrack>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(SpotifyTrack)]),
+          () => ListBuilder<SpotifyTrack>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(String)]),
+          () => ListBuilder<String>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(SpotifyTrack)]),
+          () => ListBuilder<SpotifyTrack>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(String)]),
+          () => ListBuilder<String>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(String)]),
+          () => ListBuilder<String>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(String)]),
+          () => ListBuilder<String>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(String)]),
+          () => ListBuilder<String>())
       ..addBuilderFactory(
           const FullType(BuiltList, const [const FullType(String)]),
           () => ListBuilder<String>())
@@ -218,18 +278,6 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..addBuilderFactory(
           const FullType(BuiltList, const [const FullType(SuggestArtist)]),
           () => ListBuilder<SuggestArtist>())
-      ..addBuilderFactory(
-          const FullType(BuiltMap, const [
-            const FullType(String),
-            const FullType.nullable(JsonObject)
-          ]),
-          () => MapBuilder<String, JsonObject?>())
-      ..addBuilderFactory(
-          const FullType(BuiltMap, const [
-            const FullType(String),
-            const FullType.nullable(JsonObject)
-          ]),
-          () => MapBuilder<String, JsonObject?>())
       ..addBuilderFactory(
           const FullType(BuiltMap, const [
             const FullType(String),

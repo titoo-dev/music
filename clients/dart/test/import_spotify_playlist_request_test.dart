@@ -7,9 +7,33 @@ void main() {
   // TODO add properties to the builder and call build()
 
   group(ImportSpotifyPlaylistRequest, () {
-    // Spotify playlist URL, URI or id
+    // Spotify playlist URL, URI or id (first 100 tracks without API access)
     // String url
     test('to test the property `url`', () async {
+      // TODO
+    });
+
+    // tracks read with POST /playlists/import/spotify/tracks
+    // BuiltList<SpotifyTrack> tracks
+    test('to test the property `tracks`', () async {
+      // TODO
+    });
+
+    // track ids that could not be read (reported as not found)
+    // BuiltList<String> unreadable
+    test('to test the property `unreadable`', () async {
+      // TODO
+    });
+
+    // number of pasted links, for the truncated flag
+    // int total
+    test('to test the property `total`', () async {
+      // TODO
+    });
+
+    // name of the new playlist (default \"Spotify import\")
+    // String title
+    test('to test the property `title`', () async {
       // TODO
     });
 

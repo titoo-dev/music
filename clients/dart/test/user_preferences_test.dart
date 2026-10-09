@@ -17,7 +17,7 @@ void main() {
       // TODO
     });
 
-    // Warm the Blob cache when saving a track/album
+    // Warm the R2 cache when saving a track/album
     // bool preCacheSaved
     test('to test the property `preCacheSaved`', () async {
       // TODO

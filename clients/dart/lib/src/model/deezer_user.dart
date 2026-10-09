@@ -10,13 +10,12 @@ import 'package:built_value/serializer.dart';
 
 part 'deezer_user.g.dart';
 
-/// Deezer may send extra keys; they are ignored.
+/// Deezer may send extra keys; they are ignored. `license_token` is never returned (it lets anyone request media as this account).
 ///
 /// Properties:
 /// * [id] 
 /// * [name] 
 /// * [picture] - Deezer picture hash (build URL via e-cdns-images.dzcdn.net/images/user/{hash}/...)
-/// * [licenseToken] 
 /// * [canStreamHq] 
 /// * [canStreamLossless] 
 /// * [country] 
@@ -33,9 +32,6 @@ abstract class DeezerUser implements Built<DeezerUser, DeezerUserBuilder> {
   /// Deezer picture hash (build URL via e-cdns-images.dzcdn.net/images/user/{hash}/...)
   @BuiltValueField(wireName: r'picture')
   String? get picture;
-
-  @BuiltValueField(wireName: r'license_token')
-  String? get licenseToken;
 
   @BuiltValueField(wireName: r'can_stream_hq')
   bool? get canStreamHq;
@@ -93,13 +89,6 @@ class _$DeezerUserSerializer implements PrimitiveSerializer<DeezerUser> {
       yield r'picture';
       yield serializers.serialize(
         object.picture,
-        specifiedType: const FullType(String),
-      );
-    }
-    if (object.licenseToken != null) {
-      yield r'license_token';
-      yield serializers.serialize(
-        object.licenseToken,
         specifiedType: const FullType(String),
       );
     }
@@ -184,14 +173,6 @@ class _$DeezerUserSerializer implements PrimitiveSerializer<DeezerUser> {
           ) as String?;
           if (valueDes == null) continue;
           result.picture = valueDes;
-          break;
-        case r'license_token':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType.nullable(String),
-          ) as String?;
-          if (valueDes == null) continue;
-          result.licenseToken = valueDes;
           break;
         case r'can_stream_hq':
           final valueDes = serializers.deserialize(

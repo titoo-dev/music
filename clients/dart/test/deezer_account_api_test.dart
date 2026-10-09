@@ -9,6 +9,8 @@ void main() {
   group(DeezerAccountApi, () {
     // Switch to another Deezer family/child account
     //
+    // The session is checked before the body is read (401 / 403 come first). The choice is saved, so a later session restore logs into the same child; if that save fails, the switch is still answered as done.
+    //
     //Future<ChangeAccountEnvelope> changeDeezerAccount(ChangeDeezerAccountRequest changeDeezerAccountRequest) async
     test('test changeDeezerAccount', () async {
       // TODO

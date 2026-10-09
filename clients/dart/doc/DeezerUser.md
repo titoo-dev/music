@@ -11,7 +11,6 @@ Name | Type | Description | Notes
 **id** | [**DeezerUserId**](DeezerUserId.md) |  | [optional] 
 **name** | **String** |  | [optional] 
 **picture** | **String** | Deezer picture hash (build URL via e-cdns-images.dzcdn.net/images/user/{hash}/...) | [optional] 
-**licenseToken** | **String** |  | [optional] 
 **canStreamHq** | **bool** |  | [optional] 
 **canStreamLossless** | **bool** |  | [optional] 
 **country** | **String** |  | [optional] 

@@ -27,6 +27,9 @@ vi.mock("@/lib/server-state", () => serverStateMock);
 
 import { GET } from "./route";
 
+/** Was "public, max-age=3600": a revoked link kept playing from cache for an hour. */
+const SHARE_CACHE_CONTROL = "private, no-cache";
+
 function fakeBody() {
 	return new ReadableStream({
 		start(c) {
@@ -111,6 +114,8 @@ describe("GET /api/v1/shares/[shareId]/stream", () => {
 		expect(res.status).toBe(206);
 		expect(res.headers.get("Content-Range")).toBe("bytes 0-9/100");
 		expect(streamObjectMock).toHaveBeenCalledWith("music/x.mp3", "bytes=0-9");
+		// Revoking or expiring the link must stop playback: nothing kept in a shared or browser cache.
+		expect(res.headers.get("Cache-Control")).toBe(SHARE_CACHE_CONTROL);
 		expect(startProgressiveStreamMock).not.toHaveBeenCalled();
 	});
 
@@ -227,7 +232,7 @@ describe("GET /api/v1/shares/[shareId]/stream", () => {
 
 		const res = await GET(request(), makeParams({ shareId: "abc" }));
 		expect(res.status).toBe(200);
-		expect(res.headers.get("Cache-Control")).toBe("public, max-age=3600");
+		expect(res.headers.get("Cache-Control")).toBe(SHARE_CACHE_CONTROL);
 		expect(followMock).toHaveBeenCalledWith(shared);
 		expect(startProgressiveStreamMock).not.toHaveBeenCalled();
 	});

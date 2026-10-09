@@ -375,18 +375,20 @@ export async function reorderPlaylist(
 // A track's StoredTrack file is "live" as long as ANY of these hold a reference:
 //   • SavedTrack (user explicitly liked)
 //   • AlbumTrack (track of a saved album)
-//   • SharedTrack (public share link still active)
+//   • SharedTrack (public share link still active — an expired link doesn't count)
 //   • RecentPlay (within the last-100 cap)
 //
 // PlaylistTrack does NOT count — playlists are pure metadata and don't
 // anchor file lifecycle. A track only-in-playlists gets re-streamed each
 // play if its file was already evicted.
 
-export async function getTrackRefCount(trackId: string) {
+export async function getTrackRefCount(trackId: string, now = Date.now()) {
 	const [saved, album, shared, recent] = await Promise.all([
 		prisma.savedTrack.count({ where: { trackId } }),
 		prisma.albumTrack.count({ where: { trackId } }),
-		prisma.sharedTrack.count({ where: { trackId } }),
+		prisma.sharedTrack.count({
+			where: { trackId, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date(now) } }] },
+		}),
 		prisma.recentPlay.count({ where: { trackId } }),
 	]);
 	return { saved, album, shared, recent, total: saved + album + shared + recent };
@@ -456,7 +458,7 @@ export interface EvictionResult {
  * after any unsave / skip.
  */
 export async function maybeEvictFile(trackId: string, now = Date.now()): Promise<EvictionResult> {
-	const refs = await getTrackRefCount(trackId);
+	const refs = await getTrackRefCount(trackId, now);
 	if (refs.total > 0) return { evicted: 0, kept: "anchored" };
 	if (await hasActivePersistLease(trackId, now)) return { evicted: 0, kept: "persisting" };
 	const recent = await prisma.storedTrack.count({

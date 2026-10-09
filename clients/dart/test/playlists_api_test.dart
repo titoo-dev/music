@@ -35,9 +35,9 @@ void main() {
       // TODO
     });
 
-    // Import a Spotify playlist (matched to Deezer, max 500 tracks)
+    // Import a Spotify playlist (matched to Deezer, max 1000 tracks)
     //
-    // Synchronous; can take tens of seconds on large playlists — use a long client timeout.
+    // Synchronous; can take a couple of minutes on large playlists — use a long client timeout, or the chunked flow: POST /playlists/import/spotify/playlist (or …/tracks), then …/match in batches of 50, then …/save.
     //
     //Future<SpotifyImportEnvelope> importSpotifyPlaylist(ImportSpotifyPlaylistRequest importSpotifyPlaylistRequest) async
     test('test importSpotifyPlaylist', () async {
@@ -48,6 +48,33 @@ void main() {
     //
     //Future<PlaylistSummaryListEnvelope> listPlaylists({ String trackId }) async
     test('test listPlaylists', () async {
+      // TODO
+    });
+
+    // Match up to 50 Spotify tracks on Deezer
+    //
+    // Step 2 of the chunked import. `results` is in the order of `tracks`; send the matched ones to POST /playlists/import/spotify/save.
+    //
+    //Future<SpotifyMatchEnvelope> matchSpotifyTracks(MatchSpotifyTracksRequest matchSpotifyTracksRequest) async
+    test('test matchSpotifyTracks', () async {
+      // TODO
+    });
+
+    // Read a public Spotify playlist (no matching)
+    //
+    // Step 1 of the chunked import from a playlist link. `tracks` is capped at 1000; `totalTracks` keeps the real count.
+    //
+    //Future<SpotifyPlaylistEnvelope> readSpotifyPlaylist(ReadSpotifyPlaylistRequest readSpotifyPlaylistRequest) async
+    test('test readSpotifyPlaylist', () async {
+      // TODO
+    });
+
+    // Read up to 50 Spotify tracks from their public pages
+    //
+    // Step 1 of importing pasted track links. Call in batches; when `rateLimited` is non-empty, pause (20 s, then longer) and resend those ids, then send all tracks to POST /playlists/import/spotify.
+    //
+    //Future<SpotifyTrackBatchEnvelope> readSpotifyTracks(ReadSpotifyTracksRequest readSpotifyTracksRequest) async
+    test('test readSpotifyTracks', () async {
       // TODO
     });
 
@@ -66,6 +93,15 @@ void main() {
     //
     //Future<ReorderedEnvelope> reorderPlaylistTracks(String id, ReorderPlaylistTracksRequest reorderPlaylistTracksRequest) async
     test('test reorderPlaylistTracks', () async {
+      // TODO
+    });
+
+    // Create the imported playlist from matched tracks
+    //
+    // Step 3 of the chunked import. Duplicate track ids are dropped.
+    //
+    //Future<SpotifySaveEnvelope> saveSpotifyImport(SaveSpotifyImportRequest saveSpotifyImportRequest) async
+    test('test saveSpotifyImport', () async {
       // TODO
     });
 

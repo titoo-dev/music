@@ -7,7 +7,7 @@ void main() {
   // TODO add properties to the builder and call build()
 
   group(ChangeDeezerAccountRequest, () {
-    // Index in `childs`
+    // Index in `childs` — a non-negative integer (a digit string is accepted)
     // int child
     test('to test the property `child`', () async {
       // TODO

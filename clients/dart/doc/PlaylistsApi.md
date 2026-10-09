@@ -13,10 +13,14 @@ Method | HTTP request | Description
 [**createPlaylist**](PlaylistsApi.md#createplaylist) | **POST** /api/v1/playlists | Create a playlist
 [**deletePlaylist**](PlaylistsApi.md#deleteplaylist) | **DELETE** /api/v1/playlists/{id} | Delete a playlist
 [**getPlaylist**](PlaylistsApi.md#getplaylist) | **GET** /api/v1/playlists/{id} | Playlist with tracks (ordered by position)
-[**importSpotifyPlaylist**](PlaylistsApi.md#importspotifyplaylist) | **POST** /api/v1/playlists/import/spotify | Import a Spotify playlist (matched to Deezer, max 500 tracks)
+[**importSpotifyPlaylist**](PlaylistsApi.md#importspotifyplaylist) | **POST** /api/v1/playlists/import/spotify | Import a Spotify playlist (matched to Deezer, max 1000 tracks)
 [**listPlaylists**](PlaylistsApi.md#listplaylists) | **GET** /api/v1/playlists | User playlists (most recently updated first)
+[**matchSpotifyTracks**](PlaylistsApi.md#matchspotifytracks) | **POST** /api/v1/playlists/import/spotify/match | Match up to 50 Spotify tracks on Deezer
+[**readSpotifyPlaylist**](PlaylistsApi.md#readspotifyplaylist) | **POST** /api/v1/playlists/import/spotify/playlist | Read a public Spotify playlist (no matching)
+[**readSpotifyTracks**](PlaylistsApi.md#readspotifytracks) | **POST** /api/v1/playlists/import/spotify/tracks | Read up to 50 Spotify tracks from their public pages
 [**removePlaylistTracks**](PlaylistsApi.md#removeplaylisttracks) | **DELETE** /api/v1/playlists/{id}/tracks | Remove track(s)
 [**reorderPlaylistTracks**](PlaylistsApi.md#reorderplaylisttracks) | **PATCH** /api/v1/playlists/{id}/tracks | Reorder tracks
+[**saveSpotifyImport**](PlaylistsApi.md#savespotifyimport) | **POST** /api/v1/playlists/import/spotify/save | Create the imported playlist from matched tracks
 [**updatePlaylist**](PlaylistsApi.md#updateplaylist) | **PATCH** /api/v1/playlists/{id} | Rename / edit description
 
 
@@ -205,9 +209,9 @@ Name | Type | Description  | Notes
 # **importSpotifyPlaylist**
 > SpotifyImportEnvelope importSpotifyPlaylist(importSpotifyPlaylistRequest)
 
-Import a Spotify playlist (matched to Deezer, max 500 tracks)
+Import a Spotify playlist (matched to Deezer, max 1000 tracks)
 
-Synchronous; can take tens of seconds on large playlists — use a long client timeout.
+Synchronous; can take a couple of minutes on large playlists — use a long client timeout, or the chunked flow: POST /playlists/import/spotify/playlist (or …/tracks), then …/match in batches of 50, then …/save.
 
 ### Example
 ```dart
@@ -290,6 +294,147 @@ Name | Type | Description  | Notes
 ### HTTP request headers
 
  - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **matchSpotifyTracks**
+> SpotifyMatchEnvelope matchSpotifyTracks(matchSpotifyTracksRequest)
+
+Match up to 50 Spotify tracks on Deezer
+
+Step 2 of the chunked import. `results` is in the order of `tracks`; send the matched ones to POST /playlists/import/spotify/save.
+
+### Example
+```dart
+import 'package:wavelet_api/api.dart';
+// TODO Configure API key authorization: sessionCookie
+//defaultApiClient.getAuthentication<ApiKeyAuth>('sessionCookie').apiKey = 'YOUR_API_KEY';
+// uncomment below to setup prefix (e.g. Bearer) for API key, if needed
+//defaultApiClient.getAuthentication<ApiKeyAuth>('sessionCookie').apiKeyPrefix = 'Bearer';
+
+final api = WaveletApi().getPlaylistsApi();
+final MatchSpotifyTracksRequest matchSpotifyTracksRequest = ; // MatchSpotifyTracksRequest | 
+
+try {
+    final response = api.matchSpotifyTracks(matchSpotifyTracksRequest);
+    print(response);
+} on DioException catch (e) {
+    print('Exception when calling PlaylistsApi->matchSpotifyTracks: $e\n');
+}
+```
+
+### Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **matchSpotifyTracksRequest** | [**MatchSpotifyTracksRequest**](MatchSpotifyTracksRequest.md)|  | 
+
+### Return type
+
+[**SpotifyMatchEnvelope**](SpotifyMatchEnvelope.md)
+
+### Authorization
+
+[sessionCookie](../README.md#sessionCookie), [bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **readSpotifyPlaylist**
+> SpotifyPlaylistEnvelope readSpotifyPlaylist(readSpotifyPlaylistRequest)
+
+Read a public Spotify playlist (no matching)
+
+Step 1 of the chunked import from a playlist link. `tracks` is capped at 1000; `totalTracks` keeps the real count.
+
+### Example
+```dart
+import 'package:wavelet_api/api.dart';
+// TODO Configure API key authorization: sessionCookie
+//defaultApiClient.getAuthentication<ApiKeyAuth>('sessionCookie').apiKey = 'YOUR_API_KEY';
+// uncomment below to setup prefix (e.g. Bearer) for API key, if needed
+//defaultApiClient.getAuthentication<ApiKeyAuth>('sessionCookie').apiKeyPrefix = 'Bearer';
+
+final api = WaveletApi().getPlaylistsApi();
+final ReadSpotifyPlaylistRequest readSpotifyPlaylistRequest = ; // ReadSpotifyPlaylistRequest | 
+
+try {
+    final response = api.readSpotifyPlaylist(readSpotifyPlaylistRequest);
+    print(response);
+} on DioException catch (e) {
+    print('Exception when calling PlaylistsApi->readSpotifyPlaylist: $e\n');
+}
+```
+
+### Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **readSpotifyPlaylistRequest** | [**ReadSpotifyPlaylistRequest**](ReadSpotifyPlaylistRequest.md)|  | 
+
+### Return type
+
+[**SpotifyPlaylistEnvelope**](SpotifyPlaylistEnvelope.md)
+
+### Authorization
+
+[sessionCookie](../README.md#sessionCookie), [bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **readSpotifyTracks**
+> SpotifyTrackBatchEnvelope readSpotifyTracks(readSpotifyTracksRequest)
+
+Read up to 50 Spotify tracks from their public pages
+
+Step 1 of importing pasted track links. Call in batches; when `rateLimited` is non-empty, pause (20 s, then longer) and resend those ids, then send all tracks to POST /playlists/import/spotify.
+
+### Example
+```dart
+import 'package:wavelet_api/api.dart';
+// TODO Configure API key authorization: sessionCookie
+//defaultApiClient.getAuthentication<ApiKeyAuth>('sessionCookie').apiKey = 'YOUR_API_KEY';
+// uncomment below to setup prefix (e.g. Bearer) for API key, if needed
+//defaultApiClient.getAuthentication<ApiKeyAuth>('sessionCookie').apiKeyPrefix = 'Bearer';
+
+final api = WaveletApi().getPlaylistsApi();
+final ReadSpotifyTracksRequest readSpotifyTracksRequest = ; // ReadSpotifyTracksRequest | 
+
+try {
+    final response = api.readSpotifyTracks(readSpotifyTracksRequest);
+    print(response);
+} on DioException catch (e) {
+    print('Exception when calling PlaylistsApi->readSpotifyTracks: $e\n');
+}
+```
+
+### Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **readSpotifyTracksRequest** | [**ReadSpotifyTracksRequest**](ReadSpotifyTracksRequest.md)|  | 
+
+### Return type
+
+[**SpotifyTrackBatchEnvelope**](SpotifyTrackBatchEnvelope.md)
+
+### Authorization
+
+[sessionCookie](../README.md#sessionCookie), [bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -380,6 +525,53 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**ReorderedEnvelope**](ReorderedEnvelope.md)
+
+### Authorization
+
+[sessionCookie](../README.md#sessionCookie), [bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **saveSpotifyImport**
+> SpotifySaveEnvelope saveSpotifyImport(saveSpotifyImportRequest)
+
+Create the imported playlist from matched tracks
+
+Step 3 of the chunked import. Duplicate track ids are dropped.
+
+### Example
+```dart
+import 'package:wavelet_api/api.dart';
+// TODO Configure API key authorization: sessionCookie
+//defaultApiClient.getAuthentication<ApiKeyAuth>('sessionCookie').apiKey = 'YOUR_API_KEY';
+// uncomment below to setup prefix (e.g. Bearer) for API key, if needed
+//defaultApiClient.getAuthentication<ApiKeyAuth>('sessionCookie').apiKeyPrefix = 'Bearer';
+
+final api = WaveletApi().getPlaylistsApi();
+final SaveSpotifyImportRequest saveSpotifyImportRequest = ; // SaveSpotifyImportRequest | 
+
+try {
+    final response = api.saveSpotifyImport(saveSpotifyImportRequest);
+    print(response);
+} on DioException catch (e) {
+    print('Exception when calling PlaylistsApi->saveSpotifyImport: $e\n');
+}
+```
+
+### Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **saveSpotifyImportRequest** | [**SaveSpotifyImportRequest**](SaveSpotifyImportRequest.md)|  | 
+
+### Return type
+
+[**SpotifySaveEnvelope**](SpotifySaveEnvelope.md)
 
 ### Authorization
 

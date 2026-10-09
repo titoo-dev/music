@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
 	images: {
 		unoptimized: true,
 	},
+	// The share OG image reads its font from disk (src/app/share/t/[shareId]/og-font.ts).
+	outputFileTracingIncludes: {
+		"/share/t/**": ["./assets/fonts/**/*"],
+	},
 	...(REMOTE_API
 		? {
 				rewrites: async () => [

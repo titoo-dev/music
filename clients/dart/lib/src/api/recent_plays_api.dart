@@ -221,7 +221,7 @@ class RecentPlaysApi {
   }
 
   /// Report a skip before 30 s (lets the server free the cached file)
-  /// 
+  /// The file is kept (&#x60;{ kept: true, reason }&#x60;) when this user already logged a real play (&#x60;already_played&#x60;), anything else references the track (&#x60;anchored&#x60;), a persist of it is in flight (&#x60;persisting&#x60;) or its cached copy is younger than 10 min (&#x60;recent&#x60;). Otherwise it is freed (&#x60;{ evicted: true }&#x60;); the metadata in saved-* tables stays, so a replay re-streams.
   ///
   /// Parameters:
   /// * [trackId] - Deezer track id

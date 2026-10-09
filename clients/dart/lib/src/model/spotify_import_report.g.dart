@@ -17,6 +17,8 @@ class _$SpotifyImportReport extends SpotifyImportReport {
   final BuiltList<SpotifyImportReportNotFoundInner> notFound;
   @override
   final bool truncated;
+  @override
+  final bool? limited;
 
   factory _$SpotifyImportReport(
           [void Function(SpotifyImportReportBuilder)? updates]) =>
@@ -27,7 +29,8 @@ class _$SpotifyImportReport extends SpotifyImportReport {
       required this.processed,
       required this.matched,
       required this.notFound,
-      required this.truncated})
+      required this.truncated,
+      this.limited})
       : super._();
   @override
   SpotifyImportReport rebuild(
@@ -46,7 +49,8 @@ class _$SpotifyImportReport extends SpotifyImportReport {
         processed == other.processed &&
         matched == other.matched &&
         notFound == other.notFound &&
-        truncated == other.truncated;
+        truncated == other.truncated &&
+        limited == other.limited;
   }
 
   @override
@@ -57,6 +61,7 @@ class _$SpotifyImportReport extends SpotifyImportReport {
     _$hash = $jc(_$hash, matched.hashCode);
     _$hash = $jc(_$hash, notFound.hashCode);
     _$hash = $jc(_$hash, truncated.hashCode);
+    _$hash = $jc(_$hash, limited.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -68,7 +73,8 @@ class _$SpotifyImportReport extends SpotifyImportReport {
           ..add('processed', processed)
           ..add('matched', matched)
           ..add('notFound', notFound)
-          ..add('truncated', truncated))
+          ..add('truncated', truncated)
+          ..add('limited', limited))
         .toString();
   }
 }
@@ -99,6 +105,10 @@ class SpotifyImportReportBuilder
   bool? get truncated => _$this._truncated;
   set truncated(bool? truncated) => _$this._truncated = truncated;
 
+  bool? _limited;
+  bool? get limited => _$this._limited;
+  set limited(bool? limited) => _$this._limited = limited;
+
   SpotifyImportReportBuilder() {
     SpotifyImportReport._defaults(this);
   }
@@ -111,6 +121,7 @@ class SpotifyImportReportBuilder
       _matched = $v.matched;
       _notFound = $v.notFound.toBuilder();
       _truncated = $v.truncated;
+      _limited = $v.limited;
       _$v = null;
     }
     return this;
@@ -143,6 +154,7 @@ class SpotifyImportReportBuilder
             notFound: notFound.build(),
             truncated: BuiltValueNullFieldError.checkNotNull(
                 truncated, r'SpotifyImportReport', 'truncated'),
+            limited: limited,
           );
     } catch (_) {
       late String _$failedField;

@@ -14,6 +14,12 @@ import { parseRangeHeader, servePlay } from "../../../stream-progressive/_lib/pl
 export const maxDuration = 300;
 
 /**
+ * A share can be revoked or expire at any time: no shared (CDN) copy, and the
+ * browser revalidates before reusing its own.
+ */
+const SHARE_CACHE_CONTROL = "private, no-cache";
+
+/**
  * Deezer fallbacks (plays and seeks that open the CDN with the share owner's
  * account) per client address and 10 minutes, per instance.
  */
@@ -107,7 +113,7 @@ async function streamFromStorage(request: NextRequest, storagePath: string) {
 		"Content-Type": contentType,
 		"Content-Length": String(contentLength),
 		"Accept-Ranges": "bytes",
-		"Cache-Control": "public, max-age=3600",
+		"Cache-Control": SHARE_CACHE_CONTROL,
 	};
 	if (contentRange) headers["Content-Range"] = contentRange;
 
@@ -144,6 +150,6 @@ async function streamProgressive(request: NextRequest, share: { trackId: string;
 		settings,
 		bitrate,
 		requestedBitrate: capByLicence(bitrate, ownerLicence),
-		cacheControl: "public, max-age=3600",
+		cacheControl: SHARE_CACHE_CONTROL,
 	});
 }

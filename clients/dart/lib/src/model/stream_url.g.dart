@@ -79,12 +79,15 @@ class _$StreamUrl extends StreamUrl {
   @override
   final String? contentType;
   @override
+  final DateTime? expiresAt;
+  @override
   final StreamUrlStatusEnum? status;
 
   factory _$StreamUrl([void Function(StreamUrlBuilder)? updates]) =>
       (StreamUrlBuilder()..update(updates))._build();
 
-  _$StreamUrl._({this.url, this.contentType, this.status}) : super._();
+  _$StreamUrl._({this.url, this.contentType, this.expiresAt, this.status})
+      : super._();
   @override
   StreamUrl rebuild(void Function(StreamUrlBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -98,6 +101,7 @@ class _$StreamUrl extends StreamUrl {
     return other is StreamUrl &&
         url == other.url &&
         contentType == other.contentType &&
+        expiresAt == other.expiresAt &&
         status == other.status;
   }
 
@@ -106,6 +110,7 @@ class _$StreamUrl extends StreamUrl {
     var _$hash = 0;
     _$hash = $jc(_$hash, url.hashCode);
     _$hash = $jc(_$hash, contentType.hashCode);
+    _$hash = $jc(_$hash, expiresAt.hashCode);
     _$hash = $jc(_$hash, status.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -116,6 +121,7 @@ class _$StreamUrl extends StreamUrl {
     return (newBuiltValueToStringHelper(r'StreamUrl')
           ..add('url', url)
           ..add('contentType', contentType)
+          ..add('expiresAt', expiresAt)
           ..add('status', status))
         .toString();
   }
@@ -132,6 +138,10 @@ class StreamUrlBuilder implements Builder<StreamUrl, StreamUrlBuilder> {
   String? get contentType => _$this._contentType;
   set contentType(String? contentType) => _$this._contentType = contentType;
 
+  DateTime? _expiresAt;
+  DateTime? get expiresAt => _$this._expiresAt;
+  set expiresAt(DateTime? expiresAt) => _$this._expiresAt = expiresAt;
+
   StreamUrlStatusEnum? _status;
   StreamUrlStatusEnum? get status => _$this._status;
   set status(StreamUrlStatusEnum? status) => _$this._status = status;
@@ -145,6 +155,7 @@ class StreamUrlBuilder implements Builder<StreamUrl, StreamUrlBuilder> {
     if ($v != null) {
       _url = $v.url;
       _contentType = $v.contentType;
+      _expiresAt = $v.expiresAt;
       _status = $v.status;
       _$v = null;
     }
@@ -169,6 +180,7 @@ class StreamUrlBuilder implements Builder<StreamUrl, StreamUrlBuilder> {
         _$StreamUrl._(
           url: url,
           contentType: contentType,
+          expiresAt: expiresAt,
           status: status,
         );
     replace(_$result);

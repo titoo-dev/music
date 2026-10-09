@@ -109,6 +109,8 @@ Name | Type | Description  | Notes
 
 Report a skip before 30 s (lets the server free the cached file)
 
+The file is kept (`{ kept: true, reason }`) when this user already logged a real play (`already_played`), anything else references the track (`anchored`), a persist of it is in flight (`persisting`) or its cached copy is younger than 10 min (`recent`). Otherwise it is freed (`{ evicted: true }`); the metadata in saved-* tables stays, so a replay re-streams.
+
 ### Example
 ```dart
 import 'package:wavelet_api/api.dart';

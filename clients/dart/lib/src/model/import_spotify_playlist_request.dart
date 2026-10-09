@@ -3,20 +3,28 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
+import 'package:wavelet_api/src/model/import_spotify_playlist_request_one_of1.dart';
+import 'package:wavelet_api/src/model/spotify_track.dart';
+import 'package:wavelet_api/src/model/import_spotify_playlist_request_one_of.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
+import 'package:one_of/one_of.dart';
 
 part 'import_spotify_playlist_request.g.dart';
 
 /// ImportSpotifyPlaylistRequest
 ///
 /// Properties:
-/// * [url] - Spotify playlist URL, URI or id
+/// * [url] - Spotify playlist URL, URI or id (first 100 tracks without API access)
+/// * [tracks] - tracks read with POST /playlists/import/spotify/tracks
+/// * [unreadable] - track ids that could not be read (reported as not found)
+/// * [total] - number of pasted links, for the truncated flag
+/// * [title] - name of the new playlist (default \"Spotify import\")
 @BuiltValue()
 abstract class ImportSpotifyPlaylistRequest implements Built<ImportSpotifyPlaylistRequest, ImportSpotifyPlaylistRequestBuilder> {
-  /// Spotify playlist URL, URI or id
-  @BuiltValueField(wireName: r'url')
-  String get url;
+  /// One Of [ImportSpotifyPlaylistRequestOneOf], [ImportSpotifyPlaylistRequestOneOf1]
+  OneOf get oneOf;
 
   ImportSpotifyPlaylistRequest._();
 
@@ -41,11 +49,6 @@ class _$ImportSpotifyPlaylistRequestSerializer implements PrimitiveSerializer<Im
     ImportSpotifyPlaylistRequest object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
-    yield r'url';
-    yield serializers.serialize(
-      object.url,
-      specifiedType: const FullType(String),
-    );
   }
 
   @override
@@ -54,34 +57,8 @@ class _$ImportSpotifyPlaylistRequestSerializer implements PrimitiveSerializer<Im
     ImportSpotifyPlaylistRequest object, {
     FullType specifiedType = FullType.unspecified,
   }) {
-    return _serializeProperties(serializers, object, specifiedType: specifiedType).toList();
-  }
-
-  void _deserializeProperties(
-    Serializers serializers,
-    Object serialized, {
-    FullType specifiedType = FullType.unspecified,
-    required List<Object?> serializedList,
-    required ImportSpotifyPlaylistRequestBuilder result,
-    required List<Object?> unhandled,
-  }) {
-    for (var i = 0; i < serializedList.length; i += 2) {
-      final key = serializedList[i] as String;
-      final value = serializedList[i + 1];
-      switch (key) {
-        case r'url':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(String),
-          ) as String;
-          result.url = valueDes;
-          break;
-        default:
-          unhandled.add(key);
-          unhandled.add(value);
-          break;
-      }
-    }
+    final oneOf = object.oneOf;
+    return serializers.serialize(oneOf.value, specifiedType: FullType(oneOf.valueType))!;
   }
 
   @override
@@ -91,16 +68,10 @@ class _$ImportSpotifyPlaylistRequestSerializer implements PrimitiveSerializer<Im
     FullType specifiedType = FullType.unspecified,
   }) {
     final result = ImportSpotifyPlaylistRequestBuilder();
-    final serializedList = (serialized as Iterable<Object?>).toList();
-    final unhandled = <Object?>[];
-    _deserializeProperties(
-      serializers,
-      serialized,
-      specifiedType: specifiedType,
-      serializedList: serializedList,
-      unhandled: unhandled,
-      result: result,
-    );
+    Object? oneOfDataSrc;
+    final targetType = const FullType(OneOf, [FullType(ImportSpotifyPlaylistRequestOneOf), FullType(ImportSpotifyPlaylistRequestOneOf1), ]);
+    oneOfDataSrc = serialized;
+    result.oneOf = serializers.deserialize(oneOfDataSrc, specifiedType: targetType) as OneOf;
     return result.build();
   }
 }

@@ -9,12 +9,12 @@ import 'package:wavelet_api/api.dart';
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **trackId** | **String** |  | 
-**title** | **String** |  | [optional] 
-**artist** | **String** |  | [optional] 
+**title** | **String** |  | 
+**artist** | **String** |  | 
 **album** | **String** |  | [optional] 
-**coverUrl** | **String** |  | [optional] 
+**coverUrl** | **String** | https Deezer artwork (*.dzcdn.net, api.deezer.com); any other URL is dropped | [optional] 
 **duration** | **int** |  | [optional] 
-**expiresIn** | **num** | Hours until expiry. Omit for a permanent link. | [optional] 
+**expiresIn** | **num** | Hours until expiry, more than 0 and at most 8760 (a year). Null or omitted for a permanent link. | [optional] 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

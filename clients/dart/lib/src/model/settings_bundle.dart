@@ -15,7 +15,6 @@ part 'settings_bundle.g.dart';
 /// Properties:
 /// * [settings] - Wavelet engine settings (bitrate, path templates, tagging, …). Key example: `maxBitrate` (1 = MP3 128, 3 = MP3 320, 9 = FLAC). Shape mirrors `src/lib/wavelet/types/Settings.ts`.
 /// * [defaultSettings] - Wavelet engine settings (bitrate, path templates, tagging, …). Key example: `maxBitrate` (1 = MP3 128, 3 = MP3 320, 9 = FLAC). Shape mirrors `src/lib/wavelet/types/Settings.ts`.
-/// * [spotifySettings] - Spotify plugin settings (may be absent).
 @BuiltValue()
 abstract class SettingsBundle implements Built<SettingsBundle, SettingsBundleBuilder> {
   /// Wavelet engine settings (bitrate, path templates, tagging, …). Key example: `maxBitrate` (1 = MP3 128, 3 = MP3 320, 9 = FLAC). Shape mirrors `src/lib/wavelet/types/Settings.ts`.
@@ -25,10 +24,6 @@ abstract class SettingsBundle implements Built<SettingsBundle, SettingsBundleBui
   /// Wavelet engine settings (bitrate, path templates, tagging, …). Key example: `maxBitrate` (1 = MP3 128, 3 = MP3 320, 9 = FLAC). Shape mirrors `src/lib/wavelet/types/Settings.ts`.
   @BuiltValueField(wireName: r'defaultSettings')
   BuiltMap<String, JsonObject?> get defaultSettings;
-
-  /// Spotify plugin settings (may be absent).
-  @BuiltValueField(wireName: r'spotifySettings')
-  BuiltMap<String, JsonObject?>? get spotifySettings;
 
   SettingsBundle._();
 
@@ -63,13 +58,6 @@ class _$SettingsBundleSerializer implements PrimitiveSerializer<SettingsBundle> 
       object.defaultSettings,
       specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
     );
-    if (object.spotifySettings != null) {
-      yield r'spotifySettings';
-      yield serializers.serialize(
-        object.spotifySettings,
-        specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
-      );
-    }
   }
 
   @override
@@ -106,14 +94,6 @@ class _$SettingsBundleSerializer implements PrimitiveSerializer<SettingsBundle> 
             specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
           ) as BuiltMap<String, JsonObject?>;
           result.defaultSettings.replace(valueDes);
-          break;
-        case r'spotifySettings':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
-          ) as BuiltMap<String, JsonObject?>?;
-          if (valueDes == null) continue;
-          result.spotifySettings.replace(valueDes);
           break;
         default:
           unhandled.add(key);

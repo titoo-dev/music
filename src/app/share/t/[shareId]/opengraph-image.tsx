@@ -1,6 +1,8 @@
 import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/prisma";
 import { logoSvg } from "@/lib/logo";
+import { loadOgFont } from "./og-font";
+import { safeCoverUrl } from "@/lib/share-meta";
 
 export const runtime = "nodejs";
 export const alt = "Shared track on wavelet";
@@ -23,11 +25,14 @@ export default async function OgImage({
 			artist: true,
 			album: true,
 			coverUrl: true,
+			expiresAt: true,
 			user: { select: { name: true } },
 		},
 	});
 
-	if (!shared) {
+	// A dead link previews as such, not as the track it used to share.
+	const expired = !!shared?.expiresAt && shared.expiresAt < new Date();
+	if (!shared || expired) {
 		return new ImageResponse(
 			(
 				<div
@@ -42,7 +47,7 @@ export default async function OgImage({
 					}}
 				>
 					<span style={{ fontSize: 48, fontWeight: 900, color: "#0D0D0D" }}>
-						Track not found
+						{expired ? "This link has expired" : "Track not found"}
 					</span>
 				</div>
 			),
@@ -50,12 +55,10 @@ export default async function OgImage({
 		);
 	}
 
-	const coverHiRes = shared.coverUrl?.replace(/\/\d+x\d+-/, "/500x500-");
+	// Rows from before the share-meta checks may carry any URL: Deezer artwork only.
+	const coverHiRes = safeCoverUrl(shared.coverUrl)?.replace(/\/\d+x\d+-/, "/500x500-");
 
-	// Fetch the font
-	const fontData = await fetch(
-		"https://fonts.gstatic.com/s/spacegrotest/v16/V8mDoQDjQSkFtoMM3T6r8E7mPbF4Cw.ttf"
-	).then((res) => res.arrayBuffer());
+	const fontData = await loadOgFont();
 
 	return new ImageResponse(
 		(
@@ -281,14 +284,16 @@ export default async function OgImage({
 		),
 		{
 			...size,
-			fonts: [
-				{
-					name: "Space Grotesk",
-					data: fontData,
-					style: "normal",
-					weight: 700,
-				},
-			],
+			fonts: fontData
+				? [
+						{
+							name: "Space Grotesk",
+							data: fontData,
+							style: "normal",
+							weight: 700,
+						},
+					]
+				: undefined,
 		}
 	);
 }

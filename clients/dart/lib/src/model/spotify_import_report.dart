@@ -17,7 +17,8 @@ part 'spotify_import_report.g.dart';
 /// * [processed] 
 /// * [matched] 
 /// * [notFound] 
-/// * [truncated] - true when the playlist had more than 500 tracks
+/// * [truncated] - true when the playlist had more than 1000 tracks
+/// * [limited] - true when Spotify only exposed the first 100 tracks of a playlist link (paste track links for the full list)
 @BuiltValue()
 abstract class SpotifyImportReport implements Built<SpotifyImportReport, SpotifyImportReportBuilder> {
   @BuiltValueField(wireName: r'totalSpotify')
@@ -32,9 +33,13 @@ abstract class SpotifyImportReport implements Built<SpotifyImportReport, Spotify
   @BuiltValueField(wireName: r'notFound')
   BuiltList<SpotifyImportReportNotFoundInner> get notFound;
 
-  /// true when the playlist had more than 500 tracks
+  /// true when the playlist had more than 1000 tracks
   @BuiltValueField(wireName: r'truncated')
   bool get truncated;
+
+  /// true when Spotify only exposed the first 100 tracks of a playlist link (paste track links for the full list)
+  @BuiltValueField(wireName: r'limited')
+  bool? get limited;
 
   SpotifyImportReport._();
 
@@ -84,6 +89,13 @@ class _$SpotifyImportReportSerializer implements PrimitiveSerializer<SpotifyImpo
       object.truncated,
       specifiedType: const FullType(bool),
     );
+    if (object.limited != null) {
+      yield r'limited';
+      yield serializers.serialize(
+        object.limited,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -141,6 +153,14 @@ class _$SpotifyImportReportSerializer implements PrimitiveSerializer<SpotifyImpo
             specifiedType: const FullType(bool),
           ) as bool;
           result.truncated = valueDes;
+          break;
+        case r'limited':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.limited = valueDes;
           break;
         default:
           unhandled.add(key);

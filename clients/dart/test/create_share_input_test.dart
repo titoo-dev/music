@@ -27,6 +27,7 @@ void main() {
       // TODO
     });
 
+    // https Deezer artwork (*.dzcdn.net, api.deezer.com); any other URL is dropped
     // String coverUrl
     test('to test the property `coverUrl`', () async {
       // TODO
@@ -37,7 +38,7 @@ void main() {
       // TODO
     });
 
-    // Hours until expiry. Omit for a permanent link.
+    // Hours until expiry, more than 0 and at most 8760 (a year). Null or omitted for a permanent link.
     // num expiresIn
     test('to test the property `expiresIn`', () async {
       // TODO

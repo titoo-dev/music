@@ -11,10 +11,10 @@ part 'change_deezer_account_request.g.dart';
 /// ChangeDeezerAccountRequest
 ///
 /// Properties:
-/// * [child] - Index in `childs`
+/// * [child] - Index in `childs` — a non-negative integer (a digit string is accepted)
 @BuiltValue()
 abstract class ChangeDeezerAccountRequest implements Built<ChangeDeezerAccountRequest, ChangeDeezerAccountRequestBuilder> {
-  /// Index in `childs`
+  /// Index in `childs` — a non-negative integer (a digit string is accepted)
   @BuiltValueField(wireName: r'child')
   int get child;
 

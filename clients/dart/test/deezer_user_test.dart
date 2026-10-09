@@ -23,11 +23,6 @@ void main() {
       // TODO
     });
 
-    // String licenseToken
-    test('to test the property `licenseToken`', () async {
-      // TODO
-    });
-
     // bool canStreamHq
     test('to test the property `canStreamHq`', () async {
       // TODO

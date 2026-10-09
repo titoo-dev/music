@@ -2,6 +2,34 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, ok, fail, handleError } from "../_lib/helpers";
 import { shareTrack } from "@/lib/library";
+import { sanitizeShareMeta, type ShareMeta } from "@/lib/share-meta";
+import { restoreUserDz } from "@/lib/deezer-session";
+
+/** Longest share link lifetime: a year. */
+const MAX_EXPIRY_HOURS = 24 * 365;
+
+/**
+ * The track's metadata as Deezer has it, read with the sharer's session.
+ * Null without a session or when Deezer doesn't know the id (uploads,
+ * API down): the client's metadata is used then.
+ */
+async function deezerShareMeta(userId: string, trackId: string): Promise<ShareMeta | null> {
+	try {
+		const restored = await restoreUserDz(userId);
+		if (restored.status !== "ok") return null;
+		const t = await restored.dz.api.getTrack(trackId);
+		const meta = sanitizeShareMeta({
+			title: t?.title,
+			artist: t?.artist?.name,
+			album: t?.album?.title,
+			coverUrl: t?.album?.cover_medium,
+			duration: t?.duration,
+		});
+		return meta.title && meta.artist ? meta : null;
+	} catch {
+		return null;
+	}
+}
 
 // POST /api/v1/shares — create a public share link for a track.
 // No download requirement: the share creates with storedTrackId=null when
@@ -18,28 +46,50 @@ export async function POST(request: NextRequest) {
 			return fail("MISSING_TRACK_ID", "trackId is required.", 400);
 		}
 
-		// Reuse an existing share by this user for the same track if any
-		const existing = await prisma.sharedTrack.findFirst({
-			where: { userId: userResult.userId, trackId },
-		});
+		// Hours until expiry; null / absent = permanent link.
+		const expiresIn = body?.expiresIn ?? null;
+		if (expiresIn !== null && !(typeof expiresIn === "number" && expiresIn > 0 && expiresIn <= MAX_EXPIRY_HOURS)) {
+			return fail("INVALID_EXPIRY", `expiresIn must be a number of hours between 0 and ${MAX_EXPIRY_HOURS}, or null.`, 400);
+		}
+
+		// Shown on a public page and fetched by the OG renderer: taken from
+		// Deezer when it knows the track, else the client's, trimmed, capped
+		// and with the cover limited to Deezer artwork.
+		const meta = (await deezerShareMeta(userResult.userId, trackId)) ?? sanitizeShareMeta(body);
+		if (!meta.title || !meta.artist) {
+			return fail("MISSING_METADATA", "title and artist are required.", 400);
+		}
+
+		// Reuse this user's live share for the same track; expired ones are
+		// dropped (they would otherwise come back as a dead link forever and
+		// keep anchoring the cached file).
+		const now = new Date();
+		const findLive = () =>
+			prisma.sharedTrack.findFirst({
+				where: {
+					userId: userResult.userId,
+					trackId,
+					OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+				},
+			});
+		const existing = await findLive();
 		if (existing) return ok(existing);
+		await prisma.sharedTrack.deleteMany({
+			where: { userId: userResult.userId, trackId, expiresAt: { lte: now } },
+		});
 
-		const expiresAt = body?.expiresIn
-			? new Date(Date.now() + Number(body.expiresIn) * 60 * 60 * 1000)
-			: null;
+		const expiresAt = expiresIn === null ? null : new Date(Date.now() + expiresIn * 60 * 60 * 1000);
 
-		const shared = await shareTrack(
-			userResult.userId,
-			{
-				trackId,
-				title: String(body?.title || ""),
-				artist: String(body?.artist || ""),
-				album: body?.album ?? null,
-				coverUrl: body?.coverUrl ?? null,
-				duration: body?.duration ?? null,
-			},
-			{ expiresAt }
-		);
+		let shared;
+		try {
+			shared = await shareTrack(userResult.userId, { trackId, ...meta }, { expiresAt });
+		} catch (e) {
+			// (userId, trackId) is unique: a concurrent request (double tap,
+			// two devices) created the link first — answer that one.
+			const winner = (e as { code?: string })?.code === "P2002" ? await findLive() : null;
+			if (winner) return ok(winner);
+			throw e;
+		}
 
 		return ok(shared, 201);
 	} catch (e) {
